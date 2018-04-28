@@ -14,9 +14,9 @@ class GraphFactorization():
 
     def train(self, Y, iterations=100, batch_size=1):
         with tf.name_scope('inputs'):
-            y_ij_inputs = tf.placeholder(tf.float32, shape=[batch_size])
-            i = tf.placeholder(tf.int32, shape=[1])
-            j = tf.placeholder(tf.int32, shape=[1])
+            y_ij_inputs = tf.placeholder(tf.float32, shape=[batch_size], name="y_ij_inputs")
+            i = tf.placeholder(tf.int32, shape=[1], name="i")
+            j = tf.placeholder(tf.int32, shape=[1], name="j")
 
         # y_ij = tf.Variable(name="y_ij")
         #
@@ -33,8 +33,9 @@ class GraphFactorization():
         z_ind = tf.range(self.d)
 
         # Loss Function
-        loss = 1.0 / 2 * tf.square(tf.reduce_mean(y_ij_inputs - tf.matmul(tf.transpose(z_emb)[i], z_emb[j]))) + \
-               lr / 2 * tf.square(tf.reduce_mean(z_emb, axis=1))
+        loss = 1.0 / 2 * tf.square(tf.reduce_mean(y_ij_inputs - \
+                                                  tf.matmul(tf.transpose(tf.slice(z_emb, [i,0], [self.d,1])), tf.slice(z_emb, [i,0], [self.d,1])))) + \
+               lr / 2 * tf.square(tf.reduce_mean(z_emb[i]))
 
         # Add the loss value as a scalar to summary.
         tf.summary.scalar('loss', loss)
@@ -47,8 +48,9 @@ class GraphFactorization():
         with tf.Session() as session:
             average_loss = 0
             for step in range(iterations):
-
                 for (x, y), value in np.ndenumerate(Y):
+                    print((x, y), value)
+
                     feed_dict = {y_ij_inputs: value, i: x, j: y}
 
                     _, summary, loss_val = session.run(
