@@ -7,7 +7,7 @@ import scipy.sparse
 
 class GraphFactorization():
 
-    def __init__(self, G, d=100, reg=1.0, lr=1.0):
+    def __init__(self, G, d=100, reg=1.0, lr=0.001):
         self.n_nodes = G.number_of_nodes()
         self.d = d
         self.reg = reg
@@ -19,12 +19,8 @@ class GraphFactorization():
             i = tf.Variable(int, name="i", trainable=False)
             j = tf.Variable(int, name="j", trainable=False)
 
-        # y_ij = tf.Variable(name="y_ij")
-        #
-        # Y = tf.get_variable("Y", shape=(self.n_nodes, self.n_nodes),
-        #                     initializer=tf.zeros_initializer())
-
-        lr = tf.constant(self.lr)
+        with tf.name_scope('params'):
+            lr = tf.constant(self.lr)
 
         z_emb = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self.d], -1, 1),
                             validate_shape=True, dtype=tf.float32,
@@ -37,10 +33,8 @@ class GraphFactorization():
         regu_term = lr/2.0 * tf.square(tf.reduce_mean(z_emb[i]), name="regu_term")
 
         # Loss Function: 1/2 * sum_ij (Y_ij - <Z_i, Z_j>)^2 + lr/2 * sum_i |Z_i|^2
-        loss = 1.0/2.0 * tf.add(tf.reduce_mean(y_ij - z_ij_inner), regu_term, name="loss")
-
+        loss = 1.0/2.0 * tf.add(tf.square(tf.reduce_mean(y_ij - z_ij_inner)), regu_term, name="loss")
         print(loss.get_shape())
-
         # with tf.Session() as session:
         #     session.run(tf.global_variables_initializer())
         #     print('Loss(x,y) = %.3f' % session.run(z_ij_inner, {i:2, j:3, y_ij:[1,]}))
@@ -58,11 +52,13 @@ class GraphFactorization():
 
         with tf.Session() as session:
             session.run(init_op)
-            average_loss = 0.0
             for step in range(iterations):
                 print("iteration", step)
                 rows, cols = Y.nonzero()
+                count=0.0
+                interation_loss = 0.0
                 for x,y in zip(rows,cols):
+                    count+=1
                     feed_dict = {y_ij: [Y[x, y],],
                                  i: x,
                                  j: y}
@@ -70,10 +66,9 @@ class GraphFactorization():
                     _, summary, loss_val = session.run(
                         [self.optimizer, merged, loss],
                         feed_dict=feed_dict)
-                    print(loss_val)
-                average_loss += loss_val
+                    interation_loss += loss_val
 
-        print(average_loss/iterations)
+                print(interation_loss/count)
 
 if __name__ == '__main__':
 
@@ -82,7 +77,7 @@ if __name__ == '__main__':
     # G = nx.from_pandas_edgelist(ppi, source=0, target=3, create_using=nx.DiGraph())
     # nx.relabel.convert_node_labels_to_integers(G)
 
-    gf = GraphFactorization(G, d=100, reg=1.0, lr=1.0)
+    gf = GraphFactorization(G, d=100, reg=1.0, lr=0.05)
     Y = nx.adjacency_matrix(G)
 
     gf.train(Y=Y)
