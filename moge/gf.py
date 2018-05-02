@@ -26,20 +26,23 @@ class GraphFactorization():
 
         lr = tf.constant(self.lr)
 
-        z_emb = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self.d], -1, 1), validate_shape=True,
+        z_emb = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self.d], -1, 1),
+                            validate_shape=True, dtype=tf.float32,
                             name="z_emb", trainable=True)
 
-        z_ij_inner = tf.matmul(tf.transpose(tf.slice(z_emb, [i, 0], [self.d, 1])),
-                                                            tf.slice(z_emb, [j, 0], [self.d, 1]))
+        z_ij_inner = tf.matmul(tf.transpose(tf.slice(z_emb, [i, 0], [self.d, 1], name="slice1"), name="slice1_T"),
+                                                            tf.slice(z_emb, [j, 0], [self.d,1 ], name="slice2"),
+                               name="z_ij_inner")
 
-        regu_term = lr/2.0 * tf.square(tf.reduce_mean(z_emb[i]))
+        regu_term = lr/2.0 * tf.square(tf.reduce_mean(z_emb[i]), name="regu_term")
 
         # Loss Function: 1/2 * sum_ij (Y_ij - <Z_i, Z_j>)^2 + lr/2 * sum_i |Z_i|^2
-        loss = 1.0/2.0 * tf.square(tf.reduce_mean(y_ij - z_ij_inner)) + regu_term
+        loss = 1.0/2.0 * tf.add(tf.square(tf.reduce_mean(y_ij - z_ij_inner)), regu_term, name="loss")
+
 
         with tf.Session() as session:
             session.run(tf.global_variables_initializer())
-            print('Loss(x,y) = %.3f' % session.run(tf.reduce_mean(z_emb[i]), {i:0, j:1, y_ij:[1,]}))
+            print('Loss(x,y) = %.3f' % session.run(z_ij_inner, {i:0, j:1, y_ij:[1,]}))
 
         # Add the loss value as a scalar to summary.
         tf.summary.scalar('loss', loss)
