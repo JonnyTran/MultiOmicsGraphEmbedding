@@ -19,9 +19,6 @@ class GraphFactorization():
             i = tf.Variable(int, name="i", trainable=False)
             j = tf.Variable(int, name="j", trainable=False)
 
-        with tf.name_scope('params'):
-            lr = tf.constant(self.lr)
-
         z_emb = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self.d], -1, 1),
                             validate_shape=True, dtype=tf.float32,
                             name="z_emb", trainable=True)
@@ -30,7 +27,7 @@ class GraphFactorization():
                                tf.slice(z_emb, [j, 0], [1, z_emb.get_shape()[1]], name="slice2"),
                                name="z_ij_inner", transpose_b=True)
 
-        regu_term = lr/2.0 * tf.square(tf.reduce_mean(z_emb[i]), name="regu_term")
+        regu_term = self.reg / 2.0 * tf.square(tf.reduce_mean(z_emb[i]), name="regu_term")
 
         # Loss Function: 1/2 * sum_ij (Y_ij - <Z_i, Z_j>)^2 + lr/2 * sum_i |Z_i|^2
         loss = 1.0/2.0 * tf.add(tf.square(tf.reduce_mean(y_ij - z_ij_inner)), regu_term, name="loss")
