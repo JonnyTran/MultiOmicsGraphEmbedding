@@ -50,7 +50,6 @@ class GraphFactorization():
         with tf.Session() as session:
             session.run(init_op)
             for step in range(iterations):
-                print("iteration", step)
                 rows, cols = Y.nonzero()
                 count=0.0
                 interation_loss = 0.0
@@ -65,16 +64,16 @@ class GraphFactorization():
                         feed_dict=feed_dict)
                     interation_loss += loss_val
 
-                print(interation_loss/count)
+                print("iteration", step, ":", interation_loss/count)
 
 if __name__ == '__main__':
 
-    G = nx.read_edgelist("/Users/jonny/Desktop/PycharmProjects/MultiOmicsGraphEmbedding/data/karate.edgelist", create_using=nx.DiGraph())
-
-    # G = nx.from_pandas_edgelist(ppi, source=0, target=3, create_using=nx.DiGraph())
+    # G = nx.read_edgelist("/Users/jonny/Desktop/PycharmProjects/MultiOmicsGraphEmbedding/data/karate.edgelist", create_using=nx.DiGraph())
+    ppi = pd.read_table("/home/jonny_admin/PycharmProjects/MultiOmicsGraphEmbedding/data/karate.edgelist", header=None)
+    G = nx.from_pandas_dataframe(ppi, source=0, target=3, create_using=nx.DiGraph())
     # nx.relabel.convert_node_labels_to_integers(G)
 
-    gf = GraphFactorization(G, d=100, reg=1.0, lr=0.05)
+    gf = GraphFactorization(G, d=100, reg=1.0, lr=0.001)
     Y = nx.adjacency_matrix(G)
 
     gf.train(Y=Y)
