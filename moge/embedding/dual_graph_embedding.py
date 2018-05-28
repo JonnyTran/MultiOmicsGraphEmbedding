@@ -1,7 +1,7 @@
 import tensorflow as tf
 import networkx as nx
 import numpy as np
-from moge.static_graph_embedding import StaticGraphEmbedding
+from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 
 class DualGraphEmbedding(StaticGraphEmbedding):
     def __init__(self, d=50, reg=1.0, lr=0.001):
