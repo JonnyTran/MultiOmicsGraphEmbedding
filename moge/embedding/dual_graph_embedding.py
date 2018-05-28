@@ -57,7 +57,7 @@ class DualGraphEmbedding(StaticGraphEmbedding):
             session.as_default()
             session.run(init_op)
             for step in range(self.iterations):
-                print("iteration", step)
+
                 rows, cols = Y.nonzero() # getting the list of non-zero edges from the Sparse Numpy matrix
                 iteration_loss = 0.0
                 for x, y in zip(rows, cols):
