@@ -4,16 +4,19 @@ import numpy as np
 import pandas as pd
 import scipy.sparse
 
+from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 
-class GraphFactorization():
+class GraphFactorization(StaticGraphEmbedding):
 
-    def __init__(self, G, d=100, reg=1.0, lr=0.001):
-        self.n_nodes = G.number_of_nodes()
+    def __init__(self, d=100, reg=1.0, lr=0.001):
         self.d = d
         self.reg = reg
         self.lr = lr
 
-    def train(self, Y, iterations=100, batch_size=1):
+    def learn_embedding(self, graph, iterations=100, batch_size=1):
+        self.n_nodes = graph.number_of_nodes()
+        Y = nx.adjacency_matrix(graph)
+
         with tf.name_scope('inputs'):
             y_ij = tf.placeholder(tf.float32, shape=(1, ), name="y_ij")
             i = tf.Variable(int, name="i", trainable=False)
@@ -66,6 +69,15 @@ class GraphFactorization():
 
                 print("iteration", step, ":", interation_loss/count)
 
+                self.embedding = session.run(z_emb)
+
+    def get_embedding(self):
+        return self.embedding
+
+    def get_reconstructed_adj(self):
+        return np.matmul(self.embedding, self.embedding.T)
+
+
 if __name__ == '__main__':
 
     # G = nx.read_edgelist("/Users/jonny/Desktop/PycharmProjects/MultiOmicsGraphEmbedding/data/karate.edgelist", create_using=nx.DiGraph())
@@ -73,8 +85,6 @@ if __name__ == '__main__':
     G = nx.from_pandas_dataframe(ppi, source=0, target=3, create_using=nx.DiGraph())
     # nx.relabel.convert_node_labels_to_integers(G)
 
-    gf = GraphFactorization(G, d=100, reg=1.0, lr=0.001)
-    Y = nx.adjacency_matrix(G)
-
-    gf.train(Y=Y)
+    gf = GraphFactorization(d=100, reg=1.0, lr=0.001)
+    gf.learn_embedding(graph=G)
 

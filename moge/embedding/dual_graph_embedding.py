@@ -4,14 +4,17 @@ import numpy as np
 from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 
 class DualGraphEmbedding(StaticGraphEmbedding):
-    def __init__(self, d=50, reg=1.0, lr=0.001):
+    def __init__(self, d=50, reg=1.0, lr=0.001, iterations=100, batch_size=1):
         super().__init__(d)
 
         self.d = d
         self.reg = reg
         self.lr = lr
+        self.iterations = iterations
+        self.batch_size = batch_size
 
-    def learn_embedding(self, graph, iterations=100, batch_size=1):
+    def learn_embedding(self, graph, edge_f=None,
+                        is_weighted=False, no_python=False):
         self.n_nodes = graph.number_of_nodes()
         Y = nx.adjacency_matrix(graph)
 
@@ -53,13 +56,11 @@ class DualGraphEmbedding(StaticGraphEmbedding):
         with tf.Session() as session:
             session.as_default()
             session.run(init_op)
-            for step in range(iterations):
+            for step in range(self.iterations):
                 print("iteration", step)
-                rows, cols = Y.nonzero()
-                count = 0.0
-                interation_loss = 0.0
+                rows, cols = Y.nonzero() # getting the list of non-zero edges from the Sparse Numpy matrix
+                iteration_loss = 0.0
                 for x, y in zip(rows, cols):
-                    count += 1
                     feed_dict = {y_ij: [Y[x, y], ],
                                  i: x,
                                  j: y}
@@ -67,19 +68,19 @@ class DualGraphEmbedding(StaticGraphEmbedding):
                     _, summary, loss_val = session.run(
                         [optimizer, merged, loss_f1],
                         feed_dict=feed_dict)
-                    interation_loss += loss_val
+                    iteration_loss += loss_val
 
-                print(interation_loss / count)
+                if step % 50 == 0:
+                    print("iteration:",step, "loss", iteration_loss)
 
             self.embedding_s = session.run([emb_s])[0]
             self.embedding_t = session.run([emb_t])[0]
 
 
-    def get_reconstructed_adj(self):
+    def get_reconstructed_adj(self, X=None, node_l=None):
         return np.matmul(self.embedding_s, self.embedding_t.T)
 
     def get_embedding(self):
-
         return np.concatenate([self.embedding_s, self.embedding_t], axis=1)
         # return self.embedding_s, self.embedding_t
 
@@ -90,13 +91,13 @@ class DualGraphEmbedding(StaticGraphEmbedding):
 
 
 if __name__ == '__main__':
-    G = nx.read_edgelist("/home/jonny_admin/PycharmProjects/MultiOmicsGraphEmbedding/data/karate.edgelist",
+    G = nx.read_edgelist("/home/jonny_admin/PycharmProjects/MultiOmicsGraphEmbedding/moge/data/karate.edgelist",
                          create_using=nx.DiGraph())
 
     # G = nx.from_pandas_edgelist(ppi, source=0, target=3, create_using=nx.DiGraph())
     # nx.relabel.convert_node_labels_to_integers(G)
 
-    gf = DualGraphEmbedding(d=5, reg=1.0, lr=0.05)
+    gf = DualGraphEmbedding(d=5, reg=1.0, lr=0.05, iterations=100)
 
-    gf.learn_embedding(G, iterations=10)
+    gf.learn_embedding(G)
     print(gf.get_embedding())
