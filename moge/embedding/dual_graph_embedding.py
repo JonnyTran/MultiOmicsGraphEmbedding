@@ -18,7 +18,6 @@ class DualGraphEmbedding(StaticGraphEmbedding):
         self.n_nodes = graph.number_of_nodes()
         Y = nx.adjacency_matrix(graph)
 
-
         with tf.name_scope('inputs'):
             y_ij = tf.placeholder(tf.float32, shape=(1,), name="y_ij")
             i = tf.Variable(int, name="i", trainable=False)
@@ -76,16 +75,17 @@ class DualGraphEmbedding(StaticGraphEmbedding):
             self.embedding_s = session.run([emb_s])[0]
             self.embedding_t = session.run([emb_t])[0]
 
+            session.close()
 
     def get_reconstructed_adj(self, X=None, node_l=None):
-        return np.matmul(self.embedding_s, self.embedding_t.T)
+        return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s, self.embedding_t.T)))
 
     def get_embedding(self):
         return np.concatenate([self.embedding_s, self.embedding_t], axis=1)
         # return self.embedding_s, self.embedding_t
 
     def get_edge_weight(self, i, j):
-        return np.matmul(self.embedding_s[i], self.embedding_t[j].T)
+        return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s[i], self.embedding_t[j].T)))
 
 
 
