@@ -25,6 +25,8 @@ class HeterogeneousNetwork():
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
             self.all_nodes.extend(self.multi_omics_data[modality].get_genes_list())
 
+        print("Total nodes:", len(self.all_nodes))
+
     def add_edges_from_modality(self, modality):
         self.G.add_edges_from(self.multi_omics_data[modality].network.edges(data=True))
 
