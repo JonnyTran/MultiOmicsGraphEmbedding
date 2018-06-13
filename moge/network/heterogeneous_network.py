@@ -21,8 +21,10 @@ class HeterogeneousNetwork():
         self.nodes = {}
         self.all_nodes = []
         for modality in self.modalities:
-            self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list())
+            self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
+
+            print(modality, " nodes:", len(self.nodes[modality]))
             self.all_nodes.extend(self.multi_omics_data[modality].get_genes_list())
 
         print("Total nodes:", len(self.all_nodes))
@@ -30,7 +32,18 @@ class HeterogeneousNetwork():
     def add_edges_from_modality(self, modality):
         self.G.add_edges_from(self.multi_omics_data[modality].network.edges(data=True))
 
-    def add_edges_from_edgelist(self, edgelist):
+    def add_edges_from_edgelist(self, edgelist, modalities=None):
+        if not (modalities is None):
+            source_genes = set(pd.DataFrame(edgelist)[0].tolist())
+            target_genes = set(pd.DataFrame(edgelist)[1].tolist())
+
+            source_genes_matched = set(self.nodes[modalities[0]]) & source_genes
+            target_genes_matched = set(self.nodes[modalities[1]]) & target_genes
+
+            print("Adding edgelist with", len(source_genes), "total unique", modalities[0], "genes (source), but only matching", len(source_genes_matched), "nodes")
+
+            print("Adding edgelist with", len(target_genes), "total unique", modalities[1], "genes (target), but only matching", len(target_genes_matched), "nodes")
+
         self.G.add_edges_from(edgelist)
 
     def get_affinity_matrix(self):

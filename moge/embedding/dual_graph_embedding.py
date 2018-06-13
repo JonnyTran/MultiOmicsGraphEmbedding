@@ -72,8 +72,8 @@ class DualGraphEmbedding(StaticGraphEmbedding):
                 if step % 50 == 0:
                     print("iteration:",step, "loss", iteration_loss)
 
-            self.embedding_s = session.run([emb_s])[0]
-            self.embedding_t = session.run([emb_t])[0]
+            self.embedding_s = session.run([emb_s])[0].copy()
+            self.embedding_t = session.run([emb_t])[0].copy()
 
             session.close()
 
