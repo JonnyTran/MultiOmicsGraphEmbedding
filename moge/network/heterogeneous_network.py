@@ -5,6 +5,8 @@ import pandas as pd
 import networkx as nx
 import dask.dataframe as dd
 from dask.threaded import get
+from sklearn.neighbors import DistanceMetric
+from scipy.spatial.distance import pdist
 
 from TCGAMultiOmics.multiomics import MultiOmicsData
 
@@ -46,7 +48,11 @@ class HeterogeneousNetwork():
 
         self.G.add_edges_from(edgelist)
 
-    def get_affinity_matrix(self):
+    def remove_extra_nodes(self):
+        # TODO remove nodes added from edgelists that are not in TCGA data
+        pass
+
+    def get_adjacency_matrix(self):
         return nx.adjacency_matrix(self.G)
 
     def get_edge(self, i, j):
@@ -69,6 +75,44 @@ class HeterogeneousNetwork():
         X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr, columns=cols, index=cols)
 
         return X_multiomics_corr_df
+
+
+    def compute_annotation_similarity(self, modality, features=None):
+        gene_info = self.multi_omics_data[modality].get_genes_info()
+
+        if features is not None:
+            gene_info.filter(columns=features)
+        elif modality == "GE":
+            dist = function
+        elif modality == "MIR":
+            dist = function
+        elif modality == "LNC":
+            dist = function
+
+
+    def gower_distance(X):
+        """
+        This function expects a pandas dataframe as input
+        The data frame is to contain the features along the columns. Based on these features a
+        distance matrix will be returned which will contain the pairwise gower distance between the rows
+        All variables of object type will be treated as nominal variables and the others will be treated as
+        numeric variables.
+        Distance metrics used for:
+        Nominal variables: Dice distance (https://en.wikipedia.org/wiki/S%C3%B8rensen%E2%80%93Dice_coefficient)
+        Numeric variables: Manhattan distance normalized by the range of the variable (https://en.wikipedia.org/wiki/Taxicab_geometry)
+        """
+        individual_variable_distances = []
+
+        for i in range(X.shape[1]):
+            feature = X.iloc[:, [i]]
+            if feature.dtypes[0] == np.object:
+                feature_dist = DistanceMetric.get_metric('dice').pairwise(pd.get_dummies(feature))
+            else:
+                feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature) / np.ptp(feature.values)
+
+            individual_variable_distances.append(feature_dist)
+
+        return np.array(individual_variable_distances).mean(0)
 
     @DeprecationWarning
     def compute_corr_graph_(self, modalities_pairs):
@@ -141,9 +185,6 @@ class HeterogeneousNetwork():
         result = self._map(df, map_func=self._correlation, apply_func=None, modalities=["MIR", "GE"])
         print(result)
 
-
-    def _merge_results(self, result):
-        pass
 
     # def calc_dys_A_B(df, miRNA_A, miRNA_B, gene_A, gene_B):
     #     result = []
