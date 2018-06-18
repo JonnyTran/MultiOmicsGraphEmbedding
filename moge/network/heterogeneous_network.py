@@ -9,6 +9,7 @@ from sklearn.neighbors import DistanceMetric
 from scipy.spatial.distance import pdist
 
 from TCGAMultiOmics.multiomics import MultiOmicsData
+from moge.utils.distance import *
 
 
 class HeterogeneousNetwork():
@@ -65,54 +66,7 @@ class HeterogeneousNetwork():
 
         return self.G.subgraph(nodes)
 
-    def compute_multiomics_correlations(self, modalities, pathologic_stages=[], histological_subtypes=[]):
-        X_multiomics, y = self.multi_omics_data.load_data(modalities=modalities, pathologic_stages=pathologic_stages, histological_subtypes=histological_subtypes)
 
-        X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
-        X_multiomics_corr = np.corrcoef(X_multiomics_concat,  rowvar=False)
-
-        cols = X_multiomics_concat.columns
-        X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr, columns=cols, index=cols)
-
-        return X_multiomics_corr_df
-
-
-    def compute_annotation_similarity(self, modality, features=None):
-        gene_info = self.multi_omics_data[modality].get_genes_info()
-
-        if features is not None:
-            gene_info.filter(columns=features)
-        elif modality == "GE":
-            dist = function
-        elif modality == "MIR":
-            dist = function
-        elif modality == "LNC":
-            dist = function
-
-
-    def gower_distance(X):
-        """
-        This function expects a pandas dataframe as input
-        The data frame is to contain the features along the columns. Based on these features a
-        distance matrix will be returned which will contain the pairwise gower distance between the rows
-        All variables of object type will be treated as nominal variables and the others will be treated as
-        numeric variables.
-        Distance metrics used for:
-        Nominal variables: Dice distance (https://en.wikipedia.org/wiki/S%C3%B8rensen%E2%80%93Dice_coefficient)
-        Numeric variables: Manhattan distance normalized by the range of the variable (https://en.wikipedia.org/wiki/Taxicab_geometry)
-        """
-        individual_variable_distances = []
-
-        for i in range(X.shape[1]):
-            feature = X.iloc[:, [i]]
-            if feature.dtypes[0] == np.object:
-                feature_dist = DistanceMetric.get_metric('dice').pairwise(pd.get_dummies(feature))
-            else:
-                feature_dist = DistanceMetric.get_metric('manhattan').pairwise(feature) / np.ptp(feature.values)
-
-            individual_variable_distances.append(feature_dist)
-
-        return np.array(individual_variable_distances).mean(0)
 
     @DeprecationWarning
     def compute_corr_graph_(self, modalities_pairs):
