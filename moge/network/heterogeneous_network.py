@@ -66,7 +66,22 @@ class HeterogeneousNetwork():
 
         return self.G.subgraph(nodes)
 
+    def add_edges_from_nodes_similarity(self, modality, similarity_threshold=0.7, data=True):
+        genes_info = self.multi_omics_data[modality].get_genes_info()
 
+        similarity_adj_df = pd.DataFrame(compute_annotation_similarity(genes_info, modality=modality), index=self.multi_omics_data[modality].get_genes_list())
+
+        similarity_filtered = similarity_adj_df.loc[:, :] >= similarity_threshold
+        index = similarity_filtered.index
+
+        edgelist_df = pd.DataFrame(columns=["source", "target", "weight"])
+        i = 0
+        for x, y in zip(*np.nonzero(similarity_filtered.values)):
+            edgelist_df.loc[i] = [index[x], index[y], similarity_filtered.loc[index[x], index[y]]]
+            i += 1
+
+        print(i, "edges added.")
+        nx.from_pandas_dataframe(edgelist_df, create_using=nx.Graph())
 
     @DeprecationWarning
     def compute_corr_graph_(self, modalities_pairs):

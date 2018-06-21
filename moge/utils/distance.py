@@ -5,7 +5,9 @@ import networkx as nx
 
 from sklearn.neighbors import DistanceMetric
 from scipy.spatial.distance import pdist
-from scipy.spatial.distance import squareform
+from scipy.spatial.distance import squareform as squareform_
+
+from Bio import pairwise2
 
 from TCGAMultiOmics.multiomics import MultiOmicsData
 
@@ -23,18 +25,21 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
 
     return X_multiomics_corr_df
 
-def compute_annotation_similarity(genes_info, modality, beta=1.0, features=None):
+def compute_annotation_similarity(genes_info, modality, beta=1.0, features=None, squareform=True):
     if features is None:
         if modality == "GE":
             features = ["gene_family_id"]
         elif modality == "MIR":
-            features = ["miR family"]
+            features = ["miR family", "Mature sequence"]
         elif modality == "LNC":
-            features = ["Transcript Type"]
+            features = ["Transcript Type", "GO terms"]
 
-    gower_dists = gower_distance(genes_info.filter(items=features))
+    gower_dists = gower_distance(genes_info.loc[:,features])
 
-    return np.subtract(1, gower_dists)
+    if squareform:
+        return squareform_(np.subtract(1, gower_dists))
+    else:
+        return np.subtract(1, gower_dists)
     # return np.exp(-beta * gower_dists)
 
 def gower_distance(X):
@@ -54,12 +59,23 @@ def gower_distance(X):
         feature = X.loc[:, column]
         if column == "gene_family_id" or column == "gene_family":
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
+
         elif column == "miR family":
             feature_dist = pdist(feature.str.get_dummies("/"), 'dice')
+
+        elif column == "GO terms":
+            feature_dist = pdist(feature.str.get_dummies(","), 'dice')
+
+        elif column in ["Mature sequence", ]:
+            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)),
+                lambda u, v: pairwise2.align.globalxx(u, v, score_only=True) if (type(u[0]) is str and type(v[0]) is str) else np.nan)
+
+            feature_dist = 1-(feature_dist/np.nanmax(feature_dist))
+
         elif feature.dtypes == np.object:
             feature_dist = pdist(pd.get_dummies(feature), 'dice')
         elif False: # if nominal numbers
-            feature_dist = pdist(featurevalues.reshape((X.shape[0],-1)), "manhattan") / np.ptp(feature.values)
+            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "manhattan") / np.ptp(feature.values)
         else:
             feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "euclidean")
 
@@ -67,4 +83,5 @@ def gower_distance(X):
 
     pdists_mean = np.nanmean(np.array(individual_variable_distances), axis=0)
 
-    return squareform(pdists_mean)
+    return pdists_mean
+    # return squareform(pdists_mean)
