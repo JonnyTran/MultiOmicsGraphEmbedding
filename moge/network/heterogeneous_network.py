@@ -9,7 +9,7 @@ from sklearn.neighbors import DistanceMetric
 from scipy.spatial.distance import pdist
 
 from TCGAMultiOmics.multiomics import MultiOmicsData
-from moge.utils.distance import *
+from moge.utils.omics_distance import *
 
 
 class HeterogeneousNetwork():
@@ -32,8 +32,6 @@ class HeterogeneousNetwork():
 
         print("Total nodes:", len(self.all_nodes))
 
-    def add_edges_from_modality(self, modality):
-        self.G.add_edges_from(self.multi_omics_data[modality].network.edges(data=True))
 
     def add_edges_from_edgelist(self, edgelist, modalities=None):
         if not (modalities is None):
@@ -67,21 +65,29 @@ class HeterogeneousNetwork():
         return self.G.subgraph(nodes)
 
     def add_edges_from_nodes_similarity(self, modality, similarity_threshold=0.7, data=True):
+        """
+        Computes similarity measures between genes within the same modality, and add them as undirected edges to the network if the similarity measures passes the threshold
+
+        :param modality: E.g. "GE", "MIR", "LNC"
+        :param similarity_threshold: a hard-threshold on the similarity measure
+        :param data:
+        """
         genes_info = self.multi_omics_data[modality].get_genes_info()
 
         similarity_adj_df = pd.DataFrame(compute_annotation_similarity(genes_info, modality=modality), index=self.multi_omics_data[modality].get_genes_list())
 
         similarity_filtered = similarity_adj_df.loc[:, :] >= similarity_threshold
-        index = similarity_filtered.index
+        index = similarity_adj_df.index
 
-        edgelist_df = pd.DataFrame(columns=["source", "target", "weight"])
-        i = 0
-        for x, y in zip(*np.nonzero(similarity_filtered.values)):
-            edgelist_df.loc[i] = [index[x], index[y], similarity_filtered.loc[index[x], index[y]]]
-            i += 1
+        edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in zip(*np.nonzero(similarity_filtered.values))]
 
-        print(i, "edges added.")
-        nx.from_pandas_dataframe(edgelist_df, create_using=nx.Graph())
+        self.G.add_weighted_edges_from(edgelist_ebunch)
+        print(len(edgelist_ebunch), "edges added.")
+
+    def remove_isolates(self):
+        self.G = self.get_subgraph(self.modalities)
+
+
 
     @DeprecationWarning
     def compute_corr_graph_(self, modalities_pairs):

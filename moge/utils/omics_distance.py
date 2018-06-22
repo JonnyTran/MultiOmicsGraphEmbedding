@@ -34,7 +34,7 @@ def compute_annotation_similarity(genes_info, modality, beta=1.0, features=None,
         elif modality == "LNC":
             features = ["Transcript Type", "GO terms"]
 
-    gower_dists = gower_distance(genes_info.loc[:,features])
+    gower_dists = gower_distance(genes_info.loc[:, features])
 
     if squareform:
         return squareform_(np.subtract(1, gower_dists))
@@ -56,6 +56,7 @@ def gower_distance(X):
     individual_variable_distances = []
 
     for column in X.columns:
+        print("Gower's dissimilarity: Computing", column)
         feature = X.loc[:, column]
         if column == "gene_family_id" or column == "gene_family":
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
@@ -68,9 +69,9 @@ def gower_distance(X):
 
         elif column in ["Mature sequence", ]:
             feature_dist = pdist(feature.values.reshape((X.shape[0],-1)),
-                lambda u, v: pairwise2.align.globalxx(u, v, score_only=True) if (type(u[0]) is str and type(v[0]) is str) else np.nan)
+                lambda u, v: pairwise2.align.globalxx(u[0], v[0], score_only=True)/min(len(u[0]), len(v[0])) if (type(u[0]) is str and type(v[0]) is str) else np.nan)
 
-            feature_dist = 1-(feature_dist/np.nanmax(feature_dist))
+            feature_dist = 1-feature_dist # Convert from similarity to distance
 
         elif feature.dtypes == np.object:
             feature_dist = pdist(pd.get_dummies(feature), 'dice')
