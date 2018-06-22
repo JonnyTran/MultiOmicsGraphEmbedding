@@ -67,11 +67,11 @@ def gower_distance(X):
         elif column == "GO terms":
             feature_dist = pdist(feature.str.get_dummies(","), 'dice')
 
-        elif column in ["Mature sequence", ]:
+        elif column in ["Mature sequence", "Transcript sequence"]:
             feature_dist = pdist(feature.values.reshape((X.shape[0],-1)),
                 lambda u, v: pairwise2.align.globalxx(u[0], v[0], score_only=True)/min(len(u[0]), len(v[0])) if (type(u[0]) is str and type(v[0]) is str) else np.nan)
 
-            feature_dist = 1-feature_dist # Convert from similarity to distance
+            feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
         elif feature.dtypes == np.object:
             feature_dist = pdist(pd.get_dummies(feature), 'dice')
