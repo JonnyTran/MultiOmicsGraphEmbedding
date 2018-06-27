@@ -4,14 +4,27 @@ import numpy as np
 from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 
 class DualGraphEmbedding(StaticGraphEmbedding):
-    def __init__(self, d=50, reg=1.0, lr=0.001, iterations=100, batch_size=1):
+    def __init__(self, d=50, reg=1.0, lr=0.001, iterations=100, batch_size=1, **kwargs):
         super().__init__(d)
 
-        self.d = d
+        self._d = d
         self.reg = reg
         self.lr = lr
         self.iterations = iterations
         self.batch_size = batch_size
+
+        hyper_params = {
+            'method_name': 'dual_graph_embedding'
+        }
+        hyper_params.update(kwargs)
+        for key in hyper_params.keys():
+            self.__setattr__('_%s' % key, hyper_params[key])
+
+    def get_method_name(self):
+        return self._method_name
+
+    def get_method_summary(self):
+        return '%s_%d' % (self._method_name, self._d)
 
     def learn_embedding(self, graph, edge_f=None,
                         is_weighted=False, no_python=False):
@@ -24,11 +37,11 @@ class DualGraphEmbedding(StaticGraphEmbedding):
             j = tf.Variable(int, name="j", trainable=False)
 
 
-        emb_s = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self.d], -1, 1),
+        emb_s = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self._d], -1, 1),
                                  validate_shape=True, dtype=tf.float32,
                                  name="emb_s", trainable=True)
 
-        emb_t = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self.d], -1, 1),
+        emb_t = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self._d], -1, 1),
                                  validate_shape=True, dtype=tf.float32,
                                  name="emb_s", trainable=True)
 

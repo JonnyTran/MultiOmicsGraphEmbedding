@@ -42,8 +42,8 @@ class HeterogeneousNetwork():
             target_genes_matched = set(self.nodes[modalities[1]]) & target_genes
 
             print("Adding edgelist with", len(source_genes), "total unique", modalities[0], "genes (source), but only matching", len(source_genes_matched), "nodes")
-
             print("Adding edgelist with", len(target_genes), "total unique", modalities[1], "genes (target), but only matching", len(target_genes_matched), "nodes")
+            print(len(edgelist), "edges added.")
 
         self.G.add_edges_from(edgelist)
 
@@ -57,14 +57,14 @@ class HeterogeneousNetwork():
     def get_edge(self, i, j):
         return self.G.get_edge_data(i, j)
 
-    def get_subgraph(self, modalities):
+    def get_subgraph(self, modalities=["MIR", "LNC", "GE"]):
         nodes = []
         for modality in modalities:
             nodes.extend(self.nodes[modality])
 
         return self.G.subgraph(nodes)
 
-    def add_edges_from_nodes_similarity(self, modality, similarity_threshold=0.7, data=True):
+    def add_edges_from_nodes_similarity(self, modality, features=None, similarity_threshold=0.7, data=True):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the network if the similarity measures passes the threshold
 
@@ -74,7 +74,7 @@ class HeterogeneousNetwork():
         """
         genes_info = self.multi_omics_data[modality].get_genes_info()
 
-        similarity_adj_df = pd.DataFrame(compute_annotation_similarity(genes_info, modality=modality), index=self.multi_omics_data[modality].get_genes_list())
+        similarity_adj_df = pd.DataFrame(compute_annotation_similarity(genes_info, modality=modality, features=features), index=self.multi_omics_data[modality].get_genes_list())
 
         similarity_filtered = similarity_adj_df.loc[:, :] >= similarity_threshold
         index = similarity_adj_df.index
