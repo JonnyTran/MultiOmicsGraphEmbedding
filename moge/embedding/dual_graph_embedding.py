@@ -3,7 +3,7 @@ import networkx as nx
 import numpy as np
 from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
-from TCGAMultiOmics.multiomics import MultiOmicsData
+
 
 class SourceTargetGraphEmbedding(StaticGraphEmbedding):
     def __init__(self, d=50, reg=1.0, lr=0.001, iterations=100, batch_size=1, **kwargs):
@@ -31,10 +31,17 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
     def learn_embedding(self, network:HeterogeneousNetwork, edge_f=None,
                         is_weighted=False, no_python=False):
         self.n_nodes = len(network.all_nodes)
-        E_u = network.get_node_similarity_adjacency()
-        E_d = network.get_regulatory_edges_adjacency()
 
+        adj_undirected = network.get_node_similarity_adjacency()
+        adj_directed = network.get_regulatory_edges_adjacency()
 
+        Ed_rows, Ed_cols = adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
+        Ed_count = len(Ed_rows)
+        Eu_rows, Eu_cols = adj_undirected.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
+        Eu_count = len(Eu_rows)
+
+        print("Directed edges:", Ed_count)
+        print("Undirected edges:", Eu_count)
 
         with tf.name_scope('inputs'):
             E_ij = tf.placeholder(tf.float32, shape=(1,), name="E_ij")
@@ -81,40 +88,42 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
             session.as_default()
             session.run(init_op)
 
-            E_d_rows, E_d_cols = E_d.nonzero() # getting the list of non-zero edges from the Sparse Numpy matrix
-            E_u_rows, E_u_cols = E_u.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
-
-            print("Directed edges", len(E_d_rows))
-            print("Undirected edges", len(E_u_rows))
-
             for step in range(self.iterations):
-
+                # Run all directed edges
                 iteration_loss = 0.0
-                for x, y in zip(E_d_rows, E_d_cols):
-                    feed_dict = {E_ij: [E_d[x, y], ],
+                n_samples = 0
+                for k in np.random.permutation(Ed_count):
+                    feed_dict = {E_ij: [adj_directed[Ed_rows[k], Ed_cols[k]], ],
                                  is_directed: True,
-                                 i: x,
-                                 j: y}
+                                 i: Ed_rows[k],
+                                 j: Ed_cols[k]}
 
-                    _, summary, loss_val = session.run(
-                        [optimizer, merged, loss],
-                        feed_dict=feed_dict)
+                    _, summary, loss_val = session.run([optimizer, merged, loss],
+                                                       feed_dict=feed_dict)
+
+                    n_samples += 1
                     iteration_loss += loss_val
-                print("iteration:",step, "f1_loss", iteration_loss)
+                    if (self.batch_size != None) and n_samples > self.batch_size:
+                        break
+                print("iteration:",step, "f1_loss", iteration_loss/self.batch_size)
 
-
+                # Run all
                 iteration_loss = 0.0
-                for x, y in zip(E_u_rows, E_u_cols):
-                    feed_dict = {E_ij: [E_u[x, y], ],
+                n_samples=0
+                for k in np.random.permutation(Eu_count):
+                    feed_dict = {E_ij: [adj_undirected[Eu_rows[k], Eu_cols[k]], ],
                                  is_directed: False,
-                                 i: x,
-                                 j: y}
+                                 i: Eu_rows[k],
+                                 j: Eu_cols[k]}
 
-                    _, summary, loss_val = session.run(
-                        [optimizer, merged, loss],
-                        feed_dict=feed_dict)
+                    _, summary, loss_val = session.run([optimizer, merged, loss],
+                                                       feed_dict=feed_dict)
+
+                    n_samples += 1
                     iteration_loss += loss_val
-                print("iteration:", step, "f1_loss", iteration_loss)
+                    if (self.batch_size != None) and n_samples > self.batch_size:
+                        break
+                print("iteration:", step, "f2_loss", iteration_loss/self.batch_size)
 
             # Save embedding vectors
             self.embedding_s = session.run([emb_s])[0].copy()
@@ -127,10 +136,10 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
 
     def get_embedding(self):
         return np.concatenate([self.embedding_s, self.embedding_t], axis=1)
-        # return self.embedding_s, self.embedding_t
 
     def get_edge_weight(self, i, j):
         return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s[i], self.embedding_t[j].T)))
+
 
 class DualGraphEmbedding(StaticGraphEmbedding):
     def __init__(self, d=50, reg=1.0, lr=0.001, iterations=100, batch_size=1, **kwargs):
@@ -231,23 +240,17 @@ class DualGraphEmbedding(StaticGraphEmbedding):
 
 
 
-
 if __name__ == '__main__':
+    from TCGAMultiOmics.multiomics import MultiOmicsData
+
     folder_path = "/home/jonny_admin/PycharmProjects/Bioinformatics_ExternalData/tcga-assembler/LUAD"
     external_data_path = "/home/jonny_admin/PycharmProjects/Bioinformatics_ExternalData/"
     luad_data = MultiOmicsData(cancer_type="LUAD", tcga_data_path=folder_path, external_data_path=external_data_path,
-                               modalities=[
-                                   "GE",
-                                   "MIR",
-                                   # "LNC",
-                                   # "CNV",
-                                   # "SNP",
-                                   #                                        "PRO",
-                                   # "DNA"
-                               ])
+                               modalities=["GE", "MIR",])
 
     luad_data.GE.drop_genes(set(luad_data.GE.get_genes_list()) & set(luad_data.LNC.get_genes_list()))
 
+    ##### Build heterogeneous network #####
     network = HeterogeneousNetwork(modalities=["MIR", "GE"], multi_omics_data=luad_data)
     # Adds mRNA-mRNA and miRNA-miRNA node similarity
     network.add_edges_from_nodes_similarity(modality="GE", similarity_threshold=0.99,
@@ -262,7 +265,8 @@ if __name__ == '__main__':
                                     modalities=["GE", "GE"])
     network.remove_isolates()
 
-    gf = SourceTargetGraphEmbedding(d=64, reg=1.0, lr=0.05, iterations=100)
+    ##### Run graph embedding #####
+    gf = SourceTargetGraphEmbedding(d=64, reg=1.0, lr=0.05, iterations=10)
 
     gf.learn_embedding(network)
     np.save("/home/jonny_admin/PycharmProjects/MultiOmicsGraphEmbedding/moge/data/lncRNA_miRNA_mRNA/miRNA-mRNA_source_target_embeddings_128.npy",

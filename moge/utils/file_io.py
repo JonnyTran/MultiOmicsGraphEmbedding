@@ -44,7 +44,10 @@ def write_node_labels_to_file(file_path, multi_omics_data:MultiOmicsData, modali
         file.close()
 
 
-def write_node_features_to_file(file_path, network:HeterogeneousNetwork, multi_omics_data:MultiOmicsData):
+def save_embedding(file_path, network:HeterogeneousNetwork, multi_omics_data:MultiOmicsData):
+    pass
+
+def load_embedding(file_path, network):
     pass
 
 def import_graph_from_files(node_features_path, edgelist_path, node_labels_path):
