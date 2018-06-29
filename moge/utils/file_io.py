@@ -9,16 +9,27 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 from sklearn.feature_extraction import DictVectorizer
 
 
-def write_node_labels_to_file(file_path, network:HeterogeneousNetwork, multi_omics_data:MultiOmicsData, modalities=["GE", "MIR", "LNC"], node_label_integer=False, get_dummies=True):
-    with open(file_path, 'a') as file:
+def write_node_labels_to_file(file_path, multi_omics_data:MultiOmicsData, modalities=["GE", "MIR", "LNC"], label_cols=["Disease association"],sep=" ", get_dummies=True):
+    with open(file_path, 'w') as file:
         genes_info_concat = []
 
         for modality in modalities:
-            label_cols = ["Disease association"]
+            if label_cols == ["family"]:
+                if modality == "GE":
+                    family_col = ["gene_family_id"]
+                elif modality == "MIR":
+                    family_col = ["miR family"]
+                elif modality == "LNC":
+                    family_col = ["Transcript Type"]
 
-            genes_info_concat.append(multi_omics_data[modality].get_genes_info()[label_cols])
+                genes_info_concat.append(multi_omics_data[modality].get_genes_info().rename(columns={family_col[0]: "family"})[label_cols])
+            else:
+                genes_info_concat.append(multi_omics_data[modality].get_genes_info()[label_cols])
 
-        file.write(pd.concat(genes_info_concat, axis=0).index.str.get_dummies("|").to_csv(sep="\t", header=None, index_label=True, line_terminator="\n", columns=label_cols))
+        if get_dummies:
+            file.write(pd.concat(genes_info_concat, axis=0)[label_cols[0]].str.get_dummies("|").to_csv(sep=sep, header=None, index_label=True))
+        else:
+            file.write(pd.concat(genes_info_concat, axis=0)[label_cols[0]].to_csv(sep=sep, header=None, index_label=True))
 
 #             for node in network.nodes[modality]:
 #                 gene_info = multi_omics_data[modality].get_genes_info()[node]

@@ -45,11 +45,8 @@ class HeterogeneousNetwork():
             print("Adding edgelist with", len(target_genes), "total unique", modalities[1], "genes (target), but only matching", len(target_genes_matched), "nodes")
             print(len(edgelist), "edges added.")
 
-        self.G.add_edges_from(edgelist)
+        self.G.add_edges_from(edgelist, type="d")
 
-    def remove_extra_nodes(self):
-        # TODO remove nodes added from edgelists that are not in TCGA data
-        pass
 
     def get_adjacency_matrix(self):
         return nx.adjacency_matrix(self.G)
@@ -74,20 +71,28 @@ class HeterogeneousNetwork():
         """
         genes_info = self.multi_omics_data[modality].get_genes_info()
 
-        similarity_adj_df = pd.DataFrame(compute_annotation_similarity(genes_info, modality=modality, features=features), index=self.multi_omics_data[modality].get_genes_list())
+        similarity_adj_df = pd.DataFrame(compute_annotation_similarity(genes_info, modality=modality, features=features, squareform=True), index=self.multi_omics_data[modality].get_genes_list())
 
         similarity_filtered = similarity_adj_df.loc[:, :] >= similarity_threshold
         index = similarity_adj_df.index
 
         edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in zip(*np.nonzero(similarity_filtered.values))]
 
-        self.G.add_weighted_edges_from(edgelist_ebunch)
+        self.G.add_weighted_edges_from(edgelist_ebunch, type="u")
         print(len(edgelist_ebunch), "edges added.")
 
     def remove_isolates(self):
         self.G = self.get_subgraph(self.modalities)
 
+    def get_node_similarity_adjacency(self):
+        edge_list = set((u,v) for u, v, d in self.G.edges_iter(data=True)if d['type'] == 'u')
+        adj_similarity = nx.adjacency_matrix(nx.Graph(data=edge_list), nodelist=self.all_nodes)
+        return adj_similarity
 
+    def get_regulatory_edges_adjacency(self):
+        edge_list = set((u, v) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'd')
+        adj_regulatory = nx.adjacency_matrix(nx.DiGraph(data=edge_list), nodelist=self.all_nodes)
+        return adj_regulatory
 
     @DeprecationWarning
     def compute_corr_graph_(self, modalities_pairs):
