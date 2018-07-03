@@ -6,11 +6,11 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
 class SourceTargetGraphEmbedding(StaticGraphEmbedding):
-    def __init__(self, d=50, reg=1.0, lr=0.001, epochs=10, batch_size=20000, Ed_Eu_ratio=0.4, **kwargs):
+    def __init__(self, d=50, reg=1.0, lr=0.001, epochs=10, batch_size=20000, Ed_Eu_ratio=0.2, **kwargs):
         super().__init__(d)
 
         self._d = d
-        self.reg = reg
+        # self.reg = reg
         self.lr = lr
         self.epochs = epochs
         self.batch_size = batch_size
@@ -73,18 +73,14 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
         # 2nd order proximity
         p_2_nom = tf.exp(tf.matmul(tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]], name="emb_c_i"),
                                tf.slice(emb_c, [j, 0], [1, emb_c.get_shape()[1]], name="emb_c_j"),
-                               transpose_b=True, name="p_2_nom_inner_prod"), name="p_2_nom")
-        p_2_denom = tf.reduce_sum(tf.matmul(emb_c,
-                                             tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]]),
-                                             transpose_b=True, name="p_2_denom_inner_prod"),
-                                   axis=0, name="p_2_denom")
+                               transpose_b=True, name="p_2_nom_inner_prod"),
+                         name="p_2_nom")
+        p_2_denom = tf.reduce_sum(tf.exp(tf.matmul(emb_c,
+                                                   tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]]),
+                                                   transpose_b=True, name="p_2_denom_inner_prod")),
+                                  axis=0, name="p_2_denom")
 
-        print(p_2_nom)
-        print(p_2_denom)
-
-        p_2 = tf.divide(p_2_nom, p_2_denom)
-
-        print(p_2)
+        p_2 = p_2_nom / p_2_denom
 
         loss_f2 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_2), name="loss_f2"))
 

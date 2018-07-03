@@ -66,6 +66,7 @@ class HeterogeneousNetwork():
 
         return self.G.subgraph(nodes)
 
+
     def add_edges_from_nodes_similarity(self, modality, features=None, similarity_threshold=0.7, data=True):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the network if the similarity measures passes the threshold
@@ -86,7 +87,7 @@ class HeterogeneousNetwork():
         self.G.add_weighted_edges_from(edgelist_ebunch, type="u")
         print(len(edgelist_ebunch), "edges added.")
 
-    def remove_isolates(self):
+    def remove_extra_nodes(self):
         self.G = self.get_subgraph(self.modalities)
 
     def get_node_similarity_adjacency(self):
@@ -98,6 +99,13 @@ class HeterogeneousNetwork():
         edge_list = [(u, v, d) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'd']
         adj_regulatory = nx.adjacency_matrix(nx.DiGraph(data=edge_list), nodelist=self.all_nodes)
         return adj_regulatory
+
+    def get_non_zero_degree_nodes(self):
+        return [k for k, v in self.G.degree_iter() if v > 0]
+
+
+
+
 
 
     @DeprecationWarning
