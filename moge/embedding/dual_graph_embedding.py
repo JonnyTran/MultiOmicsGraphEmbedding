@@ -6,14 +6,15 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
 class SourceTargetGraphEmbedding(StaticGraphEmbedding):
-    def __init__(self, d=50, reg=1.0, lr=0.001, iterations=100, batch_size=1, **kwargs):
+    def __init__(self, d=50, reg=1.0, lr=0.001, epochs=10, batch_size=20000, Ed_Eu_ratio=0.4, **kwargs):
         super().__init__(d)
 
         self._d = d
         self.reg = reg
         self.lr = lr
-        self.iterations = iterations
+        self.epochs = epochs
         self.batch_size = batch_size
+        self.Ed_Eu_ratio = Ed_Eu_ratio
 
         hyper_params = {
             'method_name': 'dual_graph_embedding'
@@ -31,6 +32,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
     def learn_embedding(self, network:HeterogeneousNetwork, edge_f=None,
                         is_weighted=False, no_python=False):
         self.n_nodes = len(network.all_nodes)
+        self.all_nodes = network.all_nodes
 
         adj_undirected = network.get_node_similarity_adjacency()
         adj_directed = network.get_regulatory_edges_adjacency()
@@ -40,9 +42,10 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
         Eu_rows, Eu_cols = adj_undirected.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         Eu_count = len(Eu_rows)
 
-        print("Directed edges:", Ed_count)
-        print("Undirected edges:", Eu_count)
+        print("Directed edges training size:", Ed_count)
+        print("Undirected edges training size:", Eu_count)
 
+        tf.reset_default_graph()
         with tf.name_scope('inputs'):
             E_ij = tf.placeholder(tf.float32, shape=(1,), name="E_ij")
             is_directed = tf.placeholder(tf.bool, name="is_directed")
@@ -58,20 +61,34 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
                                  validate_shape=True, dtype=tf.float32,
                                  name="emb_s", trainable=True)
 
+        emb_c = tf.concat([emb_s, emb_t], axis=1, name="emb_concat")
 
-        p_1 = tf.sigmoid(tf.matmul(tf.slice(emb_s, [i, 0], [1, emb_s.get_shape()[1]], name="emb_s_i"),
-                                       tf.slice(emb_t, [j, 0], [1, emb_s.get_shape()[1]], name="emb_t_j"),
-                                       transpose_b=True, name="p_1_inner_prod"), name="p_1")
+        # 1st order (directed proximity)
+        p_1 = tf.sigmoid(tf.matmul(tf.slice(emb_s, [i, 0], [1, emb_s.get_shape()[1]]),
+                                   tf.slice(emb_t, [j, 0], [1, emb_s.get_shape()[1]]),
+                                   transpose_b=True, name="p_1_inner_prod"), name="p_1")
 
         loss_f1 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_1), name="loss_f1"))
 
-        p_2 = tf.sigmoid(tf.matmul(tf.slice(tf.concat(emb_s, emb_t, 0), [i, 0], [1, emb_s.get_shape()[1]*2], name="emb_s_i"),
-                                       tf.slice(tf.concat(emb_s, emb_t, 0), [j, 0], [1, emb_s.get_shape()[1]*2], name="emb_t_j"),
-                                       transpose_b=True, name="p_2_inner_prod"), name="p_2")
+        # 2nd order proximity
+        p_2_nom = tf.exp(tf.matmul(tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]], name="emb_c_i"),
+                               tf.slice(emb_c, [j, 0], [1, emb_c.get_shape()[1]], name="emb_c_j"),
+                               transpose_b=True, name="p_2_nom_inner_prod"), name="p_2_nom")
+        p_2_denom = tf.reduce_sum(tf.matmul(emb_c,
+                                             tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]]),
+                                             transpose_b=True, name="p_2_denom_inner_prod"),
+                                   axis=0, name="p_2_denom")
+
+        print(p_2_nom)
+        print(p_2_denom)
+
+        p_2 = tf.divide(p_2_nom, p_2_denom)
+
+        print(p_2)
 
         loss_f2 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_2), name="loss_f2"))
 
-        loss = tf.cond(is_directed, true_fn=loss_f1, false_fn=loss_f2)
+        loss = tf.cond(is_directed, true_fn=lambda: loss_f1, false_fn=lambda: loss_f2)
 
         # Add the loss value as a scalar to summary.
         tf.summary.scalar('loss', loss)
@@ -88,51 +105,64 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
             session.as_default()
             session.run(init_op)
 
-            for step in range(self.iterations):
-                # Run all directed edges
-                iteration_loss = 0.0
-                n_samples = 0
-                for k in np.random.permutation(Ed_count):
-                    feed_dict = {E_ij: [adj_directed[Ed_rows[k], Ed_cols[k]], ],
-                                 is_directed: True,
-                                 i: Ed_rows[k],
-                                 j: Ed_cols[k]}
+            if self.batch_size == None or self.batch_size == -1:
+                self.batch_size = Ed_count + Eu_count
 
-                    _, summary, loss_val = session.run([optimizer, merged, loss],
-                                                       feed_dict=feed_dict)
+            self.iterations = int(self.epochs * (Ed_count + Eu_count) / self.batch_size)
 
-                    n_samples += 1
-                    iteration_loss += loss_val
-                    if (self.batch_size != None) and n_samples > self.batch_size:
-                        break
-                print("iteration:",step, "f1_loss", iteration_loss/self.batch_size)
+            Ed_batch_size = int(self.batch_size * self.Ed_Eu_ratio)
+            Eu_batch_size = int(self.batch_size * (1-self.Ed_Eu_ratio))
 
-                # Run all
-                iteration_loss = 0.0
-                n_samples=0
-                for k in np.random.permutation(Eu_count):
-                    feed_dict = {E_ij: [adj_undirected[Eu_rows[k], Eu_cols[k]], ],
-                                 is_directed: False,
-                                 i: Eu_rows[k],
-                                 j: Eu_cols[k]}
+            print("Training", self.iterations, "iterations, with directed_edges_batch_size", Ed_batch_size, "and undirected_edges_batch_size", Eu_batch_size)
 
-                    _, summary, loss_val = session.run([optimizer, merged, loss],
-                                                       feed_dict=feed_dict)
+            try:
+                for step in range(self.iterations):
+                    # Run all directed edges
+                    iteration_loss_f1 = 0.0
+                    for k in np.random.permutation(Ed_count)[0:Ed_batch_size]:
+                        feed_dict = {E_ij: [adj_directed[Ed_rows[k], Ed_cols[k]], ],
+                                     is_directed: True,
+                                     i: Ed_rows[k],
+                                     j: Ed_cols[k]}
 
-                    n_samples += 1
-                    iteration_loss += loss_val
-                    if (self.batch_size != None) and n_samples > self.batch_size:
-                        break
-                print("iteration:", step, "f2_loss", iteration_loss/self.batch_size)
+                        _, summary, loss_val = session.run([optimizer, merged, loss],
+                                                           feed_dict=feed_dict)
+                        iteration_loss_f1 += loss_val
 
-            # Save embedding vectors
-            self.embedding_s = session.run([emb_s])[0].copy()
-            self.embedding_t = session.run([emb_t])[0].copy()
 
-            session.close()
+                    # Run all undirected edges
+                    iteration_loss_f2 = 0.0
+                    for k in np.random.permutation(Eu_count)[0:Eu_batch_size]:
+                        feed_dict = {E_ij: [adj_undirected[Eu_rows[k], Eu_cols[k]], ],
+                                     is_directed: False,
+                                     i: Eu_rows[k],
+                                     j: Eu_cols[k]}
+
+                        _, summary, loss_val = session.run([optimizer, merged, loss],
+                                                           feed_dict=feed_dict)
+                        iteration_loss_f2 += loss_val
+
+                    print("iteration:", step, "f1_loss", iteration_loss_f1/Ed_batch_size, "f2_loss", iteration_loss_f2/Eu_batch_size)
+            except KeyboardInterrupt:
+                pass
+
+            finally:
+                # Save embedding vectors
+                self.embedding_s = session.run([emb_s])[0].copy()
+                self.embedding_t = session.run([emb_t])[0].copy()
+
+                session.close()
 
     def get_reconstructed_adj(self, X=None, node_l=None):
         return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s, self.embedding_t.T)))
+
+    def save_embeddings(self, filename):
+        fout = open(filename, 'w')
+        fout.write("{} {}\n".format(self.n_nodes, self._d*2))
+        for i in range(self.n_nodes):
+            fout.write("{} {}\n".format(self.all_nodes[i],
+                                        ' '.join([str(x) for x in self.get_embedding()[i]])))
+        fout.close()
 
     def get_embedding(self):
         return np.concatenate([self.embedding_s, self.embedding_t], axis=1)
@@ -169,6 +199,7 @@ class DualGraphEmbedding(StaticGraphEmbedding):
         self.n_nodes = graph.number_of_nodes()
         Y = nx.adjacency_matrix(graph)
 
+        tf.reset_default_graph()
         with tf.name_scope('inputs'):
             y_ij = tf.placeholder(tf.float32, shape=(1,), name="y_ij")
             i = tf.Variable(int, name="i", trainable=False)
@@ -241,32 +272,13 @@ class DualGraphEmbedding(StaticGraphEmbedding):
 
 
 if __name__ == '__main__':
-    from TCGAMultiOmics.multiomics import MultiOmicsData
+    import pickle
 
-    folder_path = "/home/jonny_admin/PycharmProjects/Bioinformatics_ExternalData/tcga-assembler/LUAD"
-    external_data_path = "/home/jonny_admin/PycharmProjects/Bioinformatics_ExternalData/"
-    luad_data = MultiOmicsData(cancer_type="LUAD", tcga_data_path=folder_path, external_data_path=external_data_path,
-                               modalities=["GE", "MIR",])
-
-    luad_data.GE.drop_genes(set(luad_data.GE.get_genes_list()) & set(luad_data.LNC.get_genes_list()))
-
-    ##### Build heterogeneous network #####
-    network = HeterogeneousNetwork(modalities=["MIR", "GE"], multi_omics_data=luad_data)
-    # Adds mRNA-mRNA and miRNA-miRNA node similarity
-    network.add_edges_from_nodes_similarity(modality="GE", similarity_threshold=0.99,
-                                            features=["locus_type", "gene_family_id"])
-    network.add_edges_from_nodes_similarity(modality="MIR", similarity_threshold=0.5)
-
-    # Adds miRNA-target interaction network
-    network.add_edges_from_edgelist(edgelist=luad_data.MIR.get_miRNA_target_interaction_edgelist(),
-                                    modalities=["MIR", "GE"])
-    # Adds Gene Regulatory Network edges
-    network.add_edges_from_edgelist(edgelist=luad_data.GE.get_RegNet_GRN_edgelist(),
-                                    modalities=["GE", "GE"])
-    network.remove_isolates()
+    with open('moge/data/lncRNA_miRNA_mRNA/miRNA-mRNA_network.pickle', 'rb') as input_file:
+        network = pickle.load(input_file)
 
     ##### Run graph embedding #####
-    gf = SourceTargetGraphEmbedding(d=64, reg=1.0, lr=0.05, iterations=10)
+    gf = SourceTargetGraphEmbedding(d=64, reg=1.0, lr=0.05, epochs=50, batch_size=10000)
 
     gf.learn_embedding(network)
     np.save("/home/jonny_admin/PycharmProjects/MultiOmicsGraphEmbedding/moge/data/lncRNA_miRNA_mRNA/miRNA-mRNA_source_target_embeddings_128.npy",

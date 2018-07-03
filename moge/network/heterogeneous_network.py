@@ -47,6 +47,11 @@ class HeterogeneousNetwork():
 
         self.G.add_edges_from(edgelist, type="d")
 
+    def import_edgelist_file(self, file, directed):
+        if directed:
+            self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.DiGraph()).edges(data=True))
+        else:
+            self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
     def get_adjacency_matrix(self):
         return nx.adjacency_matrix(self.G)
@@ -85,14 +90,15 @@ class HeterogeneousNetwork():
         self.G = self.get_subgraph(self.modalities)
 
     def get_node_similarity_adjacency(self):
-        edge_list = set((u,v) for u, v, d in self.G.edges_iter(data=True)if d['type'] == 'u')
+        edge_list = [(u, v, d) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'u']
         adj_similarity = nx.adjacency_matrix(nx.Graph(data=edge_list), nodelist=self.all_nodes)
         return adj_similarity
 
     def get_regulatory_edges_adjacency(self):
-        edge_list = set((u, v) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'd')
+        edge_list = [(u, v, d) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'd']
         adj_regulatory = nx.adjacency_matrix(nx.DiGraph(data=edge_list), nodelist=self.all_nodes)
         return adj_regulatory
+
 
     @DeprecationWarning
     def compute_corr_graph_(self, modalities_pairs):

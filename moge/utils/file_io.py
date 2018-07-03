@@ -9,7 +9,7 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 from sklearn.feature_extraction import DictVectorizer
 
 
-def write_node_labels_to_file(file_path, multi_omics_data:MultiOmicsData, modalities=["GE", "MIR", "LNC"], label_cols=["Disease association"],sep=" ", get_dummies=True):
+def write_node_labels_to_file(file_path, multi_omics_data:MultiOmicsData, modalities=["GE", "MIR", "LNC"], label_cols=["Disease association"], sep="\t", remove_na=True, get_dummies=False):
     with open(file_path, 'w') as file:
         genes_info_concat = []
 
@@ -23,24 +23,21 @@ def write_node_labels_to_file(file_path, multi_omics_data:MultiOmicsData, modali
                     family_col = ["Transcript Type"]
 
                 genes_info_concat.append(multi_omics_data[modality].get_genes_info().rename(columns={family_col[0]: "family"})[label_cols])
-            else:
+            elif "Disease association" in label_cols:
+
                 genes_info_concat.append(multi_omics_data[modality].get_genes_info()[label_cols])
 
-        if get_dummies:
-            file.write(pd.concat(genes_info_concat, axis=0)[label_cols[0]].str.get_dummies("|").to_csv(sep=sep, header=None, index_label=True))
-        else:
-            file.write(pd.concat(genes_info_concat, axis=0)[label_cols[0]].to_csv(sep=sep, header=None, index_label=True))
 
-#             for node in network.nodes[modality]:
-#                 gene_info = multi_omics_data[modality].get_genes_info()[node]
-#                 # TODO if node_label_integer:
-#                 file.write(node)
-#
-#                 # str = gene_info.loc[node, label_cols].to_csv(sep="\t")
-#
-# )
-#
-#                 file.write(os.linesep)
+        if remove_na:
+            entries_to_write = pd.concat(genes_info_concat, axis=0)[label_cols[0]].dropna()
+        else:
+            entries_to_write = pd.concat(genes_info_concat, axis=0)[label_cols[0]]
+
+        if get_dummies:
+            entries_to_write = entries_to_write.str.get_dummies("|")
+
+        file.write(entries_to_write.to_csv(sep=sep, header=None, index_label=True))
+
         file.close()
 
 
