@@ -1,4 +1,5 @@
 from abc import ABCMeta
+import numpy as np
 
 class StaticGraphEmbedding:
 	__metaclass__ = ABCMeta
@@ -53,6 +54,41 @@ class StaticGraphEmbedding:
 
 		'''
 		pass
+
+	def import_embedding(self, file, node_list=None):
+		self.imported = True
+		with open(file, "r") as fin:
+			node_num, size = [int(x) for x in fin.readline().strip().split()]
+			vectors = {}
+			while 1:
+				l = fin.readline()
+				if l == '':
+					break
+				vec = l.strip().split(' ')
+				assert len(vec) == size + 1
+				vectors[vec[0]] = [float(x) for x in vec[1:]]
+			fin.close()
+			assert len(vectors) == node_num
+
+			if self.get_method_name() == "source_target_graph_embedding":
+				self._d = size
+				self.embedding_s = []
+				self.embedding_t = []
+
+				for node in node_list:
+					self.embedding_s.append(vectors[node][0 : int(self._d/2)])
+					self.embedding_t.append(vectors[node][int(self._d/2) : int(self._d)])
+
+				self.embedding_s = np.array(self.embedding_s)
+				self.embedding_t = np.array(self.embedding_t)
+				self._X = np.concatenate([self.embedding_s, self.embedding_t], axis=1)
+
+			else:
+				self._d = size
+				self._X = []
+				for node in node_list:
+					self._X.append(vectors[node])
+				self._X = np.array(self._X)
 
 	def get_reconstructed_adj(self):
 		'''Compute the adjacency matrix from the learned embedding

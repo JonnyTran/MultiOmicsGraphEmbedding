@@ -17,7 +17,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
         self.Ed_Eu_ratio = Ed_Eu_ratio
 
         hyper_params = {
-            'method_name': 'dual_graph_embedding'
+            'method_name': 'source_target_graph_embedding'
         }
         hyper_params.update(kwargs)
         for key in hyper_params.keys():
@@ -147,6 +147,8 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
                 self.embedding_s = session.run([emb_s])[0].copy()
                 self.embedding_t = session.run([emb_t])[0].copy()
 
+                self._X = np.concatenate([self.embedding_s, self.embedding_t], axis=1)
+
                 session.close()
 
     def get_reconstructed_adj(self, X=None, node_l=None):
@@ -161,7 +163,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
         fout.close()
 
     def get_embedding(self):
-        return np.concatenate([self.embedding_s, self.embedding_t], axis=1)
+        return self._X
 
     def get_edge_weight(self, i, j):
         return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s[i], self.embedding_t[j].T)))
