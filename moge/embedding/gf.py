@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import scipy.sparse
 
-from moge.embedding.static_graph_embedding import StaticGraphEmbedding
+from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 
-class GraphFactorization(StaticGraphEmbedding):
+class GraphFactorization(ImportedGraphEmbedding):
 
     def __init__(self, d=100, reg=1.0, lr=0.001):
         self.d = d

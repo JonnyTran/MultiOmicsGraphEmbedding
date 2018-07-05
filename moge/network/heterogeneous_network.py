@@ -90,14 +90,18 @@ class HeterogeneousNetwork():
     def remove_extra_nodes(self):
         self.G = self.get_subgraph(self.modalities)
 
-    def get_node_similarity_adjacency(self):
+    def get_node_similarity_adjacency(self, node_list=None):
         edge_list = [(u, v, d) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'u']
-        adj_similarity = nx.adjacency_matrix(nx.Graph(data=edge_list), nodelist=self.all_nodes)
+        if node_list == None:
+            node_list = self.all_nodes
+        adj_similarity = nx.adjacency_matrix(nx.Graph(data=edge_list), nodelist=node_list)
         return adj_similarity
 
-    def get_regulatory_edges_adjacency(self):
+    def get_regulatory_edges_adjacency(self, node_list=None):
         edge_list = [(u, v, d) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'd']
-        adj_regulatory = nx.adjacency_matrix(nx.DiGraph(data=edge_list), nodelist=self.all_nodes)
+        if node_list == None:
+            node_list = self.all_nodes
+        adj_regulatory = nx.adjacency_matrix(nx.DiGraph(data=edge_list), nodelist=node_list)
         return adj_regulatory
 
     def get_non_zero_degree_nodes(self):

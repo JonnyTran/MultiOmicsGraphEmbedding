@@ -1,12 +1,12 @@
 import tensorflow as tf
 import networkx as nx
 import numpy as np
-from moge.embedding.static_graph_embedding import StaticGraphEmbedding
+from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-class SourceTargetGraphEmbedding(StaticGraphEmbedding):
-    def __init__(self, d=50, reg=1.0, lr=0.001, epochs=10, batch_size=20000, Ed_Eu_ratio=0.2, **kwargs):
+class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
+    def __init__(self, d=50, lr=0.001, epochs=10, batch_size=100000, Ed_Eu_ratio=0.2, **kwargs):
         super().__init__(d)
 
         self._d = d
@@ -30,7 +30,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
         return '%s_%d' % (self._method_name, self._d)
 
     def learn_embedding(self, network:HeterogeneousNetwork, edge_f=None,
-                        is_weighted=False, no_python=False):
+                        is_weighted=False, no_python=False, seed=0):
         self.n_nodes = len(network.all_nodes)
         self.all_nodes = network.all_nodes
 
@@ -111,6 +111,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
 
             print("Training", self.iterations, "iterations, with directed_edges_batch_size", Ed_batch_size, "and undirected_edges_batch_size", Eu_batch_size)
 
+            np.random.seed(seed)
             try:
                 for step in range(self.iterations):
                     # Run all directed edges
@@ -151,7 +152,14 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
 
                 session.close()
 
-    def get_reconstructed_adj(self, X=None, node_l=None):
+    def get_reconstructed_adj(self, X=None, node_l=None, edge_type=None):
+        """
+        Since this is
+        :param X:
+        :param node_l:
+        :param edge_type:
+        :return:
+        """
         return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s, self.embedding_t.T)))
 
     def save_embeddings(self, filename):
@@ -169,7 +177,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
         return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s[i], self.embedding_t[j].T)))
 
 
-class DualGraphEmbedding(StaticGraphEmbedding):
+class DualGraphEmbedding(ImportedGraphEmbedding):
     def __init__(self, d=50, reg=1.0, lr=0.001, iterations=100, batch_size=1, **kwargs):
         super().__init__(d)
 
