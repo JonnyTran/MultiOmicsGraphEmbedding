@@ -1,11 +1,12 @@
 import tensorflow as tf
 import networkx as nx
 import numpy as np
-from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
+from scipy.sparse import triu
+from moge.embedding.static_graph_embedding import StaticGraphEmbedding, ImportedGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
+class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
     def __init__(self, d=50, lr=0.001, epochs=10, batch_size=100000, Ed_Eu_ratio=0.2, **kwargs):
         super().__init__(d)
 
@@ -39,7 +40,7 @@ class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
 
         Ed_rows, Ed_cols = adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         Ed_count = len(Ed_rows)
-        Eu_rows, Eu_cols = adj_undirected.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
+        Eu_rows, Eu_cols = triu(adj_undirected, k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
         Eu_count = len(Eu_rows)
 
         print("Directed edges training size:", Ed_count)
@@ -68,21 +69,17 @@ class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
                                    tf.slice(emb_t, [j, 0], [1, emb_s.get_shape()[1]]),
                                    transpose_b=True, name="p_1_inner_prod"), name="p_1")
 
-        loss_f1 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_1), name="loss_f1"))
+        loss_f1 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_1)), name="loss_f1")
 
         # 2nd order proximity
-        p_2_nom = tf.exp(tf.matmul(tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]], name="emb_c_i"),
-                               tf.slice(emb_c, [j, 0], [1, emb_c.get_shape()[1]], name="emb_c_j"),
-                               transpose_b=True, name="p_2_nom_inner_prod"),
-                         name="p_2_nom")
-        p_2_denom = tf.reduce_sum(tf.exp(tf.matmul(emb_c,
-                                                   tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]]),
-                                                   transpose_b=True, name="p_2_denom_inner_prod")),
-                                  axis=0, name="p_2_denom")
+        p_2_exps = tf.matmul(tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]], name="p_2_exps_i"),
+                            emb_c,
+                            transpose_b=True) # dim (1, n_nodes)
+        p_2 = tf.slice(tf.nn.softmax(p_2_exps - tf.reduce_max(p_2_exps, axis=1),
+                                     axis=1, name="p_2_softmax"),
+                       [0, j], [1, 1], "p_2_i_j")
 
-        p_2 = p_2_nom / p_2_denom
-
-        loss_f2 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_2), name="loss_f2"))
+        loss_f2 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_2)), name="loss_f2")
 
         loss = tf.cond(is_directed, true_fn=lambda: loss_f1, false_fn=lambda: loss_f2)
 
@@ -106,8 +103,12 @@ class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
 
             self.iterations = int(self.epochs * (Ed_count + Eu_count) / self.batch_size)
 
-            Ed_batch_size = int(self.batch_size * self.Ed_Eu_ratio)
-            Eu_batch_size = int(self.batch_size * (1-self.Ed_Eu_ratio))
+            if self.Ed_Eu_ratio != None:
+                Ed_batch_size = min(int(self.batch_size * self.Ed_Eu_ratio), Ed_count)
+                Eu_batch_size = min(int(self.batch_size * (1-self.Ed_Eu_ratio)), Eu_count)
+            else:
+                Ed_batch_size = int(self.batch_size * Ed_count/(Ed_count + Eu_count))
+                Eu_batch_size = int(self.batch_size * Eu_count/(Ed_count + Eu_count))
 
             print("Training", self.iterations, "iterations, with directed_edges_batch_size", Ed_batch_size, "and undirected_edges_batch_size", Eu_batch_size)
 
@@ -139,7 +140,8 @@ class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
                                                            feed_dict=feed_dict)
                         iteration_loss_f2 += loss_val
 
-                    print("iteration:", step, "f1_loss", iteration_loss_f1/Ed_batch_size, "f2_loss", iteration_loss_f2/Eu_batch_size)
+                    print("iteration:", step, "f1_loss", iteration_loss_f1/Ed_batch_size,
+                          "f2_loss", iteration_loss_f2/Eu_batch_size)
             except KeyboardInterrupt:
                 pass
 
@@ -152,15 +154,26 @@ class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
 
                 session.close()
 
-    def get_reconstructed_adj(self, X=None, node_l=None, edge_type=None):
+    def get_reconstructed_adj(self, X=None, node_l=None, edge_type="d"):
         """
-        Since this is
+        For inter-modality, we calculate the directed first-order proximity, for intra-modality, we calculate the
+        second-order proximity.
+        The combined will be the adjacency matrix.
+
         :param X:
         :param node_l:
         :param edge_type:
         :return:
         """
-        return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s, self.embedding_t.T)))
+        if edge_type == "d":
+            estimated_adj = np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s, self.embedding_t.T)))
+        elif edge_type == 'u':
+            estimated_adj = self.softmax(np.matmul(self._X, self._X.T))
+            np.fill_diagonal(estimated_adj, 0)
+        else:
+            raise Exception("Have not implemented directed and undirected combined adjacency matrix")
+
+        return estimated_adj
 
     def save_embeddings(self, filename):
         fout = open(filename, 'w')
@@ -170,14 +183,21 @@ class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
                                         ' '.join([str(x) for x in self.get_embedding()[i]])))
         fout.close()
 
+    def softmax(self, X):
+        exps = np.exp(X)
+        return exps/np.sum(exps, axis=0)
+
     def get_embedding(self):
         return self._X
 
-    def get_edge_weight(self, i, j):
-        return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s[i], self.embedding_t[j].T)))
+    def get_edge_weight(self, i, j, edge_type='d'):
+        if edge_type == 'd':
+            return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s[i], self.embedding_t[j].T)))
+        elif edge_type == 'u':
+            return self.softmax(np.matmul(self._X[i], self._X.T))[j]
 
 
-class DualGraphEmbedding(ImportedGraphEmbedding):
+class DualGraphEmbedding(StaticGraphEmbedding):
     def __init__(self, d=50, reg=1.0, lr=0.001, iterations=100, batch_size=1, **kwargs):
         super().__init__(d)
 

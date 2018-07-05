@@ -21,17 +21,20 @@ def evaluateStaticGraphReconstruction(network:HeterogeneousNetwork, graph_emb, e
     elif edge_type == "d":
         true_adj_matrix = network.get_regulatory_edges_adjacency(node_list)
     else:
-        true_adj_matrix = nx.adjacency_matrix(network.G)
+        true_adj_matrix = nx.adjacency_matrix(network.G, nodelist=node_list)
 
-    eval_edge_rows, eval_edge_cols  = getRandomEdgePairs(true_adj_matrix, node_list=node_list,
-                                         sample_ratio=sample_ratio, return_indices=True)
+    if sample_ratio < 1.0:
+        eval_edge_rows, eval_edge_cols  = getRandomEdgePairs(true_adj_matrix, node_list=node_list,
+                                             sample_ratio=sample_ratio, return_indices=True)
+    else:
+        eval_edge_rows, eval_edge_cols = true_adj_matrix.nonzero()
     print("Sampling", len(eval_edge_rows), "edges to be evaluated.")
 
     true_edges = true_adj_matrix[eval_edge_rows, eval_edge_cols]
-    estimated_edges = graph_emb.get_reconstructed_adj()[eval_edge_rows, eval_edge_cols]
+    estimated_edges = graph_emb.get_reconstructed_adj(edge_type=edge_type)[eval_edge_rows, eval_edge_cols]
 
-    frobenius_norm = np.linalg.norm(true_edges-estimated_edges)
+    norm = np.linalg.norm(true_edges-estimated_edges)
 
-    return frobenius_norm/len(eval_edge_rows)
+    return norm/len(eval_edge_rows)
 
 
