@@ -1,16 +1,8 @@
-import os
-
-import numpy as np
-import pandas as pd
-import networkx as nx
 import dask.dataframe as dd
 from dask.threaded import get
-from sklearn.neighbors import DistanceMetric
-from scipy.spatial.distance import pdist
 import scipy.sparse as sp
 
-from TCGAMultiOmics.multiomics import MultiOmicsData
-from moge.utils.omics_distance import *
+from moge.network.omics_distance import *
 
 
 class HeterogeneousNetwork():
@@ -54,12 +46,12 @@ class HeterogeneousNetwork():
         else:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self):
+    def get_adjacency_matrix(self, node_list):
         """
         Get adjacency matrix, and remove diagonal elements
         :return:
         """
-        adj = nx.adjacency_matrix(self.G)
+        adj = nx.adjacency_matrix(self.G, nodelist=node_list)
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         adj.eliminate_zeros()
         return adj

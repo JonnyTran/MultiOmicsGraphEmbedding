@@ -39,8 +39,8 @@ def preprocess_graph(adj):
 # Takes in adjacency matrix in sparse format (from a directed graph)
 # Returns: adj_train, train_edges, val_edges, val_edges_false,
 # test_edges, test_edges_false
-def mask_test_edges_directed(adj, test_frac=.1, val_frac=.05,
-                             prevent_disconnect=True, verbose=False, false_edge_sampling='iterative'):
+def mask_test_edges_directed(adj, node_list, test_frac=.1, val_frac=.05,
+                             prevent_disconnect=True, verbose=False):
     if verbose == True:
         print('preprocessing...')
 
@@ -51,6 +51,7 @@ def mask_test_edges_directed(adj, test_frac=.1, val_frac=.05,
 
     # Convert to networkx graph to calc num. weakly connected components
     g = nx.from_scipy_sparse_matrix(adj, create_using=nx.DiGraph())
+    node_list = list(g.nodes())
     orig_num_wcc = nx.number_weakly_connected_components(g)
 
     adj_tuple = sparse_to_tuple(adj)  # (coords, values, shape)
@@ -62,7 +63,7 @@ def mask_test_edges_directed(adj, test_frac=.1, val_frac=.05,
     num_train = len(edge_pairs) - num_test - num_val  # num train edges
 
     all_edge_set = set(edge_pairs)
-    train_edges = set(edge_pairs)  # init train_edges to have all edges
+    train_edges = set()  # init train_edges to have all edges
     test_edges = set()  # init test_edges as empty set
     val_edges = set()  # init val edges as empty set
 
@@ -75,6 +76,11 @@ def mask_test_edges_directed(adj, test_frac=.1, val_frac=.05,
 
     if verbose:
         print('creating true edges...')
+
+    # Add bridge edges to train_edges, and exclude from the rest
+    train_edges = [pair for pair in edge_pairs if (pair[0], pair[1]) not in bridge_edges]
+
+
 
     for ind, edge in enumerate(edge_pairs):
         node1, node2 = edge[0], edge[1]
@@ -117,9 +123,7 @@ def mask_test_edges_directed(adj, test_frac=.1, val_frac=.05,
     # Check that enough test/val edges were found
     if (len(val_edges) < num_val or len(test_edges) < num_test):
         print("WARNING: not enough removable edges to perform full train-test split!")
-
         print("Num. (test, val) edges requested: (", num_test, ", ", num_val, ")")
-
         print("Num. (test, val) edges returned: (", len(test_edges), ", ", len(val_edges), ")")
 
 
