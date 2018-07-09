@@ -7,6 +7,7 @@ import dask.dataframe as dd
 from dask.threaded import get
 from sklearn.neighbors import DistanceMetric
 from scipy.spatial.distance import pdist
+import scipy.sparse as sp
 
 from TCGAMultiOmics.multiomics import MultiOmicsData
 from moge.utils.omics_distance import *
@@ -54,7 +55,14 @@ class HeterogeneousNetwork():
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
     def get_adjacency_matrix(self):
-        return nx.adjacency_matrix(self.G)
+        """
+        Get adjacency matrix, and remove diagonal elements
+        :return:
+        """
+        adj = nx.adjacency_matrix(self.G)
+        adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
+        adj.eliminate_zeros()
+        return adj
 
     def get_edge(self, i, j):
         return self.G.get_edge_data(i, j)
