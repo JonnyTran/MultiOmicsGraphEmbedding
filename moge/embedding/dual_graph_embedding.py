@@ -35,8 +35,8 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
         self.n_nodes = len(network.all_nodes)
         self.all_nodes = network.all_nodes
 
-        adj_undirected = network.get_node_similarity_adjacency()
-        adj_directed = network.get_regulatory_edges_adjacency()
+        adj_undirected = network.get_node_similarity_adjacency(get_training_data=True)
+        adj_directed = network.get_regulatory_edges_adjacency(get_training_data=True)
 
         Ed_rows, Ed_cols = adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         Ed_count = len(Ed_rows)

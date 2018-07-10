@@ -35,25 +35,33 @@ def preprocess_graph(adj):
     return sparse_to_tuple(adj_normalized)
 
 
-# Perform train-test split
-# Takes in adjacency matrix in sparse format (from a directed graph)
-# Returns: adj_train, train_edges, val_edges, val_edges_false,
-# test_edges, test_edges_false
-def mask_test_edges_directed(adj, node_list, test_frac=.1, val_frac=.05,
-                             prevent_disconnect=True, verbose=False):
+def mask_test_edges(adj, is_directed=True, test_frac=.1, val_frac=.05,
+                    prevent_disconnect=True, only_largest_wcc=False, seed=0, verbose=False):
+    """
+    Perform train-test split of the adjancency matrix and return the train-set and test-set edgelist (indices
+    instead of node label). Node sampling of the testing set is after excluding bridges edges to prevent disconnect
+    (implemented for undirected graph).
+
+    :param adj: adjacency matrix in sparse format
+    :param is_directed:
+    :param test_frac:
+    :param val_frac:
+    :param prevent_disconnect:
+    :param only_largest_wcc:
+    :param seed:
+    :param verbose:
+    :return:
+    """
     if verbose == True:
         print('preprocessing...')
-
 
     # Remove diagonal elements
     adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
     adj.eliminate_zeros()
 
     # Convert to networkx graph to calc num. weakly connected components
-    g = nx.from_scipy_sparse_matrix(adj, create_using=nx.DiGraph())
-    node_list = list(g.nodes())
-    orig_num_wcc = nx.number_weakly_connected_components(g)
-
+    g = nx.from_scipy_sparse_matrix(adj, create_using=nx.DiGraph() if is_directed else nx.Graph())
+    orig_num_wcc = nx.number_weakly_connected_components(g) if is_directed else nx.number_connected_components(g)
     adj_tuple = sparse_to_tuple(adj)  # (coords, values, shape)
     edges = adj_tuple[0]  # List of ALL edges (either direction)
     edge_pairs = [(edge[0], edge[1]) for edge in edges]  # store edges as list of tuples (from_node, to_node)
@@ -62,63 +70,30 @@ def mask_test_edges_directed(adj, node_list, test_frac=.1, val_frac=.05,
     num_val = int(np.floor(edges.shape[0] * val_frac))  # controls how alrge the validation set should be
     num_train = len(edge_pairs) - num_test - num_val  # num train edges
 
-    all_edge_set = set(edge_pairs)
-    train_edges = set()  # init train_edges to have all edges
-    test_edges = set()  # init test_edges as empty set
-    val_edges = set()  # init val edges as empty set
-
     ### ---------- TRUE EDGES ---------- ###
     # Shuffle and iterate over all edges
-    np.random.shuffle(edge_pairs)
-
-    # get initial bridge edges
-    bridge_edges = set(bridges(g.to_undirected()))
 
     if verbose:
         print('creating true edges...')
 
-    # Add bridge edges to train_edges, and exclude from the rest
-    train_edges = [pair for pair in edge_pairs if (pair[0], pair[1]) not in bridge_edges]
+    # Add MST edges to train_edges, to exclude bridge edges from the test and validation set
+    mst_edges = set(nx.minimum_spanning_tree(g.to_undirected() if is_directed else g).edges())
+    train_edges = set([pair for pair in edge_pairs if
+                       (pair[0], pair[1]) in mst_edges or (pair[0], pair[1])[::-1] in mst_edges])
+    if verbose: print("edges in MST:", len(train_edges))
 
+    all_edge_set = [pair for pair in edge_pairs if pair not in train_edges]
+    np.random.seed(seed)
+    np.random.shuffle(all_edge_set)
+    train_edges = list(train_edges)
 
+    test_edges = all_edge_set[0 : num_test]
+    val_edges = all_edge_set[num_test : num_test+num_val]
+    train_edges.extend(all_edge_set[num_test+num_val:])
 
-    for ind, edge in enumerate(edge_pairs):
-        node1, node2 = edge[0], edge[1]
-
-        # Recalculate bridges every ____ iterations to relatively recent
-        if ind % 10000 == 0 and prevent_disconnect:
-            bridge_edges = set(bridges(g.to_undirected()))
-
-            # Don't sample bridge edges to increase likelihood of staying connected
-        if (node1, node2) in bridge_edges or (node2, node1) in bridge_edges:
-            continue
-
-        # If removing edge would disconnect the graph, backtrack and move on
-        g.remove_edge(node1, node2)
-        if prevent_disconnect == True:
-            if not nx.is_weakly_connected(g):
-                g.add_edge(node1, node2)
-                continue
-
-        # Fill test_edges first
-        if len(test_edges) < num_test:
-            test_edges.add(edge)
-            train_edges.remove(edge)
-            if len(test_edges) % 10000 == 0 and verbose == True:
-                print('Current num test edges: ', len(test_edges))
-
-
-        # Then, fill val_edges
-        elif len(val_edges) < num_val:
-            val_edges.add(edge)
-            train_edges.remove(edge)
-            if len(val_edges) % 10000 == 0 and verbose == True:
-                print('Current num val edges: ', len(val_edges))
-
-
-        # Both edge lists full --> break loop
-        elif len(test_edges) == num_test and len(val_edges) == num_val:
-            break
+    # Remove edges from g to test connected-ness
+    g.remove_edges_from(test_edges)
+    g.remove_edges_from(val_edges)
 
     # Check that enough test/val edges were found
     if (len(val_edges) < num_val or len(test_edges) < num_test):
@@ -126,22 +101,22 @@ def mask_test_edges_directed(adj, node_list, test_frac=.1, val_frac=.05,
         print("Num. (test, val) edges requested: (", num_test, ", ", num_val, ")")
         print("Num. (test, val) edges returned: (", len(test_edges), ", ", len(val_edges), ")")
 
+    if prevent_disconnect == True:
+        assert nx.number_weakly_connected_components(g) if is_directed else nx.number_connected_components(g) == orig_num_wcc
 
     # Print stats for largest remaining WCC
-    print('Num WCC: ', nx.number_weakly_connected_components(g))
+    if verbose:
+        print('Num WCC: ', nx.number_weakly_connected_components(g) if is_directed else nx.number_connected_components(g))
+        largest_wcc_set = max(nx.weakly_connected_components(g) if is_directed else nx.connected_components(g), key=len)
+        largest_wcc = g.subgraph(largest_wcc_set)
+        print('Largest WCC num nodes: ', largest_wcc.number_of_nodes())
+        print('Largest WCC num edges: ', largest_wcc.number_of_edges())
 
-    largest_wcc_set = max(nx.weakly_connected_components(g), key=len)
-    largest_wcc = g.subgraph(largest_wcc_set)
-    print('Largest WCC num nodes: ', largest_wcc.number_of_nodes())
-
-    print('Largest WCC num edges: ', largest_wcc.number_of_edges())
-
-
-    if prevent_disconnect == True:
-        assert nx.number_weakly_connected_components(g) == orig_num_wcc
 
     # Fraction of edges with both endpoints in largest WCC
     def frac_edges_in_wcc(edge_set):
+        if len(edge_set) == 0:
+            return "N/A"
         num_wcc_contained_edges = 0.0
         num_total_edges = 0.0
         for edge in edge_set:
@@ -152,27 +127,18 @@ def mask_test_edges_directed(adj, node_list, test_frac=.1, val_frac=.05,
         return frac_in_wcc
 
     # Check what percentage of edges have both endpoints in largest WCC
-    print('Fraction of train edges with both endpoints in L-WCC: ', frac_edges_in_wcc(train_edges))
-
-    print('Fraction of test edges with both endpoints in L-WCC: ', frac_edges_in_wcc(test_edges))
-
-    print('Fraction of val edges with both endpoints in L-WCC: ', frac_edges_in_wcc(val_edges))
+    if verbose:
+        print('Fraction of train edges with both endpoints in L-WCC: ', frac_edges_in_wcc(train_edges))
+        print('Fraction of test edges with both endpoints in L-WCC: ', frac_edges_in_wcc(test_edges))
+        print('Fraction of val edges with both endpoints in L-WCC: ', frac_edges_in_wcc(val_edges))
 
 
     # Ignore edges with endpoint not in largest WCC
-    print('Removing edges with either endpoint not in L-WCC from train-test split...')
-
-    train_edges = {edge for edge in train_edges if edge[0] in largest_wcc_set and edge[1] in largest_wcc_set}
-    test_edges = {edge for edge in test_edges if edge[0] in largest_wcc_set and edge[1] in largest_wcc_set}
-    val_edges = {edge for edge in val_edges if edge[0] in largest_wcc_set and edge[1] in largest_wcc_set}
-
-    ### ---------- FALSE EDGES ---------- ###
-
-    # Initialize empty sets
-    # train_edges_false = set()
-    # test_edges_false = set()
-    # val_edges_false = set()
-
+    if only_largest_wcc:
+        print('Removing edges with either endpoint not in L-WCC from train-test split...')
+        train_edges = {edge for edge in train_edges if edge[0] in largest_wcc_set and edge[1] in largest_wcc_set}
+        test_edges = {edge for edge in test_edges if edge[0] in largest_wcc_set and edge[1] in largest_wcc_set}
+        val_edges = {edge for edge in val_edges if edge[0] in largest_wcc_set and edge[1] in largest_wcc_set}
 
 
     ### ---------- FINAL DISJOINTNESS CHECKS ---------- ###
@@ -180,20 +146,10 @@ def mask_test_edges_directed(adj, node_list, test_frac=.1, val_frac=.05,
         print('final checks for disjointness...')
 
 
-    # assert: false_edges are actually false (not in all_edge_tuples)
-    # assert test_edges_false.isdisjoint(all_edge_set)
-    # assert val_edges_false.isdisjoint(all_edge_set)
-    # assert train_edges_false.isdisjoint(all_edge_set)
-    #
-    # # assert: test, val, train false edges disjoint
-    # assert test_edges_false.isdisjoint(val_edges_false)
-    # assert test_edges_false.isdisjoint(train_edges_false)
-    # assert val_edges_false.isdisjoint(train_edges_false)
-
     # assert: test, val, train positive edges disjoint
-    assert val_edges.isdisjoint(train_edges)
-    assert test_edges.isdisjoint(train_edges)
-    assert val_edges.isdisjoint(test_edges)
+    assert set(val_edges).isdisjoint(set(train_edges))
+    assert set(test_edges).isdisjoint(set(train_edges))
+    assert set(val_edges).isdisjoint(set(test_edges))
 
     if verbose == True:
         print('creating adj_train...')

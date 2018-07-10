@@ -46,11 +46,12 @@ class HeterogeneousNetwork():
         else:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, node_list):
+    def get_adjacency_matrix(self, node_list=None):
         """
         Get adjacency matrix, and remove diagonal elements
         :return:
         """
+        if node_list==None: node_list = self.all_nodes
         adj = nx.adjacency_matrix(self.G, nodelist=node_list)
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         adj.eliminate_zeros()
@@ -90,25 +91,34 @@ class HeterogeneousNetwork():
     def remove_extra_nodes(self):
         self.G = self.get_subgraph(self.modalities)
 
-    def get_node_similarity_adjacency(self, node_list=None):
-        edge_list = [(u, v, d) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'u']
+    def get_node_similarity_adjacency(self, node_list=None, get_training_data=False):
+        if hasattr(self, "adj_similarity_train") and get_training_data:
+            return self.adj_similarity_train
+
+        edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == 'u']
         if node_list == None:
             node_list = self.all_nodes
-        adj_similarity = nx.adjacency_matrix(nx.Graph(data=edge_list), nodelist=node_list)
+        adj_similarity = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
         return adj_similarity
 
-    def get_regulatory_edges_adjacency(self, node_list=None):
-        edge_list = [(u, v, d) for u, v, d in self.G.edges_iter(data=True) if d['type'] == 'd']
+    def get_regulatory_edges_adjacency(self, node_list=None, get_training_data=False):
+        if hasattr(self, "adj_regulatory_train") and get_training_data:
+            return self.adj_regulatory_train
+
+        edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == 'd']
         if node_list == None:
             node_list = self.all_nodes
-        adj_regulatory = nx.adjacency_matrix(nx.DiGraph(data=edge_list), nodelist=node_list)
+        adj_regulatory = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         return adj_regulatory
 
+    def set_node_similarity_training_adjacency(self, adj):
+        self.adj_similarity_train = adj
+
+    def set_regulatory_edges_training_adjacency(self, adj):
+        self.adj_regulatory_train = adj
+
     def get_non_zero_degree_nodes(self):
-        return [k for k, v in self.G.degree_iter() if v > 0]
-
-
-
+        return [k for k, v in self.G.degree() if v > 0]
 
 
 
