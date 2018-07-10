@@ -2,8 +2,18 @@ import numpy as np
 import random
 import scipy.sparse as sp
 import networkx as nx
-from networkx.algorithms.bridges import bridges as bridges
-from networkx.algorithms.chains import chain_decomposition
+
+from moge.network.heterogeneous_network import HeterogeneousNetwork
+from moge.embedding.dual_graph_embedding import ImportedGraphEmbedding
+
+def get_top_k_edge_prediction(network:HeterogeneousNetwork, graph_emb:ImportedGraphEmbedding, edge_type):
+    estimated_adj = graph_emb.get_reconstructed_adj(edge_type=edge_type)
+
+    if edge_type == 'd':
+        true_adj = network.get_regulatory_edges_adjacency()
+    elif edge_type == 'u':
+        true_adj = network.get_node_similarity_adjacency()
+
 
 def getRandomEdgePairs(sparse_adj_matrix, node_list, sample_ratio=0.01, return_indices=False):
     rows, cols = sparse_adj_matrix.nonzero()
