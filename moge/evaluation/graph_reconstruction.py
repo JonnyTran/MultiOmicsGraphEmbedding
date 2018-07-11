@@ -36,6 +36,6 @@ def evaluateStaticGraphReconstruction(network:HeterogeneousNetwork, graph_emb, e
     norm = np.linalg.norm(true_edges-estimated_edges)
     avg = np.average(true_edges - estimated_edges)
 
-    return norm/len(eval_edge_rows), avg
+    return norm, avg
 
 
