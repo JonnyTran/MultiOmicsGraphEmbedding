@@ -160,7 +160,7 @@ class StaticGraphEmbedding:
         '''
         pass
 
-    def get_reconstructed_adj(self):
+    def get_reconstructed_adj(self, edge_type):
         '''Compute the adjacency matrix from the learned embedding
 
         Returns:

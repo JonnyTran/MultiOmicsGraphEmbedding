@@ -46,13 +46,26 @@ class HeterogeneousNetwork():
         else:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, node_list=None):
+    def get_adjacency_matrix(self, edge_type=["u", "d"], node_list=None):
         """
         Get adjacency matrix, and remove diagonal elements
         :return:
         """
-        if node_list==None: node_list = self.all_nodes
-        adj = nx.adjacency_matrix(self.G, nodelist=node_list)
+        if node_list==None:
+            node_list = self.all_nodes
+
+        if edge_type == None:
+            edge_list = self.G.edges(data=True)
+        else:
+            edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_type]
+
+        if 'u' in edge_type:
+            undirected_edge_list = [(v, u, d) for u, v, d in edge_list if d['type'] == 'u']
+            edge_list = edge_list.extend(undirected_edge_list)
+
+        adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
+
+        # adj = nx.adjacency_matrix(self.G, nodelist=node_list)
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         adj.eliminate_zeros()
         return adj
@@ -61,6 +74,9 @@ class HeterogeneousNetwork():
         return self.G.get_edge_data(i, j)
 
     def get_subgraph(self, modalities=["MIR", "LNC", "GE"]):
+        if modalities==None:
+            modalities = self.modalities
+
         nodes = []
         for modality in modalities:
             nodes.extend(self.nodes[modality])

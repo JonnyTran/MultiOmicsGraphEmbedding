@@ -56,6 +56,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
             E_i_ = tf.sparse_placeholder(tf.float32, name="E_i_")
             is_directed = tf.placeholder(tf.bool, name="is_directed")
             i = tf.placeholder(tf.int32, name="i")
+            learning_rate = tf.placeholder(tf.float32, shape=[])
 
 
         emb_s = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self._d], -1, 1),
@@ -99,7 +100,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
         init_op = tf.global_variables_initializer()
 
         # SGD Optimizer
-        optimizer = tf.train.GradientDescentOptimizer(self.lr)\
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)\
             .minimize(loss, var_list=[emb_s, emb_t])
 
         with tf.Session() as session:
@@ -116,8 +117,8 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
             Eu_random_idx = list(np.unique(Eu_rows))  # Non_zero degree nodes in Eu
 
             if self.Ed_Eu_ratio != None:
-                Ed_batch_size = min(int(self.batch_size * self.Ed_Eu_ratio), len(Ed_random_idx))
-                Eu_batch_size = min(int(self.batch_size * (1-self.Ed_Eu_ratio)), len(Eu_random_idx))
+                Ed_batch_size = int(self.batch_size * self.Ed_Eu_ratio)
+                Eu_batch_size = int(self.batch_size * (1-self.Ed_Eu_ratio))
             else:
                 Ed_batch_size = int(self.batch_size * len(Ed_random_idx)/(len(Ed_random_idx) + len(Eu_random_idx)))
                 Eu_batch_size = int(self.batch_size * len(Eu_random_idx)/(len(Ed_random_idx) + len(Eu_random_idx)))
@@ -127,22 +128,15 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
             np.random.seed(seed)
             try:
                 for epoch in range(self.epochs):
-
                     np.random.shuffle(Ed_random_idx)
                     np.random.shuffle(Eu_random_idx)
-
-                    # print("Ed_random_idx", len(Ed_random_idx), "Eu_random_idx", len(Eu_random_idx))
 
                     for iteration in range(self.iterations_per_epoch):
                         iteration_loss_f1 = 0.0
                         iteration_loss_f2 = 0.0
                         Ed_edges_processed = 0
                         Eu_edges_processed = 0
-                        # print(iteration * self.batch_size, ",", (iteration + 1) * self.batch_size)
-                        # print("Ed_node_index list", iteration * self.batch_size % len(Eu_random_idx), (iteration + 1) * self.batch_size % len(Eu_random_idx))
-                        # print("Eu_node_index list", (iteration * self.batch_size) % len(Eu_random_idx), (iteration + 1) * self.batch_size % len(Eu_random_idx))
 
-                        # 1st order
                         for idx in Ed_random_idx[iteration*Ed_batch_size: (iteration+1)*Ed_batch_size]:
                             Ed_i_sparse = convert_sparse_matrix_to_sparse_tensor(adj_directed[idx, :])
                             Ed_i_sparse_nonzero = Ed_i_sparse[1].shape[0]
@@ -150,7 +144,8 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
                             if Ed_i_sparse_nonzero > 0:
                                 feed_dict = {E_i_: Ed_i_sparse,
                                              is_directed: True,
-                                             i: idx}
+                                             i: idx,
+                                             learning_rate: self.lr / Ed_i_sparse_nonzero}
 
                                 _, summary, loss_val = session.run([optimizer, merged, loss],
                                                                    feed_dict=feed_dict)
@@ -165,7 +160,8 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
                             if Eu_i_sparse_nonzero > 0:
                                 feed_dict = {E_i_: Eu_i_sparse,
                                              is_directed: False,
-                                             i: idx}
+                                             i: idx,
+                                             learning_rate: self.lr / Eu_i_sparse_nonzero}
 
                                 _, summary, loss_val = session.run([optimizer, merged, loss],
                                                                    feed_dict=feed_dict)
@@ -179,9 +175,8 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
                               "\tEd", Ed_edges_processed,
                               "Eu", Eu_edges_processed)
 
-            except Exception as e:
-                print(e)
-
+            except:
+                pass
             finally:
                 # Save embedding vectors
                 self.embedding_s = session.run([emb_s])[0].copy()

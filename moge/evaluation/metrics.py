@@ -1,5 +1,26 @@
-from sklearn.metrics import roc_auc_score, average_precision_score, roc_curve
+from sklearn.metrics import f1_score, roc_auc_score, average_precision_score, roc_curve
+
 import numpy as np
+
+
+def link_prediction_score(true_edges, pred_edges, directed=True, metrics=["precision", "recall"]):
+    if directed==False:
+        true_edges = set([(edge[0], edge[1]) for edge in true_edges]).union(set([(edge[1], edge[0]) for edge in true_edges]))
+        pred_edges = set([(edge[0], edge[1]) for edge in pred_edges]).union(
+            set([(edge[1], edge[0]) for edge in pred_edges]))
+
+    true_edges = set(true_edges)
+    pred_edges = set(pred_edges)
+
+    scores = {}
+    if "precision" in metrics:
+        scores["precision"] = float(len(pred_edges & true_edges)) / len(pred_edges)
+
+    if "recall" in metrics:
+        scores["recall"] = float(len(pred_edges & true_edges)) / len(true_edges)
+
+    return scores
+
 
 # Input: positive test/val edges, negative test/val edges, edge score matrix
 # Output: ROC AUC score, ROC Curve (FPR, TPR, Thresholds), AP score
