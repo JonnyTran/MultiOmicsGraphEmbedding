@@ -45,7 +45,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
 
         Ed_rows, Ed_cols = adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         # Ed_count = len(Ed_rows)
-        Eu_rows, Eu_cols = triu(adj_undirected, k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
+        Eu_rows, Eu_cols = adj_undirected.nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
         # Eu_count = len(Eu_rows)
 
         # print("Directed edges training size:", Ed_count)
