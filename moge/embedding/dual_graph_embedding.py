@@ -11,7 +11,7 @@ def convert_sparse_matrix_to_sparse_tensor(X):
     return indices, coo.data, coo.shape
 
 
-class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
+class SourceTargetGraphEmbedding(StaticGraphEmbedding):
     def __init__(self, d=50, lr=0.001, epochs=10, batch_size=100000, Ed_Eu_ratio=0.2, **kwargs):
         super().__init__(d)
 
@@ -36,16 +36,16 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
         return '%s_%d' % (self._method_name, self._d)
 
     def learn_embedding(self, network:HeterogeneousNetwork, edge_f=None,
-                        is_weighted=False, no_python=False, seed=0):
-        self.n_nodes = len(network.all_nodes)
-        self.all_nodes = network.all_nodes
+                        is_weighted=False, no_python=False, seed=0, get_training_data=False):
+        self.n_nodes = len(network.node_list)
+        self.node_list = network.node_list
 
-        adj_undirected = network.get_node_similarity_adjacency(get_training_data=True)
-        adj_directed = network.get_regulatory_edges_adjacency(get_training_data=True)
+        adj_directed = network.get_adjacency_matrix(edge_type="d", get_training_data=get_training_data)
+        adj_undirected = network.get_adjacency_matrix(edge_type="u", get_training_data=get_training_data)
 
         Ed_rows, Ed_cols = adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         # Ed_count = len(Ed_rows)
-        Eu_rows, Eu_cols = adj_undirected.nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
+        Eu_rows, Eu_cols = adj_undirected.nonzero()  #
         # Eu_count = len(Eu_rows)
 
         # print("Directed edges training size:", Ed_count)
@@ -211,9 +211,12 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
         fout = open(filename, 'w')
         fout.write("{} {}\n".format(self.n_nodes, self._d*2))
         for i in range(self.n_nodes):
-            fout.write("{} {}\n".format(self.all_nodes[i],
+            fout.write("{} {}\n".format(self.node_list[i],
                                         ' '.join([str(x) for x in self.get_embedding()[i]])))
         fout.close()
+
+    def get_node_list(self):
+        return self.node_list
 
     def softmax(self, X):
         exps = np.exp(X)

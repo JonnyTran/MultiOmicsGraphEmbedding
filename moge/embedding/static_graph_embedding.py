@@ -1,7 +1,78 @@
 from abc import ABCMeta
 import numpy as np
 
-class ImportedGraphEmbedding:
+class StaticGraphEmbedding:
+    __metaclass__ = ABCMeta
+
+    def __init__(self, d):
+        '''Initialize the Embedding class
+
+        Args:
+            d: dimension of embedding
+        '''
+        pass
+
+    def get_method_name(self):
+        ''' Returns the name for the embedding method
+
+        Return:
+            The name of embedding
+        '''
+        return ''
+
+    def get_method_summary(self):
+        ''' Returns the summary for the embedding include method name and paramater setting
+
+        Return:
+            A summary string of the method
+        '''
+        return ''
+
+    def learn_embedding(self, graph):
+        '''Learning the graph embedding from the adjcency matrix.
+
+        Args:
+            graph: the graph to embed in networkx DiGraph format
+        '''
+        pass
+
+    def get_embedding(self):
+        ''' Returns the learnt embedding
+
+        Return:
+            A numpy array of size #nodes * d
+        '''
+        pass
+
+    def get_node_list(self):
+        return self.node_list
+
+    def get_edge_weight(self, i, j):
+        '''Compute the weight for edge between node i and node j
+
+        Args:
+            i, j: two node id in the graph for embedding
+        Returns:
+            A single number represent the weight of edge between node i and node j
+
+        '''
+        pass
+
+    def is_trained(self):
+        if hasattr(self, "_X"):
+            return True
+        else:
+            return False
+
+    def get_reconstructed_adj(self, edge_type=None):
+        '''Compute the adjacency matrix from the learned embedding
+
+        Returns:
+            A numpy array of size #nodes * #nodes containing the reconstructed adjacency matrix.
+        '''
+        pass
+
+class ImportedGraphEmbedding(StaticGraphEmbedding):
     __metaclass__ = ABCMeta
 
     def __init__(self, d, method_name):
@@ -105,65 +176,3 @@ class ImportedGraphEmbedding:
             return np.divide(1, 1 + np.power(np.e, -np.matmul(self._X, self._X.T)))
         elif self._method_name == "node2vec":
             return np.dot(self._X, self._X.T)
-
-class StaticGraphEmbedding:
-    __metaclass__ = ABCMeta
-
-    def __init__(self, d):
-        '''Initialize the Embedding class
-
-        Args:
-            d: dimension of embedding
-        '''
-        pass
-
-    def get_method_name(self):
-        ''' Returns the name for the embedding method
-
-        Return:
-            The name of embedding
-        '''
-        return ''
-
-    def get_method_summary(self):
-        ''' Returns the summary for the embedding include method name and paramater setting
-
-        Return:
-            A summary string of the method
-        '''
-        return ''
-
-    def learn_embedding(self, graph):
-        '''Learning the graph embedding from the adjcency matrix.
-
-        Args:
-            graph: the graph to embed in networkx DiGraph format
-        '''
-        pass
-
-    def get_embedding(self):
-        ''' Returns the learnt embedding
-
-        Return:
-            A numpy array of size #nodes * d
-        '''
-        pass
-
-    def get_edge_weight(self, i, j):
-        '''Compute the weight for edge between node i and node j
-
-        Args:
-            i, j: two node id in the graph for embedding
-        Returns:
-            A single number represent the weight of edge between node i and node j
-
-        '''
-        pass
-
-    def get_reconstructed_adj(self, edge_type):
-        '''Compute the adjacency matrix from the learned embedding
-
-        Returns:
-            A numpy array of size #nodes * #nodes containing the reconstructed adjacency matrix.
-        '''
-        pass

@@ -39,13 +39,3 @@ def write_node_labels_to_file(file_path, multi_omics_data:MultiOmicsData, modali
         file.write(entries_to_write.to_csv(sep=sep, header=None, index_label=True))
 
         file.close()
-
-
-def save_embedding(file_path, network:HeterogeneousNetwork, multi_omics_data:MultiOmicsData):
-    pass
-
-def load_embedding(file_path, network):
-    pass
-
-def import_graph_from_files(node_features_path, edgelist_path, node_labels_path):
-    pass

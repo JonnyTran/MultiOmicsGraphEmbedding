@@ -2,29 +2,46 @@ import numpy as np
 import random
 import scipy.sparse as sp
 import networkx as nx
+import copy
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 from moge.embedding.dual_graph_embedding import ImportedGraphEmbedding
 
-def get_top_k_edge_prediction(network:HeterogeneousNetwork, graph_emb:ImportedGraphEmbedding, edge_type):
-    estimated_adj = graph_emb.get_reconstructed_adj(edge_type=edge_type)
 
-    if edge_type == 'd':
-        true_adj = network.get_regulatory_edges_adjacency()
-    elif edge_type == 'u':
-        true_adj = network.get_node_similarity_adjacency()
-
-
-def getRandomEdgePairs(sparse_adj_matrix, node_list, sample_ratio=0.01, return_indices=False):
+def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, return_indices=True, seed=0):
     rows, cols = sparse_adj_matrix.nonzero()
     num_pairs = int(sample_ratio * len(rows))
 
-    np.random.seed(random.randint(0, 1000000))
+    np.random.seed(seed)
     rand_indices = np.random.choice(range(len(rows)), size=num_pairs, replace=False)
     if return_indices:
         return [rows[i] for i in rand_indices], [cols[i] for i in rand_indices]
-    else:
+    elif node_list is not None:
         return [(node_list[rows[i]], node_list[cols[i]]) for i in rand_indices]
+
+def split_train_test_network(network:HeterogeneousNetwork, node_list, edge_type=["u", "d"],
+                             test_frac=.1, val_frac=.05, seed=0):
+    network_train = network
+    val_edges_dict = {}
+    test_edges_dict = {}
+
+    for edge_type_1 in edge_type:
+        if edge_type_1 == 'd':
+            is_directed = True
+        else:
+            is_directed = False
+
+        adj_train, train_edges, \
+        val_edges, test_edges = mask_test_edges(network.get_adjacency_matrix(edge_type_1, node_list=node_list),
+                                                is_directed=is_directed,
+                                                test_frac=test_frac, val_frac=val_frac, seed=seed)
+        edge_list = [(node_list[edge[0]], node_list[edge[1]]) for edge in train_edges]
+        network_train.remove_edges_from(edge_list)
+        print("Removed", len(edge_list), edge_type_1, "edges")
+        val_edges_dict[edge_type_1] = val_edges
+        test_edges_dict[edge_type_1] = test_edges
+
+    return network_train, val_edges_dict, test_edges_dict
 
 # Convert sparse matrix to tuple
 def sparse_to_tuple(sparse_mx):

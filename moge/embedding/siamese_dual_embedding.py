@@ -7,7 +7,7 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 from keras import backend as K
 
 
-class SiameseGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
+class SiameseGraphEmbedding(StaticGraphEmbedding):
     def __init__(self, d=50, lr=0.001, epochs=10, batch_size=100000, Ed_Eu_ratio=0.2, **kwargs):
         super().__init__(d)
 
@@ -31,14 +31,14 @@ class SiameseGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
     def get_method_summary(self):
         return '%s_%d' % (self._method_name, self._d)
 
-    def learn_embedding(self, network: HeterogeneousNetwork, edge_f=None,
+    def learn_embedding(self, network: HeterogeneousNetwork, edge_f=None, get_training_data=False,
                         is_weighted=False, no_python=False, seed=0):
 
         self.n_nodes = len(network.all_nodes)
         self.all_nodes = network.all_nodes
 
-        adj_undirected = network.get_adjacency_matrix(edge_type="u", get_training_data=True)
-        adj_directed = network.get_adjacency_matrix(edge_type='d', get_training_data=True)
+        adj_undirected = network.get_adjacency_matrix(edge_type="u", get_training_data=get_training_data)
+        adj_directed = network.get_adjacency_matrix(edge_type='d', get_training_data=get_training_data)
 
         Ed_rows, Ed_cols = adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         Ed_count = len(Ed_rows)

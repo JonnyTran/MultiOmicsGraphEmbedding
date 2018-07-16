@@ -15,15 +15,15 @@ class HeterogeneousNetwork():
 
     def preprocess_graph(self):
         self.nodes = {}
-        self.all_nodes = []
+        self.node_list = []
         for modality in self.modalities:
             self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
 
             print(modality, " nodes:", len(self.nodes[modality]))
-            self.all_nodes.extend(self.multi_omics_data[modality].get_genes_list())
+            self.node_list.extend(self.multi_omics_data[modality].get_genes_list())
 
-        print("Total nodes:", len(self.all_nodes))
+        print("Total nodes:", len(self.node_list))
 
 
     def add_edges_from_edgelist(self, edgelist, modalities=None):
@@ -46,26 +46,32 @@ class HeterogeneousNetwork():
         else:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, edge_type=["u", "d"], node_list=None):
+    def get_adjacency_matrix(self, edge_type=["u", "d"], node_list=None, get_training_data=False):
         """
         Get adjacency matrix, and remove diagonal elements
         :return:
         """
         if node_list==None:
-            node_list = self.all_nodes
+            node_list = self.node_list
 
         if edge_type == None:
             edge_list = self.G.edges(data=True)
         else:
-            edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_type]
+            if get_training_data:
+                if "u" in edge_type:
+                    return self.adj_similarity_train
+                elif 'd' in edge_type:
+                    return self.adj_regulatory_train
+            else:
+                edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_type]
 
         if 'u' in edge_type:
             undirected_edge_list = [(v, u, d) for u, v, d in edge_list if d['type'] == 'u']
-            edge_list = edge_list.extend(undirected_edge_list)
+            edge_list.extend(undirected_edge_list)
 
         adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
 
-        # adj = nx.adjacency_matrix(self.G, nodelist=node_list)
+        # Eliminate self-edges
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         adj.eliminate_zeros()
         return adj
@@ -107,25 +113,9 @@ class HeterogeneousNetwork():
     def remove_extra_nodes(self):
         self.G = self.get_subgraph(self.modalities)
 
-    def get_node_similarity_adjacency(self, node_list=None, get_training_data=False):
-        if hasattr(self, "adj_similarity_train") and get_training_data:
-            return self.adj_similarity_train
+    def remove_edges_from(self, edgelist):
+        self.G.remove_edges_from(edgelist)
 
-        edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == 'u']
-        if node_list == None:
-            node_list = self.all_nodes
-        adj_similarity = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
-        return adj_similarity
-
-    def get_regulatory_edges_adjacency(self, node_list=None, get_training_data=False):
-        if hasattr(self, "adj_regulatory_train") and get_training_data:
-            return self.adj_regulatory_train
-
-        edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == 'd']
-        if node_list == None:
-            node_list = self.all_nodes
-        adj_regulatory = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
-        return adj_regulatory
 
     def set_node_similarity_training_adjacency(self, adj):
         self.adj_similarity_train = adj
