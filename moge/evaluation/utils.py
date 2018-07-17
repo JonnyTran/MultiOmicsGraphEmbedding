@@ -5,7 +5,7 @@ import networkx as nx
 import copy
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
-from moge.embedding.dual_graph_embedding import ImportedGraphEmbedding
+from moge.embedding.dual_graph_embedding_node_SGD import ImportedGraphEmbedding
 
 
 def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, return_indices=True, seed=0):

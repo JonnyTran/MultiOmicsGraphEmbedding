@@ -175,4 +175,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         if self._method_name == "LINE":
             return np.divide(1, 1 + np.power(np.e, -np.matmul(self._X, self._X.T)))
         elif self._method_name == "node2vec":
-            return np.dot(self._X, self._X.T)
+            return self.softmax(np.dot(self._X, self._X.T))
+
+    def softmax(self, X):
+        exps = np.exp(X)
+        return exps/np.sum(exps, axis=0)

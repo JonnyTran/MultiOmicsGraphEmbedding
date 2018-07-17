@@ -8,7 +8,7 @@ flatten = lambda l: [item for sublist in l for item in sublist]
 
 
 def evaluateStaticGraphReconstruction(network:HeterogeneousNetwork, graph_emb:StaticGraphEmbedding,
-                                      edge_type, modalities=None,
+                                      edge_type, modalities=None, train_embedding=False,
                                       node_list=None, sample_ratio=0.1, seed=0):
 
     if node_list != None:
@@ -29,13 +29,13 @@ def evaluateStaticGraphReconstruction(network:HeterogeneousNetwork, graph_emb:St
 
     true_edges = true_adj_matrix[eval_edge_rows, eval_edge_cols]
 
-    if ~hasattr(graph_emb, "_X"): # If graph embedding isn't trained
+    if ~hasattr(graph_emb, "_X") and train_embedding: # If graph embedding isn't trained
         graph_emb.learn_embedding(network.G)
 
     estimated_edges = graph_emb.get_reconstructed_adj(edge_type=edge_type)[eval_edge_rows, eval_edge_cols]
 
     norm = np.linalg.norm(true_edges-estimated_edges)
-    avg = np.average(true_edges - estimated_edges)
+    avg = np.average(np.abs(true_edges - estimated_edges))
 
     return norm, avg
 

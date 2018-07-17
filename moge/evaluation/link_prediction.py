@@ -1,7 +1,7 @@
 import numpy as np
 import networkx as nx
 from moge.network.heterogeneous_network import HeterogeneousNetwork
-from moge.embedding.dual_graph_embedding import StaticGraphEmbedding
+from moge.embedding.dual_graph_embedding_node_SGD import StaticGraphEmbedding
 from moge.evaluation.utils import mask_test_edges
 from moge.evaluation.metrics import link_prediction_score
 
@@ -39,7 +39,7 @@ def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_em
 
     # evaluate precision/recall at top k predictions, excluding training edges
     top_k_pred_edges_ind = select_top_k_link_predictions(top_k, estimated_adj, train_edges)
-    # print("top k predicted edges:", estimated_adj[top_k_pred_edges_ind])
+    print("top k predicted edges:", estimated_adj[top_k_pred_edges_ind])
     top_k_pred_edges = [x for x in zip(*top_k_pred_edges_ind)]
 
     test_edges = [x for x in zip(test_edges[:, 0], test_edges[:, 1])]
