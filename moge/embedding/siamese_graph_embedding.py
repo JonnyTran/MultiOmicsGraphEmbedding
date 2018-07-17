@@ -61,11 +61,11 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
             j = tf.Variable(int, name="j", trainable=False)
 
         # Siamese network
-        node_i = Dense(128, activation='relu')(N_i)
-        node_i = Dense(128, activation='relu')(node_i)
+        emb_c_i = Dense(128, activation='relu')(N_i)
+        emb_c_i = Dense(128, activation='relu')(emb_c_i)
 
-        node_j = Dense(128, activation='relu')(N_j)
-        node_j = Dense(128, activation='relu')(node_j)
+        emb_c_j = Dense(128, activation='relu')(N_j)
+        emb_c_j = Dense(128, activation='relu')(emb_c_j)
 
         # emb_s = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self._d], -1, 1),
         #                     validate_shape=True, dtype=tf.float32,

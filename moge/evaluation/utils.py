@@ -20,7 +20,7 @@ def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, ret
         return [(node_list[rows[i]], node_list[cols[i]]) for i in rand_indices]
 
 def split_train_test_network(network:HeterogeneousNetwork, node_list, edge_types=["u", "d"],
-                             test_frac=.1, val_frac=.05, seed=0):
+                             test_frac=.05, val_frac=.01, seed=0):
     network_train = network
     val_edges_dict = {}
     test_edges_dict = {}
@@ -35,9 +35,11 @@ def split_train_test_network(network:HeterogeneousNetwork, node_list, edge_types
         val_edges, test_edges = mask_test_edges(network.get_adjacency_matrix(edge_type, node_list=node_list),
                                                 is_directed=is_directed,
                                                 test_frac=test_frac, val_frac=val_frac, seed=seed)
-        edge_list = [(node_list[edge[0]], node_list[edge[1]]) for edge in train_edges]
-        network_train.remove_edges_from(edge_list)
-        print("Removed", len(edge_list), edge_type, "edges")
+        test_edge_list = [(node_list[edge[0]], node_list[edge[1]]) for edge in test_edges]
+        val_edge_list = [(node_list[edge[0]], node_list[edge[1]]) for edge in val_edges]
+        network_train.remove_edges_from(test_edge_list)
+        network_train.remove_edges_from(val_edge_list)
+        print("Removed", len(test_edge_list), "test, and", len(val_edge_list), "val, type", edge_type, "edges")
         val_edges_dict[edge_type] = val_edges
         test_edges_dict[edge_type] = test_edges
 

@@ -87,7 +87,7 @@ class HeterogeneousNetwork():
         for modality in modalities:
             nodes.extend(self.nodes[modality])
 
-        return self.G.subgraph(nodes)
+        return self.G.subgraph(nodes) # returned subgraph is not mutable
 
 
     def add_edges_from_nodes_similarity(self, modality, features=None, similarity_threshold=0.7, data=True):
