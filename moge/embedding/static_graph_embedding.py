@@ -75,7 +75,7 @@ class StaticGraphEmbedding:
 class ImportedGraphEmbedding(StaticGraphEmbedding):
     __metaclass__ = ABCMeta
 
-    def __init__(self, d, method_name):
+    def __init__(self, d, method_name="ImportedGraphEmbedding"):
         '''Initialize the Embedding class
 
         Args:
@@ -166,7 +166,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             self.node_list = vectors.keys()
 
 
-    def get_reconstructed_adj(self, edge_type=None):
+    def get_reconstructed_adj(self, edge_type=None, node_list=None):
         '''Compute the adjacency matrix from the learned embedding
 
         Returns:

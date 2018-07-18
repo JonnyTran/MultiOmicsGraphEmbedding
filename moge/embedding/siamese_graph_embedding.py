@@ -60,12 +60,14 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
             i = tf.Variable(int, name="i", trainable=False)
             j = tf.Variable(int, name="j", trainable=False)
 
-        # Siamese network
-        emb_c_i = Dense(128, activation='relu')(N_i)
-        emb_c_i = Dense(128, activation='relu')(emb_c_i)
 
-        emb_c_j = Dense(128, activation='relu')(N_j)
-        emb_c_j = Dense(128, activation='relu')(emb_c_j)
+        # Siamese network
+        with tf.name_scope('siamese'):
+            emb_c_i = Dense(128, activation='relu')(N_i)
+            emb_c_i = Dense(128, activation='relu')(emb_c_i)
+
+            emb_c_j = Dense(128, activation='relu')(N_j)
+            emb_c_j = Dense(128, activation='relu')(emb_c_j)
 
         # emb_s = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self._d], -1, 1),
         #                     validate_shape=True, dtype=tf.float32,
@@ -168,6 +170,9 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
 
                 session.close()
 
+    def get_training_data(self):
+        return pass
+
     def get_reconstructed_adj(self, X=None, node_l=None, edge_type="d"):
         """
         For inter-modality, we calculate the directed first-order proximity, for intra-modality, we calculate the
@@ -179,15 +184,7 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         :param edge_type:
         :return:
         """
-        if edge_type == "d":
-            estimated_adj = np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s, self.embedding_t.T)))
-        elif edge_type == 'u':
-            estimated_adj = self.softmax(np.matmul(self._X, self._X.T))
-            np.fill_diagonal(estimated_adj, 0)
-        else:
-            raise Exception("Have not implemented directed and undirected combined adjacency matrix")
-
-        return estimated_adj
+        pass
 
     def save_embeddings(self, filename):
         fout = open(filename, 'w')
@@ -202,13 +199,10 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         return exps / np.sum(exps, axis=0)
 
     def get_embedding(self):
-        return self._X
+        pass
 
     def get_edge_weight(self, i, j, edge_type='d'):
-        if edge_type == 'd':
-            return np.divide(1, 1 + np.power(np.e, -np.matmul(self.embedding_s[i], self.embedding_t[j].T)))
-        elif edge_type == 'u':
-            return self.softmax(np.matmul(self._X[i], self._X.T))[j]
+        pass
 
 
 if __name__ == '__main__':

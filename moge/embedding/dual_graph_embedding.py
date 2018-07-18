@@ -7,7 +7,7 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 from keras import backend as K
 
 
-class SourceTargetGraphEmbedding(StaticGraphEmbedding):
+class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
     def __init__(self, d=50, lr=0.001, epochs=10, batch_size=100000, Ed_Eu_ratio=0.2, **kwargs):
         super().__init__(d)
 
