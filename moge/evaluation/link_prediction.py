@@ -6,11 +6,11 @@ from moge.evaluation.utils import mask_test_edges
 from moge.evaluation.metrics import link_prediction_score
 
 def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_emb:StaticGraphEmbedding,
-                                   edge_type, node_list,
-                                   saved_test_edges=None, test_frac=0.01, val_frac=0., seed=0,
+                                   edge_type, node_list, saved_test_edges=None,
+                                   test_frac=0.01, val_frac=0., seed=0,
                                    train_embedding=True,
                                    metrics=["precision", "recall"]):
-    # TODO Implement modality -specific train-test-split
+    # TODO Implement modality-specific train-test-split
     if edge_type == 'd':
         is_directed = True
         true_adj = network.get_adjacency_matrix(edge_type=edge_type, node_list=node_list)

@@ -121,8 +121,9 @@ def mask_test_edges(adj, is_directed=True, test_frac=.1, val_frac=.05,
     train_edges.extend(all_edge_set[num_test+num_val:])
 
     # Remove edges from g to test connected-ness
-    g.remove_edges_from(test_edges)
-    g.remove_edges_from(val_edges)
+    if prevent_disconnect:
+        g.remove_edges_from(test_edges)
+        g.remove_edges_from(val_edges)
 
     # Check that enough test/val edges were found
     if (len(val_edges) < num_val or len(test_edges) < num_test):
