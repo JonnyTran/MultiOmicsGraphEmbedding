@@ -26,7 +26,7 @@ class HeterogeneousNetwork():
         print("Total nodes:", len(self.node_list))
 
 
-    def add_edges_from_edgelist(self, edgelist, modalities=None):
+    def add_directed_edges_from_edgelist(self, edgelist, modalities=None):
         if not (modalities is None):
             source_genes = set(pd.DataFrame(edgelist)[0].tolist())
             target_genes = set(pd.DataFrame(edgelist)[1].tolist())
@@ -38,10 +38,10 @@ class HeterogeneousNetwork():
             print("Adding edgelist with", len(target_genes), "total unique", modalities[1], "genes (target), but only matching", len(target_genes_matched), "nodes")
             print(len(edgelist), "edges added.")
 
-        self.G.add_edges_from(edgelist, type="d")
+        self.G.add_edges_from(edgelist)
 
-    def import_edgelist_file(self, file, directed):
-        if directed:
+    def import_edgelist_file(self, file, is_directed):
+        if is_directed:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.DiGraph()).edges(data=True))
         else:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))

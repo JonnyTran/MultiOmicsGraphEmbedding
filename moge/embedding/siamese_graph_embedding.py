@@ -205,6 +205,12 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         pass
 
 
+class DataGenerator():
+
+    def __init__(self) -> None:
+        super().__init__()
+
+
 if __name__ == '__main__':
     import pickle
 
