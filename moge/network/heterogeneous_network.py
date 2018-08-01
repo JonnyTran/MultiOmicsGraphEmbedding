@@ -51,7 +51,7 @@ class HeterogeneousNetwork():
         Get adjacency matrix, and remove diagonal elements
         :return:
         """
-        if node_list==None:
+        if node_list == None:
             node_list = self.node_list
 
         if edge_type == None:
