@@ -2,7 +2,7 @@ import tensorflow as tf
 import networkx as nx
 import numpy as np
 from scipy.sparse import triu
-from moge.embedding.static_graph_embedding import StaticGraphEmbedding, ImportedGraphEmbedding
+from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 from keras import backend as K
 
@@ -201,13 +201,13 @@ class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
 if __name__ == '__main__':
     import pickle
 
-    with open('moge/data/lncRNA_miRNA_mRNA/miRNA-mRNA_network.pickle', 'rb') as input_file:
+    with open('../data/lncRNA_miRNA_mRNA/miRNA-mRNA_network_biogrid.pickle', 'rb') as input_file:
         network = pickle.load(input_file)
 
     ##### Run graph embedding #####
     gf = SourceTargetGraphEmbedding(d=64, reg=1.0, lr=0.05, epochs=50, batch_size=10000)
 
     gf.learn_embedding(network)
-    np.save(
-        "/home/jonny_admin/PycharmProjects/MultiOmicsGraphEmbedding/moge/data/lncRNA_miRNA_mRNA/miRNA-mRNA_source_target_embeddings_128.npy",
-        gf.get_embedding())
+    # np.save(
+    #     "/home/jonny_admin/PycharmProjects/MultiOmicsGraphEmbedding/moge/data/lncRNA_miRNA_mRNA/miRNA-mRNA_source_target_embeddings_128.npy",
+    #     gf.get_embedding())
