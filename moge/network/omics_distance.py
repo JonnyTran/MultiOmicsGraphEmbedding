@@ -74,19 +74,17 @@ def gower_distance(X, multiprocessing=True, n_jobs=-2):
             feature_dist = pdist(feature.str.get_dummies(","), 'dice')
 
         elif column in ["Mature sequence", "Transcript sequence"]:
-            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)),
-                                     metric=seq_global_alignment_pairwise_score)
-
+            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), seq_global_alignment_pairwise_score)
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
         elif feature.dtypes == np.object:
             feature_dist = pdist(pd.get_dummies(feature), 'dice')
-        elif False: # if nominal numbers
+
+        elif False: # TODO if nominal numbers
             feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "manhattan") / np.ptp(feature.values)
         else:
             feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "euclidean")
 
-        print(feature_dist)
         individual_variable_distances.append(feature_dist)
 
     pdists_mean = np.nanmean(np.array(individual_variable_distances), axis=0)

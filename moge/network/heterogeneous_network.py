@@ -109,13 +109,14 @@ class HeterogeneousNetwork():
         index = similarity_adj_df.index
         sim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in zip(*np.nonzero(similarity_filtered.values))]
         self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u")
+        print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
+        # TODO Make sure that the edges picked up are edge weight
         dissimilarity_filtered = similarity_adj_df.loc[:, :] <= dissimilarity_threshold
         dissim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in
                                zip(*np.nonzero(dissimilarity_filtered.values))]
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
 
-        print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
 
     def remove_extra_nodes(self):

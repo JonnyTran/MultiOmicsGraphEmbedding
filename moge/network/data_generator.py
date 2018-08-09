@@ -9,41 +9,57 @@ class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, list_IDs, network: HeterogeneousNetwork,
                  get_training_data=False,
-                 batch_size=1, dim=(None, 4), negative_samples=5,
+                 batch_size=1, dim=(None, 4), negative_sampling_ratio=5,
                  shuffle=True):
         'Initialization'
         self.dim = dim
         self.batch_size = batch_size
-        self.negative_samples = negative_samples
+        # self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
         self.shuffle = shuffle
+        self.node_list = list_IDs
 
-        self.adj_directed = network.get_adjacency_matrix(edge_type="d", node_list=list_IDs,
+        # Directed Edges (regulatory interaction)
+        self.adj_directed = self.network.get_adjacency_matrix(edge_type="d", node_list=list_IDs,
                                                          get_training_data=get_training_data)
-        self.adj_undirected = network.get_adjacency_matrix(edge_type="u", node_list=list_IDs,
-                                                           get_training_data=get_training_data)
-
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
-        self.Eu_rows, self.Eu_cols = triu(self.adj_undirected,
-                                          k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
+
+        # Undirected Edges (node similarity)
+        self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=list_IDs,
+                                                           get_training_data=get_training_data)
+        self.Eu_rows, self.Eu_cols = self.adj_undirected.nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix # TODO upper trianglar
         self.Eu_count = len(self.Eu_rows)
 
-        self.node_list = list_IDs
+        # # Negative Edges (node similarity)
+        # self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=list_IDs,
+        #                                                  get_training_data=get_training_data)
+        # self.En_rows, self.En_cols = triu(self.adj_undirected,
+        #                                   k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
+        self.En_count = 0 # len(self.En_rows) # TODO change this to change negative sampling ratio
+
 
         self.on_epoch_end()
 
+    def split_index(self, index):
+        if index < self.Ed_count:
+            return index, "d" # Index belonging to undirected edges
+        elif self.Ed_count <= index and index < (self.Ed_count + self.Eu_count):
+            return index-self.Ed_count, "u" # Index belonging to undirected edges
+        else:
+            return index-(self.Ed_count+self.Eu_count), "u_n" # index belonging to negative edges
+
     def __len__(self):
         'Denotes the number of batches per epoch'
-        return int(np.floor((self.Ed_count + self.Eu_count) / self.batch_size))
+        return int(np.floor((self.Ed_count + self.Eu_count + self.En_count) / self.batch_size))
 
-    def __getitem__(self, index):
-        'Generate one batch of data'
+    def __getitem__(self, training_index):
         # Generate indexes of the batch
-        indexes = self.indexes[index * self.batch_size: (index + 1) * self.batch_size]
+        indices = self.indexes[training_index * self.batch_size: (training_index + 1) * self.batch_size]
+        print(indices)
 
         # Find list of IDs
-        list_IDs_temp = [self.node_list[k] for k in indexes]
+        list_IDs_temp = [self.split_index(k) for k in indices]
 
         # Generate data
         X, y = self.__data_generation(list_IDs_temp)
@@ -51,8 +67,8 @@ class DataGenerator(keras.utils.Sequence):
         return X, y
 
     def on_epoch_end(self):
-        'Updates indexes after each epoch'
-        self.indexes = np.arange(len(self.node_list))
+        'Updates indexes after each epoch and shuffle'
+        self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count)
 
         if self.shuffle == True:
             np.random.shuffle(self.indexes)
@@ -60,19 +76,41 @@ class DataGenerator(keras.utils.Sequence):
     def sample_one_negative_sample(self):
         pass
 
-    def __data_generation(self, list_IDs_temp):
-        'Generates data containing batch_size samples'  # X : (n_samples, *dim, n_channels)
-        # Initialization
+    def __data_generation(self, list_IDs):
+        """
+
+        :param list_IDs_temp:
+        :return: X : (batch_size, *dim, n_channels)
+        """
+        #
+
+        X_list = []
+
+        for id, edge_type in list_IDs:
+            if edge_type == 'd':
+                X_list.append((self.Ed_rows[id], self.Ed_cols[id], self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
+            elif edge_type == 'u':
+                X_list.append(
+                    (self.Eu_rows[id], self.Eu_cols[id], self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
+            elif edge_type == 'u_n':
+                X_list.append(
+                    (self.En_rows[id], self.En_cols[id], 0)) # E_ij of negative edges should be 0
+
+        batch_size = len(X_list)
+
         X = {}
-        X["input_seq_i"] = np.empty((self.batch_size, *self.dim))
-        X["input_seq_j"] = np.empty((self.batch_size, *self.dim))
+        X["input_seq_i"] = np.empty((batch_size, *self.dim))
+        X["input_seq_j"] = np.empty((batch_size, *self.dim))
 
-        # X =
-        y = np.empty((self.batch_size), dtype=int)
+        y = np.empty((self.batch_size), dtype=np.float32)
 
+        for i, tuple  in enumerate(X_list):
+            node_i_id, node_j_id, E_ij = tuple
+            X["input_seq_i"][i] = self.node_list[node_i_id]
+            X["input_seq_j"][i] = self.node_list[node_j_id]
+            y[i] = E_ij
 
-
-        return X, keras.utils.to_categorical(y, num_classes=self.n_classes)
+        return X, y
 
     def seq_to_array(self, seq_str):
         pass
