@@ -5,7 +5,7 @@ import networkx as nx
 
 from sklearn.neighbors import DistanceMetric
 from sklearn.metrics.pairwise import pairwise_distances
-from scipy.spatial.distance import pdist
+from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.spatial.distance import squareform as squareform_
 
 from Bio import pairwise2
@@ -26,7 +26,7 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
 
     return X_multiomics_corr_df
 
-def compute_annotation_similarity(genes_info, modality, beta=1.0, features=None, squareform=True, multiprocessing=False):
+def compute_annotation_similarity(genes_info, modality, features=None, squareform=True, multiprocessing=True):
     if features is None:
         if modality == "GE":
             features = ["locus_type", "gene_family_id", "Transcript sequence"]
@@ -43,7 +43,7 @@ def compute_annotation_similarity(genes_info, modality, beta=1.0, features=None,
         return np.subtract(1, gower_dists)
     # return np.exp(-beta * gower_dists)
 
-def gower_distance(X, multiprocessing=False, n_jobs=-2):
+def gower_distance(X, multiprocessing=True, n_jobs=-2):
     """
     This function expects a pandas dataframe as input
     The data frame is to contain the features along the columns. Based on these features a
@@ -55,6 +55,11 @@ def gower_distance(X, multiprocessing=False, n_jobs=-2):
     Numeric variables: Manhattan distance normalized by the range of the variable (https://en.wikipedia.org/wiki/Taxicab_geometry)
     """
     individual_variable_distances = []
+
+    if multiprocessing:
+        pdist = lambda X, metric: squareform_(pairwise_distances(X=X, metric=metric, n_jobs=n_jobs), checks=False)
+    else:
+        pdist = scipy_pdist # returns condensed dist matrix
 
     for column in X.columns:
         print("Gower's dissimilarity: Computing", column)
@@ -69,16 +74,8 @@ def gower_distance(X, multiprocessing=False, n_jobs=-2):
             feature_dist = pdist(feature.str.get_dummies(","), 'dice')
 
         elif column in ["Mature sequence", "Transcript sequence"]:
-            if multiprocessing:
-                feature_dist_sq = pairwise_distances(X=feature.values.reshape((X.shape[0],-1)),
-                                                     metric=seq_global_alignment_score, n_jobs=n_jobs)
-                # feature_dist_sq = pairwise_distances(X=feature.values.reshape((X.shape[0], -1)), dtype=str,
-                #                                      metric=lambda u, v: u+v)
-
-                feature_dist = squareform_(feature_dist_sq, checks=False)
-            else:
-                feature_dist = pdist(feature.values.reshape((X.shape[0],-1)),
-                                     metric=seq_global_alignment_score)
+            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)),
+                                     metric=seq_global_alignment_pairwise_score)
 
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
@@ -89,6 +86,7 @@ def gower_distance(X, multiprocessing=False, n_jobs=-2):
         else:
             feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "euclidean")
 
+        print(feature_dist)
         individual_variable_distances.append(feature_dist)
 
     pdists_mean = np.nanmean(np.array(individual_variable_distances), axis=0)
@@ -96,7 +94,7 @@ def gower_distance(X, multiprocessing=False, n_jobs=-2):
     return pdists_mean
     # return squareform(pdists_mean)
 
-def seq_global_alignment_score(u, v):
+def seq_global_alignment_pairwise_score(u, v, truncate=False):
     if (type(u[0]) is str and type(v[0]) is str):
         return pairwise2.align.globalxx(u[0], v[0], score_only=True) / min(len(u[0]), len(v[0]))
     else:
