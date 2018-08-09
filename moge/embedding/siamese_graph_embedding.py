@@ -2,8 +2,12 @@ import networkx as nx
 import numpy as np
 
 import tensorflow as tf
+
+from keras.models import Sequential, Model
+from keras.layers import Dense, Dropout, Input, Lambda, LSTM
+from keras.optimizers import RMSprop
 from keras import backend as K
-from keras.layers import Dense
+
 
 from scipy.sparse import triu
 from moge.embedding.static_graph_embedding import StaticGraphEmbedding, ImportedGraphEmbedding
@@ -34,6 +38,42 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
     def get_method_summary(self):
         return '%s_%d' % (self._method_name, self._d)
 
+    def create_base_network(self, input_shape):
+        """ Base network to be shared (eq. to feature extraction).
+        """
+        input = Input(shape=input_shape)
+        #     x = Flatten()(input)
+        x = LSTM(128, input_shape=input_shape, return_sequences=False)(input)
+        x = Dense(128, activation='relu')(x)
+        x = Dropout(0.1)(x)
+        x = Dense(128, activation='relu')(x)
+        x = Dropout(0.1)(x)
+        x = Dense(128, activation='relu')(x)
+        return Model(input, x)
+
+    def euclidean_distance(self, vects):
+        x, y = vects
+        return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
+
+    def source_target_emebedding_distance(self, vects):
+        emb_i, emb_j, is_directed = vects
+        dot_directed = Dot(axes=1)([emb_i[:, 0:int(_d / 2)], emb_j[:, int(_d / 2):_d]])
+        dot_undirected = Dot(axes=1)([emb_i, emb_j])
+        return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
+
+    def contrastive_loss(self, y_true, y_pred):
+        '''Contrastive loss from Hadsell-et-al.'06
+        http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+        '''
+        margin = 1
+        return K.mean(y_true * K.square(y_pred) +
+                      (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+    def accuracy(self, y_true, y_pred):
+        '''Compute classification accuracy with a fixed threshold on distances.
+        '''
+        return K.mean(K.equal(y_true, K.cast(y_pred < 0.5, y_true.dtype)))
+
     def learn_embedding(self, network: HeterogeneousNetwork, edge_f=None, get_training_data=False,
                         is_weighted=False, no_python=False, seed=0):
 
@@ -52,67 +92,40 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         print("Undirected edges training size:", Eu_count)
 
         tf.reset_default_graph()
+
         with tf.name_scope('inputs'):
-            E_ij = tf.placeholder(tf.float32, shape=(1,), name="E_ij")
-            N_i = tf.placeholder(tf.float32, shape=(1, self.node_features_size), name="N_i")
-            N_j = tf.placeholder(tf.float32, shape=(1, self.node_features_size), name="N_j")
-            is_directed = tf.placeholder(tf.bool, name="is_directed")
+            E_ij = Input(batch_shape=(1,), name="E_ij")
+            #     input_i = tf.placeholder(tf.float32, shape=input_shape, name="input_i")
+            #     input_j = tf.placeholder(tf.float32, shape=input_shape, name="input_j")
+            input_seq_i = Input(batch_shape=(1, None, 4), name="input_i")
+            input_seq_j = Input(batch_shape=(1, None, 4), name="input_j")
+            # is_directed = tf.placeholder(tf.bool, name="is_directed")
+            is_directed = Input(batch_shape=(1,), dtype=tf.bool, name="is_directed")
             i = tf.Variable(int, name="i", trainable=False)
             j = tf.Variable(int, name="j", trainable=False)
 
+        # build create_base_network to use in each siamese 'leg'
+        lstm_network = self.create_base_network(input_shape=(None, 4))
 
-        # Siamese network
-        with tf.name_scope('siamese'):
-            emb_c_i = Dense(128, activation='relu')(N_i)
-            emb_c_i = Dense(128, activation='relu')(emb_c_i)
+        print("lstm_network", lstm_network)
 
-            emb_c_j = Dense(128, activation='relu')(N_j)
-            emb_c_j = Dense(128, activation='relu')(emb_c_j)
+        # encode each of the two inputs into a vector with the convnet
+        encoded_i = lstm_network(input_seq_i)
+        encoded_j = lstm_network(input_seq_j)
+        print("encoded_i", encoded_i, "\nencoded_j", encoded_j)
 
-        # emb_s = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self._d], -1, 1),
-        #                     validate_shape=True, dtype=tf.float32,
-        #                     name="emb_s", trainable=True)
+        distance = Lambda(self.source_target_emebedding_distance)([encoded_i, encoded_j, is_directed])
+        print("distance", distance)
 
-        # emb_t = tf.Variable(initial_value=tf.random_uniform([self.n_nodes, self._d], -1, 1),
-        #                     validate_shape=True, dtype=tf.float32,
-        #                     name="emb_s", trainable=True)
+        siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=distance)
 
-        emb_c = tf.concat([emb_s, emb_t], axis=1, name="emb_concat")
-
-        # 1st order (directed proximity)
-        p_1 = tf.sigmoid(tf.matmul(tf.slice(emb_s, [i, 0], [1, emb_s.get_shape()[1]]),
-                                   tf.slice(emb_t, [j, 0], [1, emb_s.get_shape()[1]]),
-                                   transpose_b=True, name="p_1_inner_prod"), name="p_1")
-
-        loss_f1 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_1)), name="loss_f1")
-
-        # 2nd order proximity
-        p_2_exps = tf.matmul(tf.slice(emb_c, [i, 0], [1, emb_c.get_shape()[1]], name="p_2_exps_i"),
-                             emb_c,
-                             transpose_b=True)  # dim (1, n_nodes)
-        p_2 = tf.slice(tf.nn.softmax(p_2_exps - tf.reduce_max(p_2_exps, axis=1),
-                                     axis=1, name="p_2_softmax"),
-                       [0, j], [1, 1], "p_2_i_j")
-
-        loss_f2 = tf.reduce_sum(-tf.multiply(E_ij, tf.log(p_2)), name="loss_f2")
-
-        loss = tf.cond(is_directed, true_fn=lambda: loss_f1, false_fn=lambda: loss_f2)
-
-        # Add the loss value as a scalar to summary.
-        tf.summary.scalar('loss', loss)
-        merged = tf.summary.merge_all()
-
-        # Initialize variables
-        init_op = tf.global_variables_initializer()
-
-        # SGD Optimizer
-        optimizer = tf.train.GradientDescentOptimizer(self.lr) \
-            .minimize(loss, var_list=[emb_s, emb_t])
+        siamese_net.compile(loss=self.contrastive_loss,
+                            optimizer=RMSprop(lr=0.01),
+                            metrics=[self.accuracy])
 
         with tf.Session() as session:
             session.as_default()
             K.set_session(session)
-            session.run(init_op)
 
             if self.batch_size == None or self.batch_size == -1:
                 self.batch_size = Ed_count + Eu_count
