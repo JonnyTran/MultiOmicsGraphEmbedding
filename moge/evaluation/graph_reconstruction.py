@@ -14,7 +14,7 @@ def evaluateStaticGraphReconstruction(network:HeterogeneousNetwork, graph_emb:St
     if node_list != None:
         node_list = node_list
     elif modalities != None:
-        node_list = flatten([network.nodes[modality] for modality in modalities])
+        node_list = flatten([network.modality_to_nodes[modality] for modality in modalities])
     else:
         node_list = network.node_list
 

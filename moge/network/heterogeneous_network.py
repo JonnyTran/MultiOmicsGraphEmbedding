@@ -15,15 +15,21 @@ class HeterogeneousNetwork():
 
     def preprocess_graph(self):
         self.nodes = {}
+        self.node_to_modality = {}
+
         self.node_list = []
         for modality in self.modalities:
             self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
 
-            print(modality, " nodes:", len(self.nodes[modality]))
+            for gene in self.multi_omics_data[modality].get_genes_list():
+                self.node_to_modality[gene] = modality
+
+            print(modality, " nodes:", len(self.modality_to_nodes[modality]))
             self.node_list.extend(self.multi_omics_data[modality].get_genes_list())
 
         print("Total nodes:", len(self.node_list))
+
 
 
     def add_directed_edges_from_edgelist(self, edgelist, modalities=None):
@@ -31,8 +37,8 @@ class HeterogeneousNetwork():
             source_genes = set(pd.DataFrame(edgelist)[0].tolist())
             target_genes = set(pd.DataFrame(edgelist)[1].tolist())
 
-            source_genes_matched = set(self.nodes[modalities[0]]) & source_genes
-            target_genes_matched = set(self.nodes[modalities[1]]) & target_genes
+            source_genes_matched = set(self.modality_to_nodes[modalities[0]]) & source_genes
+            target_genes_matched = set(self.modality_to_nodes[modalities[1]]) & target_genes
 
             print("Adding edgelist with", len(source_genes), "total unique", modalities[0], "genes (source), but only matching", len(source_genes_matched), "nodes")
             print("Adding edgelist with", len(target_genes), "total unique", modalities[1], "genes (target), but only matching", len(target_genes_matched), "nodes")
@@ -85,7 +91,7 @@ class HeterogeneousNetwork():
 
         nodes = []
         for modality in modalities:
-            nodes.extend(self.nodes[modality])
+            nodes.extend(self.modality_to_nodes[modality])
 
         return self.G.subgraph(nodes) # returned subgraph is not mutable
 

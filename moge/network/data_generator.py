@@ -11,7 +11,6 @@ class DataGenerator(keras.utils.Sequence):
                  get_training_data=False,
                  batch_size=1, dim=(None, 4), negative_sampling_ratio=5,
                  shuffle=True):
-        'Initialization'
         self.dim = dim
         self.batch_size = batch_size
         # self.negative_sampling_ratio = negative_sampling_ratio
@@ -28,7 +27,7 @@ class DataGenerator(keras.utils.Sequence):
         # Undirected Edges (node similarity)
         self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=list_IDs,
                                                            get_training_data=get_training_data)
-        self.Eu_rows, self.Eu_cols = self.adj_undirected.nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix # TODO upper trianglar
+        self.Eu_rows, self.Eu_cols = self.adj_undirected.nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix # TODO upper trianglar
         self.Eu_count = len(self.Eu_rows)
 
         # # Negative Edges (node similarity)
@@ -38,16 +37,19 @@ class DataGenerator(keras.utils.Sequence):
         #                                   k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
         self.En_count = 0 # len(self.En_rows) # TODO change this to change negative sampling ratio
 
+        print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
 
         self.on_epoch_end()
 
     def split_index(self, index):
-        if index < self.Ed_count:
-            return index, "d" # Index belonging to undirected edges
-        elif self.Ed_count <= index and index < (self.Ed_count + self.Eu_count):
-            return index-self.Ed_count, "u" # Index belonging to undirected edges
+        if index < self.Ed_count:  # Index belonging to undirected edges
+            return index, "d"
+        elif self.Ed_count <= index and index < (self.Ed_count + self.Eu_count):  # Index belonging to undirected edges
+            return index - self.Ed_count, "u"
+        elif index >= (self.Ed_count + self.Eu_count):  # index belonging to negative edges
+            return index - (self.Ed_count + self.Eu_count), "u_n"
         else:
-            return index-(self.Ed_count+self.Eu_count), "u_n" # index belonging to negative edges
+            raise Exception("Index out of range. Value:" + index)
 
     def __len__(self):
         'Denotes the number of batches per epoch'
@@ -60,6 +62,7 @@ class DataGenerator(keras.utils.Sequence):
 
         # Find list of IDs
         list_IDs_temp = [self.split_index(k) for k in indices]
+        print(list_IDs_temp)
 
         # Generate data
         X, y = self.__data_generation(list_IDs_temp)
@@ -88,29 +91,60 @@ class DataGenerator(keras.utils.Sequence):
 
         for id, edge_type in list_IDs:
             if edge_type == 'd':
-                X_list.append((self.Ed_rows[id], self.Ed_cols[id], self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
+                X_list.append((self.Ed_rows[id],
+                               self.Ed_cols[id],
+                               self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
             elif edge_type == 'u':
                 X_list.append(
-                    (self.Eu_rows[id], self.Eu_cols[id], self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
+                    (self.Eu_rows[id],
+                     self.Eu_cols[id],
+                     self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
             elif edge_type == 'u_n':
                 X_list.append(
-                    (self.En_rows[id], self.En_cols[id], 0)) # E_ij of negative edges should be 0
+                    (self.En_rows[id],
+                     self.En_cols[id],
+                     0))  # E_ij of negative edges should be 0
 
         batch_size = len(X_list)
 
         X = {}
-        X["input_seq_i"] = np.empty((batch_size, *self.dim))
-        X["input_seq_j"] = np.empty((batch_size, *self.dim))
+        X["input_seq_i"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
+        X["input_seq_j"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
 
         y = np.empty((self.batch_size), dtype=np.float32)
 
         for i, tuple  in enumerate(X_list):
             node_i_id, node_j_id, E_ij = tuple
-            X["input_seq_i"][i] = self.node_list[node_i_id]
-            X["input_seq_j"][i] = self.node_list[node_j_id]
+            X["input_seq_i"][i] = self.get_gene_info(self.node_list[node_i_id])
+            X["input_seq_j"][i] = self.get_gene_info(self.node_list[node_j_id])
             y[i] = E_ij
 
         return X, y
 
+    def get_gene_info(self, gene_name):
+        modality = self.network.node_to_modality[gene_name]
+        return self.network.multi_omics_data[modality].get_genes_info().loc[gene_name]
+
     def seq_to_array(self, seq_str):
         pass
+
+
+def main():
+    path = "/Users/jonny/Desktop/PycharmProjects/MultiOmicsGraphEmbedding/data/miRNA-mRNA_network.pickle"
+    import pickle
+
+    with open(path, "rb") as file:
+        network = pickle.load(file)
+        file.close()
+
+    network.node_to_modality = {}
+    for modality in network.modalities:
+        for gene in network.multi_omics_data[modality].get_genes_list():
+            network.node_to_modality[gene] = modality
+
+    generator = DataGenerator(network.node_list, network)
+    print(generator.__getitem__(1))
+
+
+if __name__ == "__main__":
+    main()
