@@ -31,11 +31,11 @@ class DataGenerator(keras.utils.Sequence):
         self.Eu_count = len(self.Eu_rows)
 
         # # Negative Edges (node similarity)
-        # self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=list_IDs,
-        #                                                  get_training_data=get_training_data)
-        # self.En_rows, self.En_cols = triu(self.adj_undirected,
-        #                                   k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
-        self.En_count = 0 # len(self.En_rows) # TODO change this to change negative sampling ratio
+        self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=list_IDs,
+                                                              get_training_data=get_training_data)
+        self.En_rows, self.En_cols = triu(self.adj_undirected,
+                                          k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
+        self.En_count = len(self.En_rows)
 
         print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
 
@@ -103,7 +103,7 @@ class DataGenerator(keras.utils.Sequence):
                 X_list.append(
                     (self.En_rows[id],
                      self.En_cols[id],
-                     0))  # E_ij of negative edges should be 0
+                     self.adj_negative[self.En_rows[id], self.En_cols[id]]))  # E_ij of negative edges should be 0
 
         batch_size = len(X_list)
 
