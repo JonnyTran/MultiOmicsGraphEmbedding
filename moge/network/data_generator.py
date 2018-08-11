@@ -19,23 +19,26 @@ class DataGenerator(keras.utils.Sequence):
         self.node_list = list_IDs
 
         # Directed Edges (regulatory interaction)
-        self.adj_directed = self.network.get_adjacency_matrix(edge_type="d", node_list=list_IDs,
-                                                         get_training_data=get_training_data)
+        self.adj_directed = self.network.get_adjacency_matrix(edge_type="d", node_list=self.node_list,
+                                                              get_training_data=get_training_data)
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
 
         # Undirected Edges (node similarity)
-        self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=list_IDs,
-                                                           get_training_data=get_training_data)
+        self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=self.node_list,
+                                                                get_training_data=get_training_data)
         self.Eu_rows, self.Eu_cols = self.adj_undirected.nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix # TODO upper trianglar
         self.Eu_count = len(self.Eu_rows)
 
         # # Negative Edges (node similarity)
-        self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=list_IDs,
+        self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=self.node_list,
                                                               get_training_data=get_training_data)
         self.En_rows, self.En_cols = triu(self.adj_undirected,
                                           k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
         self.En_count = len(self.En_rows)
+
+        # Negative Sampled Edges
+        self.negative = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
 
         print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
 
@@ -71,15 +74,20 @@ class DataGenerator(keras.utils.Sequence):
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
+        self.update_negative_samples()
+
         self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count)
 
         if self.shuffle == True:
             np.random.shuffle(self.indexes)
 
+    def update_negative_samples(self):
+        self.negative = ad
+
     def sample_one_negative_sample(self):
         pass
 
-    def __data_generation(self, list_IDs):
+    def __data_generation(self, edges_batch):
         """
 
         :param list_IDs_temp:
@@ -89,7 +97,7 @@ class DataGenerator(keras.utils.Sequence):
 
         X_list = []
 
-        for id, edge_type in list_IDs:
+        for id, edge_type in edges_batch:
             if edge_type == 'd':
                 X_list.append((self.Ed_rows[id],
                                self.Ed_cols[id],
