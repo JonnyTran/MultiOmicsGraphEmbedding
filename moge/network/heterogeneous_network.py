@@ -44,7 +44,7 @@ class HeterogeneousNetwork():
             print("Adding edgelist with", len(target_genes), "total unique", modalities[1], "genes (target), but only matching", len(target_genes_matched), "nodes")
             print(len(edgelist), "edges added.")
 
-        self.G.add_edges_from(edgelist)
+        self.G.add_edges_from(edgelist, type="d")
 
     def import_edgelist_file(self, file, is_directed):
         if is_directed:
