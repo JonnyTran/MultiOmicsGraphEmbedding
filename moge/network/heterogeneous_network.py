@@ -113,7 +113,8 @@ class HeterogeneousNetwork():
 
         similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1)
         index = similarity_adj_df.index
-        sim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in zip(*np.nonzero(similarity_filtered.values))]
+        sim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in
+                               zip(*np.nonzero(similarity_filtered))]
         self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u")
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
@@ -121,7 +122,7 @@ class HeterogeneousNetwork():
         # TODO Make sure that the edges picked up are edge weight
         dissimilarity_filtered = np.triu(similarity_adj_df <= dissimilarity_threshold, k=1)
         dissim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for i, (x, y) in
-                                  enumerate(zip(*np.nonzero(dissimilarity_filtered.values))) if i < max_negative_edges]
+                                  enumerate(zip(*np.nonzero(dissimilarity_filtered))) if i < max_negative_edges]
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
