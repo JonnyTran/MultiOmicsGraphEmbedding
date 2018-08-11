@@ -37,8 +37,8 @@ class HeterogeneousNetwork():
             source_genes = set(pd.DataFrame(edgelist)[0].tolist())
             target_genes = set(pd.DataFrame(edgelist)[1].tolist())
 
-            source_genes_matched = set(self.modality_to_nodes[modalities[0]]) & source_genes
-            target_genes_matched = set(self.modality_to_nodes[modalities[1]]) & target_genes
+            source_genes_matched = set(self.nodes[modalities[0]]) & source_genes
+            target_genes_matched = set(self.nodes[modalities[1]]) & target_genes
 
             print("Adding edgelist with", len(source_genes), "total unique", modalities[0], "genes (source), but only matching", len(source_genes_matched), "nodes")
             print("Adding edgelist with", len(target_genes), "total unique", modalities[1], "genes (target), but only matching", len(target_genes_matched), "nodes")
@@ -91,7 +91,7 @@ class HeterogeneousNetwork():
 
         nodes = []
         for modality in modalities:
-            nodes.extend(self.modality_to_nodes[modality])
+            nodes.extend(self.nodes[modality])
 
         return self.G.subgraph(nodes) # returned subgraph is not mutable
 
