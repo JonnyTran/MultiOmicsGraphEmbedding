@@ -97,7 +97,7 @@ class HeterogeneousNetwork():
 
 
     def add_edges_from_nodes_similarity(self, modality, features=None, similarity_threshold=0.7,
-                                        dissimilarity_threshold=0.1, data=True):
+                                        dissimilarity_threshold=0.1, negative_sampling_ratio=2.0, data=True):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the network if the similarity measures passes the threshold
 
@@ -111,16 +111,17 @@ class HeterogeneousNetwork():
                                                                        features=features, squareform=True),
                                          index=self.multi_omics_data[modality].get_genes_list())
 
-        similarity_filtered = similarity_adj_df.loc[:, :] >= similarity_threshold
+        similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1)
         index = similarity_adj_df.index
         sim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in zip(*np.nonzero(similarity_filtered.values))]
         self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u")
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
+        max_negative_edges = len(sim_edgelist_ebunch) * negative_sampling_ratio
         # TODO Make sure that the edges picked up are edge weight
-        dissimilarity_filtered = similarity_adj_df.loc[:, :] <= dissimilarity_threshold
-        dissim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in
-                               zip(*np.nonzero(dissimilarity_filtered.values))]
+        dissimilarity_filtered = np.triu(similarity_adj_df <= dissimilarity_threshold, k=1)
+        dissim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for i, (x, y) in
+                                  enumerate(zip(*np.nonzero(dissimilarity_filtered.values))) if i < max_negative_edges]
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
