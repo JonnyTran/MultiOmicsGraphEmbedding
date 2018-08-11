@@ -25,7 +25,7 @@ class HeterogeneousNetwork():
             for gene in self.multi_omics_data[modality].get_genes_list():
                 self.node_to_modality[gene] = modality
 
-            print(modality, " nodes:", len(self.modality_to_nodes[modality]))
+            print(modality, " nodes:", len(self.nodes[modality]))
             self.node_list.extend(self.multi_omics_data[modality].get_genes_list())
 
         print("Total nodes:", len(self.node_list))
