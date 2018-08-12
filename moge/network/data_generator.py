@@ -30,15 +30,15 @@ class DataGenerator(keras.utils.Sequence):
         self.Eu_rows, self.Eu_cols = self.adj_undirected.nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix # TODO upper trianglar
         self.Eu_count = len(self.Eu_rows)
 
-        # # Negative Edges (node similarity)
+        # # Negative Edges (true negative edges from node similarity)
         self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=self.node_list,
                                                               get_training_data=get_training_data)
         self.En_rows, self.En_cols = triu(self.adj_undirected,
                                           k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
         self.En_count = len(self.En_rows)
 
-        # Negative Sampled Edges
-        self.negative = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
+        # Negative Edges (for sampling)
+        self.negative_edges = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
 
         print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
 

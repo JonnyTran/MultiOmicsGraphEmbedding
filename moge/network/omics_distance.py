@@ -29,11 +29,11 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
 def compute_annotation_similarity(genes_info, modality, features=None, squareform=True, multiprocessing=True):
     if features is None:
         if modality == "GE":
-            features = ["locus_type", "gene_family_id", "Transcript sequence"]
+            features = ["locus_type", "gene_family_id", "Transcript sequence", "Chromosome", "Chromosome arm", "Chromosome region"]
         elif modality == "MIR":
             features = ["miR family", "Mature sequence"]
         elif modality == "LNC":
-            features = ["Transcript Type", "Transcript sequence"]
+            features = ["Transcript Type", "Transcript sequence", "Chromosome", "start"]
 
     gower_dists = gower_distance(genes_info.loc[:, features], multiprocessing)
 
@@ -64,26 +64,38 @@ def gower_distance(X, multiprocessing=True, n_jobs=-2):
     for column in X.columns:
         print("Gower's dissimilarity: Computing", column)
         feature = X.loc[:, column]
-        if column == "gene_family_id" or column == "gene_family" or column == "locus_type":
+        if column in ["gene_family_id", "gene_family", "locus_type"]:
+            print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
         elif column == "miR family":
+            print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies("/"), 'dice')
 
         elif column == "GO terms":
+            print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies(","), 'dice')
 
         elif column in ["Mature sequence", "Transcript sequence"]:
+            print("Global alignment seq score")
             feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), seq_global_alignment_pairwise_score)
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
         elif feature.dtypes == np.object:
+            print("Dice distance")
             feature_dist = pdist(pd.get_dummies(feature), 'dice')
 
-        elif False: # TODO if nominal numbers
+            if column in ["Chromosome", "Chromosome arm", "Chromosome region"]:
+                feature_dist = 1/3*feature_dist
+
+        elif feature.dtypes == int:
+            print("Manhattan distance (normalized ptp)")
             feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "manhattan") / np.ptp(feature.values)
+        elif feature.dtypes == float:
+            print("Euclidean distance (normalized ptp)")
+            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "euclidean") / np.ptp(feature.values)
         else:
-            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "euclidean")
+            raise Exception("Invalid column dtype")
 
         individual_variable_distances.append(feature_dist)
 
@@ -92,8 +104,10 @@ def gower_distance(X, multiprocessing=True, n_jobs=-2):
     return pdists_mean
     # return squareform(pdists_mean)
 
-def seq_global_alignment_pairwise_score(u, v, truncate=False):
+def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=300):
     if (type(u[0]) is str and type(v[0]) is str):
+        if truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
+            return np.nan
         return pairwise2.align.globalxx(u[0], v[0], score_only=True) / min(len(u[0]), len(v[0]))
     else:
         return np.nan
