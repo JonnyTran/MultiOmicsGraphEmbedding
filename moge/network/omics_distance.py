@@ -31,7 +31,8 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
 
     return X_multiomics_corr_df
 
-def compute_annotation_similarity(genes_info, modality, features=None, squareform=True, multiprocessing=True, **kwargs):
+
+def compute_annotation_similarity(genes_info, modality, features=None, squareform=True, multiprocessing=True):
     if features is None:
         if modality == "GE":
             features = ["locus_type", "gene_family_id", "Transcript sequence", "location", "Transcript length"]
@@ -40,7 +41,7 @@ def compute_annotation_similarity(genes_info, modality, features=None, squarefor
         elif modality == "LNC":
             features = ["Transcript Type", "Transcript sequence", "Location", "Transcript length"]
 
-    gower_dists = gower_distance(genes_info.loc[:, features], multiprocessing=multiprocessing, **kwargs)
+    gower_dists = gower_distance(genes_info.loc[:, features], agg_func=None, multiprocessing=multiprocessing)
 
     if squareform:
         return squareform_(np.subtract(1, gower_dists))
@@ -48,7 +49,8 @@ def compute_annotation_similarity(genes_info, modality, features=None, squarefor
         return np.subtract(1, gower_dists) # Turns distance to similarity measure
     # return np.exp(-beta * gower_dists)
 
-def gower_distance(X, agg_func=None, multiprocessing=True, n_jobs=-2, **kwargs):
+
+def gower_distance(X, agg_func=None, multiprocessing=True, n_jobs=-2):
     """
     This function expects a pandas dataframe as input
     The data frame is to contain the features along the columns. Based on these features a
@@ -84,7 +86,7 @@ def gower_distance(X, agg_func=None, multiprocessing=True, n_jobs=-2, **kwargs):
 
         elif column in ["Mature sequence", "Transcript sequence"]:
             print("Global alignment seq score")
-            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), seq_global_alignment_pairwise_score, *kwargs)
+            feature_dist = pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
         elif column == "Location": # LNC Locations
@@ -141,7 +143,8 @@ def hierarchical_distance_aggregate_score(X):
 
     return np.nanmean(X, axis=0)
 
-def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=300):
+
+def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=600):
     if (type(u[0]) is str and type(v[0]) is str):
         if truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
             return np.nan
