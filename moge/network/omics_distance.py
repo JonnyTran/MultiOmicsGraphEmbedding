@@ -13,37 +13,42 @@ from Bio import pairwise2
 from TCGAMultiOmics.multiomics import MultiOmicsData
 
 
-def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities, pathologic_stages=[],
+def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities, node_list, pathologic_stages=[],
                                     histological_subtypes=[]):
     X_multiomics, y = multi_omics_data.load_data(modalities=modalities, pathologic_stages=pathologic_stages,
                                                  histological_subtypes=histological_subtypes)
 
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
-    X_multiomics_corr = np.corrcoef(X_multiomics_concat, rowvar=False)
+    X_multiomics_corr = squareform_(scipy_pdist(X_multiomics_concat.T, 'correlation'))
 
     cols = X_multiomics_concat.columns
     X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr, columns=cols, index=cols)
+    print(X_multiomics_corr_df.shape)
+    X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list)
+    X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list, axis=0)
+
+    print(X_multiomics_corr_df.shape)
 
     return X_multiomics_corr_df
 
-def compute_annotation_similarity(genes_info, modality, features=None, squareform=True, multiprocessing=True):
+def compute_annotation_similarity(genes_info, modality, features=None, squareform=True, multiprocessing=True, **kwargs):
     if features is None:
         if modality == "GE":
-            features = ["locus_type", "gene_family_id", "Transcript sequence", "Chromosome", "Chromosome arm", "Chromosome region"]
+            features = ["locus_type", "gene_family_id", "Transcript sequence", "location", "Transcript length"]
         elif modality == "MIR":
             features = ["miR family", "Mature sequence"]
         elif modality == "LNC":
-            features = ["Transcript Type", "Transcript sequence", "Chromosome", "start"]
+            features = ["Transcript Type", "Transcript sequence", "Location", "Transcript length"]
 
-    gower_dists = gower_distance(genes_info.loc[:, features], multiprocessing)
+    gower_dists = gower_distance(genes_info.loc[:, features], multiprocessing=multiprocessing, **kwargs)
 
     if squareform:
         return squareform_(np.subtract(1, gower_dists))
     else:
-        return np.subtract(1, gower_dists)
+        return np.subtract(1, gower_dists) # Turns distance to similarity measure
     # return np.exp(-beta * gower_dists)
 
-def gower_distance(X, multiprocessing=True, n_jobs=-2):
+def gower_distance(X, agg_func=None, multiprocessing=True, n_jobs=-2, **kwargs):
     """
     This function expects a pandas dataframe as input
     The data frame is to contain the features along the columns. Based on these features a
@@ -62,8 +67,9 @@ def gower_distance(X, multiprocessing=True, n_jobs=-2):
         pdist = scipy_pdist # returns condensed dist matrix
 
     for column in X.columns:
-        print("Gower's dissimilarity: Computing", column)
         feature = X.loc[:, column]
+        print("Gower's dissimilarity: Computing", column, ", dtype:", feature.dtypes, ", shape:", feature.shape)
+
         if column in ["gene_family_id", "gene_family", "locus_type"]:
             print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
@@ -78,31 +84,62 @@ def gower_distance(X, multiprocessing=True, n_jobs=-2):
 
         elif column in ["Mature sequence", "Transcript sequence"]:
             print("Global alignment seq score")
-            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), seq_global_alignment_pairwise_score)
+            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), seq_global_alignment_pairwise_score, *kwargs)
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
-        elif feature.dtypes == np.object:
+        elif column == "Location": # LNC Locations
+            print("Location split to Chromosome, start, end")
+            location_features = feature.str.split("[:-]", expand=True).filter(items=[0, 1])
+            hierarchical_columns = ["Chromosome", "start"]
+            location_features.columns = hierarchical_columns
+            location_features["start"] = location_features["start"].astype(np.float64)
+            # location_features["end"] = location_features["end"].astype(np.float64) TODO Add bp region length
+
+            feature_dist = gower_distance(location_features, agg_func=hierarchical_distance_aggregate_score,
+                                          multiprocessing=True)
+
+        elif column == "location": # GE Locations
+            print("Location split to Chromosome, arm, region")
+            location_features = feature.str.split("[pq.]", expand=True).filter(items=[0, 1])
+            location_features.columns = ["Chromosome", "region"]
+            location_features["arm"] = feature.str.extract(r'(?P<arm>[pq])', expand=True)
+            location_features = location_features[["Chromosome", "arm", "region"]] # TODO Add band #
+            print(location_features)
+            feature_dist = gower_distance(location_features, agg_func=hierarchical_distance_aggregate_score,
+                                          multiprocessing=True)
+
+        elif feature.dtypes == np.object: # TODO Use Categorical dtypes later
             print("Dice distance")
             feature_dist = pdist(pd.get_dummies(feature), 'dice')
 
-            if column in ["Chromosome", "Chromosome arm", "Chromosome region"]:
-                feature_dist = 1/3*feature_dist
-
         elif feature.dtypes == int:
             print("Manhattan distance (normalized ptp)")
-            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "manhattan") / np.ptp(feature.values)
+            feature_dist = scipy_pdist(feature.values.reshape((X.shape[0],-1)), "manhattan") / \
+                           (np.nanmax(feature.values) - np.nanmin(feature.values))
         elif feature.dtypes == float:
             print("Euclidean distance (normalized ptp)")
-            feature_dist = pdist(feature.values.reshape((X.shape[0],-1)), "euclidean") / np.ptp(feature.values)
+            feature_dist = scipy_pdist(feature.values.reshape((X.shape[0],-1)), "euclidean") / \
+                           (np.nanmax(feature.values) - np.nanmin(feature.values))
         else:
             raise Exception("Invalid column dtype")
 
         individual_variable_distances.append(feature_dist)
 
-    pdists_mean = np.nanmean(np.array(individual_variable_distances), axis=0)
+    if agg_func is None:
+        agg_func = lambda x: np.nanmean(x, axis=0)
 
-    return pdists_mean
-    # return squareform(pdists_mean)
+    pdists_mean_reduced = agg_func(np.array(individual_variable_distances))
+
+    return pdists_mean_reduced
+
+def hierarchical_distance_aggregate_score(X):
+    """
+    X: ndarray of features where the first dimension is ordered hierarchically (e.g. [Chromosome #, arm, region, band])
+    """
+    for i in range(1, len(X)):
+        X[i][np.where(X[i-1] >= X[i])] = X[i-1][np.where(X[i-1] >= X[i])] # the distance of child feature is only as great as distance of parent features
+
+    return np.nanmean(X, axis=0)
 
 def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=300):
     if (type(u[0]) is str and type(v[0]) is str):
