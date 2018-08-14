@@ -35,11 +35,11 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
 def compute_annotation_similarity(genes_info, modality, features=None, squareform=True, multiprocessing=True):
     if features is None:
         if modality == "GE":
-            features = ["locus_type", "gene_family_id", "Transcript sequence", "location", "Transcript length"]
+            features = ["locus_type", "gene_family_id", "location", "Transcript length", "Transcript sequence"]
         elif modality == "MIR":
             features = ["miR family", "Mature sequence"]
         elif modality == "LNC":
-            features = ["Transcript Type", "Transcript sequence", "Location", "Transcript length"]
+            features = ["Transcript Type", "Location", "Transcript length", "Transcript sequence"]
 
     gower_dists = gower_distance(genes_info.loc[:, features], agg_func=None, multiprocessing=multiprocessing)
 

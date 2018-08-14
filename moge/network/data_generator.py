@@ -1,7 +1,9 @@
-import keras
 import numpy as np
+import pandas as pd
 
 from scipy.linalg import triu
+
+import keras
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
@@ -33,14 +35,19 @@ class DataGenerator(keras.utils.Sequence):
         # # Negative Edges (true negative edges from node similarity)
         self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=self.node_list,
                                                               get_training_data=get_training_data)
-        self.En_rows, self.En_cols = triu(self.adj_undirected,
-                                          k=1).nonzero()  # only get non-zero edges from upper triangle of the adjacency matrix
+        self.En_rows, self.En_cols = self.adj_undirected.nonzero() # TODO only get non-zero edges from upper triangle of the adjacency matrix
         self.En_count = len(self.En_rows)
 
         # Negative Edges (for sampling)
-        self.negative_edges = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
+        # self.negative_edges = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
 
         print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
+
+        MIR = network.multi_omics_data.MIR.get_genes_info()
+        LNC = network.multi_omics_data.LNC.get_genes_info()
+        GE = network.multi_omics_data.GE.get_genes_info()
+
+        self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
 
         self.on_epoch_end()
 
@@ -68,13 +75,16 @@ class DataGenerator(keras.utils.Sequence):
         print(list_IDs_temp)
 
         # Generate data
-        X, y = self.__data_generation(list_IDs_temp)
+        try:
+            X, y = self.__data_generation(list_IDs_temp)
+        except:
+            return self.__getitem__(training_index+1)
 
         return X, y
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
-        self.update_negative_samples()
+        # self.update_negative_samples()
 
         self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count)
 
@@ -82,7 +92,7 @@ class DataGenerator(keras.utils.Sequence):
             np.random.shuffle(self.indexes)
 
     def update_negative_samples(self):
-        self.negative = ad
+        self.negative = np.random.shuffle(self.negative)
 
     def sample_one_negative_sample(self):
         pass
@@ -101,16 +111,19 @@ class DataGenerator(keras.utils.Sequence):
             if edge_type == 'd':
                 X_list.append((self.Ed_rows[id],
                                self.Ed_cols[id],
+                               True,
                                self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
             elif edge_type == 'u':
                 X_list.append(
                     (self.Eu_rows[id],
                      self.Eu_cols[id],
+                     False,
                      self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
             elif edge_type == 'u_n':
                 X_list.append(
                     (self.En_rows[id],
                      self.En_cols[id],
+                     False,
                      self.adj_negative[self.En_rows[id], self.En_cols[id]]))  # E_ij of negative edges should be 0
 
         batch_size = len(X_list)
@@ -118,23 +131,35 @@ class DataGenerator(keras.utils.Sequence):
         X = {}
         X["input_seq_i"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
         X["input_seq_j"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
+        X["input_seq_j"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
 
-        y = np.empty((self.batch_size), dtype=np.float32)
+        y = np.empty((batch_size), dtype=np.float32)
 
         for i, tuple  in enumerate(X_list):
-            node_i_id, node_j_id, E_ij = tuple
+            node_i_id, node_j_id, is_directed, E_ij = tuple
             X["input_seq_i"][i] = self.get_gene_info(self.node_list[node_i_id])
             X["input_seq_j"][i] = self.get_gene_info(self.node_list[node_j_id])
+            X["is_directed"][i] = is_directed
             y[i] = E_ij
 
         return X, y
 
     def get_gene_info(self, gene_name):
-        modality = self.network.node_to_modality[gene_name]
-        return self.network.multi_omics_data[modality].get_genes_info().loc[gene_name]
+        return self.seq_to_array(self.genes_info.loc[gene_name, "Transcript length"])
 
-    def seq_to_array(self, seq_str):
-        pass
+    def seq_to_array(self, seq):
+        arr = np.zeros((len(seq), 4))
+        for i in range(len(seq)):
+            if seq[i] == "A":
+                arr[i] = np.array([1, 0, 0, 0])
+            elif seq[i] == "C":
+                arr[i] = np.array([0, 1, 0, 0])
+            elif seq[i] == "G":
+                arr[i] = np.array([0, 0, 1, 0])
+            elif seq[i] == "T":
+                arr[i] = np.array([0, 0, 0, 1])
+            else:
+                arr[i] = np.array([1, 1, 1, 1])
 
 
 def main():

@@ -97,7 +97,7 @@ class HeterogeneousNetwork():
 
 
     def add_edges_from_nodes_similarity(self, modality, features=None, similarity_threshold=0.7,
-                                        dissimilarity_threshold=0.1, negative_sampling_ratio=2.0):
+                                        dissimilarity_threshold=0.1, negative_sampling_ratio=2.0, **kwargs):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the network if the similarity measures passes the threshold
 
@@ -108,7 +108,7 @@ class HeterogeneousNetwork():
         genes_info = self.multi_omics_data[modality].get_genes_info()
 
         similarity_adj_df = pd.DataFrame(compute_annotation_similarity(genes_info, modality=modality,
-                                                                       features=features, squareform=True),
+                                                                       features=features, squareform=True, **kwargs),
                                          index=self.multi_omics_data[modality].get_genes_list())
 
         similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1) # A True/False matrix
