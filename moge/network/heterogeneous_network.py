@@ -73,10 +73,11 @@ class HeterogeneousNetwork():
 
         # Also add reverse edges for undirected edges
         if 'u' == edge_type:
-            undirected_edge_list = [(v, u, d) for u, v, d in edge_list if d['type'] == edge_type]
-            edge_list.extend(undirected_edge_list)
+            edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] == edge_type])
 
         print(len(edge_list))
+        if 'u' in edge_type:
+            edge_list = [[(v, u, d) for u, v, d in edge_list if d['type'] == edge_type]]
 
         adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         print(len(adj.nonzero()[0]))
@@ -123,9 +124,9 @@ class HeterogeneousNetwork():
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
         max_negative_edges = negative_sampling_ratio * len(sim_edgelist_ebunch)
-        # TODO Make sure that the edges picked up are edge weight
         dissimilarity_filtered = np.triu(similarity_adj_df <= dissimilarity_threshold, k=1)
-        dissim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for i, (x, y) in
+        # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
+        dissim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y] + 1e-8) for i, (x, y) in
                                   enumerate(zip(*np.nonzero(dissimilarity_filtered))) if i < max_negative_edges]
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
 
