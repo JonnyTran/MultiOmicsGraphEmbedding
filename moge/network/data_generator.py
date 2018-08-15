@@ -80,7 +80,7 @@ class DataGenerator(keras.utils.Sequence):
         try:
             X, y = self.__data_generation(list_IDs_temp)
         except:
-            X, y = self.__data_generation([i + 1 for i in list_IDs_temp])
+            return self.__getitem__(training_index + 1)
 
         return X, y
 
