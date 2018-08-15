@@ -33,7 +33,7 @@ def plot_coo_matrix(m):
         m = coo_matrix(m)
     fig = plt.figure(figsize=(15,15))
     ax = fig.add_subplot(111)
-    ax.plot(m.col, m.row, 's', cmap=plt.cm.seismic, ms=1)
+    ax.plot(m.col, m.row, 's', ms=1)
     ax.set_aspect('equal')
     for spine in ax.spines.values():
         spine.set_visible(False)
