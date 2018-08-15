@@ -4,29 +4,14 @@ from scipy.sparse import coo_matrix
 
 import seaborn
 
-def matrix_heatmap(data):
+
+def matrix_heatmap(csr, figsize=(15, 15)):
     # Scatter plot of the graph adjacency matrix
-    fig, ax = plt.subplots(figsize=(15, 15))
 
-    data = np.ma.masked_invalid(data)
-
-    heatmap = ax.pcolormesh(data, cmap=plt.cm.seismic,
-                        vmin=np.nanmin(data), vmax=np.nanmax(data))
-    # https://stackoverflow.com/a/16125413/190597 (Joe Kington)
-    ax.patch.set(hatch='x', edgecolor='black')
-    fig.colorbar(heatmap)
-
-    # put the major ticks at the middle of each cell
-    ax.set_xticks(np.arange(data.shape[1]) + 0.5, minor=False)
-    ax.set_yticks(np.arange(data.shape[0]) + 0.5, minor=False)
-
-    # want a more natural, table-like display
-    ax.invert_yaxis()
-    ax.xaxis.tick_top()
-
-    # ax.set_xticklabels(row_labels, minor=False)
-    # ax.set_yticklabels(column_labels, minor=False)
-    plt.show()
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111)
+    cax = ax.matshow(csr.toarray(), interpolation='nearest', cmap=plt.cm.gray)
+    fig.colorbar(cax)
 
 def plot_coo_matrix(m):
     if not isinstance(m, coo_matrix):

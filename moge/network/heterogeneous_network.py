@@ -64,15 +64,15 @@ class HeterogeneousNetwork():
             edge_list = self.G.edges(data=True)
         else:
             if get_training_data:
-                if "u" in edge_type:
+                if "u" == edge_type:
                     return self.adj_similarity_train
-                elif 'd' in edge_type:
+                elif 'd' == edge_type:
                     return self.adj_regulatory_train
             else:
-                edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_type]
+                edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_type]
 
-        if 'u' in edge_type:
-            undirected_edge_list = [(v, u, d) for u, v, d in edge_list if d['type'] == 'u']
+        if 'u' == edge_type or 'u_n' == edge_type:
+            undirected_edge_list = [(v, u, d) for u, v, d in edge_list if d['type'] == edge_type]
             edge_list.extend(undirected_edge_list)
 
         adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
@@ -111,6 +111,7 @@ class HeterogeneousNetwork():
                                                                        features=features, squareform=True),
                                          index=self.multi_omics_data[modality].get_genes_list())
 
+        # Selects edges from the affinity matrix
         similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1) # A True/False matrix
         index = similarity_adj_df.index
         sim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in
@@ -118,7 +119,7 @@ class HeterogeneousNetwork():
         self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u")
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
-        max_negative_edges = len(sim_edgelist_ebunch) * negative_sampling_ratio
+        max_negative_edges = negative_sampling_ratio * len(sim_edgelist_ebunch)
         # TODO Make sure that the edges picked up are edge weight
         dissimilarity_filtered = np.triu(similarity_adj_df <= dissimilarity_threshold, k=1)
         dissim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for i, (x, y) in
