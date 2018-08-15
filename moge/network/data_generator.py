@@ -79,7 +79,7 @@ class DataGenerator(keras.utils.Sequence):
         # Generate data
         try:
             X, y = self.__data_generation(list_IDs_temp)
-        except ValueError:
+        except TypeError:
             return self.__getitem__(training_index + 1)
 
         return X, y
@@ -152,9 +152,6 @@ class DataGenerator(keras.utils.Sequence):
         return self.seq_to_array(self.genes_info.loc[gene_name, "Transcript sequence"])
 
     def seq_to_array(self, seq):
-        if seq == np.nan:
-            raise ValueError()
-
         arr = np.zeros((len(seq), 4))
         for i in range(len(seq)):
             if seq[i] == "A":
