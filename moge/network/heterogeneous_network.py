@@ -71,6 +71,7 @@ class HeterogeneousNetwork():
             else:
                 edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_type]
 
+        # Also add reverse edges for undirected edges
         if 'u' == edge_type or 'u_n' == edge_type:
             undirected_edge_list = [(v, u, d) for u, v, d in edge_list if d['type'] == edge_type]
             edge_list.extend(undirected_edge_list)
@@ -79,7 +80,6 @@ class HeterogeneousNetwork():
 
         # Eliminate self-edges
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
-        adj.eliminate_zeros()
         return adj
 
     def get_edge(self, i, j):
