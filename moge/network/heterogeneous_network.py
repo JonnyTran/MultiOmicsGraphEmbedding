@@ -76,10 +76,13 @@ class HeterogeneousNetwork():
             undirected_edge_list = [(v, u, d) for u, v, d in edge_list if d['type'] == edge_type]
             edge_list.extend(undirected_edge_list)
 
-        adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
+        print(len(edge_list))
 
+        adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
+        print(len(adj.nonzero()[0]))
         # Eliminate self-edges
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
+        print(len(adj.nonzero()[0]))
         return adj
 
     def get_edge(self, i, j):
