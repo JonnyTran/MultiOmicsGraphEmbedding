@@ -20,36 +20,40 @@ class DataGenerator(keras.utils.Sequence):
         self.shuffle = shuffle
         self.node_list = list_IDs
 
+        self.process_training_edges_data(get_training_data)
+
+        # Negative Edges (for sampling)
+        # self.negative_edges = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
+
+        self.process_genes_info(network)
+
+        self.on_epoch_end()
+
+    def process_genes_info(self, network):
+        MIR = network.multi_omics_data.MIR.get_genes_info()
+        LNC = network.multi_omics_data.LNC.get_genes_info()
+        GE = network.multi_omics_data.GE.get_genes_info()
+        self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
+
+    def process_training_edges_data(self, get_training_data):
         # Directed Edges (regulatory interaction)
         self.adj_directed = self.network.get_adjacency_matrix(edge_type="d", node_list=self.node_list,
                                                               get_training_data=get_training_data)
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
-
         # Undirected Edges (node similarity)
         self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=self.node_list,
                                                                 get_training_data=get_training_data)
         self.Eu_rows, self.Eu_cols = self.adj_undirected.nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix # TODO upper trianglar
         self.Eu_count = len(self.Eu_rows)
-
         # # Negative Edges (true negative edges from node similarity)
         self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=self.node_list,
                                                               get_training_data=get_training_data)
-        self.En_rows, self.En_cols = self.adj_undirected.nonzero() # TODO only get non-zero edges from upper triangle of the adjacency matrix
+        self.En_rows, self.En_cols = self.adj_undirected.nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix
         self.En_count = len(self.En_rows)
-
-        # Negative Edges (for sampling)
-        # self.negative_edges = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
 
         print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
 
-        MIR = network.multi_omics_data.MIR.get_genes_info()
-        LNC = network.multi_omics_data.LNC.get_genes_info()
-        GE = network.multi_omics_data.GE.get_genes_info()
-
-        self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
-
-        self.on_epoch_end()
 
     def split_index(self, index):
         if index < self.Ed_count:  # Index belonging to undirected edges
@@ -68,11 +72,9 @@ class DataGenerator(keras.utils.Sequence):
     def __getitem__(self, training_index):
         # Generate indexes of the batch
         indices = self.indexes[training_index * self.batch_size: (training_index + 1) * self.batch_size]
-        print(indices)
 
         # Find list of IDs
         list_IDs_temp = [self.split_index(k) for k in indices]
-        print(list_IDs_temp)
 
         # Generate data
         try:
@@ -143,6 +145,8 @@ class DataGenerator(keras.utils.Sequence):
             y[i] = E_ij
 
         return X, y
+
+
 
     def get_gene_info(self, gene_name):
         return self.seq_to_array(self.genes_info.loc[gene_name, "Transcript length"])
