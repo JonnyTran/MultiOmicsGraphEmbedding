@@ -144,6 +144,10 @@ class DataGenerator(keras.utils.Sequence):
             X["is_directed"][i] = is_directed
             y[i] = E_ij
 
+        X["input_seq_i"] = np.ndarray(X["input_seq_i"])
+        X["input_seq_j"] = np.ndarray(X["input_seq_j"])
+        X["is_directed"] = np.ndarray(X["is_directed"])
+
         return X, y
 
 
@@ -163,7 +167,7 @@ class DataGenerator(keras.utils.Sequence):
             elif seq[i] == "T":
                 arr[i] = np.array([0, 0, 0, 1])
             else:
-                arr[i] = np.array([1, 1, 1, 1])
+                arr[i] = np.array([0, 0, 0, 0])
 
         return arr
 
