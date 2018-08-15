@@ -146,7 +146,7 @@ class DataGenerator(keras.utils.Sequence):
 
 
     def get_gene_info(self, gene_name):
-        return self.seq_to_array(self.genes_info.loc[gene_name, "Transcript length"])
+        return self.seq_to_array(self.genes_info.loc[gene_name, "Transcript sequence"])
 
     def seq_to_array(self, seq):
         arr = np.zeros((len(seq), 4))
