@@ -133,7 +133,7 @@ class DataGenerator(keras.utils.Sequence):
         X = {}
         X["input_seq_i"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
         X["input_seq_j"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
-        X["input_seq_j"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
+        X["is_directed"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
 
         y = np.empty((batch_size), dtype=np.float32)
 
