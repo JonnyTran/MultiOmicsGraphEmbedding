@@ -165,6 +165,8 @@ class DataGenerator(keras.utils.Sequence):
             else:
                 arr[i] = np.array([1, 1, 1, 1])
 
+        return arr
+
 
 def main():
     path = "/Users/jonny/Desktop/PycharmProjects/MultiOmicsGraphEmbedding/data/miRNA-mRNA_network.pickle"
