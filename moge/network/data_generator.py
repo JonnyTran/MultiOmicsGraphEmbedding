@@ -49,7 +49,7 @@ class DataGenerator(keras.utils.Sequence):
         # # Negative Edges (true negative edges from node similarity)
         self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=self.node_list,
                                                               get_training_data=get_training_data)
-        self.En_rows, self.En_cols = self.adj_undirected.nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix
+        self.En_rows, self.En_cols = self.adj_negative.nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix
         self.En_count = len(self.En_rows)
 
         print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
@@ -74,7 +74,7 @@ class DataGenerator(keras.utils.Sequence):
         indices = self.indexes[training_index * self.batch_size: (training_index + 1) * self.batch_size]
 
         # Find list of IDs
-        list_IDs_temp = [self.split_index(k) for k in indices]
+        list_IDs_temp = [self.split_index(i) for i in indices]
 
         # Generate data
         X, y = self.__data_generation(list_IDs_temp)
