@@ -77,10 +77,7 @@ class DataGenerator(keras.utils.Sequence):
         list_IDs_temp = [self.split_index(k) for k in indices]
 
         # Generate data
-        try:
-            X, y = self.__data_generation(list_IDs_temp)
-        except:
-            return self.__getitem__(training_index+1)
+        X, y = self.__data_generation(list_IDs_temp)
 
         return X, y
 
