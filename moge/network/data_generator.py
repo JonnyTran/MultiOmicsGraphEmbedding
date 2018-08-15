@@ -79,7 +79,7 @@ class DataGenerator(keras.utils.Sequence):
         # Generate data
         try:
             X, y = self.__data_generation(list_IDs_temp)
-        except:
+        except ValueError:
             return self.__getitem__(training_index + 1)
 
         return X, y
@@ -153,7 +153,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def seq_to_array(self, seq):
         if seq == np.nan:
-            raise Exception()
+            raise ValueError()
 
         arr = np.zeros((len(seq), 4))
         for i in range(len(seq)):
