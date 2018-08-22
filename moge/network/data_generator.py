@@ -4,28 +4,35 @@ import pandas as pd
 from scipy.linalg import triu
 
 import keras
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 class DataGenerator(keras.utils.Sequence):
 
-    def __init__(self, list_IDs, network: HeterogeneousNetwork,
+    def __init__(self, network: HeterogeneousNetwork,
                  get_training_data=False,
                  batch_size=1, dim=(None, 4), negative_sampling_ratio=5,
+                 maxlen=600, padding='post', truncating='post',
                  shuffle=True):
         self.dim = dim
         self.batch_size = batch_size
         # self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
         self.shuffle = shuffle
-        self.node_list = list_IDs
+        self.padding = padding
+        self.maxlen = maxlen
+        self.truncating = truncating
 
+        self.process_genes_info(network)
+        self.filter_node_list()
+        self.process_sequence_tokenizer()
         self.process_training_edges_data(get_training_data)
 
         # Negative Edges (for sampling)
         # self.negative_edges = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
 
-        self.process_genes_info(network)
 
         self.on_epoch_end()
 
@@ -34,6 +41,16 @@ class DataGenerator(keras.utils.Sequence):
         LNC = network.multi_omics_data.LNC.get_genes_info()
         GE = network.multi_omics_data.GE.get_genes_info()
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
+        print("Genes info columns:", self.genes_info.columns)
+
+    def filter_node_list(self):
+        self.node_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
+        print("Number of nodes without seq removed:", len(self.network.node_list) - len(self.node_list))
+
+    def process_sequence_tokenizer(self):
+        self.tokenizer = Tokenizer(char_level=True, lower=False)
+        self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
+        print("num_words:", self.tokenizer.num_words, self.tokenizer.word_index)
 
     def process_training_edges_data(self, get_training_data):
         # Directed Edges (regulatory interaction)
@@ -41,11 +58,13 @@ class DataGenerator(keras.utils.Sequence):
                                                               get_training_data=get_training_data)
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
+
         # Undirected Edges (node similarity)
         self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=self.node_list,
                                                                 get_training_data=get_training_data)
         self.Eu_rows, self.Eu_cols = self.adj_undirected.nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix # TODO upper trianglar
         self.Eu_count = len(self.Eu_rows)
+
         # # Negative Edges (true negative edges from node similarity)
         self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=self.node_list,
                                                               get_training_data=get_training_data)
@@ -56,6 +75,7 @@ class DataGenerator(keras.utils.Sequence):
 
 
     def split_index(self, index):
+        'Choose the corresponding edge type data depending on the index number'
         if index < self.Ed_count:  # Index belonging to undirected edges
             return index, "d"
         elif self.Ed_count <= index and index < (self.Ed_count + self.Eu_count):  # Index belonging to undirected edges
@@ -74,15 +94,42 @@ class DataGenerator(keras.utils.Sequence):
         indices = self.indexes[training_index * self.batch_size: (training_index + 1) * self.batch_size]
 
         # Find list of IDs
-        list_IDs_temp = [self.split_index(i) for i in indices]
+        edges_batch = [self.split_index(i) for i in indices]
 
         # Generate data
-        try:
-            X, y = self.__data_generation(list_IDs_temp)
-        except TypeError:
-            return self.__getitem__(training_index + 1)
+        X, y = self.__data_generation(edges_batch)
 
         return X, y
+
+    def __data_generation(self, edges_batch):
+        'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
+        X_list = []
+        for id, edge_type in edges_batch:
+            if edge_type == 'd':
+                X_list.append((self.Ed_rows[id], self.Ed_cols[id], True,
+                               self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
+            elif edge_type == 'u':
+                X_list.append(
+                    (self.Eu_rows[id], self.Eu_cols[id], False,
+                     self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
+            elif edge_type == 'u_n':
+                X_list.append(
+                    (self.En_rows[id], self.En_cols[id], False,
+                     self.adj_negative[self.En_rows[id], self.En_cols[id]]))  # E_ij of negative edges should be 0
+
+        # assert self.batch_size == len(X_list)
+        X_list = np.array(X_list, dtype="O")
+
+        X = {}
+        X["input_seq_j"] = self.get_sequence_data(X_list[:, 0].tolist())
+        X["input_seq_i"] = self.get_sequence_data(X_list[:, 1].tolist())
+        X["is_directed"] = np.expand_dims(X_list[:,2], axis=-1)
+
+        y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
+
+        return X, y
+
+
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
@@ -99,77 +146,27 @@ class DataGenerator(keras.utils.Sequence):
     def sample_one_negative_sample(self):
         pass
 
-    def __data_generation(self, edges_batch):
+
+    def get_sequence_data(self, node_list_ids):
+        """
+        Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
+        (indexing from self.node_list)
         """
 
-        :param list_IDs_temp:
-        :return: X : (batch_size, *dim, n_channels)
-        """
-        #
+        node_list = [self.node_list[i] for i in node_list_ids]
 
-        X_list = []
+        padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"])
+        return padded_encoded_sequences
 
-        for id, edge_type in edges_batch:
-            if edge_type == 'd':
-                X_list.append((self.Ed_rows[id],
-                               self.Ed_cols[id],
-                               True,
-                               self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
-            elif edge_type == 'u':
-                X_list.append(
-                    (self.Eu_rows[id],
-                     self.Eu_cols[id],
-                     False,
-                     self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
-            elif edge_type == 'u_n':
-                X_list.append(
-                    (self.En_rows[id],
-                     self.En_cols[id],
-                     False,
-                     self.adj_negative[self.En_rows[id], self.En_cols[id]]))  # E_ij of negative edges should be 0
+    def encode_texts(self, texts):
+        # integer encode
+        encoded = self.tokenizer.texts_to_sequences(texts)
+        # pad encoded sequences
+        padded_seqs = pad_sequences(encoded, maxlen=self.maxlen, padding=self.padding, truncating=self.truncating)
+        # Sequence to matrix
+        exp_pad_seqs = np.expand_dims(padded_seqs, axis=-1)
+        return np.array([self.tokenizer.sequences_to_matrix(s) for s in exp_pad_seqs])
 
-        batch_size = len(X_list)
-
-        X = {}
-        X["input_seq_i"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
-        X["input_seq_j"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
-        X["is_directed"] = [None, ] * batch_size  # np.empty((batch_size, *self.dim))
-
-        y = np.empty((batch_size), dtype=np.float32)
-
-        for i, tuple  in enumerate(X_list):
-            node_i_id, node_j_id, is_directed, E_ij = tuple
-            X["input_seq_i"][i] = self.get_gene_info(self.node_list[node_i_id])
-            X["input_seq_j"][i] = self.get_gene_info(self.node_list[node_j_id])
-            X["is_directed"][i] = is_directed
-            y[i] = E_ij
-
-        X["input_seq_i"] = np.array(X["input_seq_i"])
-        X["input_seq_j"] = np.array(X["input_seq_j"])
-        X["is_directed"] = np.array(X["is_directed"])
-
-        return X, y
-
-
-
-    def get_gene_info(self, gene_name):
-        return self.seq_to_array(self.genes_info.loc[gene_name, "Transcript sequence"])
-
-    def seq_to_array(self, seq):
-        arr = np.zeros((len(seq), 4))
-        for i in range(len(seq)):
-            if seq[i] == "A":
-                arr[i] = np.array([1, 0, 0, 0])
-            elif seq[i] == "C":
-                arr[i] = np.array([0, 1, 0, 0])
-            elif seq[i] == "G":
-                arr[i] = np.array([0, 0, 1, 0])
-            elif seq[i] == "T":
-                arr[i] = np.array([0, 0, 0, 1])
-            else:
-                arr[i] = np.array([0, 0, 0, 0])
-
-        return arr
 
 
 def main():
