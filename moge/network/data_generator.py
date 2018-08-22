@@ -3,7 +3,9 @@ import numpy as np
 import pandas as pd
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
+from scipy.linalg import triu as dense_triu
 from scipy.sparse import triu
+from sklearn.utils import shuffle
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
@@ -12,26 +14,25 @@ class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
                  get_training_data=False,
-                 batch_size=1, dim=(None, 4), negative_sampling_ratio=5,
+                 batch_size=1, dim=(None, 4), negative_sampling_ratio=3,
                  maxlen=600, padding='post', truncating='post',
-                 shuffle=True):
+                 shuffle=True, seed=0):
         self.dim = dim
         self.batch_size = batch_size
-        # self.negative_sampling_ratio = negative_sampling_ratio
+        self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
         self.shuffle = shuffle
         self.padding = padding
         self.maxlen = maxlen
         self.truncating = truncating
+        self.seed = seed
+        np.random.seed(seed)
 
         self.process_genes_info(network)
         self.filter_node_list()
         self.process_sequence_tokenizer()
         self.process_training_edges_data(get_training_data)
-
-        # Negative Edges (for sampling)
-        # self.negative_edges = np.argwhere(np.isnan(self.adj_directed + self.adj_undirected + self.adj_negative))
-
+        self.process_negative_sampling_edges()
 
         self.on_epoch_end()
 
@@ -41,6 +42,7 @@ class DataGenerator(keras.utils.Sequence):
         GE = network.multi_omics_data.GE.get_genes_info()
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
         print("Genes info columns:", self.genes_info.columns)
+
 
     def filter_node_list(self):
         self.node_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
@@ -61,17 +63,34 @@ class DataGenerator(keras.utils.Sequence):
         # Undirected Edges (node similarity)
         self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=self.node_list,
                                                                 get_training_data=get_training_data)
-        self.Eu_rows, self.Eu_cols = triu(self.adj_undirected, k=1).nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix # TODO upper trianglar
+        self.Eu_rows, self.Eu_cols = triu(self.adj_undirected, k=1).nonzero()
         self.Eu_count = len(self.Eu_rows)
 
-        # # Negative Edges (true negative edges from node similarity)
+        # Negative Edges (true negative edges from node similarity)
         self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=self.node_list,
                                                               get_training_data=get_training_data)
-        self.En_rows, self.En_cols = triu(self.adj_negative, k=1).nonzero()  # TODO only get non-zero edges from upper triangle of the adjacency matrix
+        self.En_rows, self.En_cols = triu(self.adj_negative, k=1).nonzero()
         self.En_count = len(self.En_rows)
 
         print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
 
+    def process_negative_sampling_edges(self):
+        # Negative Edges (for sampling)
+        adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
+        self.Ens_rows, self.Ens_cols = np.where(dense_triu(adj_positive.todense() == 0, k=1))
+        self.Ens_count = (self.Ed_count + self.Eu_count) * self.negative_sampling_ratio - self.En_count
+        print("Ens_count", self.Ens_count)
+
+
+    def on_epoch_end(self):
+        'Updates indexes after each epoch and shuffle'
+        # self.update_negative_samples()
+
+        self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count + self.Ens_count)
+
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+            self.Ens_rows, self.Ens_cols = shuffle(self.Ens_rows, self.Ens_cols)
 
     def split_index(self, index):
         'Choose the corresponding edge type data depending on the index number'
@@ -79,8 +98,10 @@ class DataGenerator(keras.utils.Sequence):
             return index, "d"
         elif self.Ed_count <= index and index < (self.Ed_count + self.Eu_count):  # Index belonging to undirected edges
             return index - self.Ed_count, "u"
-        elif index >= (self.Ed_count + self.Eu_count):  # index belonging to negative edges
+        elif (self.Ed_count + self.Eu_count) <= index and index < (self.Ed_count + self.Eu_count + self.En_count):  # index belonging to negative edges
             return index - (self.Ed_count + self.Eu_count), "u_n"
+        elif (self.Ed_count + self.Eu_count + self.En_count) <= index:
+            return index - (self.Ed_count + self.Eu_count + self.En_count), "d_n"
         else:
             raise Exception("Index out of range. Value:" + index)
 
@@ -100,6 +121,8 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, y
 
+
+
     def __data_generation(self, edges_batch):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
@@ -115,7 +138,11 @@ class DataGenerator(keras.utils.Sequence):
                 X_list.append(
                     (self.En_rows[id], self.En_cols[id], False,
                      self.adj_negative[self.En_rows[id], self.En_cols[id]]))  # E_ij of negative edges should be 0
-
+            elif edge_type == 'd_n':
+                X_list.append(
+                    (self.Ens_rows[id], self.Ens_cols[id], True,
+                     0.0))  # E_ij of negative edges should be 0
+                
         # assert self.batch_size == len(X_list)
         X_list = np.array(X_list, dtype="O")
 
@@ -127,24 +154,6 @@ class DataGenerator(keras.utils.Sequence):
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
 
         return X, y
-
-
-
-    def on_epoch_end(self):
-        'Updates indexes after each epoch and shuffle'
-        # self.update_negative_samples()
-
-        self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count)
-
-        if self.shuffle == True:
-            np.random.shuffle(self.indexes)
-
-    def update_negative_samples(self):
-        self.negative = np.random.shuffle(self.negative)
-
-    def sample_one_negative_sample(self):
-        pass
-
 
     def get_sequence_data(self, node_list_ids):
         """

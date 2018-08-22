@@ -81,7 +81,8 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         '''
         return K.mean(K.equal(K.cast(y_true > 0.5, y_true.dtype), K.cast(y_pred > 0.8, y_true.dtype)))
 
-    def learn_embedding(self, network: HeterogeneousNetwork, edge_f=None, get_training_data=False,
+    def learn_embedding(self, network: HeterogeneousNetwork, n_epochs=10,
+                        edge_f=None, get_training_data=False,
                         is_weighted=False, no_python=False, seed=0):
 
         self.generator = DataGenerator(network=network, get_training_data=get_training_data,
@@ -110,7 +111,7 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
 
         print("Network total weights:", self.siamese_net.count_params())
 
-        self.siamese_net.fit_generator(self.generator, use_multiprocessing=True, workers=9)
+        self.siamese_net.fit_generator(self.generator, use_multiprocessing=True, workers=9, epochs=n_epochs)
 
 
     def get_reconstructed_adj(self, X=None, node_l=None, edge_type="d"):
