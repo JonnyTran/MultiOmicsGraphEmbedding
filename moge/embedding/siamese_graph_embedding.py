@@ -83,7 +83,8 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
 
     def learn_embedding(self, network: HeterogeneousNetwork, edge_f=None, get_training_data=False,
                         is_weighted=False, no_python=False, seed=0):
-        self.generator = DataGenerator(network=network, get_training_data=False,
+
+        self.generator = DataGenerator(network=network, get_training_data=get_training_data,
                                   maxlen=self.max_length, padding='post', truncating="post",
                                   batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
 
@@ -123,7 +124,7 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         :param edge_type:
         :return:
         """
-        pass
+        pass #TODO
 
     def save_embeddings(self, filename):
         fout = open(filename, 'w')
