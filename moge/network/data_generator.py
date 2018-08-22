@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
-from scipy.linalg import triu
+from scipy.sparse import triu
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
