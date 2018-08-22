@@ -9,6 +9,15 @@ from sklearn.utils import shuffle
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
+UNDIRECTED_EDGE_TYPE = False
+
+DIRECTED_EDGE_TYPE = True
+
+DIRECTED_NEG_EDGE = 'd_n'
+UNDIRECTED_NEG_EDGE = 'u_n'
+UNDIRECTED_EDGE = 'u'
+DIRECTED_EDGE = 'd'
+
 
 class DataGenerator(keras.utils.Sequence):
 
@@ -72,14 +81,15 @@ class DataGenerator(keras.utils.Sequence):
         self.En_rows, self.En_cols = triu(self.adj_negative, k=1).nonzero()
         self.En_count = len(self.En_rows)
 
-        print("Ed_count", self.Ed_count, "Eu_count", self.Eu_count, "En_count", self.En_count)
+        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count)
 
     def process_negative_sampling_edges(self):
         # Negative Edges (for sampling)
         adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
         self.Ens_rows, self.Ens_cols = np.where(dense_triu(adj_positive.todense() == 0, k=1))
         self.Ens_count = (self.Ed_count + self.Eu_count) * self.negative_sampling_ratio - self.En_count
-        print("Ens_count", self.Ens_count)
+        self.Ens_count = int(self.Ens_count)
+        print("Ens_count:", self.Ens_count)
 
 
     def on_epoch_end(self):
@@ -94,14 +104,22 @@ class DataGenerator(keras.utils.Sequence):
 
     def split_index(self, index):
         'Choose the corresponding edge type data depending on the index number'
-        if index < self.Ed_count:  # Index belonging to undirected edges
-            return index, "d"
-        elif self.Ed_count <= index and index < (self.Ed_count + self.Eu_count):  # Index belonging to undirected edges
-            return index - self.Ed_count, "u"
-        elif (self.Ed_count + self.Eu_count) <= index and index < (self.Ed_count + self.Eu_count + self.En_count):  # index belonging to negative edges
-            return index - (self.Ed_count + self.Eu_count), "u_n"
+
+        # Index belonging to undirected edges
+        if index < self.Ed_count:
+            return index, DIRECTED_EDGE
+
+        # Index belonging to undirected edges
+        elif self.Ed_count <= index and index < (self.Ed_count + self.Eu_count):
+            return index - self.Ed_count, UNDIRECTED_EDGE
+
+        # index belonging to negative edges
+        elif (self.Ed_count + self.Eu_count) <= index and index < (self.Ed_count + self.Eu_count + self.En_count):
+            return index - (self.Ed_count + self.Eu_count), UNDIRECTED_NEG_EDGE
+
+        # Index belonging to directed negative sampled edges
         elif (self.Ed_count + self.Eu_count + self.En_count) <= index:
-            return index - (self.Ed_count + self.Eu_count + self.En_count), "d_n"
+            return index - (self.Ed_count + self.Eu_count + self.En_count), DIRECTED_NEG_EDGE
         else:
             raise Exception("Index out of range. Value:" + index)
 
@@ -127,20 +145,20 @@ class DataGenerator(keras.utils.Sequence):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
         for id, edge_type in edges_batch:
-            if edge_type == 'd':
-                X_list.append((self.Ed_rows[id], self.Ed_cols[id], True,
+            if edge_type == DIRECTED_EDGE:
+                X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE,
                                self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
-            elif edge_type == 'u':
+            elif edge_type == UNDIRECTED_EDGE:
                 X_list.append(
-                    (self.Eu_rows[id], self.Eu_cols[id], False,
+                    (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE,
                      self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
-            elif edge_type == 'u_n':
+            elif edge_type == UNDIRECTED_NEG_EDGE:
                 X_list.append(
-                    (self.En_rows[id], self.En_cols[id], False,
+                    (self.En_rows[id], self.En_cols[id], UNDIRECTED_EDGE_TYPE,
                      self.adj_negative[self.En_rows[id], self.En_cols[id]]))  # E_ij of negative edges should be 0
-            elif edge_type == 'd_n':
+            elif edge_type == DIRECTED_NEG_EDGE:
                 X_list.append(
-                    (self.Ens_rows[id], self.Ens_cols[id], True,
+                    (self.Ens_rows[id], self.Ens_cols[id], DIRECTED_EDGE_TYPE,
                      0.0))  # E_ij of negative edges should be 0
                 
         # assert self.batch_size == len(X_list)
