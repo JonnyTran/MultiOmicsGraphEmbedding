@@ -158,8 +158,7 @@ class DataGenerator(keras.utils.Sequence):
                 # self.adj_negative[self.En_rows[id], self.En_cols[id]]))  # E_ij of negative edges should be 0
             elif edge_type == DIRECTED_NEG_EDGE:
                 X_list.append(
-                    (self.Ens_rows[id], self.Ens_cols[id], DIRECTED_EDGE_TYPE,
-                     0))  # E_ij of negative edges should be 0
+                    (self.Ens_rows[id], self.Ens_cols[id], DIRECTED_EDGE_TYPE, 0))  # E_ij of negative edges should be 0
                 
         # assert self.batch_size == len(X_list)
         X_list = np.array(X_list, dtype="O")

@@ -113,6 +113,9 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
 
         self.siamese_net.fit_generator(self.generator, use_multiprocessing=True, workers=9, epochs=n_epochs)
 
+    def save_model(self, file_name):
+        self.siamese_net.save(file_name)
+
 
     def get_reconstructed_adj(self, X=None, node_l=None, edge_type="d"):
         """
