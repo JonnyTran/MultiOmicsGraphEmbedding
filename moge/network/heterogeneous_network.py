@@ -1,6 +1,7 @@
 import dask.dataframe as dd
 from dask.threaded import get
 import scipy.sparse as sp
+import networkx as nx
 
 from moge.network.omics_distance import *
 
