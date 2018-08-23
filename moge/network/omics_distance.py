@@ -1,16 +1,11 @@
 
 import numpy as np
 import pandas as pd
-import networkx as nx
-
-from sklearn.neighbors import DistanceMetric
-from sklearn.metrics.pairwise import pairwise_distances
+from Bio import pairwise2
+from TCGAMultiOmics.multiomics import MultiOmicsData
 from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.spatial.distance import squareform as squareform_
-
-from Bio import pairwise2
-
-from TCGAMultiOmics.multiomics import MultiOmicsData
+from sklearn.metrics.pairwise import pairwise_distances
 
 
 def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities, node_list, pathologic_stages=[],
@@ -37,7 +32,7 @@ def compute_annotation_similarity(genes_info, modality, features=None, squarefor
         if modality == "GE":
             features = ["locus_type", "gene_family_id", "location", "Transcript length", "Transcript sequence"]
         elif modality == "MIR":
-            features = ["miR family", "Mature sequence"]
+            features = ["miR family", "location", "Mature sequence"]
         elif modality == "LNC":
             features = ["Transcript Type", "Location", "Transcript length", "Transcript sequence"]
 

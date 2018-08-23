@@ -10,14 +10,11 @@ from sklearn.utils import shuffle
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 UNDIRECTED_EDGE_TYPE = False
-
 DIRECTED_EDGE_TYPE = True
-
 DIRECTED_NEG_EDGE = 'd_n'
 UNDIRECTED_NEG_EDGE = 'u_n'
 UNDIRECTED_EDGE = 'u'
 DIRECTED_EDGE = 'd'
-
 
 class DataGenerator(keras.utils.Sequence):
 
@@ -49,6 +46,11 @@ class DataGenerator(keras.utils.Sequence):
         MIR = network.multi_omics_data.MIR.get_genes_info()
         LNC = network.multi_omics_data.LNC.get_genes_info()
         GE = network.multi_omics_data.GE.get_genes_info()
+
+        MIR.rename(columns={'miR family': 'Family'}, inplace=True)
+        LNC.rename(columns={'Transcript Type': 'Family'}, inplace=True) # TODO Find family data for lncRNA's
+        GE.rename(columns={'gene_family_id': 'Family'}, inplace=True)
+
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
         print("Genes info columns:", self.genes_info.columns)
 
