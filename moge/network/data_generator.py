@@ -142,7 +142,6 @@ class DataGenerator(keras.utils.Sequence):
         return X, y
 
 
-
     def __data_generation(self, edges_batch):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
@@ -186,18 +185,23 @@ class DataGenerator(keras.utils.Sequence):
             padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
-            padded_encoded_sequences = [self.encode_texts(self.genes_info.loc[node, "Transcript sequence"]) for node in
+            padded_encoded_sequences = [self.encode_texts(self.genes_info.loc[node, "Transcript sequence"], single=True)
+                                        for node in
                                         node_list]
 
         return padded_encoded_sequences
 
-    def encode_texts(self, texts, maxlen=None):
+    def encode_texts(self, texts, maxlen=None, single=False):
         # integer encode
         encoded = self.tokenizer.texts_to_sequences(texts)
         # pad encoded sequences
         padded_seqs = pad_sequences(encoded, maxlen=maxlen, padding=self.padding, truncating=self.truncating)
         # Sequence to matrix
-        exp_pad_seqs = np.expand_dims(padded_seqs, axis=-1)
+        if single:
+            exp_pad_seqs = np.expand_dims(padded_seqs, axis=0)
+        else:
+            exp_pad_seqs = np.expand_dims(padded_seqs, axis=-1)
+
         return np.array([self.tokenizer.sequences_to_matrix(s) for s in exp_pad_seqs])
 
 
