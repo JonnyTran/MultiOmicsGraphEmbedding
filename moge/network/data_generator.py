@@ -198,10 +198,12 @@ class DataGenerator(keras.utils.Sequence):
         encoded = self.tokenizer.texts_to_sequences(texts)
         # pad encoded sequences
         padded_seqs = pad_sequences(encoded, maxlen=maxlen, padding=self.padding, truncating=self.truncating)
+
         # Sequence to matrix
         if expand_dim:
-            exp_pad_seqs = np.expand_dims(padded_seqs, axis=-1)
-        return np.array([self.tokenizer.sequences_to_matrix(s) for s in exp_pad_seqs])
+            padded_seqs = np.expand_dims(padded_seqs, axis=-1)
+
+        return np.array([self.tokenizer.sequences_to_matrix(s) for s in padded_seqs])
 
 
 
