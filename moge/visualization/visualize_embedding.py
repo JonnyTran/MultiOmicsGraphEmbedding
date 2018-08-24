@@ -2,7 +2,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from sklearn.manifold import TSNE
 
-def plot_embedding2D(node_pos, node_list, node_colors=None, di_graph=None):
+
+def plot_embedding2D(node_pos, node_list, node_colors=None, di_graph=None, cmap="jet"):
     node_num, embedding_dimension = node_pos.shape
     assert node_num == len(node_list)
     if(embedding_dimension > 2):
@@ -12,7 +13,7 @@ def plot_embedding2D(node_pos, node_list, node_colors=None, di_graph=None):
 
     if di_graph is None:
         # plot using plt scatter
-        plt.scatter(node_pos[:, 0], node_pos[:, 1], c=node_colors, cmap="jet")
+        plt.scatter(node_pos[:, 0], node_pos[:, 1], c=node_colors, cmap=cmap)
     else:
         # plot using networkx with edge structure
         pos = {}
@@ -20,7 +21,7 @@ def plot_embedding2D(node_pos, node_list, node_colors=None, di_graph=None):
             pos[i] = node_pos[i, :]
         if node_colors:
             nx.draw_networkx_nodes(di_graph, pos,
-                                   node_color=node_colors, cmap="jet",
+                                   node_color=node_colors, cmap=cmap,
                                    width=0.1, node_size=100,
                                    arrows=False, alpha=0.8,
                                    font_size=5)
