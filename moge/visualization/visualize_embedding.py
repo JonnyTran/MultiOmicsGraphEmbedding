@@ -20,7 +20,7 @@ def plot_embedding2D(node_pos, node_list, node_colors=None, di_graph=None, cmap=
         for i in range(node_num):
             pos[i] = node_pos[i, :]
         if node_colors:
-            nx.draw_networkx_nodes(di_graph, pos,
+            nx.draw_networkx_nodes(di_graph, pos, nodelist=node_list,
                                    node_color=node_colors, cmap=cmap,
                                    width=0.1, node_size=100,
                                    arrows=False, alpha=0.8,
