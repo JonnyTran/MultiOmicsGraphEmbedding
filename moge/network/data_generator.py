@@ -173,7 +173,7 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, y
 
-    def get_sequence_data(self, node_list_ids, variable_length=False):
+    def get_sequence_data(self, node_list_ids, variable_length=False, minlen=26):
         """
         Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
         (indexing from self.node_list)
@@ -185,16 +185,27 @@ class DataGenerator(keras.utils.Sequence):
             padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
-            padded_encoded_sequences = [self.encode_texts(self.genes_info.loc[node, "Transcript sequence"], single=True)
-                                        for node in
-                                        node_list]
+            padded_encoded_sequences = [
+                self.encode_texts(self.genes_info.loc[node, "Transcript sequence"], single=True, minlen=minlen)
+                for node in
+                node_list]
 
         return padded_encoded_sequences
 
-    def encode_texts(self, texts, maxlen=None, single=False):
+    def encode_texts(self, texts, maxlen=None, single=False, minlen=None):
+        """
+
+        :param texts: [str | list(str)]
+        :param maxlen:
+        :param single: Set to True if texts is not a list (i.e. only a single node name string).
+        :return:
+        """
         # integer encode
         encoded = self.tokenizer.texts_to_sequences(texts)
         # pad encoded sequences
+        if minlen and single and len(texts) < minlen:
+            maxlen = minlen
+
         padded_seqs = pad_sequences(encoded, maxlen=maxlen, padding=self.padding, truncating=self.truncating)
         # Sequence to matrix
         if single:
