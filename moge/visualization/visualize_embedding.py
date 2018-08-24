@@ -17,8 +17,8 @@ def plot_embedding2D(node_pos, node_list, node_colors=None, di_graph=None, cmap=
     else:
         # plot using networkx with edge structure
         pos = {}
-        for i in range(node_num):
-            pos[i] = node_pos[i, :]
+        for i, node in enumerate(node_list):
+            pos[node] = node_pos[i, :]
         if node_colors:
             nx.draw_networkx_nodes(di_graph, pos, nodelist=node_list,
                                    node_color=node_colors, cmap=cmap,
