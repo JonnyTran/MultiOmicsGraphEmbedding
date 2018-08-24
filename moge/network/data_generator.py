@@ -182,28 +182,23 @@ class DataGenerator(keras.utils.Sequence):
 
         node_list = [self.node_list[i] for i in node_list_ids]
 
-        print(node_list)
-
         if variable_length == False:
             padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
-            padded_encoded_sequences = [self.encode_texts(self.genes_info.loc[node, "Transcript sequence"],
-                                                          maxlen=None, expand_dim=False) for node in node_list]
+            padded_encoded_sequences = [self.encode_texts(self.genes_info.loc[node, "Transcript sequence"]) for node in
+                                        node_list]
 
         return padded_encoded_sequences
 
-    def encode_texts(self, texts, maxlen=None, expand_dim=True):
+    def encode_texts(self, texts, maxlen=None):
         # integer encode
         encoded = self.tokenizer.texts_to_sequences(texts)
         # pad encoded sequences
         padded_seqs = pad_sequences(encoded, maxlen=maxlen, padding=self.padding, truncating=self.truncating)
-
         # Sequence to matrix
-        if expand_dim:
-            padded_seqs = np.expand_dims(padded_seqs, axis=-1)
-
-        return np.array([self.tokenizer.sequences_to_matrix(s) for s in padded_seqs])
+        exp_pad_seqs = np.expand_dims(padded_seqs, axis=-1)
+        return np.array([self.tokenizer.sequences_to_matrix(s) for s in exp_pad_seqs])
 
 
 
