@@ -31,7 +31,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         else:
             nx.draw_networkx(di_graph, pos,
                              node_color=node_colors, cmap=cmap,
-                             width=0.1, node_size=300, arrows=False,
+                             width=0.1, node_size=300, arrows=True,
                              alpha=0.8, font_size=5, **kwargs)
 
 
