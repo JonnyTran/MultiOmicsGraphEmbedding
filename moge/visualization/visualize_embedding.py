@@ -3,7 +3,9 @@ import networkx as nx
 from sklearn.manifold import TSNE
 
 
-def plot_embedding2D(node_pos, node_list, node_colors=None, di_graph=None, cmap="jet"):
+def plot_embedding2D(node_pos, node_list, di_graph=None,
+                     node_colors=None,
+                     plot_nodes_only=True, cmap="jet", **kwargs):
     node_num, embedding_dimension = node_pos.shape
     assert node_num == len(node_list)
     if(embedding_dimension > 2):
@@ -19,10 +21,18 @@ def plot_embedding2D(node_pos, node_list, node_colors=None, di_graph=None, cmap=
         pos = {}
         for i, node in enumerate(node_list):
             pos[node] = node_pos[i, :]
-
-        nx.draw_networkx(di_graph, pos, node_color=node_colors, cmap=cmap,
+        if plot_nodes_only:
+            nx.draw_networkx_nodes(di_graph, pos, nodelist=node_list,
+                                   node_color=node_colors, cmap=cmap,
+                                   vmin=0, vmax=255,
+                                   width=0.1, node_size=100,
+                                   arrows=False, alpha=0.8,
+                                   font_size=5, **kwargs)
+        else:
+            nx.draw_networkx(di_graph, pos,
+                             node_color=node_colors, cmap=cmap,
                              width=0.1, node_size=300, arrows=False,
-                             alpha=0.8, font_size=12)
+                             alpha=0.8, font_size=5, **kwargs)
 
 
 def get_node_color(node_labels):
