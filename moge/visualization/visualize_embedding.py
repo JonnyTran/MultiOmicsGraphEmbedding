@@ -4,8 +4,8 @@ from sklearn.manifold import TSNE
 
 
 def plot_embedding2D(node_pos, node_list, di_graph=None,
-                     node_colors=None,
-                     plot_nodes_only=True, cmap="jet", **kwargs):
+                     node_colors=None, plot_nodes_only=True, legend=True,
+                     cmap="jet", file_name=None, **kwargs):
     node_num, embedding_dimension = node_pos.shape
     assert node_num == len(node_list)
     if(embedding_dimension > 2):
@@ -14,10 +14,10 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         node_pos = model.fit_transform(node_pos)
 
     if di_graph is None:
-        # plot using plt scatter
+        # Plot using plt scatter
         plt.scatter(node_pos[:, 0], node_pos[:, 1], c=node_colors, cmap=cmap)
     else:
-        # plot using networkx with edge structure
+        # Plot using networkx with edge structure
         pos = {}
         for i, node in enumerate(node_list):
             pos[node] = node_pos[i, :]
@@ -26,13 +26,19 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
             nx.draw_networkx_nodes(di_graph, pos,
                                    node_color=node_colors, cmap=cmap,
                                    width=0.1, node_size=100,
-                                   arrows=False, alpha=0.8,
-                                   font_size=5, **kwargs)
+                                   alpha=0.8, font_size=5, **kwargs)
         else:
             nx.draw_networkx(di_graph, pos,
                              node_color=node_colors, cmap=cmap,
                              width=0.1, node_size=100, arrows=True,
                              alpha=0.8, font_size=5, **kwargs)
+
+        if legend:
+            plt.legend(loc='center')
+
+    if file_name:
+        plt.savefig('%s_vis.pdf' % (file_name), dpi=300, format='pdf', bbox_inches='tight')
+        plt.figure()
 
 
 def get_node_color(node_labels):
@@ -40,14 +46,3 @@ def get_node_color(node_labels):
 
     return colors
 
-def expVis(X, res_pre, m_summ, node_labels=None, di_graph=None):
-    print('\tGraph Visualization:')
-    if node_labels:
-        node_colors = get_node_color(node_labels)
-    else:
-        node_colors = None
-    plot_embedding2D(X, node_colors=node_colors,
-                     di_graph=di_graph)
-    plt.savefig('%s_%s_vis.pdf' % (res_pre, m_summ), dpi=300,
-                format='pdf', bbox_inches='tight')
-    plt.figure()
