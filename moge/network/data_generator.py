@@ -186,10 +186,8 @@ class DataGenerator(keras.utils.Sequence):
             padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
-            padded_encoded_sequences = [
-                self.encode_texts(self.genes_info.loc[node, "Transcript sequence"], maxlen=None, expand_dim=False) for
-                node in
-                node_list]
+            padded_encoded_sequences = [self.encode_texts(self.genes_info.loc[node, "Transcript sequence"],
+                                                          maxlen=None, expand_dim=False) for node in node_list]
 
         return padded_encoded_sequences
 
