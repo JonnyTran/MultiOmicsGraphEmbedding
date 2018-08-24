@@ -4,7 +4,7 @@ from sklearn.manifold import TSNE
 
 
 def plot_embedding2D(node_pos, node_list, di_graph=None,
-                     node_colors=None, plot_nodes_only=True, legend=True,
+                     node_colors=None, plot_nodes_only=True, legend=False,
                      cmap="jet", file_name=None, **kwargs):
     node_num, embedding_dimension = node_pos.shape
     assert node_num == len(node_list)
@@ -34,7 +34,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
                              alpha=0.8, font_size=5, **kwargs)
 
         if legend:
-            plt.legend(loc='center')
+            plt.legend(loc='bottom')
 
     if file_name:
         plt.savefig('%s_vis.pdf' % (file_name), dpi=300, format='pdf', bbox_inches='tight')
