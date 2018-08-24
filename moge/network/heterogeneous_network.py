@@ -70,11 +70,17 @@ class HeterogeneousNetwork():
                 elif 'd' == edge_type:
                     return self.adj_regulatory_train
             else:
-                edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_type]
+                if type(edge_type) == list:
+                    edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_type]
+                else:
+                    edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_type]
 
         # Also add reverse edges for undirected edges
         if 'u' == edge_type:
-            edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] == edge_type])
+            if type(edge_type) == list:
+                edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] in edge_type])
+            else:
+                edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] == edge_type])
 
         adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         # Eliminate self-edges
