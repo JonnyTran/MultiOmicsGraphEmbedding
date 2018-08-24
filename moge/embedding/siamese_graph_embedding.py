@@ -47,7 +47,7 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         x = MaxPooling1D(pool_size=13, strides=13)(x)  # Similar to DanQ Model
         print("max pooling", x)
         x = Dropout(0.2)(x)
-        x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)
+        x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)  # TODO Return states?
         print("brnn", x)
         x = Dropout(0.5)(x)
         #     x = GlobalMaxPooling1D()(x)
