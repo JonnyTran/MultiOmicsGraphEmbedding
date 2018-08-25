@@ -5,6 +5,7 @@ from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
 from keras.optimizers import RMSprop
+from keras.utils import multi_gpu_model
 
 from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 from moge.network.data_generator import DataGenerator
@@ -12,7 +13,7 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
 class SiameseGraphEmbedding(StaticGraphEmbedding):
-    def __init__(self, d, input_shape, batch_size=100, lr=0.001, epochs=10,
+    def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
                  max_length=700, Ed_Eu_ratio=0.2, **kwargs):
         super().__init__(d)
 
@@ -54,13 +55,21 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         #     print("GAP pooling", x)
 
         x = Dense(75 * 640, activation='relu')(x)
-        x = Dense(925, activation='sigmoid')(x)
+        x = Dense(925, activation='relu')(x)
         x = Dense(self._d, activation='linear')(x)  # Embedding space
         return Model(input, x)
 
     def euclidean_distance(self, inputs):
         x, y = inputs
         return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
+
+    def st_euclidean_distance(self, inputs):
+        emb_i, emb_j, is_directed = inputs
+        sum_directed = K.sum(K.square(emb_i[:, 0:int(self._d / 2)] - emb_j[:, int(self._d / 2):self._d]), axis=1,
+                             keepdims=True)
+        sum_undirected = K.sum(K.square(emb_i - emb_j), axis=1, keepdims=True)
+        sum_switch = K.switch(is_directed, sum_directed, sum_undirected)
+        return K.sqrt(K.maximum(sum_switch, K.epsilon()))
 
     def st_emb_probability(self, inputs):
         emb_i, emb_j, is_directed = inputs
@@ -81,37 +90,62 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         '''
         return K.mean(K.equal(K.cast(y_true > 0.5, y_true.dtype), K.cast(y_pred > 0.8, y_true.dtype)))
 
-    def learn_embedding(self, network: HeterogeneousNetwork, n_epochs=10,
-                        edge_f=None, get_training_data=False,
-                        is_weighted=False, no_python=False, seed=0):
+    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
+                        edge_f=None, is_weighted=False, no_python=False, seed=0):
 
-        self.generator = DataGenerator(network=network, get_training_data=get_training_data,
-                                  maxlen=self.max_length, padding='post', truncating="post",
-                                  batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
+        self.generator = DataGenerator(network=network,
+                                       maxlen=self.max_length, padding='post', truncating="post",
+                                       batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
 
-        # Inputs
-        E_ij = Input(batch_shape=(self.batch_size, 1), name="E_ij")
-        input_seq_i = Input(batch_shape=(self.batch_size, *self.input_shape), name="input_seq_i")
-        input_seq_j = Input(batch_shape=(self.batch_size, *self.input_shape), name="input_seq_j")
-        is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.bool, name="is_directed")
+        if network_val:
+            generator_val = DataGenerator(network=network_val,
+                                          maxlen=self.max_length, padding='post', truncating="post",
+                                          batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
+        else:
+            generator_val = None
 
-        # build create_base_network to use in each siamese 'leg'
-        self.lstm_network = self.create_base_network(input_shape=(self.max_length, 6))
+        K.clear_session()
+        tf.reset_default_graph()
+        sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True))
 
-        # encode each of the two inputs into a vector with the convnet
-        encoded_i = self.lstm_network(input_seq_i)
-        encoded_j = self.lstm_network(input_seq_j)
+        if multi_gpu:
+            device = "/cpu:0"
+        else:
+            device = "/gpu:0"
 
-        distance = Lambda(self.st_emb_probability)([encoded_i, encoded_j, is_directed])
+        # Build model
+        with tf.device(device):
+            # Inputs
+            E_ij = Input(batch_shape=(self.batch_size, 1), name="E_ij")
+            input_seq_i = Input(batch_shape=(self.batch_size, *self.input_shape), name="input_seq_i")
+            input_seq_j = Input(batch_shape=(self.batch_size, *self.input_shape), name="input_seq_j")
+            is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.bool, name="is_directed")
 
-        self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=distance)
+            # build create_base_network to use in each siamese 'leg'
+            self.lstm_network = self.create_base_network(input_shape=self.input_shape)
+
+            # encode each of the two inputs into a vector with the convnet
+            encoded_i = self.lstm_network(input_seq_i)
+            encoded_j = self.lstm_network(input_seq_j)
+
+            distance = Lambda(self.st_euclidean_distance)([encoded_i, encoded_j, is_directed])
+
+            self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=distance)
+
+        # Multi-gpu parallelization
+        if multi_gpu:
+            self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
+
+        # Compile & train
         self.siamese_net.compile(loss=self.contrastive_loss,
                             optimizer=RMSprop(lr=self.lr),
                             metrics=[self.accuracy])
 
         print("Network total weights:", self.siamese_net.count_params())
 
-        self.siamese_net.fit_generator(self.generator, use_multiprocessing=True, workers=9, epochs=n_epochs)
+        self.history = self.siamese_net.fit_generator(self.generator, epochs=self.n_epochs,
+                                                      validation_data=generator_val,
+                                                      use_multiprocessing=True, workers=8)
 
     def save_model(self, file_name):
         self.siamese_net.save(file_name)

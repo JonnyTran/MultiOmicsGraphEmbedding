@@ -196,7 +196,7 @@ class DataGenerator(keras.utils.Sequence):
         """
 
         :param texts: [str | list(str)]
-        :param maxlen:
+        :param maxlen: Set length to maximum length
         :param single: Set to True if texts is not a list (i.e. only a single node name string).
         :return:
         """
