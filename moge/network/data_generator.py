@@ -52,7 +52,7 @@ class DataGenerator(keras.utils.Sequence):
         GE.rename(columns={'gene_family_id': 'Family'}, inplace=True)
 
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
-        print("Genes info columns:", self.genes_info.columns)
+        print("Genes info columns:", self.genes_info.columns.tolist())
 
 
     def filter_node_list(self):

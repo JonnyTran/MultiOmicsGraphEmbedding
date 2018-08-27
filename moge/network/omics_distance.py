@@ -101,7 +101,7 @@ def gower_distance(X, agg_func=None, multiprocessing=True, n_jobs=-2):
             location_features.columns = ["Chromosome", "region"]
             location_features["arm"] = feature.str.extract(r'(?P<arm>[pq])', expand=True)
             location_features = location_features[["Chromosome", "arm", "region"]] # TODO Add band #
-            print(location_features)
+            # print(location_features)
             feature_dist = gower_distance(location_features, agg_func=hierarchical_distance_aggregate_score,
                                           multiprocessing=True)
 
