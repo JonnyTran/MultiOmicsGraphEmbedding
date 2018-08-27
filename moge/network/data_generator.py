@@ -89,9 +89,15 @@ class DataGenerator(keras.utils.Sequence):
         # Negative Edges (for sampling)
         adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
         self.Ens_rows, self.Ens_cols = np.where(dense_triu(adj_positive.todense() == 0, k=1))
-        self.Ens_count = (self.Ed_count) * self.negative_sampling_ratio
+        self.Ens_count = self.Ed_count * self.negative_sampling_ratio
         self.Ens_count = int(self.Ens_count)
         print("Ens_count:", self.Ens_count)
+
+        print(self.Ens_rows.shape)
+        sample_indices = np.random.choice(self.Ens_rows.shape, self.Ens_count)
+        self.Ens_rows = self.Ens_rows[sample_indices]
+        self.Ens_cols = self.Ens_cols[sample_indices]
+
 
 
     def on_epoch_end(self):
