@@ -165,6 +165,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
             self.node_list = vectors.keys()
 
+        return self._X
+
 
     def get_reconstructed_adj(self, edge_type=None, node_list=None):
         '''Compute the adjacency matrix from the learned embedding

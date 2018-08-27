@@ -207,7 +207,12 @@ class DataGenerator(keras.utils.Sequence):
             maxlen = minlen
 
         # pad encoded sequences
-        padded_seqs = pad_sequences(encoded, maxlen=maxlen, padding=self.padding, truncating=self.truncating)
+        if self.truncating == "random":
+            truncating = np.random.choice(["post", "pre"])
+        else:
+            truncating = self.truncating
+
+        padded_seqs = pad_sequences(encoded, maxlen=maxlen, padding=self.padding, truncating=truncating)
 
         # Sequence to matrix
         exp_pad_seqs = np.expand_dims(padded_seqs, axis=-1)
