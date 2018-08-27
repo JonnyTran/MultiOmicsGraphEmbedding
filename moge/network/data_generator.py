@@ -74,7 +74,7 @@ class DataGenerator(keras.utils.Sequence):
         # Undirected Edges (node similarity)
         self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=self.node_list,
                                                                 get_training_data=get_training_data)
-        self.Eu_rows, self.Eu_cols = triu(self.adj_undirected, k=1).nonzero()
+        self.Eu_rows, self.Eu_cols = triu(self.adj_undirected < 0.9, k=1).nonzero()
         self.Eu_count = len(self.Eu_rows)
 
         # Negative Edges (true negative edges from node similarity)
@@ -93,12 +93,9 @@ class DataGenerator(keras.utils.Sequence):
         self.Ens_count = int(self.Ens_count)
         print("Ens_count:", self.Ens_count)
 
-        print(self.Ens_rows.shape)
-        sample_indices = np.random.choice(self.Ens_rows.shape, self.Ens_count)
+        sample_indices = np.random.choice(self.Ens_rows.shape[0], self.Ens_count)
         self.Ens_rows = self.Ens_rows[sample_indices]
         self.Ens_cols = self.Ens_cols[sample_indices]
-
-
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
@@ -108,7 +105,6 @@ class DataGenerator(keras.utils.Sequence):
 
         if self.shuffle == True:
             np.random.shuffle(self.indexes)
-            # self.Ens_rows, self.Ens_cols = shuffle(self.Ens_rows, self.Ens_cols) # Shuffling negative sample edges
 
     def split_index(self, index):
         'Choose the corresponding edge type data depending on the index number'
