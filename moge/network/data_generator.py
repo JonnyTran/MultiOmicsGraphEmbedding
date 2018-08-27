@@ -102,7 +102,7 @@ class DataGenerator(keras.utils.Sequence):
 
         if self.shuffle == True:
             np.random.shuffle(self.indexes)
-            self.Ens_rows, self.Ens_cols = shuffle(self.Ens_rows, self.Ens_cols)
+            # self.Ens_rows, self.Ens_cols = shuffle(self.Ens_rows, self.Ens_cols) # Shuffling negative sample edges
 
     def split_index(self, index):
         'Choose the corresponding edge type data depending on the index number'
