@@ -74,7 +74,7 @@ class DataGenerator(keras.utils.Sequence):
         # Undirected Edges (node similarity)
         self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=self.node_list,
                                                                 get_training_data=get_training_data)
-        self.Eu_rows, self.Eu_cols = triu(self.adj_undirected >= 0.9, k=1).nonzero()
+        self.Eu_rows, self.Eu_cols = triu(self.adj_undirected, k=1).nonzero()
         self.Eu_count = len(self.Eu_rows)
 
         # Negative Edges (true negative edges from node similarity)
@@ -89,7 +89,7 @@ class DataGenerator(keras.utils.Sequence):
         # Negative Edges (for sampling)
         adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
         self.Ens_rows, self.Ens_cols = np.where(dense_triu(adj_positive.todense() == 0, k=1))
-        self.Ens_count = (self.Ed_count + self.Eu_count) * self.negative_sampling_ratio - self.En_count
+        self.Ens_count = (self.Ed_count) * self.negative_sampling_ratio
         self.Ens_count = int(self.Ens_count)
         print("Ens_count:", self.Ens_count)
 
