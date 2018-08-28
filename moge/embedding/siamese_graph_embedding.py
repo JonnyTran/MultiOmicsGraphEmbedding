@@ -104,14 +104,16 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         else:
             generator_val = None
 
-        K.clear_session()
-        tf.reset_default_graph()
-        sess = tf.InteractiveSession(config=tf.ConfigProto(allow_soft_placement=True))
-
         if multi_gpu:
             device = "/cpu:0"
+            allow_soft_placement = True
         else:
             device = "/gpu:0"
+            allow_soft_placement = False
+
+        K.clear_session()
+        tf.reset_default_graph()
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
 
         # Build model
         with tf.device(device):

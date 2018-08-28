@@ -5,12 +5,12 @@ from scipy.sparse import coo_matrix
 import seaborn
 
 
-def matrix_heatmap(csr, figsize=(15, 15)):
+def matrix_heatmap(matrix, figsize=(15, 15)):
     # Scatter plot of the graph adjacency matrix
 
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111)
-    cax = ax.matshow(csr.toarray(), interpolation='nearest', cmap=plt.cm.gray)
+    cax = ax.matshow(matrix, interpolation='nearest', cmap=plt.cm.gray)
     fig.colorbar(cax)
 
 def plot_coo_matrix(m):
