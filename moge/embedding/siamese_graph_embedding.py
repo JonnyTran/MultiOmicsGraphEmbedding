@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.metrics import pairwise_distances
 import tensorflow as tf
 from keras import backend as K
 from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional
@@ -14,7 +15,7 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 class SiameseGraphEmbedding(StaticGraphEmbedding):
     def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
-                 max_length=700, Ed_Eu_ratio=0.2, **kwargs):
+                 max_length=700, Ed_Eu_ratio=0.2, seed=0, verbose=False, **kwargs):
         super().__init__(d)
 
         self._d = d
@@ -24,6 +25,8 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         self.epochs = epochs
         self.Ed_Eu_ratio = Ed_Eu_ratio
         self.max_length = max_length
+        self.seed = seed
+        self.verbose = verbose
 
         hyper_params = {
             'method_name': 'source_target_graph_embedding'
@@ -44,12 +47,12 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         input = Input(shape=input_shape)
         #     x = Flatten()(input)
         x = Convolution1D(filters=320, kernel_size=26, input_shape=input_shape, activation='relu')(input)
-        print("conv1d", x)
+        print("conv1d", x) if self.verbose else None
         x = MaxPooling1D(pool_size=13, strides=13)(x)  # Similar to DanQ Model
-        print("max pooling", x)
+        print("max pooling", x) if self.verbose else None
         x = Dropout(0.2)(x)
         x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)  # TODO Return states?
-        print("brnn", x)
+        print("brnn", x) if self.verbose else None
         x = Dropout(0.5)(x)
         #     x = GlobalMaxPooling1D()(x)
         #     print("GAP pooling", x)
@@ -96,6 +99,7 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         self.generator = DataGenerator(network=network,
                                        maxlen=self.max_length, padding='post', truncating="post",
                                        batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
+        self.node_list = self.generator.node_list
 
         if network_val:
             generator_val = DataGenerator(network=network_val,
@@ -143,14 +147,11 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
                             optimizer=RMSprop(lr=self.lr),
                             metrics=[self.accuracy])
 
-        print("Network total weights:", self.siamese_net.count_params())
+        print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
         self.history = self.siamese_net.fit_generator(self.generator, epochs=self.n_epochs,
                                                       validation_data=generator_val,
                                                       use_multiprocessing=True, workers=8)
-
-    def save_model(self, file_name):
-        self.siamese_net.save(file_name)
 
 
     def get_reconstructed_adj(self, X=None, node_l=None, edge_type="d"):
@@ -160,17 +161,23 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         The combined will be the adjacency matrix.
 
         :param X:
-        :param node_l:
+        :param node_l: list of node names
         :param edge_type:
         :return:
         """
-        pass #TODO
+        embs = self.get_embedding()
+        if edge_type == 'd':
+            return pairwise_distances(X=embs[:, 0:int(self._d / 2)],
+                                      Y=embs[:, int(self._d / 2):self._d],
+                                      metric="euclidean", n_jobs=8)
+        else:
+            return pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
 
     def save_embeddings(self, filename):
         fout = open(filename, 'w')
-        fout.write("{} {}\n".format(self.n_nodes, self._d * 2))
-        for i in range(self.n_nodes):
-            fout.write("{} {}\n".format(self.all_nodes[i],
+        fout.write("{} {}\n".format(len(self.node_list), self._d * 2))
+        for i in range(len(self.node_list)):
+            fout.write("{} {}\n".format(len(self.node_list)[i],
                                         ' '.join([str(x) for x in self.get_embedding()[i]])))
         fout.close()
 
@@ -178,11 +185,30 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         exps = np.exp(X)
         return exps / np.sum(exps, axis=0)
 
-    def get_embedding(self):
-        pass
+    def get_embedding(self, variable_length=False, recompute=False):
+        if ~hasattr(self, "_X") or self._X == None or recompute:
+            seqs = self.generator.get_sequence_data(range(len(self.generator.node_list)),
+                                                    variable_length=variable_length)
+            if variable_length:
+                embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
+            else:
+                embs = self.lstm_network.predict(seqs, batch_size=256)
+
+            embs = np.array(embs)
+            embs = embs.reshape(embs.shape[0], embs.shape[-1])
+            self._X = embs
+        else:
+            return self._X
 
     def get_edge_weight(self, i, j, edge_type='d'):
-        pass
+        embs = self.get_embedding()
+
+        if edge_type == 'd':
+            return pairwise_distances(X=embs[i, 0:int(self._d / 2)],
+                                      Y=embs[j, int(self._d / 2):self._d],
+                                      metric="euclidean", n_jobs=8)
+        else:
+            return pairwise_distances(X=embs[i], Y=embs[j], metric="euclidean", n_jobs=8)
 
 
 
