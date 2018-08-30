@@ -7,13 +7,14 @@ from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
 from keras.optimizers import RMSprop
 from keras.utils import multi_gpu_model
+from keras.models import load_model
 
-from moge.embedding.static_graph_embedding import StaticGraphEmbedding
+from moge.embedding.static_graph_embedding import StaticGraphEmbedding, ImportedGraphEmbedding
 from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-class SiameseGraphEmbedding(StaticGraphEmbedding):
+class SiameseGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
     def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
                  max_length=700, Ed_Eu_ratio=0.2, seed=0, verbose=False, **kwargs):
         super().__init__(d)
@@ -93,7 +94,7 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         '''
         return K.mean(K.equal(K.cast(y_true > 0.5, y_true.dtype), K.cast(y_pred > 0.8, y_true.dtype)))
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
+    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
 
         self.generator = DataGenerator(network=network,
@@ -173,13 +174,18 @@ class SiameseGraphEmbedding(StaticGraphEmbedding):
         else:
             return pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
 
-    def save_embeddings(self, filename):
-        fout = open(filename, 'w')
+    def save_embeddings(self, filepath):
+        fout = open(filepath, 'w')
         fout.write("{} {}\n".format(len(self.node_list), self._d * 2))
         for i in range(len(self.node_list)):
             fout.write("{} {}\n".format(len(self.node_list)[i],
                                         ' '.join([str(x) for x in self.get_embedding()[i]])))
         fout.close()
+
+    def load_model(self, filepath):
+        self.lstm_network = load_model(filepath)
+        print(self.lstm_network.summary())
+
 
     def softmax(self, X):
         exps = np.exp(X)
