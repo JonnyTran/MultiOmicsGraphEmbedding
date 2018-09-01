@@ -175,7 +175,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
 
-        adj = -MinMaxScaler(feature_range=(0, 1), copy=True).fit_transform(adj)
+        adj = MinMaxScaler(feature_range=(0, 1), copy=True).fit_transform(-adj)
 
         return adj
 
