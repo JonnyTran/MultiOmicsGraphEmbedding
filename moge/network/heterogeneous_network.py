@@ -114,7 +114,7 @@ class HeterogeneousNetwork():
         similarity_adj_df = pd.DataFrame(
             compute_annotation_similarity(genes_info, node_list=node_list, modality=modality,
                                           features=features, squareform=True),
-            index=self.multi_omics_data[modality].get_genes_list())
+            index=node_list)
 
         # Selects edges from the affinity matrix
         similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1) # A True/False matrix
