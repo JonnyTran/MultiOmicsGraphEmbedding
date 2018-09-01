@@ -192,7 +192,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         return exps / np.sum(exps, axis=0)
 
     def get_embedding(self, variable_length=False, recompute=False):
-        if not hasattr(self, "_X") or self._X == None or recompute:
+        if not hasattr(self, "_X") or recompute:
             seqs = self.generator.get_sequence_data(range(len(self.generator.node_list)),
                                                     variable_length=variable_length)
             if variable_length:
