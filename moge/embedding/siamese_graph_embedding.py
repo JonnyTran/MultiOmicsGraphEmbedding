@@ -13,8 +13,6 @@ from moge.embedding.static_graph_embedding import StaticGraphEmbedding, Imported
 from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
-from sklearn.preprocessing import MinMaxScaler
-
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
                  max_length=700, Ed_Eu_ratio=0.2, seed=0, verbose=False, **kwargs):
@@ -155,8 +153,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                                       validation_data=generator_val,
                                                       use_multiprocessing=True, workers=8)
 
-
-    def get_reconstructed_adj(self, X=None, node_l=None, edge_type="d"):
+    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
         """
         For inter-modality, we calculate the directed first-order proximity, for intra-modality, we calculate the
         second-order proximity.
@@ -175,7 +172,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
 
-        adj = MinMaxScaler(feature_range=(0, 1), copy=True).fit_transform(-adj)
+        adj = np.exp(-beta * adj)
 
         return adj
 
