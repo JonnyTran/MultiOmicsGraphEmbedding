@@ -35,8 +35,8 @@ class HeterogeneousNetwork():
 
     def add_directed_edges_from_edgelist(self, edgelist, modalities=None):
         if not (modalities is None):
-            source_genes = set(pd.DataFrame(edgelist)[0].tolist())
-            target_genes = set(pd.DataFrame(edgelist)[1].tolist())
+            source_genes = set([edge[0] for edge in edgelist])
+            target_genes = set([edge[1] for edge in edgelist])
 
             source_genes_matched = set(self.nodes[modalities[0]]) & source_genes
             target_genes_matched = set(self.nodes[modalities[1]]) & target_genes
