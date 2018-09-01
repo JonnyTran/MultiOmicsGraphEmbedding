@@ -14,7 +14,7 @@ from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-class SiameseGraphEmbedding(StaticGraphEmbedding, ImportedGraphEmbedding):
+class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
                  max_length=700, Ed_Eu_ratio=0.2, seed=0, verbose=False, **kwargs):
         super().__init__(d)

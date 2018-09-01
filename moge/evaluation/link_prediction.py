@@ -67,11 +67,11 @@ def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_em
     return score
 
 
-def select_top_k_link_predictions(top_k, estimated_adj, excluding_edges):
+def select_top_k_link_predictions(top_k, estimated_adj, excluding_edges, smallest=False):
     # Exclude edges already seen at training time
     estimated_adj[excluding_edges[:, 0], excluding_edges[:, 1]] = 0
 
-    top_k_indices = largest_indices(estimated_adj, top_k)
+    top_k_indices = largest_indices(estimated_adj, top_k, smallest=smallest)
 
     return top_k_indices
 
@@ -118,11 +118,14 @@ def select_random_link_predictions(top_k, estimated_adj, excluding_edges, seed=0
     return top_k_indices
 
 
-def largest_indices(array, k):
+def largest_indices(array, k, smallest=False):
     """Returns the k largest indices from a numpy array using partition O(n + k lg k) """
     flat = array.flatten()
     indices = np.argpartition(flat, -k)[-k:]
-    indices = indices[np.argsort(-flat[indices])]
+    if smallest:
+        indices = indices[np.argsort(flat[indices])]
+    else:
+        indices = indices[np.argsort(-flat[indices])]
     return np.unravel_index(indices, array.shape)
 
 
