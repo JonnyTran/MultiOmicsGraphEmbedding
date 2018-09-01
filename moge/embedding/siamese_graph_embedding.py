@@ -172,7 +172,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
 
-        adj = np.exp(-beta * adj)
+        adj = np.round(np.exp(-beta * adj))
 
         return adj
 
