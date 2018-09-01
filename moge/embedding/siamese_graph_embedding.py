@@ -30,7 +30,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         self.verbose = verbose
 
         hyper_params = {
-            'method_name': 'source_target_graph_embedding'
+            'method_name': 'siamese_graph_embedding'
         }
         hyper_params.update(kwargs)
         for key in hyper_params.keys():
