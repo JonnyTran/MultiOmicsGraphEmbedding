@@ -13,6 +13,7 @@ from moge.embedding.static_graph_embedding import StaticGraphEmbedding, Imported
 from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
+from sklearn.preprocessing import MinMaxScaler
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
@@ -168,11 +169,15 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         """
         embs = self.get_embedding()
         if edge_type == 'd':
-            return pairwise_distances(X=embs[:, 0:int(self._d / 2)],
-                                      Y=embs[:, int(self._d / 2):self._d],
-                                      metric="euclidean", n_jobs=8)
+            adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
+                                     Y=embs[:, int(self._d / 2):self._d],
+                                     metric="euclidean", n_jobs=8)
         else:
-            return pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
+            adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
+
+        adj = -MinMaxScaler(feature_range=(0, 1), copy=True).fit_transform(adj)
+
+        return adj
 
     def save_embeddings(self, filepath):
         fout = open(filepath, 'w')
