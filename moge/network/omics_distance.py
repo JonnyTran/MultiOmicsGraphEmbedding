@@ -27,7 +27,8 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
     return X_multiomics_corr_df
 
 
-def compute_annotation_similarity(genes_info, modality, features=None, squareform=True, multiprocessing=True):
+def compute_annotation_similarity(genes_info, node_list, modality, features=None, squareform=True,
+                                  multiprocessing=True):
     if features is None:
         if modality == "GE":
             features = ["locus_type", "gene_family_id", "location", "Transcript length", "Transcript sequence"]
@@ -36,7 +37,7 @@ def compute_annotation_similarity(genes_info, modality, features=None, squarefor
         elif modality == "LNC":
             features = ["Transcript Type", "Location", "Transcript length", "Transcript sequence"]
 
-    gower_dists = gower_distance(genes_info.loc[:, features], agg_func=None, multiprocessing=multiprocessing)
+    gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=None, multiprocessing=multiprocessing)
 
     if squareform:
         return squareform_(np.subtract(1, gower_dists))
