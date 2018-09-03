@@ -47,8 +47,6 @@ def link_prediction_score(true_edges, pred_edges, directed=True, metrics=["preci
         pred_edges = set([(edge[0], edge[1]) for edge in pred_edges]).union(
             set([(edge[1], edge[0]) for edge in pred_edges]))
 
-    print(true_edges[0:10])
-    print(pred_edges[0:10])
     true_edges = set(true_edges)
     pred_edges = set(pred_edges)
 
