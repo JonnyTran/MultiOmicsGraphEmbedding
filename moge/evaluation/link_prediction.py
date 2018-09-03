@@ -54,7 +54,7 @@ def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_em
 
     if train_embedding:
         graph_emb.learn_embedding(network)
-    estimated_adj = graph_emb.get_reconstructed_adj(edge_type=edge_type)
+    estimated_adj = graph_emb.get_reconstructed_adj()
 
     # evaluate precision/recall at top k predictions, excluding training edges
     top_k_pred_edges_ind = select_top_k_link_predictions(top_k, estimated_adj, train_edges)
