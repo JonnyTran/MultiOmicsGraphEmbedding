@@ -34,7 +34,7 @@ class DataGenerator(keras.utils.Sequence):
         :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
         :param maxlen: pad all RNA sequence strings to this length
         :param padding: ['post', 'pre']
-        :param truncating: ['post', 'pre', 'random']
+        :param truncating: ['post', 'pre', 'random']. If 'random', then 'post' or 'pre' truncating is chosen randomly for each sequence at each iteration
         :param shuffle:
         :param seed:
         """
@@ -179,8 +179,8 @@ class DataGenerator(keras.utils.Sequence):
         X_list = np.array(X_list, dtype="O")
 
         X = {}
-        X["input_seq_j"] = self.get_sequence_data(X_list[:, 0].tolist())
-        X["input_seq_i"] = self.get_sequence_data(X_list[:, 1].tolist())
+        X["input_seq_j"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
+        X["input_seq_i"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
         X["is_directed"] = np.expand_dims(X_list[:,2], axis=-1)
 
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
@@ -191,6 +191,8 @@ class DataGenerator(keras.utils.Sequence):
         """
         Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
         (indexing from self.node_list)
+        :param variable_length: returns a list of sequences with different timestep length
+        :param minlen: pad all sequences with length lower than this minlen
         """
 
         node_list = [self.node_list[i] for i in node_list_ids]
@@ -208,7 +210,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def encode_texts(self, texts, maxlen=None, minlen=None):
         """
-
+        Returns a one-hot-vector for a string of RNA transcript sequence
         :param texts: [str | list(str)]
         :param maxlen: Set length to maximum length
         :param single: Set to True if texts is not a list (i.e. only a single node name string).
