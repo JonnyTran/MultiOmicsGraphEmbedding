@@ -41,7 +41,15 @@ def f1(y_true, y_pred):
 
 
 def link_prediction_score(true_edges, pred_edges, directed=True, metrics=["precision", "recall"]):
+    """
+    Evaluate link prediction accuracy scores between true_edges, pred_edges. The
 
+    :param true_edges: a list of ground truth edges. Each element is a tuple of two node gene names
+    :param pred_edges: a list of predicted edges. Each element is a tuple of two node gene names
+    :param directed: bool
+    :param metrics: list of metrics ot compute
+    :return:
+    """
     if directed==False:
         true_edges = set([(edge[0], edge[1]) for edge in true_edges]).union(set([(edge[1], edge[0]) for edge in true_edges]))
         pred_edges = set([(edge[0], edge[1]) for edge in pred_edges]).union(

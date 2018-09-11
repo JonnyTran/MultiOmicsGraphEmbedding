@@ -10,6 +10,9 @@ def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_em
                                    test_frac=0.01, val_frac=0., seed=0,
                                    train_embedding=True,
                                    metrics=["precision", "recall"]):
+    """
+    Evaluates a
+    """
     # TODO Implement modality-specific train-test-split
     if edge_type == 'd':
         is_directed = True
@@ -44,7 +47,7 @@ def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_em
         else:
             adj_train, train_edges, \
             _, _ = mask_test_edges(true_adj, is_directed=is_directed,
-                                   test_frac=0.0, val_frac=val_frac,
+                                   test_frac=0.0, val_frac=0.0,
                                    prevent_disconnect=True, seed=seed, verbose=False)
             test_edges = saved_test_edges
     else:
