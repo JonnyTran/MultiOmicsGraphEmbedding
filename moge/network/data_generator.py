@@ -19,10 +19,25 @@ DIRECTED_EDGE = 'd'
 class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
-                 get_training_data=False,
-                 batch_size=1, dim=(None, 4), negative_sampling_ratio=3,
+                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3,
                  maxlen=600, padding='post', truncating='post',
                  shuffle=True, seed=0):
+        """
+        This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
+        each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
+        positive edges have an edge of 1.0, and negative have edge weight of 0.0. The features (x) of each sample is a
+        pair of nodes' RNA sequence input.
+
+        :param network: A HeterogeneousNetwork containing a MultiOmicsData
+        :param batch_size: Sample batch size at each iteration
+        :param dim: Dimensionality of the sample input
+        :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
+        :param maxlen: pad all RNA sequence strings to this length
+        :param padding: ['post', 'pre']
+        :param truncating: ['post', 'pre', 'random']
+        :param shuffle:
+        :param seed:
+        """
         self.dim = dim
         self.batch_size = batch_size
         self.negative_sampling_ratio = negative_sampling_ratio
@@ -66,27 +81,24 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_training_edges_data(self, get_training_data):
         # Directed Edges (regulatory interaction)
-        self.adj_directed = self.network.get_adjacency_matrix(edge_types="d", node_list=self.node_list,
-                                                              get_training_data=get_training_data)
+        self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list)
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
 
         # Undirected Edges (node similarity)
-        self.adj_undirected = self.network.get_adjacency_matrix(edge_types="u", node_list=self.node_list,
-                                                                get_training_data=get_training_data)
+        self.adj_undirected = self.network.get_adjacency_matrix(edge_types=["u"], node_list=self.node_list)
         self.Eu_rows, self.Eu_cols = triu(self.adj_undirected, k=1).nonzero()
         self.Eu_count = len(self.Eu_rows)
 
-        # Negative Edges (true negative edges from node similarity)
-        self.adj_negative = self.network.get_adjacency_matrix(edge_types="u_n", node_list=self.node_list,
-                                                              get_training_data=get_training_data)
+        # Negative Undirected Edges (true negative edges from node similarity)
+        self.adj_negative = self.network.get_adjacency_matrix(edge_types=["u_n"], node_list=self.node_list)
         self.En_rows, self.En_cols = triu(self.adj_negative, k=1).nonzero()
         self.En_count = len(self.En_rows)
 
         print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count)
 
     def process_negative_sampling_edges(self):
-        # Negative Edges (for sampling)
+        # Negative Directed Edges (sampled)
         adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
         self.Ens_rows, self.Ens_cols = np.where(dense_triu(adj_positive.todense() == 0, k=1))
         self.Ens_count = self.Ed_count * self.negative_sampling_ratio
