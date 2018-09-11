@@ -5,7 +5,6 @@ from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from scipy.linalg import triu as dense_triu
 from scipy.sparse import triu
-from sklearn.utils import shuffle
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
@@ -52,7 +51,7 @@ class DataGenerator(keras.utils.Sequence):
         self.process_genes_info(network)
         self.filter_node_list()
         self.process_sequence_tokenizer()
-        self.process_training_edges_data(get_training_data)
+        self.process_training_edges_data()
         self.process_negative_sampling_edges()
 
         self.on_epoch_end()
@@ -79,7 +78,7 @@ class DataGenerator(keras.utils.Sequence):
         self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
         print("num_words:", self.tokenizer.num_words, self.tokenizer.word_index)
 
-    def process_training_edges_data(self, get_training_data):
+    def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)
         self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list)
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
