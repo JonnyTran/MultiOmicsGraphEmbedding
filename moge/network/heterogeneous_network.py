@@ -121,8 +121,7 @@ class HeterogeneousNetwork():
 
         # Selects edges from the affinity matrix
         similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1) # A True/False matrix
-        index = similarity_adj_df.index
-        sim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y]) for x, y in
+        sim_edgelist_ebunch = [(node_list[x], node_list[y], similarity_adj_df.iloc[x, y]) for x, y in
                                zip(*np.nonzero(similarity_filtered))]
         self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u")
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
@@ -130,7 +129,7 @@ class HeterogeneousNetwork():
         max_negative_edges = negative_sampling_ratio * len(sim_edgelist_ebunch)
         dissimilarity_filtered = np.triu(similarity_adj_df <= dissimilarity_threshold, k=1)
         # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
-        dissim_edgelist_ebunch = [(index[x], index[y], similarity_adj_df.iloc[x, y] + 1e-8) for i, (x, y) in
+        dissim_edgelist_ebunch = [(node_list[x], node_list[y], similarity_adj_df.iloc[x, y] + 1e-8) for i, (x, y) in
                                   enumerate(zip(*np.nonzero(dissimilarity_filtered))) if i < max_negative_edges]
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
 
