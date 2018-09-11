@@ -40,8 +40,8 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
         self.n_nodes = len(network.node_list)
         self.node_list = network.node_list
 
-        adj_directed = network.get_adjacency_matrix(edge_type="d", get_training_data=get_training_data)
-        adj_undirected = network.get_adjacency_matrix(edge_type="u", get_training_data=get_training_data)
+        adj_directed = network.get_adjacency_matrix(edge_types="d", get_training_data=get_training_data)
+        adj_undirected = network.get_adjacency_matrix(edge_types="u", get_training_data=get_training_data)
 
         Ed_rows, Ed_cols = adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         # Ed_count = len(Ed_rows)

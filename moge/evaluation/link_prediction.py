@@ -13,7 +13,7 @@ def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_em
     # TODO Implement modality-specific train-test-split
     if edge_type == 'd':
         is_directed = True
-        true_adj = network.get_adjacency_matrix(edge_type=edge_type, node_list=node_list)
+        true_adj = network.get_adjacency_matrix(edge_types=edge_type, node_list=node_list)
 
         if saved_test_edges is None:
             adj_train, train_edges, \
@@ -32,7 +32,7 @@ def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_em
 
     elif edge_type == 'u':
         is_directed = False
-        true_adj = network.get_adjacency_matrix(edge_type=edge_type, node_list=node_list)
+        true_adj = network.get_adjacency_matrix(edge_types=edge_type, node_list=node_list)
 
         if saved_test_edges is None:
             adj_train, train_edges, \
@@ -81,7 +81,7 @@ def evaluate_random_link_prediction(top_k, network:HeterogeneousNetwork, edge_ty
                                     metrics=["precision", "recall"]):
     if edge_type == 'd':
         is_directed = True
-        true_adj = network.get_adjacency_matrix(edge_type=edge_type, node_list=node_list)
+        true_adj = network.get_adjacency_matrix(edge_types=edge_type, node_list=node_list)
         adj_train, train_edges, \
         val_edges, test_edges = mask_test_edges(true_adj,
                                                 is_directed=is_directed,
@@ -90,7 +90,7 @@ def evaluate_random_link_prediction(top_k, network:HeterogeneousNetwork, edge_ty
 
     elif edge_type == 'u':
         is_directed = False
-        true_adj = network.get_adjacency_matrix(edge_type=edge_type, node_list=node_list)
+        true_adj = network.get_adjacency_matrix(edge_types=edge_type, node_list=node_list)
         adj_train, train_edges, \
         val_edges, test_edges = mask_test_edges(true_adj,
                                                 is_directed=is_directed,

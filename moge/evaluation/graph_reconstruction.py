@@ -18,7 +18,7 @@ def evaluateStaticGraphReconstruction(network:HeterogeneousNetwork, graph_emb:St
     else:
         node_list = network.node_list
 
-    true_adj_matrix = network.get_adjacency_matrix(edge_type=edge_type, node_list=node_list)
+    true_adj_matrix = network.get_adjacency_matrix(edge_types=edge_type, node_list=node_list)
 
     if sample_ratio < 1.0:
         eval_edge_rows, eval_edge_cols = getRandomEdgePairs(true_adj_matrix, node_list=node_list,

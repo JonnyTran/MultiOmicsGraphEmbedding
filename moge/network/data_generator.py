@@ -66,19 +66,19 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_training_edges_data(self, get_training_data):
         # Directed Edges (regulatory interaction)
-        self.adj_directed = self.network.get_adjacency_matrix(edge_type="d", node_list=self.node_list,
+        self.adj_directed = self.network.get_adjacency_matrix(edge_types="d", node_list=self.node_list,
                                                               get_training_data=get_training_data)
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
 
         # Undirected Edges (node similarity)
-        self.adj_undirected = self.network.get_adjacency_matrix(edge_type="u", node_list=self.node_list,
+        self.adj_undirected = self.network.get_adjacency_matrix(edge_types="u", node_list=self.node_list,
                                                                 get_training_data=get_training_data)
         self.Eu_rows, self.Eu_cols = triu(self.adj_undirected, k=1).nonzero()
         self.Eu_count = len(self.Eu_rows)
 
         # Negative Edges (true negative edges from node similarity)
-        self.adj_negative = self.network.get_adjacency_matrix(edge_type="u_n", node_list=self.node_list,
+        self.adj_negative = self.network.get_adjacency_matrix(edge_types="u_n", node_list=self.node_list,
                                                               get_training_data=get_training_data)
         self.En_rows, self.En_cols = triu(self.adj_negative, k=1).nonzero()
         self.En_count = len(self.En_rows)

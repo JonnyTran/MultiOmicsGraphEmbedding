@@ -8,6 +8,12 @@ from moge.network.omics_distance import *
 
 class HeterogeneousNetwork():
     def __init__(self, modalities:list, multi_omics_data:MultiOmicsData):
+        """
+        This class manages a networkx graph consisting of heterogeneous gene nodes, and heterogeneous edge types.
+
+        :param modalities: A list of omics data to import (e.g. ["GE", "LNC"]). Each modalities has a list of genes
+        :param multi_omics_data: The multiomics data to import
+        """
         self.modalities = modalities
         self.multi_omics_data = multi_omics_data
         self.G = nx.DiGraph()
@@ -53,34 +59,32 @@ class HeterogeneousNetwork():
         else:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, edge_type=["u", "d"], node_list=None, get_training_data=False):
+    def get_adjacency_matrix(self, edge_types=["u", "d"], node_list=None):
         """
-        Get adjacency matrix, and remove diagonal elements
-        :return:
+        Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
+         :param node_list:.
+
+        :param edge_types: A list of edge types letter codes to ex
+        :param node_list: A list of node names
+        :return: A csr_matrix sparse adjacency matrix
         """
         if node_list == None:
             node_list = self.node_list
 
-        if edge_type == None:
+        if edge_types == None:
             edge_list = self.G.edges(data=True)
         else:
-            if get_training_data:
-                if "u" == edge_type:
-                    return self.adj_similarity_train
-                elif 'd' == edge_type:
-                    return self.adj_regulatory_train
+            if type(edge_types) == list:
+                edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_types]
             else:
-                if type(edge_type) == list:
-                    edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_type]
-                else:
-                    edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_type]
+                edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_types]
 
         # Also add reverse edges for undirected edges
-        if 'u' == edge_type:
-            if type(edge_type) == list:
-                edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] in edge_type])
+        if 'u' == edge_types:
+            if type(edge_types) == list:
+                edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] in edge_types])
             else:
-                edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] == edge_type])
+                edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] == edge_types])
 
         adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         # Eliminate self-edges
@@ -113,8 +117,7 @@ class HeterogeneousNetwork():
 
         similarity_adj_df = pd.DataFrame(
             compute_annotation_similarity(genes_info, node_list=node_list, modality=modality,
-                                          features=features, squareform=True),
-            index=node_list)
+                                          features=features, squareform=True), index=node_list)
 
         # Selects edges from the affinity matrix
         similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1) # A True/False matrix
