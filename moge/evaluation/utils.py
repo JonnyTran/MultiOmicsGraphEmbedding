@@ -1,11 +1,10 @@
-import numpy as np
 import random
-import scipy.sparse as sp
+
 import networkx as nx
-import copy
+import numpy as np
+import scipy.sparse as sp
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
-from moge.embedding.dual_graph_embedding_node_SGD import ImportedGraphEmbedding
 
 
 def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, return_indices=True, seed=0):
@@ -19,8 +18,8 @@ def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, ret
     elif node_list is not None:
         return [(node_list[rows[i]], node_list[cols[i]]) for i in rand_indices]
 
-def split_train_test_network(network:HeterogeneousNetwork, node_list, edge_types=["u", "d"],
-                             test_frac=.05, val_frac=.01, seed=0):
+def split_train_test_edges(network:HeterogeneousNetwork, node_list, edge_types=["u", "d"],
+                           test_frac=.05, val_frac=.01, seed=0):
     network_train = network
     val_edges_dict = {}
     test_edges_dict = {}
@@ -45,6 +44,25 @@ def split_train_test_network(network:HeterogeneousNetwork, node_list, edge_types
 
     return network_train, val_edges_dict, test_edges_dict
 
+def split_train_test_nodes(network:HeterogeneousNetwork, node_list, edge_types=["u", "d"],
+                           test_frac=.05, val_frac=.01, seed=0):
+    test_edges_dict = {}
+    val_edges_dict = {}
+    print(network.G.number_of_edges(), network.G.number_of_nodes())
+    network_train, val_edges, test_edges = mask_test_nodes(network, node_list,
+                                            test_frac=test_frac, val_frac=val_frac, seed=seed)
+    for edge_type in edge_types:
+        test_edges_dict[edge_type] = [(u, v) for u, v, d in test_edges if d["type"] == edge_type]
+        val_edges_dict[edge_type] = [(u, v) for u, v, d in val_edges if d["type"] == edge_type]
+
+    network.G = network_train
+    network.node_list = [node for node in network.node_list if node not in network_train.nodes()]
+    print(network.G.number_of_edges(), network.G.number_of_nodes())
+    print([(k, len(v)) for k,v in val_edges_dict.items()])
+    print([(k, len(v)) for k, v in test_edges_dict.items()])
+
+    return network, val_edges_dict, test_edges_dict
+
 # Convert sparse matrix to tuple
 def sparse_to_tuple(sparse_mx):
     if not sp.isspmatrix_coo(sparse_mx):
@@ -64,10 +82,35 @@ def preprocess_graph(adj):
     return sparse_to_tuple(adj_normalized)
 
 
+def mask_test_nodes(network:HeterogeneousNetwork, node_list, test_frac=.1, val_frac=.05, seed=0, verbose=False):
+    if verbose == True:
+        print('preprocessing...')
+
+    g = network.G.copy()
+    no_of_edges_before = g.number_of_edges()
+
+    test_nodes_size = int(len(node_list) * test_frac)
+    val_nodes_size = int(len(node_list) * val_frac)
+
+    test_nodes = random.sample(node_list, test_nodes_size)
+    test_edges = g.edges(test_nodes, data=True)
+
+    val_nodes = random.sample(node_list, val_nodes_size)
+    val_edges = g.edges(val_nodes, data=True)
+
+    g.remove_nodes_from(test_nodes)
+    g.remove_nodes_from(val_nodes)
+
+    if verbose == True:
+        print('removed', g.number_of_edges()-no_of_edges_before, "edges, and ", len(test_nodes)+len(val_nodes), "nodes.")
+
+    return g, val_edges, test_edges
+
+
 def mask_test_edges(adj, is_directed=True, test_frac=.1, val_frac=.05,
                     prevent_disconnect=True, only_largest_wcc=False, seed=0, verbose=False):
     """
-    Perform train-test split of the adjancency matrix and return the train-set and test-set edgelist (indices
+    Perform train-test split of the adjacency matrix and return the train-set and test-set edgelist (indices
     instead of node label). Node sampling of the testing set is after excluding bridges edges to prevent disconnect
     (implemented for undirected graph).
 
