@@ -89,7 +89,7 @@ def mask_test_nodes(network:HeterogeneousNetwork, node_list, test_frac=.1, val_f
         print('preprocessing...')
 
     g = network.G.copy()
-    g.remove_edges_from(list(nx.isolates(g)))
+    g.remove_nodes_from(list(nx.isolates(g)))
     no_of_edges_before = g.number_of_edges()
 
     test_nodes_size = int(len(node_list) * test_frac)
