@@ -50,14 +50,16 @@ def split_train_test_nodes(network:HeterogeneousNetwork, node_list, edge_types=[
     val_edges_dict = {}
     print(network.G.number_of_nodes())
     network_train, val_edges, test_edges = mask_test_nodes(network, node_list,
-                                            test_frac=test_frac, val_frac=val_frac, seed=seed)
+                                                           test_frac=test_frac, val_frac=val_frac, seed=seed)
+    print(test_edges[0:10], val_edges[0:10])
+    print(network_train.number_of_nodes())
     for edge_type in edge_types:
         test_edges_dict[edge_type] = [(u, v) for u, v, d in test_edges if d["type"] == edge_type]
         val_edges_dict[edge_type] = [(u, v) for u, v, d in val_edges if d["type"] == edge_type]
 
     network.G = network_train
-    network.node_list = [node for node in network.node_list if node not in network_train.nodes()]
     print(network.G.number_of_nodes())
+    network.node_list = [node for node in network.node_list if node not in network_train.nodes()]
     print([(k, len(v)) for k,v in val_edges_dict.items()])
     print([(k, len(v)) for k, v in test_edges_dict.items()])
 
