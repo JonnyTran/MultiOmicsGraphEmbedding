@@ -18,8 +18,8 @@ def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, ret
     elif node_list is not None:
         return [(node_list[rows[i]], node_list[cols[i]]) for i in rand_indices]
 
-def split_train_test_edges(network:HeterogeneousNetwork, node_list, edge_types=["u", "d"],
-                           test_frac=.05, val_frac=.01, seed=0):
+def split_train_test_edges(network:HeterogeneousNetwork, node_list, edge_types=["u", "d", "u_n"],
+                           test_frac=.05, val_frac=.01, seed=0, verbose=True):
     network_train = network
     val_edges_dict = {}
     test_edges_dict = {}
@@ -33,7 +33,7 @@ def split_train_test_edges(network:HeterogeneousNetwork, node_list, edge_types=[
         adj_train, train_edges, \
         val_edges, test_edges = mask_test_edges(network.get_adjacency_matrix(edge_type, node_list=node_list),
                                                 is_directed=is_directed,
-                                                test_frac=test_frac, val_frac=val_frac, seed=seed)
+                                                test_frac=test_frac, val_frac=val_frac, seed=seed, verbose=verbose)
         test_edge_list = [(node_list[edge[0]], node_list[edge[1]]) for edge in test_edges]
         val_edge_list = [(node_list[edge[0]], node_list[edge[1]]) for edge in val_edges]
         network_train.remove_edges_from(test_edge_list)
@@ -44,19 +44,31 @@ def split_train_test_edges(network:HeterogeneousNetwork, node_list, edge_types=[
 
     return network_train, val_edges_dict, test_edges_dict
 
-def split_train_test_nodes(network:HeterogeneousNetwork, node_list, edge_types=["u", "d"],
-                           test_frac=.05, val_frac=.01, seed=0):
+def split_train_test_nodes(network:HeterogeneousNetwork, node_list, edge_types=["u", "d", "u_n"],
+                           test_frac=.05, val_frac=.01, seed=0, verbose=True):
+    """
+    Randomly remove nodes from node_list with test_frac and val_frac. Then, collect the edges with types in edge_types
+    into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
+
+    :param network: HeterogeneousNetwork
+    :param node_list: a list of nodes to split from
+    :param edge_types: edges types to remove
+    :param test_frac: fraction of edges to remove from training set to add to test set
+    :param val_frac: fraction of edges to remove from training set to add to validation set
+    :param seed:
+    :param verbose:
+    :return: network, val_edges_dict, test_edges_dict
+    """
     test_edges_dict = {}
     val_edges_dict = {}
-    print(network.G.number_of_nodes())
     network_train, val_edges, test_edges = mask_test_edges_by_nodes(network, node_list, edge_types=edge_types,
-                                                                    test_frac=test_frac, val_frac=val_frac, seed=seed)
+                                                                    test_frac=test_frac, val_frac=val_frac, seed=seed,
+                                                                    verbose=verbose)
     for edge_type in edge_types:
         test_edges_dict[edge_type] = [(u, v) for u, v, d in test_edges if d["type"] == edge_type]
         val_edges_dict[edge_type] = [(u, v) for u, v, d in val_edges if d["type"] == edge_type]
 
     network.G = network_train
-    print(network.G.number_of_nodes())
     network.node_list = [node for node in network.node_list if node in network_train.nodes()]
     print([(k, len(v)) for k,v in val_edges_dict.items()])
     print([(k, len(v)) for k, v in test_edges_dict.items()])
