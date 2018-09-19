@@ -87,16 +87,26 @@ def mask_test_nodes(network:HeterogeneousNetwork, node_list, test_frac=.1, val_f
         print('preprocessing...')
 
     g = network.G.copy()
+    nodes_dict = network.nodes
+
     g.remove_nodes_from(list(nx.isolates(g)))
     no_of_edges_before = g.number_of_edges()
 
     test_nodes_size = int(len(node_list) * test_frac)
     val_nodes_size = int(len(node_list) * val_frac)
 
-    test_nodes = random.sample(node_list, test_nodes_size)
+    test_nodes = []
+    for node_type, nodes in nodes_dict:
+        node_type_ratio = len(nodes) / len(node_list)
+        test_nodes.extend(random.sample(nodes, int(test_nodes_size * node_type_ratio)))
+    print(test_nodes)
     test_edges = list(g.edges(test_nodes, data=True))
 
-    val_nodes = random.sample(node_list, val_nodes_size)
+    val_nodes = []
+    for node_type, nodes in nodes_dict:
+        node_type_ratio = len(nodes) / len(node_list)
+        val_nodes.extend(random.sample(nodes, int(val_nodes_size * node_type_ratio)))
+
     val_edges = list(g.edges(val_nodes, data=True))
 
     g.remove_nodes_from(test_nodes)
