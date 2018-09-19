@@ -93,29 +93,48 @@ def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list, edge_type
 
     g.remove_nodes_from(list(nx.isolates(g)))
     no_of_edges_before = g.number_of_edges()
+    no_of_nodes_before = g.number_of_nodes()
 
     test_nodes_size = int(len(node_list) * test_frac)
     val_nodes_size = int(len(node_list) * val_frac)
 
     test_nodes = []
+    test_edges = []
+    test_edges_add_back = [] # Edges to retain in the training network (even if nodes are removed)
     for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         test_nodes.extend(random.sample(nodes, int(test_nodes_size * node_type_ratio)))
-    print(test_nodes)
-    test_edges = [(u, v, d) for u, v, d in g.edges(test_nodes, data=True) if d["type"] in edge_types]
+
+    for u, v, d in g.edges(test_nodes, data=True):
+        if d["type"] in edge_types:
+            test_edges.append((u, v, d))
+        else:
+            test_edges_add_back.append((u, v, d))
+
+
 
     val_nodes = []
+    val_edges = []
+    val_edges_add_back = []
     for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         val_nodes.extend(random.sample(nodes, int(val_nodes_size * node_type_ratio)))
 
-    val_edges = [(u, v, d) for u, v, d in g.edges(val_nodes, data=True) if d["type"] in edge_types]
+    for u, v, d in g.edges(val_nodes, data=True):
+        if d["type"] in edge_types:
+            val_edges.append((u, v, d))
+        else:
+            val_edges_add_back.append((u, v, d))
 
     g.remove_nodes_from(test_nodes)
     g.remove_nodes_from(val_nodes)
 
+    g.add_edges_from(test_edges_add_back)
+    g.add_edges_from(val_edges_add_back)
+
     if verbose == True:
-        print('removed', g.number_of_edges()-no_of_edges_before, "edges, and ", len(test_nodes)+len(val_nodes), "nodes.")
+        print('removed', g.number_of_edges()-no_of_edges_before, "edges, and ",
+              g.number_of_nodes()-no_of_nodes_before, "nodes.")
 
     return g, val_edges, test_edges
 
