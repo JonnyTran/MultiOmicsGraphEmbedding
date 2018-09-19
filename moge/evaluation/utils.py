@@ -49,8 +49,8 @@ def split_train_test_nodes(network:HeterogeneousNetwork, node_list, edge_types=[
     test_edges_dict = {}
     val_edges_dict = {}
     print(network.G.number_of_nodes())
-    network_train, val_edges, test_edges = mask_test_nodes(network, node_list,
-                                                           test_frac=test_frac, val_frac=val_frac, seed=seed)
+    network_train, val_edges, test_edges = mask_test_edges_by_nodes(network, node_list, edge_types=edge_types,
+                                                                    test_frac=test_frac, val_frac=val_frac, seed=seed)
     for edge_type in edge_types:
         test_edges_dict[edge_type] = [(u, v) for u, v, d in test_edges if d["type"] == edge_type]
         val_edges_dict[edge_type] = [(u, v) for u, v, d in val_edges if d["type"] == edge_type]
@@ -82,7 +82,9 @@ def preprocess_graph(adj):
     return sparse_to_tuple(adj_normalized)
 
 
-def mask_test_nodes(network:HeterogeneousNetwork, node_list, test_frac=.1, val_frac=.05, seed=0, verbose=False):
+def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list, edge_types=["u", "d"],
+                             test_frac=.1, val_frac=.05,
+                             seed=0, verbose=False):
     if verbose == True:
         print('preprocessing...')
 
@@ -100,14 +102,14 @@ def mask_test_nodes(network:HeterogeneousNetwork, node_list, test_frac=.1, val_f
         node_type_ratio = len(nodes) / len(node_list)
         test_nodes.extend(random.sample(nodes, int(test_nodes_size * node_type_ratio)))
     print(test_nodes)
-    test_edges = list(g.edges(test_nodes, data=True))
+    test_edges = [(u, v, d) for u, v, d in g.edges(test_nodes, data=True) if d["type"] in edge_types]
 
     val_nodes = []
     for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         val_nodes.extend(random.sample(nodes, int(val_nodes_size * node_type_ratio)))
 
-    val_edges = list(g.edges(val_nodes, data=True))
+    val_edges = [(u, v, d) for u, v, d in g.edges(val_nodes, data=True) if d["type"] in edge_types]
 
     g.remove_nodes_from(test_nodes)
     g.remove_nodes_from(val_nodes)
