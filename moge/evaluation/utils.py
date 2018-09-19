@@ -96,14 +96,14 @@ def mask_test_nodes(network:HeterogeneousNetwork, node_list, test_frac=.1, val_f
     val_nodes_size = int(len(node_list) * val_frac)
 
     test_nodes = []
-    for node_type, nodes in nodes_dict:
+    for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         test_nodes.extend(random.sample(nodes, int(test_nodes_size * node_type_ratio)))
     print(test_nodes)
     test_edges = list(g.edges(test_nodes, data=True))
 
     val_nodes = []
-    for node_type, nodes in nodes_dict:
+    for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         val_nodes.extend(random.sample(nodes, int(val_nodes_size * node_type_ratio)))
 
