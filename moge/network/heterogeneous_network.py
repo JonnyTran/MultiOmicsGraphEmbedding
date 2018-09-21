@@ -124,7 +124,8 @@ class HeterogeneousNetwork():
             correlation_dist = compute_expression_correlation_dists(self.multi_omics_data, modalities=[modality],
                                                                     node_list=node_list,
                                                                     histological_subtypes=histological_subtypes,
-                                                                    pathologic_stages=pathologic_stages)
+                                                                    pathologic_stages=pathologic_stages,
+                                                                    squareform=False)
         else:
             correlation_dist = None
 
