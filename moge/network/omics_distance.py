@@ -14,11 +14,12 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
                                                  histological_subtypes=histological_subtypes)
 
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
-    X_multiomics_corr = pairwise_distances(X_multiomics_concat.T, metric="correlation", n_jobs=-1)
+    X_multiomics_corr_dists = pairwise_distances(X_multiomics_concat.T, metric="correlation", n_jobs=-1)
 
     cols = X_multiomics_concat.columns
-    cols = list(OrderedDict.fromkeys(cols))
-    X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr, columns=cols, index=cols)
+    X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr_dists, columns=cols, index=cols)
+    X_multiomics_corr_df = X_multiomics_corr_df.loc[~X_multiomics_corr_df.index.duplicated(keep='first'),
+                                                    ~X_multiomics_corr_df.columns.duplicated(keep='first')]
     X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list)
     X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list, axis=0)
 
