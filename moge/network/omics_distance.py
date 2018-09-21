@@ -7,20 +7,14 @@ from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.spatial.distance import squareform as squareform_
 from sklearn.metrics.pairwise import pairwise_distances
 
-from scipy.spatial.distance import correlation
 
-
-def correlation_uncentered(u, v):
-    return correlation(u, v, centered=False)
-
-
-def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities, node_list, pathologic_stages=[],
-                                    histological_subtypes=[]):
+def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modalities, node_list, pathologic_stages=[],
+                                         histological_subtypes=[], squareform=True):
     X_multiomics, y = multi_omics_data.load_data(modalities=modalities, pathologic_stages=pathologic_stages,
                                                  histological_subtypes=histological_subtypes)
 
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
-    X_multiomics_corr = pairwise_distances(X_multiomics_concat.T, metric=correlation_uncentered, n_jobs=-1)
+    X_multiomics_corr = pairwise_distances(X_multiomics_concat.T, metric="correlation", n_jobs=-1)
 
     cols = X_multiomics_concat.columns
     X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr, columns=cols, index=cols)
@@ -30,10 +24,14 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
 
     print(X_multiomics_corr_df.shape)
 
-    return X_multiomics_corr_df
+    if squareform:
+        return X_multiomics_corr_df
+    else:
+        return squareform_(X_multiomics_corr_df, checks=False)
 
 
-def compute_annotation_similarity(genes_info, node_list, modality, features=None, squareform=True,
+def compute_annotation_similarity(genes_info, node_list, modality, correlation_dist=None, features=None,
+                                  squareform=True,
                                   multiprocessing=True):
     if features is None:
         if modality == "GE":
@@ -43,7 +41,8 @@ def compute_annotation_similarity(genes_info, node_list, modality, features=None
         elif modality == "LNC":
             features = ["Transcript Type", "Location", "Transcript length", "Transcript sequence"]
 
-    gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=None, multiprocessing=multiprocessing)
+    gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=None, correlation_dist=correlation_dist,
+                                 multiprocessing=multiprocessing)  # Returns a condensed distance matrix
 
     if squareform:
         return squareform_(np.subtract(1, gower_dists))
@@ -52,7 +51,7 @@ def compute_annotation_similarity(genes_info, node_list, modality, features=None
     # return np.exp(-beta * gower_dists)
 
 
-def gower_distance(X, agg_func=None, multiprocessing=True, n_jobs=-2):
+def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True, n_jobs=-2):
     """
     This function expects a pandas dataframe as input
     The data frame is to contain the features along the columns. Based on these features a
@@ -127,6 +126,9 @@ def gower_distance(X, agg_func=None, multiprocessing=True, n_jobs=-2):
         else:
             raise Exception("Invalid column dtype")
 
+        individual_variable_distances.append(feature_dist)
+
+    if correlation_dist:
         individual_variable_distances.append(feature_dist)
 
     if agg_func is None:

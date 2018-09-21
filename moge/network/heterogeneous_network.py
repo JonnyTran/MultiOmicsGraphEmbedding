@@ -106,7 +106,7 @@ class HeterogeneousNetwork():
 
     def add_edges_from_nodes_similarity(self, modality, node_list, features=None, similarity_threshold=0.7,
                                         dissimilarity_threshold=0.1, negative_sampling_ratio=2.0,
-                                        histological_subtypes=[], pathologic_stages=[]):
+                                        compute_correlation=True, histological_subtypes=[], pathologic_stages=[]):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the network if the similarity measures passes the threshold
 
@@ -119,14 +119,21 @@ class HeterogeneousNetwork():
         """
         genes_info = self.multi_omics_data[modality].get_genes_info()
 
-        similarity_adj_df = pd.DataFrame(
-            compute_annotation_similarity(genes_info, node_list=node_list, modality=modality,
-                                          features=features, squareform=True), index=node_list)
-
         # Filter similarity adj by correlation
-        compute_expression_correlations(self.multi_omics_data, modalities=[modality], node_list=node_list,
-                                        histological_subtypes=histological_subtypes,
-                                        pathologic_stages=pathologic_stages)
+        if compute_correlation:
+            correlation_dist = compute_expression_correlation_dists(self.multi_omics_data, modalities=[modality],
+                                                                    node_list=node_list,
+                                                                    histological_subtypes=histological_subtypes,
+                                                                    pathologic_stages=pathologic_stages)
+        else:
+            correlation_dist = None
+
+        similarity_adj_df = pd.DataFrame(
+            data=compute_annotation_similarity(genes_info, node_list=node_list, modality=modality,
+                                               correlation_dist=correlation_dist,
+                                               features=features, squareform=True),
+            index=node_list)
+
 
         # Selects edges from the affinity matrix
         similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1) # A True/False matrix
