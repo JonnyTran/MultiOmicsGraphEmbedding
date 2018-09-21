@@ -125,8 +125,8 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
 
         individual_variable_distances.append(feature_dist)
 
-    if correlation_dist:
-        individual_variable_distances.append(feature_dist)
+    if correlation_dist is not None:
+        individual_variable_distances.append(correlation_dist)
 
     if agg_func is None:
         agg_func = lambda x: np.nanmean(x, axis=0)
