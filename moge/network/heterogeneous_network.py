@@ -105,19 +105,28 @@ class HeterogeneousNetwork():
         return self.G.subgraph(nodes) # returned subgraph is not mutable
 
     def add_edges_from_nodes_similarity(self, modality, node_list, features=None, similarity_threshold=0.7,
-                                        dissimilarity_threshold=0.1, negative_sampling_ratio=2.0):
+                                        dissimilarity_threshold=0.1, negative_sampling_ratio=2.0,
+                                        histological_subtypes=[], pathologic_stages=[]):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the network if the similarity measures passes the threshold
 
         :param modality: E.g. ["GE", "MIR", "LNC"]
-        :param similarity_threshold: a hard-threshold on the similarity measure
-        :param data:
+        :param similarity_threshold: a hard-threshold to select positive edges with affinity value more than it
+        :param dissimilarity_threshold: a hard-threshold to select negative edges with affinity value less than
+        :param negative_sampling_ratio: the number of negative edges in proportion to positive edges to select
+        :param histological_subtypes: the patients' cancer subtype group to calculate correlation from
+        :param pathologic_stages: the patient's cancer stage group to calculate correlations from
         """
         genes_info = self.multi_omics_data[modality].get_genes_info()
 
         similarity_adj_df = pd.DataFrame(
             compute_annotation_similarity(genes_info, node_list=node_list, modality=modality,
                                           features=features, squareform=True), index=node_list)
+
+        # Filter similarity adj by correlation
+        compute_expression_correlations(self.multi_omics_data, modalities=[modality], node_list=node_list,
+                                        histological_subtypes=histological_subtypes,
+                                        pathologic_stages=pathologic_stages)
 
         # Selects edges from the affinity matrix
         similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1) # A True/False matrix

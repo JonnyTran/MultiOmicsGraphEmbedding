@@ -14,7 +14,7 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
                                                  histological_subtypes=histological_subtypes)
 
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
-    X_multiomics_corr = pairwise_distances(X_multiomics_concat.T, metric='correlation')
+    X_multiomics_corr = squareform_(scipy_pdist(X_multiomics_concat.T, 'correlation'))
 
     cols = X_multiomics_concat.columns
     X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr, columns=cols, index=cols)
