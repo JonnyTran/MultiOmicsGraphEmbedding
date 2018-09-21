@@ -7,6 +7,12 @@ from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.spatial.distance import squareform as squareform_
 from sklearn.metrics.pairwise import pairwise_distances
 
+from scipy.spatial.distance import correlation
+
+
+def correlation_uncentered(u, v):
+    return correlation(u, v, centered=False)
+
 
 def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities, node_list, pathologic_stages=[],
                                     histological_subtypes=[]):
@@ -14,7 +20,7 @@ def compute_expression_correlations(multi_omics_data: MultiOmicsData, modalities
                                                  histological_subtypes=histological_subtypes)
 
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
-    X_multiomics_corr = pairwise_distances(X_multiomics_concat.T, metric='correlation', n_jobs=-1)
+    X_multiomics_corr = pairwise_distances(X_multiomics_concat.T, metric=correlation_uncentered, n_jobs=-1)
 
     cols = X_multiomics_concat.columns
     X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr, columns=cols, index=cols)
