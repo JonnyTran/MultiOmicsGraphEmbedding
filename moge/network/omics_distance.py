@@ -126,6 +126,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
         individual_variable_distances.append(feature_dist)
 
     if correlation_dist is not None:
+        print("Correlation distance", correlation_dist.shape)
         individual_variable_distances.append(correlation_dist)
 
     if agg_func is None:
