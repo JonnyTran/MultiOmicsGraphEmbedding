@@ -18,11 +18,8 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
 
     cols = X_multiomics_concat.columns
     X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr, columns=cols, index=cols)
-    print(X_multiomics_corr_df.shape)
     X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list)
     X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list, axis=0)
-
-    print(X_multiomics_corr_df.shape)
 
     if squareform:
         return X_multiomics_corr_df
