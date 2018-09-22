@@ -80,11 +80,8 @@ class HeterogeneousNetwork():
                 edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_types]
 
         # Also add reverse edges for undirected edges
-        if 'u' == edge_types:
-            if type(edge_types) == list:
-                edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] in edge_types])
-            else:
-                edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] == edge_types])
+        if 'u' in edge_types or "u_n" in edge_types:
+            edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] in edge_types])
 
         adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         # Eliminate self-edges
