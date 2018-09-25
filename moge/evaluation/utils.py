@@ -70,8 +70,8 @@ def split_train_test_nodes(network:HeterogeneousNetwork, node_list, edge_types=[
 
     network.G = network_train
     network.node_list = [node for node in network.node_list if node in network_train.nodes()]
-    print([(k, len(v)) for k,v in val_edges_dict.items()])
-    print([(k, len(v)) for k, v in test_edges_dict.items()])
+    print("validation edges", [(k, len(v)) for k,v in val_edges_dict.items()])
+    print("test edges", [(k, len(v)) for k, v in test_edges_dict.items()])
 
     return network, val_edges_dict, test_edges_dict
 
@@ -145,8 +145,8 @@ def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list, edge_type
     g.add_edges_from(val_edges_add_back)
 
     if verbose == True:
-        print('removed', g.number_of_edges()-no_of_edges_before, "edges, and ",
-              g.number_of_nodes()-no_of_nodes_before, "nodes.")
+        print('removed', no_of_edges_before-g.number_of_edges(), "edges, and ",
+              no_of_nodes_before-g.number_of_nodes(), "nodes.")
 
     return g, val_edges, test_edges
 
