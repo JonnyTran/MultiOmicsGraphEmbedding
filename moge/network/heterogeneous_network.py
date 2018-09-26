@@ -152,7 +152,7 @@ class HeterogeneousNetwork():
     def add_sampled_negative_edges(self, n_edges, modalities=[]):
         nodes_A = self.nodes[modalities[0]]
         nodes_B = self.nodes[modalities[1]]
-        edges_ebunch = sample_edges(nodes_A, nodes_B, n_edges=n_edges)
+        edges_ebunch = sample_edges(nodes_A, nodes_B, n_edges=n_edges, edge_type="u_n")
 
         print(edges_ebunch[0:10])
         print("Number of negative sampled edges between", modalities, "added:", len(edges_ebunch))
