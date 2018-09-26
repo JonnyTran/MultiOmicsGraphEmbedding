@@ -7,6 +7,14 @@ import scipy.sparse as sp
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
+def sample_edges(nodes_A, nodes_B, n_edges, edge_type="u_n", edge_weight=1e-8):
+    edges_u = np.random.choice(nodes_A, size=n_edges, replace=True)
+    edges_v = np.random.choice(nodes_B, size=n_edges, replace=True)
+
+    edge_ebunch = [(u, v, {"type":edge_type, "weight":edge_weight}) for u,v in zip(edges_u, edges_v)]
+
+    return edge_ebunch
+
 def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, return_indices=True, seed=0):
     rows, cols = sparse_adj_matrix.nonzero()
     num_pairs = int(sample_ratio * len(rows))

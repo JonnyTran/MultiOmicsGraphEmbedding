@@ -6,7 +6,7 @@ from TCGAMultiOmics.multiomics import MultiOmicsData
 from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.spatial.distance import squareform as squareform_
 from sklearn.metrics.pairwise import pairwise_distances
-from collections import OrderedDict
+
 
 def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modalities, node_list, pathologic_stages=[],
                                          histological_subtypes=[], squareform=True):
@@ -26,10 +26,10 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
     if squareform:
         return X_multiomics_corr_df
     else:
-        return squareform_(X_multiomics_corr_df, checks=False)
+        return squareform_(X_multiomics_corr_df, checks=False) # Returns condensed distance matrix
 
 
-def compute_annotation_similarity(genes_info, node_list, modality, correlation_dist=None, features=None,
+def compute_annotation_affinities(genes_info, node_list, modality, correlation_dist=None, features=None,
                                   squareform=True,
                                   multiprocessing=True):
     if features is None:

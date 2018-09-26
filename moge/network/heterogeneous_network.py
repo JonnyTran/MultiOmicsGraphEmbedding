@@ -1,8 +1,7 @@
-import dask.dataframe as dd
-from dask.threaded import get
-import scipy.sparse as sp
 import networkx as nx
+import scipy.sparse as sp
 
+from moge.evaluation.utils import sample_edges
 from moge.network.omics_distance import *
 
 
@@ -126,28 +125,69 @@ class HeterogeneousNetwork():
         else:
             correlation_dist = None
 
-        similarity_adj_df = pd.DataFrame(
-            data=compute_annotation_similarity(genes_info, node_list=node_list, modality=modality,
+        annotation_affinities_df = pd.DataFrame(
+            data=compute_annotation_affinities(genes_info, node_list=node_list, modality=modality,
                                                correlation_dist=correlation_dist,
                                                features=features, squareform=True),
             index=node_list)
 
 
         # Selects edges from the affinity matrix
-        similarity_filtered = np.triu(similarity_adj_df >= similarity_threshold, k=1) # A True/False matrix
-        sim_edgelist_ebunch = [(node_list[x], node_list[y], similarity_adj_df.iloc[x, y]) for x, y in
+        similarity_filtered = np.triu(annotation_affinities_df >= similarity_threshold, k=1) # A True/False matrix
+        sim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y]) for x, y in
                                zip(*np.nonzero(similarity_filtered))]
         self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u")
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
         max_negative_edges = negative_sampling_ratio * len(sim_edgelist_ebunch)
-        dissimilarity_filtered = np.triu(similarity_adj_df <= dissimilarity_threshold, k=1)
+        dissimilarity_filtered = np.triu(annotation_affinities_df <= dissimilarity_threshold, k=1)
         # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
-        dissim_edgelist_ebunch = [(node_list[x], node_list[y], similarity_adj_df.iloc[x, y] + 1e-8) for i, (x, y) in
+        dissim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y] + 1e-8) for i, (x, y) in
                                   enumerate(zip(*np.nonzero(dissimilarity_filtered))) if i < max_negative_edges]
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
+
+
+    def add_sampled_negative_edges(self, n_edges, modalities=[]):
+        nodes_A = self.nodes[modalities[0]]
+        nodes_B = self.nodes[modalities[1]]
+        edges_ebunch = sample_edges(nodes_A, nodes_B, n_edges=n_edges)
+
+        print(edges_ebunch[0:10])
+        print("Number of negative sampled edges between", modalities, "added:", len(edges_ebunch))
+        self.G.add_edges_from(edges_ebunch)
+
+    def add_sampled_negative_edges_from_correlation(self, modalities=[], correlation_threshold=0.2,
+                                                    histological_subtypes=[],
+                                                    pathologic_stages=[]):
+        """
+        Sample edges with experssion values absolute-value correlations near zero, indicating no relationships
+
+        :param modalities:
+        :param correlation_threshold:
+        :return:
+        """
+        nodes_A = self.nodes[modalities[0]]
+        nodes_B = self.nodes[modalities[1]]
+        node_list = [node for node in self.node_list if node in nodes_A or node in nodes_B]
+
+        # Filter similarity adj by correlation
+        correlation_dist = compute_expression_correlation_dists(self.multi_omics_data, modalities=modalities,
+                                                                node_list=node_list,
+                                                                histological_subtypes=histological_subtypes,
+                                                                pathologic_stages=pathologic_stages,
+                                                                squareform=True)
+        correlation_dist = 1 - correlation_dist
+        correlation_dist = np.abs(correlation_dist)
+
+        similarity_filtered = np.triu(correlation_dist <= correlation_threshold, k=1)  # A True/False matrix
+        sim_edgelist_ebunch = [(node_list[x], node_list[y], correlation_dist.iloc[x, y]) for x, y in
+                               zip(*np.nonzero(similarity_filtered))]
+        print(sim_edgelist_ebunch[0:10])
+        self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u_n")
+        print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
+
 
     def remove_extra_nodes(self):
         self.G = self.get_subgraph(self.modalities)
@@ -168,3 +208,7 @@ class HeterogeneousNetwork():
 
     def get_combined_gene_info(self, modalities):
         pass
+
+
+
+
