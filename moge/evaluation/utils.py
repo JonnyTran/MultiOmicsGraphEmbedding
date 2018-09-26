@@ -4,8 +4,6 @@ import networkx as nx
 import numpy as np
 import scipy.sparse as sp
 
-from moge.network.heterogeneous_network import HeterogeneousNetwork
-
 
 def sample_edges(nodes_A, nodes_B, n_edges, edge_type="u_n", edge_weight=1e-8):
     edges_u = np.random.choice(nodes_A, size=n_edges, replace=True)
@@ -26,7 +24,7 @@ def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, ret
     elif node_list is not None:
         return [(node_list[rows[i]], node_list[cols[i]]) for i in rand_indices]
 
-def split_train_test_edges(network:HeterogeneousNetwork, node_list, edge_types=["u", "d", "u_n"],
+def split_train_test_edges(network, node_list, edge_types=["u", "d", "u_n"],
                            test_frac=.05, val_frac=.01, seed=0, verbose=True):
     network_train = network
     val_edges_dict = {}
@@ -52,7 +50,7 @@ def split_train_test_edges(network:HeterogeneousNetwork, node_list, edge_types=[
 
     return network_train, val_edges_dict, test_edges_dict
 
-def split_train_test_nodes(network:HeterogeneousNetwork, node_list, edge_types=["u", "d", "u_n"],
+def split_train_test_nodes(network, node_list, edge_types=["u", "d", "u_n"],
                            test_frac=.05, val_frac=.01, seed=0, verbose=True):
     """
     Randomly remove nodes from node_list with test_frac and val_frac. Then, collect the edges with types in edge_types
