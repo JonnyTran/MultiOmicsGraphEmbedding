@@ -140,11 +140,11 @@ network if the similarity measures passes the threshold
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
         # Select negative edges at affinity close to zero in the affinity matrix
-        max_negative_edges = negative_sampling_ratio * len(sim_edgelist_ebunch)
+        max_negative_edges = int(negative_sampling_ratio * len(sim_edgelist_ebunch))
         dissimilarity_filtered = np.triu(annotation_affinities_df <= dissimilarity_threshold, k=1)
 
         dissimilarity_index_rows, dissimilarity_index_cols = np.nonzero(dissimilarity_filtered)
-        sample_indices = np.random.choice(dissimilarity_index_rows.shape[0],
+        sample_indices = np.random.choice(a=dissimilarity_index_rows.shape[0],
                                           size=min(max_negative_edges, dissimilarity_index_rows.shape[0]))
         # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
         dissim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y] + 1e-8) for i, (x, y) in
