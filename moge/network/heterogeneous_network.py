@@ -36,9 +36,7 @@ class HeterogeneousNetwork():
 
         print("Total nodes:", len(self.node_list))
 
-
-
-    def add_directed_edges_from_edgelist(self, edgelist, modalities=None):
+    def add_directed_edges_from_edgelist(self, edgelist, modalities=None, correlation_weights=False):
         if not (modalities is None):
             source_genes = set([edge[0] for edge in edgelist])
             target_genes = set([edge[1] for edge in edgelist])
@@ -46,11 +44,29 @@ class HeterogeneousNetwork():
             source_genes_matched = set(self.nodes[modalities[0]]) & source_genes
             target_genes_matched = set(self.nodes[modalities[1]]) & target_genes
 
-            print("Adding edgelist with", len(source_genes), "total unique", modalities[0], "genes (source), but only matching", len(source_genes_matched), "nodes")
-            print("Adding edgelist with", len(target_genes), "total unique", modalities[1], "genes (target), but only matching", len(target_genes_matched), "nodes")
+            print("Adding edgelist with", len(source_genes), "total unique", modalities[0],
+                  "genes (source), but only matching", len(source_genes_matched), "nodes")
+            print("Adding edgelist with", len(target_genes), "total unique", modalities[1],
+                  "genes (target), but only matching", len(target_genes_matched), "nodes")
             print(len(edgelist), "edges added.")
 
-        self.G.add_edges_from(edgelist, type="d")
+        if correlation_weights == False:
+            self.G.add_edges_from(edgelist, type="d")
+
+        else:
+            node_list = [node for node in self.node_list if
+                         node in self.nodes[modalities[0]] or node in self.nodes[modalities[1]]]
+            correlation_df = compute_expression_correlation_dists(self.multi_omics_data, modalities=modalities,
+                                                                  node_list=node_list, absolute_corr=True,
+                                                                  histological_subtypes=[],
+                                                                  pathologic_stages=[],
+                                                                  squareform=True)
+
+            edgelist_weighted = [(u, v, {"weight": correlation_df.loc[u, v]}) for u, v in edgelist if
+                                 u in node_list and v in node_list]
+            print(edgelist_weighted[0:10])
+            self.G.add_edges_from(edgelist_weighted, type="d")
+
 
     def import_edgelist_file(self, file, is_directed):
         if is_directed:
