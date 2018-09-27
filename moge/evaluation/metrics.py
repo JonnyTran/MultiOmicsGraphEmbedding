@@ -40,6 +40,15 @@ def f1(y_true, y_pred):
     return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
 
 
+def contrastive_loss(y_true, y_pred):
+    '''Contrastive loss from Hadsell-et-al.'06
+    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    '''
+    margin = 1
+    return K.mean(y_true * K.square(y_pred) +
+                  (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+
 def link_prediction_score(true_edges, pred_edges, directed=True, metrics=["precision", "recall"]):
     """
     Evaluate link prediction accuracy scores between true_edges, pred_edges. The

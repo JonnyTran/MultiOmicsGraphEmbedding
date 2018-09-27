@@ -80,30 +80,19 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         dot_undirected = Dot(axes=1)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
 
-    def contrastive_loss(self, y_true, y_pred):
-        '''Contrastive loss from Hadsell-et-al.'06
-        http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-        '''
-        margin = 1
-        return K.mean(y_true * K.square(y_pred) +
-                      (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
-
-    def accuracy(self, y_true, y_pred):
-        '''Compute classification accuracy with a fixed threshold on distances.
-        '''
-        return K.mean(K.equal(K.cast(y_true > 0.5, y_true.dtype), K.cast(y_pred > 0.8, y_true.dtype)))
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
+                        truncating="random",
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
 
         self.generator = DataGenerator(network=network,
-                                       maxlen=self.max_length, padding='post', truncating="post",
+                                       maxlen=self.max_length, padding='post', truncating=truncating,
                                        batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
         self.node_list = self.generator.node_list
 
         if network_val:
             generator_val = DataGenerator(network=network_val,
-                                          maxlen=self.max_length, padding='post', truncating="post",
+                                          maxlen=self.max_length, padding='post', truncating=truncating,
                                           batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
         else:
             generator_val = None

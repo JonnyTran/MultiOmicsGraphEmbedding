@@ -104,7 +104,8 @@ class HeterogeneousNetwork():
                                         dissimilarity_threshold=0.1, negative_sampling_ratio=2.0,
                                         compute_correlation=True, histological_subtypes=[], pathologic_stages=[]):
         """
-        Computes similarity measures between genes within the same modality, and add them as undirected edges to the network if the similarity measures passes the threshold
+        Computes similarity measures between genes within the same modality, and add them as undirected edges to the
+network if the similarity measures passes the threshold
 
         :param modality: E.g. ["GE", "MIR", "LNC"]
         :param similarity_threshold: a hard-threshold to select positive edges with affinity value more than it
@@ -131,19 +132,24 @@ class HeterogeneousNetwork():
                                                features=features, squareform=True),
             index=node_list)
 
-
-        # Selects edges from the affinity matrix
+        # Selects positive edges with high affinity in the affinity matrix
         similarity_filtered = np.triu(annotation_affinities_df >= similarity_threshold, k=1) # A True/False matrix
         sim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y]) for x, y in
                                zip(*np.nonzero(similarity_filtered))]
         self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u")
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
+        # Select negative edges at affinity close to zero in the affinity matrix
         max_negative_edges = negative_sampling_ratio * len(sim_edgelist_ebunch)
         dissimilarity_filtered = np.triu(annotation_affinities_df <= dissimilarity_threshold, k=1)
+
+        dissimilarity_index_rows, dissimilarity_index_cols = np.nonzero(dissimilarity_filtered)
+        sample_indices = np.random.choice(dissimilarity_index_rows.shape[0],
+                                          size=min(max_negative_edges, dissimilarity_index_rows.shape[0]))
         # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
         dissim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y] + 1e-8) for i, (x, y) in
-                                  enumerate(zip(*np.nonzero(dissimilarity_filtered))) if i < max_negative_edges]
+                                  enumerate(zip(dissimilarity_index_rows[sample_indices],
+                                                dissimilarity_index_cols[sample_indices])) if i < max_negative_edges]
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
