@@ -100,7 +100,7 @@ def preprocess_graph(adj):
     return sparse_to_tuple(adj_normalized)
 
 
-def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list, edge_types=["u", "d"],
+def mask_test_edges_by_nodes(network, node_list, edge_types=["u", "d"],
                              test_frac=.1, val_frac=.05,
                              seed=0, verbose=False):
     if verbose == True:
