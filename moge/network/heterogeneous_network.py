@@ -71,7 +71,7 @@ class HeterogeneousNetwork():
             node_list = self.node_list
 
         if edge_types == None:
-            edge_list = self.G.edges(data=True)
+            edge_list = self.G.edges(nbunch=node_list, data=True)
         else:
             if type(edge_types) == list:
                 edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_types]
