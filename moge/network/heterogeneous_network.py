@@ -52,22 +52,20 @@ class HeterogeneousNetwork():
 
         if correlation_weights == False:
             self.G.add_edges_from(edgelist, type="d")
+            print(len(edgelist), "edges added.")
         else:
             node_list = [node for node in self.node_list if
                          node in self.nodes[modalities[0]] or node in self.nodes[modalities[1]]]
             correlation_df = compute_expression_correlation_dists(self.multi_omics_data, modalities=modalities,
                                                                   node_list=node_list, absolute_corr=True,
-                                                                  histological_subtypes=[],
-                                                                  pathologic_stages=[],
+                                                                  return_distance=False,
                                                                   squareform=True)
 
             edgelist_weighted = [(edge[0], edge[1], {"weight": correlation_df.loc[edge[0], edge[1]]}) for edge in
                                  edgelist if
                                  edge[0] in node_list and edge[1] in node_list]
-            print(edgelist_weighted[0:10])
             self.G.add_edges_from(edgelist_weighted, type="d")
-
-        print(len(edgelist), "edges added.")
+            print(len(edgelist_weighted), "edges added.")
 
 
     def import_edgelist_file(self, file, is_directed):
