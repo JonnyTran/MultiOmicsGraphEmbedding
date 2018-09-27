@@ -46,13 +46,12 @@ class HeterogeneousNetwork():
 
             print("Adding edgelist with", len(source_genes), "total unique", modalities[0],
                   "genes (source), but only matching", len(source_genes_matched), "nodes")
+
             print("Adding edgelist with", len(target_genes), "total unique", modalities[1],
                   "genes (target), but only matching", len(target_genes_matched), "nodes")
-            print(len(edgelist), "edges added.")
 
         if correlation_weights == False:
             self.G.add_edges_from(edgelist, type="d")
-
         else:
             node_list = [node for node in self.node_list if
                          node in self.nodes[modalities[0]] or node in self.nodes[modalities[1]]]
@@ -62,10 +61,13 @@ class HeterogeneousNetwork():
                                                                   pathologic_stages=[],
                                                                   squareform=True)
 
-            edgelist_weighted = [(u, v, {"weight": correlation_df.loc[u, v]}) for u, v in edgelist if
-                                 u in node_list and v in node_list]
+            edgelist_weighted = [(edge[0], edge[1], {"weight": correlation_df.loc[edge[0], edge[1]]}) for edge in
+                                 edgelist if
+                                 edge[0] in node_list and edge[1] in node_list]
             print(edgelist_weighted[0:10])
             self.G.add_edges_from(edgelist_weighted, type="d")
+
+        print(len(edgelist), "edges added.")
 
 
     def import_edgelist_file(self, file, is_directed):
