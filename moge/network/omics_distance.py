@@ -8,8 +8,9 @@ from scipy.spatial.distance import squareform as squareform_
 from sklearn.metrics.pairwise import pairwise_distances
 
 
-def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modalities, node_list, pathologic_stages=[],
-                                         histological_subtypes=[], squareform=True):
+def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modalities, node_list, absolute_corr=True,
+                                         return_distance=True,
+                                         pathologic_stages=[], histological_subtypes=[], squareform=True):
     X_multiomics, y = multi_omics_data.load_data(modalities=modalities, pathologic_stages=pathologic_stages,
                                                  histological_subtypes=histological_subtypes)
 
@@ -22,6 +23,14 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
                                                     ~X_multiomics_corr_df.columns.duplicated(keep='first')]
     X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list)
     X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list, axis=0)
+
+    if absolute_corr:
+        X_multiomics_corr_df = 1 - X_multiomics_corr_df
+        X_multiomics_corr_df = np.abs(X_multiomics_corr_df)
+        X_multiomics_corr_df = 1 - X_multiomics_corr_df
+
+    if return_distance == False:
+        X_multiomics_corr_df = 1 - X_multiomics_corr_df
 
     if squareform:
         return X_multiomics_corr_df
