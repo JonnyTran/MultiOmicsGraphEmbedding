@@ -1,7 +1,7 @@
-from sklearn.metrics import f1_score, roc_auc_score, average_precision_score, roc_curve
 import keras.backend as K
-
 import numpy as np
+import tensorflow as tf
+from sklearn.metrics import roc_auc_score, average_precision_score
 
 
 def precision(y_true, y_pred):
@@ -40,6 +40,12 @@ def f1(y_true, y_pred):
     return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
 
 
+def accuracy(y_true, y_pred):
+    ''' Compute classification accuracy with a fixed threshold on distances.
+    '''
+    return K.mean(K.equal(y_true, K.cast(y_pred < 0.5, y_true.dtype)))
+
+
 def contrastive_loss(y_true, y_pred):
     '''Contrastive loss from Hadsell-et-al.'06
     http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
@@ -47,6 +53,24 @@ def contrastive_loss(y_true, y_pred):
     margin = 1
     return K.mean(y_true * K.square(y_pred) +
                   (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+def auc_roc(y_true, y_pred):
+    # any tensorflow metric
+    y_pred = K.exp(-2 * y_pred)
+    value, update_op = tf.contrib.metrics.streaming_auc(y_pred, y_true)
+
+    # find all variables created for this metric
+    metric_vars = [i for i in tf.local_variables() if 'auc_roc' in i.name.split('/')[1]]
+
+    # Add metric variables to GLOBAL_VARIABLES collection.
+    # They will be initialized for new session.
+    for v in metric_vars:
+        tf.add_to_collection(tf.GraphKeys.GLOBAL_VARIABLES, v)
+
+    # force to update metric values
+    with tf.control_dependencies([update_op]):
+        value = tf.identity(value)
+        return value
 
 
 def link_prediction_score(true_edges, pred_edges, directed=True, metrics=["precision", "recall"]):

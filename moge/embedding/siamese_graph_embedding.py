@@ -1,21 +1,24 @@
+
 import numpy as np
-from sklearn.metrics import pairwise_distances
 import tensorflow as tf
 from keras import backend as K
 from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
+from keras.models import load_model
 from keras.optimizers import RMSprop
 from keras.utils import multi_gpu_model
-from keras.models import load_model
+from sklearn.metrics import pairwise_distances
 
-from moge.embedding.static_graph_embedding import StaticGraphEmbedding, ImportedGraphEmbedding
+from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
+from moge.evaluation.metrics import contrastive_loss, precision, recall, auc_roc
 from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
+
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
-                 max_length=700, Ed_Eu_ratio=0.2, seed=0, verbose=False, **kwargs):
+                 max_length=700, truncating="post", Ed_Eu_ratio=0.2, seed=0, verbose=False, **kwargs):
         super().__init__(d)
 
         self._d = d
@@ -25,6 +28,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         self.epochs = epochs
         self.Ed_Eu_ratio = Ed_Eu_ratio
         self.max_length = max_length
+        self.truncating = truncating
         self.seed = seed
         self.verbose = verbose
 
@@ -45,21 +49,26 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         """ Base network to be shared (eq. to feature extraction).
         """
         input = Input(shape=input_shape)
-        #     x = Flatten()(input)
-        x = Convolution1D(filters=320, kernel_size=26, input_shape=input_shape, activation='relu')(input)
-        print("conv1d", x) if self.verbose else None
-        x = MaxPooling1D(pool_size=13, strides=13)(x)  # Similar to DanQ Model
-        print("max pooling", x) if self.verbose else None
+
+        x = Convolution1D(filters=192, kernel_size=6, input_shape=input_shape, activation='relu')(input)
+        print("conv1d_1", x) if self.verbose else None
+        x = MaxPooling1D(pool_size=3, padding="same")(x)
+        print("max pooling_1", x) if self.verbose else None
+
+        x = Convolution1D(filters=320, kernel_size=3, activation='relu')(x)
+        print("conv1d_2", x) if self.verbose else None
+        x = MaxPooling1D(pool_size=3, padding="same")(x)
+        print("max pooling_2", x) if self.verbose else None
+
         x = Dropout(0.2)(x)
-        x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)  # TODO Return states?
+        x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)
         print("brnn", x) if self.verbose else None
-        x = Dropout(0.5)(x)
-        #     x = GlobalMaxPooling1D()(x)
-        #     print("GAP pooling", x)
+        x = Dropout(0.2)(x)
 
         x = Dense(75 * 640, activation='relu')(x)
         x = Dense(925, activation='relu')(x)
         x = Dense(self._d, activation='linear')(x)  # Embedding space
+        print("embedding", x) if self.verbose else None
         return Model(input, x)
 
     def euclidean_distance(self, inputs):
@@ -82,18 +91,18 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
-                        truncating="random",
+
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
 
         self.generator = DataGenerator(network=network,
-                                       maxlen=self.max_length, padding='post', truncating=truncating,
-                                       batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
+                                       maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                       batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         self.node_list = self.generator.node_list
 
         if network_val:
             generator_val = DataGenerator(network=network_val,
-                                          maxlen=self.max_length, padding='post', truncating=truncating,
-                                          batch_size=self.batch_size, dim=self.input_shape, shuffle=True)
+                                          maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                          batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         else:
             generator_val = None
 
@@ -132,13 +141,13 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
         # Compile & train
-        self.siamese_net.compile(loss=self.contrastive_loss,
+        self.siamese_net.compile(loss=contrastive_loss,
                             optimizer=RMSprop(lr=self.lr),
-                            metrics=[self.accuracy])
+                            metrics=[precision, recall, auc_roc])
 
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-        self.history = self.siamese_net.fit_generator(self.generator, epochs=self.n_epochs,
+        self.history = self.siamese_net.fit_generator(self.generator, epochs=self.epochs,
                                                       validation_data=generator_val,
                                                       use_multiprocessing=True, workers=8)
 
