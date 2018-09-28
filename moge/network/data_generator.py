@@ -66,6 +66,7 @@ class DataGenerator(keras.utils.Sequence):
         GE.rename(columns={'gene_family': 'Family'}, inplace=True)
 
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
+        self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[0]
         print("Genes info columns:", self.genes_info.columns.tolist())
 
 
