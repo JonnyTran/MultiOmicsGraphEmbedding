@@ -172,7 +172,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
                                      Y=embs[:, int(self._d / 2):self._d],
                                      metric="euclidean", n_jobs=8)
-        else:
+        elif edge_type == 'u':
             adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
 
         adj = np.round(np.exp(-beta * adj))

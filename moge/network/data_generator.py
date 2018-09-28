@@ -63,7 +63,7 @@ class DataGenerator(keras.utils.Sequence):
 
         MIR.rename(columns={'miR family': 'Family'}, inplace=True)
         LNC.rename(columns={'Transcript Type': 'Family'}, inplace=True) # TODO Find family data for lncRNA's
-        GE.rename(columns={'gene_family_id': 'Family'}, inplace=True)
+        GE.rename(columns={'gene_family': 'Family'}, inplace=True)
 
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
         print("Genes info columns:", self.genes_info.columns.tolist())
