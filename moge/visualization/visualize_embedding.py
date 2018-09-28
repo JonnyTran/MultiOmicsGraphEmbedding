@@ -47,7 +47,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
                              alpha=0.8, font_size=5, **kwargs)
 
         if legend:
-            plt.legend(loc='bottom')
+            plt.legend(loc='best')
         plt.axis('off')
 
     if file_name:
