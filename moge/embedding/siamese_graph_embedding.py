@@ -154,7 +154,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         self.history = self.siamese_net.fit_generator(self.generator, epochs=self.epochs,
                                                       validation_data=generator_val,
-                                                      use_multiprocessing=True, workers=8)
+                                                      use_multiprocessing=True, workers=4)
 
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
         """
