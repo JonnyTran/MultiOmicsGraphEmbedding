@@ -25,12 +25,12 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         if plot_nodes_only:
             nx.draw_networkx_nodes(di_graph, pos,
                                    node_color=node_colors, cmap=cmap,
-                                   width=0.1, node_size=100,
+                                   width=0.1, node_size=50,
                                    alpha=0.8, font_size=5, **kwargs)
         else:
             nx.draw_networkx(di_graph, pos,
                              node_color=node_colors, cmap=cmap,
-                             width=0.1, node_size=100, arrows=True,
+                             width=0.1, node_size=50, arrows=True,
                              alpha=0.8, font_size=5, **kwargs)
 
         if legend:
