@@ -176,7 +176,6 @@ network if the similarity measures passes the threshold
         nodes_B = self.nodes[modalities[1]]
         edges_ebunch = sample_edges(nodes_A, nodes_B, n_edges=n_edges, edge_type="u_n")
 
-        print(edges_ebunch[0:10])
         print("Number of negative sampled edges between", modalities, "added:", len(edges_ebunch))
         self.G.add_edges_from(edges_ebunch)
 
