@@ -111,14 +111,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         if multi_gpu:
             device = "/cpu:0"
-            # allow_soft_placement = True
+            allow_soft_placement = True
         else:
             device = "/gpu:0"
-            # allow_soft_placement = False
+            allow_soft_placement = False
 
         K.clear_session()
         tf.reset_default_graph()
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
 
         # Build model
         with tf.device(device):
@@ -154,7 +154,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         self.history = self.siamese_net.fit_generator(self.generator, epochs=self.epochs,
                                                       validation_data=generator_val,
-                                                      use_multiprocessing=True, workers=4)
+                                                      use_multiprocessing=True, workers=8)
 
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
         """
