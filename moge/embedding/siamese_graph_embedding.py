@@ -2,6 +2,7 @@
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
+from keras.callbacks import EarlyStopping
 from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
@@ -11,22 +12,23 @@ from keras.utils import multi_gpu_model
 from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
-from moge.evaluation.metrics import contrastive_loss, precision, recall, auc_roc
+from moge.evaluation.metrics import accuracy, contrastive_loss, precision, recall, auc_roc
 from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
-                 max_length=700, truncating="post", Ed_Eu_ratio=0.2, seed=0, verbose=False, **kwargs):
+                 negative_sampling_ratio=2.0,
+                 max_length=700, truncating="post", seed=0, verbose=False, **kwargs):
         super().__init__(d)
 
         self._d = d
         self.input_shape = input_shape
         self.batch_size = batch_size
-        self.lr = lr
+        # self.lr = lr
         self.epochs = epochs
-        self.Ed_Eu_ratio = Ed_Eu_ratio
+        self.negative_sampling_ratio = negative_sampling_ratio
         self.max_length = max_length
         self.truncating = truncating
         self.seed = seed
@@ -65,8 +67,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("brnn", x) if self.verbose else None
         x = Dropout(0.2)(x)
 
-        x = Dense(75 * 640, activation='relu')(x)
+        x = Dense(1024, activation='relu')(x)
+        x = Dropout(0.1)(x)
         x = Dense(925, activation='relu')(x)
+        x = Dropout(0.1)(x)
         x = Dense(self._d, activation='linear')(x)  # Embedding space
         print("embedding", x) if self.verbose else None
         return Model(input, x)
@@ -91,17 +95,16 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
-
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
 
         self.generator = DataGenerator(network=network,
-                                       maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                       maxlen=self.max_length, padding='post', truncating=self.truncating, negative_sampling_ratio=self.negative_sampling_ratio,
                                        batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         self.node_list = self.generator.node_list
 
         if network_val:
             generator_val = DataGenerator(network=network_val,
-                                          maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                          maxlen=self.max_length, padding='post', truncating=self.truncating, negative_sampling_ratio=self.negative_sampling_ratio,
                                           batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         else:
             generator_val = None
@@ -140,10 +143,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         if multi_gpu:
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
+        my_callbacks = [EarlyStopping(monitor='auc_roc', patience=300, verbose=1, mode='max')]
+
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,
-                            optimizer=RMSprop(lr=self.lr),
-                            metrics=[precision, recall, auc_roc])
+                            optimizer=RMSprop(),
+                            metrics=[accuracy, precision, recall, auc_roc])
 
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
