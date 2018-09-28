@@ -24,7 +24,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         for label in top_node_labels:
             ax.plot([0], [0],
                     color=scalarMap.to_rgba(node_colormap[label]),
-                    label=label) if label in node_colormap.keys() else None
+                    label=label, linewidth=4) if label in node_colormap.keys() else None
 
     if di_graph is None:
         # Plot using plt scatter
