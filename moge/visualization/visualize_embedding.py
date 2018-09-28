@@ -7,7 +7,7 @@ import matplotlib.cm as cm
 def plot_embedding2D(node_pos, node_list, di_graph=None,
                      legend=True, node_labels=None, node_colormap=None, legend_size=10,
                      node_colors=None, plot_nodes_only=True,
-                     cmap="jet", file_name=None, **kwargs):
+                     cmap="jet", file_name=None, figsize=(17, 15), **kwargs):
     node_num, embedding_dimension = node_pos.shape
     assert node_num == len(node_list)
     if(embedding_dimension > 2):
@@ -15,7 +15,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         model = TSNE(n_components=2)
         node_pos = model.fit_transform(node_pos)
 
-    fig = plt.figure(figsize=(15, 15))
+    fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(1, 1, 1)
 
     if legend and node_labels is not None and node_colormap is not None and node_colors is not None:
