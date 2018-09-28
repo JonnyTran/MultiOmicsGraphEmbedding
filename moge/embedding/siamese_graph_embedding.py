@@ -69,7 +69,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         x = Dense(1024, activation='relu')(x)
         x = Dropout(0.1)(x)
-        # x = Dense(925, activation='relu')(x)
+        x = Dense(925, activation='relu')(x)
         x = Dropout(0.1)(x)
         x = Dense(self._d, activation='linear')(x)  # Embedding space
         print("embedding", x) if self.verbose else None
