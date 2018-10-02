@@ -118,7 +118,8 @@ class HeterogeneousNetwork():
 
     def add_edges_from_nodes_similarity(self, modality, node_list, features=None, similarity_threshold=0.7,
                                         dissimilarity_threshold=0.1, negative_sampling_ratio=2.0,
-                                        compute_correlation=True, histological_subtypes=[], pathologic_stages=[]):
+                                        compute_correlation=True, histological_subtypes=[], pathologic_stages=[],
+                                        epsilon=1e-16):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the
 network if the similarity measures passes the threshold
@@ -163,7 +164,7 @@ network if the similarity measures passes the threshold
         sample_indices = np.random.choice(a=dissimilarity_index_rows.shape[0],
                                           size=min(max_negative_edges, dissimilarity_index_rows.shape[0]))
         # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
-        dissim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y] + 1e-8) for i, (x, y) in
+        dissim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y] + epsilon) for i, (x, y) in
                                   enumerate(zip(dissimilarity_index_rows[sample_indices],
                                                 dissimilarity_index_cols[sample_indices])) if i < max_negative_edges]
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
