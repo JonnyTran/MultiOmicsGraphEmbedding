@@ -98,13 +98,15 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
 
         self.generator = DataGenerator(network=network,
-                                       maxlen=self.max_length, padding='post', truncating=self.truncating, negative_sampling_ratio=self.negative_sampling_ratio,
+                                       maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                       negative_sampling_ratio=self.negative_sampling_ratio,
                                        batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         self.node_list = self.generator.node_list
 
         if network_val:
             generator_val = DataGenerator(network=network_val,
-                                          maxlen=self.max_length, padding='post', truncating=self.truncating, negative_sampling_ratio=self.negative_sampling_ratio,
+                                          maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                          negative_sampling_ratio=self.negative_sampling_ratio,
                                           batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         else:
             generator_val = None
