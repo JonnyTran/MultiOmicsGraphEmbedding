@@ -7,7 +7,7 @@ from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
 from keras.models import load_model
-from keras.optimizers import RMSprop
+from keras.optimizers import RMSprop, Adam
 from keras.utils import multi_gpu_model
 from sklearn.metrics import pairwise_distances
 
@@ -97,19 +97,19 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
 
-        self.generator = DataGenerator(network=network,
-                                       maxlen=self.max_length, padding='post', truncating=self.truncating,
-                                       negative_sampling_ratio=self.negative_sampling_ratio,
-                                       batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
-        self.node_list = self.generator.node_list
+        self.generator_train = DataGenerator(network=network,
+                                             maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                             negative_sampling_ratio=self.negative_sampling_ratio,
+                                             batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
+        self.node_list = self.generator_train.node_list
 
         if network_val:
-            generator_val = DataGenerator(network=network_val,
-                                          maxlen=self.max_length, padding='post', truncating=self.truncating,
-                                          negative_sampling_ratio=self.negative_sampling_ratio,
-                                          batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
+            self.generator_val = DataGenerator(network=network_val,
+                                               maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                               negative_sampling_ratio=self.negative_sampling_ratio,
+                                               batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         else:
-            generator_val = None
+            self.generator_val = None
 
         if multi_gpu:
             device = "/cpu:0"
@@ -120,7 +120,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         K.clear_session()
         tf.reset_default_graph()
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement,
+                                                report_tensor_allocations_upon_oom=True))
 
         # Build model
         with tf.device(device):
@@ -154,8 +155,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-        self.history = self.siamese_net.fit_generator(self.generator, epochs=self.epochs,
-                                                      validation_data=generator_val,
+        self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
+                                                      validation_data=self.generator_val,
                                                       use_multiprocessing=True, workers=8)
 
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
@@ -200,8 +201,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
     def get_embedding(self, variable_length=False, recompute=False):
         if not hasattr(self, "_X") or recompute:
-            seqs = self.generator.get_sequence_data(range(len(self.generator.node_list)),
-                                                    variable_length=variable_length)
+            seqs = self.generator_train.get_sequence_data(range(len(self.generator_train.node_list)),
+                                                          variable_length=variable_length)
             if variable_length:
                 embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
             else:

@@ -161,16 +161,20 @@ class DataGenerator(keras.utils.Sequence):
         X_list = []
         for id, edge_type in edges_batch:
             if edge_type == DIRECTED_EDGE:
-                X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE, 1))
-                # self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
+                # X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE, 1))
+                X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE,
+                               self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
             elif edge_type == UNDIRECTED_EDGE:
+                # X_list.append(
+                # (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE, 1))
                 X_list.append(
-                    (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE, 1))
-                # self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
+                    (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE,
+                     self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
+                # self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]
             elif edge_type == UNDIRECTED_NEG_EDGE:
                 X_list.append(
                     (self.En_rows[id], self.En_cols[id], UNDIRECTED_EDGE_TYPE, 0))
-                # self.adj_negative[self.En_rows[id], self.En_cols[id]]))  # E_ij of negative edges should be 0
+                # self.adj_negative[self.En_rows[id], self.En_cols[id]]  # E_ij of negative edges should be 0
             elif edge_type == DIRECTED_NEG_EDGE:
                 X_list.append(
                     (self.Ens_rows[id], self.Ens_cols[id], DIRECTED_EDGE_TYPE, 0))  # E_ij of negative edges should be 0
