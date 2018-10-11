@@ -189,7 +189,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                         ' '.join([str(x) for x in self.get_embedding()[i]])))
         fout.close()
 
-    def load_model(self, filepath):
+    def load_model(self, filepath, generator):
+        self.generator_train = generator
         self.lstm_network = load_model(filepath)
         print(self.lstm_network.summary())
 
@@ -199,7 +200,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         return exps / np.sum(exps, axis=0)
 
     def get_embedding(self, variable_length=False, recompute=False):
-        if not hasattr(self, "_X") or recompute:
+        if not hasattr(self, "_X") or recompute and hasattr(self, "generator_train"):
             seqs = self.generator_train.get_sequence_data(range(len(self.generator_train.node_list)),
                                                           variable_length=variable_length)
             if variable_length:
