@@ -70,7 +70,7 @@ def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_em
     return score
 
 
-def eselect_top_k_link_predictions(top_k, estimated_adj, excluding_edges=None, smallest=False):
+def select_top_k_link_predictions(top_k, estimated_adj, excluding_edges=None, smallest=False):
     # Exclude edges already seen at training time
     if excluding_edges is not None:
         estimated_adj[excluding_edges[:, 0], excluding_edges[:, 1]] = 0
