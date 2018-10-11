@@ -170,6 +170,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         :return:
         """
         embs = self.get_embedding()
+        assert len(self.node_list) == embs.shape[0]
+        if node_l is not None:
+            indices = [i for i in range(embs.shape[0]) if self.node_list[i] in node_l]
+            embs = embs[indices, :]
+            print("Embeddings filtered by node list", embs.shape)
+
         if edge_type == 'd':
             adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
                                      Y=embs[:, int(self._d / 2):self._d],
@@ -191,6 +197,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
     def load_model(self, filepath, generator):
         self.generator_train = generator
+        self.node_list = self.generator_train.node_list
         self.lstm_network = load_model(filepath)
         print(self.lstm_network.summary())
 
@@ -200,7 +207,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         return exps / np.sum(exps, axis=0)
 
     def get_embedding(self, variable_length=False, recompute=False):
-        if not hasattr(self, "_X") or recompute and hasattr(self, "generator_train"):
+        if (not hasattr(self, "_X") or recompute):
             seqs = self.generator_train.get_sequence_data(range(len(self.generator_train.node_list)),
                                                           variable_length=variable_length)
             if variable_length:
@@ -211,6 +218,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             embs = np.array(embs)
             embs = embs.reshape(embs.shape[0], embs.shape[-1])
             self._X = embs
+            return self._X
         else:
             return self._X
 
