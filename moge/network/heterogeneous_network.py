@@ -116,6 +116,12 @@ class HeterogeneousNetwork():
 
         return self.G.subgraph(nodes) # returned subgraph is not mutable
 
+    def get_edgelist(self, edge_types, node_list):
+        edgelist = [(u, v) for u, v, d in self.G.edges(data=True) if
+                    d['type'] in edge_types and (u in node_list and v in node_list)]
+        return edgelist
+
+
     def add_edges_from_nodes_similarity(self, modality, node_list, features=None, similarity_threshold=0.7,
                                         dissimilarity_threshold=0.1, negative_sampling_ratio=2.0,
                                         compute_correlation=True, histological_subtypes=[], pathologic_stages=[],
