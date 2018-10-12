@@ -67,9 +67,10 @@ def split_train_test_nodes(network, node_list, edge_types=["u", "d", "u_n"],
     """
     test_edges_dict = {}
     val_edges_dict = {}
-    network_train, val_edges, test_edges = mask_test_edges_by_nodes(network, node_list, edge_types=edge_types,
-                                                                    test_frac=test_frac, val_frac=val_frac, seed=seed,
-                                                                    verbose=verbose)
+    network_train, val_edges, test_edges, val_nodes, test_nodes = mask_test_edges_by_nodes(network, node_list,
+                                                                                           edge_types=edge_types,
+                                                                                           test_frac=test_frac, val_frac=val_frac, seed=seed,
+                                                                                           verbose=verbose)
     for edge_type in edge_types:
         test_edges_dict[edge_type] = [(u, v) for u, v, d in test_edges if d["type"] == edge_type]
         val_edges_dict[edge_type] = [(u, v) for u, v, d in val_edges if d["type"] == edge_type]
@@ -79,7 +80,7 @@ def split_train_test_nodes(network, node_list, edge_types=["u", "d", "u_n"],
     print("validation edges", [(k, len(v)) for k,v in val_edges_dict.items()])
     print("test edges", [(k, len(v)) for k, v in test_edges_dict.items()])
 
-    return network, val_edges_dict, test_edges_dict
+    return network, val_edges_dict, test_edges_dict, val_nodes, test_nodes
 
 # Convert sparse matrix to tuple
 def sparse_to_tuple(sparse_mx):
