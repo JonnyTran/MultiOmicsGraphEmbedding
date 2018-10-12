@@ -154,7 +154,7 @@ def mask_test_edges_by_nodes(network, node_list, edge_types=["u", "d"],
         print('removed', no_of_edges_before-g.number_of_edges(), "edges, and ",
               no_of_nodes_before-g.number_of_nodes(), "nodes.")
 
-    return g, val_edges, test_edges
+    return g, val_edges, test_edges, val_nodes, test_nodes
 
 
 def mask_test_edges(adj, is_directed=True, test_frac=.1, val_frac=.05,
