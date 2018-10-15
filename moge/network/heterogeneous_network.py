@@ -36,7 +36,7 @@ class HeterogeneousNetwork():
 
         print("Total nodes:", len(self.node_list))
 
-    def add_directed_edges_from_edgelist(self, edgelist, modalities=None, correlation_weights=False):
+    def add_directed_edges_from_edgelist(self, edgelist, modalities=None, correlation_weights=False, threshold=None):
         if not (modalities is None):
             source_genes = set([edge[0] for edge in edgelist])
             target_genes = set([edge[1] for edge in edgelist])
@@ -64,8 +64,16 @@ class HeterogeneousNetwork():
             edgelist_weighted = [(edge[0], edge[1], {"weight": correlation_df.loc[edge[0], edge[1]]}) for edge in
                                  edgelist if
                                  edge[0] in node_list and edge[1] in node_list]
+
+            if threshold is not None:
+                no_edges = len(edgelist_weighted)
+                edgelist_weighted = [(u, v, d) for u, v, d in edgelist_weighted if d["weight"] >= threshold]
+                print("Filtered out", no_edges, "-", len(edgelist_weighted), "edges by correlation weight.")
+
             self.G.add_edges_from(edgelist_weighted, type="d")
-            print(len(edgelist_weighted), "edges added.")
+            print(len(edgelist_weighted),
+                  "weighted (directed interaction) edges added. Note: only added edges that are in the modalities:",
+                  modalities)
 
 
     def import_edgelist_file(self, file, is_directed):

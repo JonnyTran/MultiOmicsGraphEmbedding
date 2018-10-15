@@ -15,6 +15,7 @@ from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.metrics import accuracy, contrastive_loss, precision, recall, auc_roc
 from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
+from moge.evaluation.link_prediction import largest_indices
 
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
@@ -234,6 +235,24 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             return pairwise_distances(X=embs[i], Y=embs[j], metric="euclidean", n_jobs=8)
 
+    def get_top_k_predicted_edges(self, edge_type, top_k, modalities=None, node_list=None):
+        nodes = self.node_list
+        if node_list is not None:
+            nodes = [n for n in nodes if n in node_list]
+
+        if modalities is not None:
+            nodes
+
+        estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)
+        training_adj = self.generator_train.network.get_adjacency_matrix(edge_types=[edge_type], node_list=nodes)
+        assert estimated_adj.shape == training_adj.shape
+        rows, cols = training_adj.nonzero()
+        estimated_adj[rows, cols] = 0
+
+        top_k_indices = largest_indices(estimated_adj, top_k, smallest=False)
+        top_k_pred_edges = [x for x in zip(*top_k_indices)]
+
+        return top_k_pred_edges
 
 
 

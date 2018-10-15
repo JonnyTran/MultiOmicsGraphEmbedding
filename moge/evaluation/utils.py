@@ -188,6 +188,8 @@ def mask_test_edges(adj, is_directed=True, test_frac=.1, val_frac=.05,
     adj_tuple = sparse_to_tuple(adj)  # (coords, values, shape)
     edges = adj_tuple[0]  # List of ALL edges (either direction)
     edge_pairs = [(edge[0], edge[1]) for edge in edges]  # store edges as list of tuples (from_node, to_node)
+    edge_values = adj_tuple[1]
+    # TODO validation edges have incorrect weight
 
     num_test = int(np.floor(edges.shape[0] * test_frac))  # controls how large the test set should be
     num_val = int(np.floor(edges.shape[0] * val_frac))  # controls how alrge the validation set should be
