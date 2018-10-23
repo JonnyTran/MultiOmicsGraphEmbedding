@@ -112,17 +112,22 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             self.generator_val = None
 
+        self.build_keras_model(multi_gpu)
+
+        self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
+                                                      validation_data=self.generator_val,
+                                                      use_multiprocessing=True, workers=8)
+
+    def build_keras_model(self, multi_gpu):
         if multi_gpu:
             device = "/cpu:0"
             allow_soft_placement = True
         else:
             device = "/gpu:0"
             allow_soft_placement = False
-
         K.clear_session()
         tf.reset_default_graph()
         sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
-
         # Build model
         with tf.device(device):
             # Inputs
@@ -141,23 +146,15 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             distance = Lambda(self.st_euclidean_distance)([encoded_i, encoded_j, is_directed])
 
             self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=distance)
-
         # Multi-gpu parallelization
         if multi_gpu:
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
-
         my_callbacks = [EarlyStopping(monitor='auc_roc', patience=300, verbose=1, mode='max')]
-
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,
-                            optimizer=RMSprop(),
-                            metrics=[accuracy, precision, recall, auc_roc])
-
+                                 optimizer=RMSprop(),
+                                 metrics=[accuracy, precision, recall, auc_roc])
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
-
-        self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
-                                                      validation_data=self.generator_val,
-                                                      use_multiprocessing=True, workers=8)
 
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
         """
@@ -201,6 +198,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def load_model(self, filepath, generator):
         self.generator_train = generator
         self.node_list = self.generator_train.node_list
+        self.build_keras_model(multi_gpu=False)
         self.lstm_network = load_model(filepath)
         print(self.lstm_network.summary())
 
