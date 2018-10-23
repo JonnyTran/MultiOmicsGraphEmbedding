@@ -18,7 +18,7 @@ DIRECTED_EDGE = 'd'
 class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
-                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3,
+                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False,
                  maxlen=600, padding='post', truncating='post',
                  shuffle=True, seed=0):
         """
