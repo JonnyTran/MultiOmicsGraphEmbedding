@@ -101,8 +101,7 @@ class DataGenerator(keras.utils.Sequence):
         # Negative Directed Edges (sampled)
         adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
         self.Ens_rows, self.Ens_cols = np.where(dense_triu(adj_positive.todense() == 0, k=1))
-        self.Ens_count = self.Ed_count * self.negative_sampling_ratio
-        self.Ens_count = int(self.Ens_count)
+        self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ens_count:", self.Ens_count)
 
         sample_indices = np.random.choice(self.Ens_rows.shape[0], self.Ens_count)
@@ -190,6 +189,16 @@ class DataGenerator(keras.utils.Sequence):
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
 
         return X, y
+
+    def make_dataset(self):
+        y_true = []
+        for i in range(self.__len__()):
+            _, y_i = self.__getitem__(i)
+            y_true.append(y_i)
+
+        y_true = np.vstack(y_true)
+
+        return None, y_true
 
     def get_sequence_data(self, node_list_ids, variable_length=False, minlen=None):
         """

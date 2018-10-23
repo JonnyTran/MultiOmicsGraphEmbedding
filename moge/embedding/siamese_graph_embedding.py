@@ -107,7 +107,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         if network_val:
             self.generator_val = DataGenerator(network=network_val,
                                                maxlen=self.max_length, padding='post', truncating=self.truncating,
-                                               negative_sampling_ratio=1.0,
+                                               negative_sampling_ratio=2.0,
                                                batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         else:
             self.generator_val = None
@@ -184,7 +184,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         elif edge_type == 'u':
             adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
 
-        adj = np.round(np.exp(-beta * adj))
+        adj = np.exp(-beta * adj)
 
         return adj
 
