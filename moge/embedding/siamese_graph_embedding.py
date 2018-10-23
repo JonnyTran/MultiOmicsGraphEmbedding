@@ -189,7 +189,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         embs = self.get_embedding()
         assert len(self.node_list) == embs.shape[0]
         fout = open(filepath, 'w')
-        fout.write("{} {}\n".format(len(self.node_list), self._d * 2))
+        fout.write("{} {}\n".format(len(self.node_list), self._d))
         for i in range(len(self.node_list)):
             fout.write("{} {}\n".format(self.node_list[i],
                                         ' '.join([str(x) for x in embs[i]])))
