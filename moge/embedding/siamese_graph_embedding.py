@@ -12,13 +12,23 @@ from keras.utils import multi_gpu_model
 from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
-from moge.evaluation.metrics import accuracy, contrastive_loss, precision, recall, auc_roc
+from moge.evaluation.metrics import accuracy, precision, recall, auc_roc
 from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 from moge.evaluation.link_prediction import largest_indices
 
 
+def contrastive_loss(y_true, y_pred):
+    '''Contrastive loss from Hadsell-et-al.'06
+    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    '''
+    margin = 1
+    return K.mean(y_true * K.square(y_pred) +
+                  (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
+
     def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
                  negative_sampling_ratio=2.0,
                  max_length=700, truncating="post", seed=0, verbose=False, **kwargs):
@@ -88,12 +98,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         sum_switch = K.switch(is_directed, sum_directed, sum_undirected)
         return K.sqrt(K.maximum(sum_switch, K.epsilon()))
 
+
     def st_emb_probability(self, inputs):
         emb_i, emb_j, is_directed = inputs
         dot_directed = Dot(axes=1)([emb_i[:, 0:int(self._d / 2)], emb_j[:, int(self._d / 2):self._d]])
         dot_undirected = Dot(axes=1)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
-
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
@@ -152,7 +162,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         my_callbacks = [EarlyStopping(monitor='auc_roc', patience=300, verbose=1, mode='max')]
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,
-                                 optimizer=RMSprop(),
+                                 optimizer=Adam(),
                                  metrics=[accuracy, precision, recall, auc_roc])
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
@@ -202,7 +212,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         self.lstm_network = load_model(filepath)
         print(self.lstm_network.summary())
 
-
     def softmax(self, X):
         exps = np.exp(X)
         return exps / np.sum(exps, axis=0)
@@ -232,7 +241,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                       metric="euclidean", n_jobs=8)
         else:
             return pairwise_distances(X=embs[i], Y=embs[j], metric="euclidean", n_jobs=8)
-
     def get_top_k_predicted_edges(self, edge_type, top_k, modalities=None, node_list=None):
         nodes = self.node_list
         if node_list is not None:
@@ -251,7 +259,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         top_k_pred_edges = [x for x in zip(*top_k_indices)]
 
         return top_k_pred_edges
-
 
 
 if __name__ == '__main__':
