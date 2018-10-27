@@ -158,6 +158,7 @@ def hierarchical_distance_aggregate_score(X):
 
 
 def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=600):
+    print("@@@", u, v[0])
     if (type(u[0]) is str and type(v[0]) is str):
         if truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
             return np.nan
