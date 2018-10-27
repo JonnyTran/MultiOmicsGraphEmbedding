@@ -158,10 +158,10 @@ def hierarchical_distance_aggregate_score(X):
 
 
 def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=600):
-    if (type(u[0]) is str and type(v[0]) is str):
-        if truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
+    if (type(u) is str and type(v) is str):
+        if truncate and (len(u) > min_length or len(v) > min_length):
             return np.nan
-        return pairwise2.align.globalxx(u[0], v[0], score_only=True) / min(len(u[0]), len(v[0]))
+        return pairwise2.align.globalxx(u, v, score_only=True) / min(len(u), len(v))
     else:
         return np.nan
 
