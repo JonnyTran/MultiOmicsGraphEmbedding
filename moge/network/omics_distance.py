@@ -95,7 +95,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
 
         elif column in ["Mature sequence", "Transcript sequence"]:
             print("Global alignment seq score")
-            feature_dist = pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
+            feature_dist = scipy_pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
         elif column == "Location": # LNC Locations
@@ -158,12 +158,10 @@ def hierarchical_distance_aggregate_score(X):
 
 
 def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=600):
-    print(u)
-    print(v[0])
-    if (type(u) is str and type(v) is str):
-        if truncate and (len(u) > min_length or len(v) > min_length):
+    if (type(u[0]) is str and type(v[0]) is str):
+        if truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
             return np.nan
-        return pairwise2.align.globalxx(u, v, score_only=True) / min(len(u), len(v))
+        return pairwise2.align.globalxx(u[0], v[0], score_only=True) / min(len(u[0]), len(v[0]))
     else:
         return np.nan
 
