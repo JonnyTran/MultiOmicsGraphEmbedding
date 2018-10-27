@@ -185,6 +185,8 @@ network if the similarity measures passes the threshold
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
 
+        return annotation_affinities_df
+
 
     def add_sampled_negative_edges(self, n_edges, modalities=[]):
         nodes_A = self.nodes[modalities[0]]
