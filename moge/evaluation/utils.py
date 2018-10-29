@@ -43,7 +43,7 @@ def split_train_test_edges(network, node_list, edge_types=["u", "d", "u_n"],
 def split_train_test_nodes(network, node_list, edge_types=["u", "d", "u_n"],
                            test_frac=.05, val_frac=.01, seed=0, verbose=True):
     """
-    Randomly remove nodes from node_list with test_frac and val_frac. Then, collect the edges with types in edge_types
+    Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
     into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
 
     :param network: HeterogeneousNetwork
@@ -154,7 +154,8 @@ def mask_test_edges(network, node_list, edge_types=["u", "d"], databases=["miRTa
     print("edges_to_remove", len(edges_to_remove)) if verbose else None
 
     # Avoid removing edges in the MST
-    mst_edges = set(nx.minimum_spanning_tree(nx.from_edgelist(edges_to_remove, create_using=nx.Graph())).edges(data=False))
+    mst_edges = set(nx.minimum_spanning_tree(nx.from_edgelist([(u, v) for u, v, d in edges_to_remove],
+                                                              create_using=nx.Graph())).edges(data=False))
     edges_to_remove = [(u,v,d) for u,v,d in edges_to_remove if (u in node_list) and (v in node_list) and
                        ~((u, v) in mst_edges or (v, u) in mst_edges)]
     print("edges_to_remove (after MST)", len(edges_to_remove)) if verbose else None

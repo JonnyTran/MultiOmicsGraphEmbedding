@@ -173,6 +173,7 @@ class DataGenerator(keras.utils.Sequence):
         return X, y
 
     def make_dataset(self):
+        # Returns the y_true labels. Only run this before running .`on_epoch_end`() since it may reindex the samples
         y_true = []
         for i in range(self.__len__()):
             _, y_i = self.__getitem__(i)
