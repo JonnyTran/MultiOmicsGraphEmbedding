@@ -6,7 +6,7 @@ from moge.network.omics_distance import *
 
 
 class HeterogeneousNetwork():
-    def __init__(self, modalities:list, multi_omics_data:MultiOmicsData):
+    def __init__(self, modalities:list, multi_omics_data:MultiOmicsData, process_genes_info=True):
         """
         This class manages a networkx graph consisting of heterogeneous gene nodes, and heterogeneous edge types.
 
@@ -18,7 +18,8 @@ class HeterogeneousNetwork():
         self.G = nx.DiGraph()
 
         self.preprocess_graph()
-        self.process_genes_info()
+        if process_genes_info:
+            self.process_genes_info()
 
     def preprocess_graph(self):
         self.nodes = {}

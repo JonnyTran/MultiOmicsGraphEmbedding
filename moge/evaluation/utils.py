@@ -25,30 +25,20 @@ def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, ret
         return [(node_list[rows[i]], node_list[cols[i]]) for i in rand_indices]
 
 def split_train_test_edges(network, node_list, edge_types=["u", "d", "u_n"],
+                           databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                            test_frac=.05, val_frac=.01, seed=0, verbose=True):
     network_train = network
-    val_edges_dict = {}
-    test_edges_dict = {}
 
-    for edge_type in edge_types:
-        if edge_type == 'd':
-            is_directed = True
-        else:
-            is_directed = False
+    test_edges, val_edges = mask_test_edges(network,
+                                            node_list=node_list,
+                                            edge_types=edge_types,
+                                            databases=databases,
+                                            test_frac=test_frac, val_frac=val_frac, seed=seed, verbose=verbose)
+    network_train.remove_edges_from(test_edges)
+    network_train.remove_edges_from(val_edges)
+    print("Removed", len(test_edges), "test, and", len(val_edges), "val, type", edge_types, "edges")
 
-        adj_train, train_edges, \
-        val_edges, test_edges = mask_test_edges(network.get_adjacency_matrix(edge_type, node_list=node_list),
-                                                is_directed=is_directed,
-                                                test_frac=test_frac, val_frac=val_frac, seed=seed, verbose=verbose)
-        test_edge_list = [(node_list[edge[0]], node_list[edge[1]]) for edge in test_edges]
-        val_edge_list = [(node_list[edge[0]], node_list[edge[1]]) for edge in val_edges]
-        network_train.remove_edges_from(test_edge_list)
-        network_train.remove_edges_from(val_edge_list)
-        print("Removed", len(test_edge_list), "test, and", len(val_edge_list), "val, type", edge_type, "edges")
-        val_edges_dict[edge_type] = val_edges
-        test_edges_dict[edge_type] = test_edges
-
-    return network_train, val_edges_dict, test_edges_dict
+    return network_train, test_edges, val_edges
 
 def split_train_test_nodes(network, node_list, edge_types=["u", "d", "u_n"],
                            test_frac=.05, val_frac=.01, seed=0, verbose=True):
@@ -65,22 +55,18 @@ def split_train_test_nodes(network, node_list, edge_types=["u", "d", "u_n"],
     :param verbose:
     :return: network, val_edges_dict, test_edges_dict
     """
-    test_edges_dict = {}
-    val_edges_dict = {}
-    network_train, val_edges, test_edges, val_nodes, test_nodes = mask_test_edges_by_nodes(network, node_list,
-                                                                                           edge_types=edge_types,
-                                                                                           test_frac=test_frac, val_frac=val_frac, seed=seed,
-                                                                                           verbose=verbose)
-    for edge_type in edge_types:
-        test_edges_dict[edge_type] = [(u, v) for u, v, d in test_edges if d["type"] == edge_type]
-        val_edges_dict[edge_type] = [(u, v) for u, v, d in val_edges if d["type"] == edge_type]
+    network_train, test_edges, val_edges, \
+    test_nodes, val_nodes = mask_test_edges_by_nodes(network, node_list,
+                                                                   edge_types=edge_types,
+                                                                   test_frac=test_frac, val_frac=val_frac, seed=seed,
+                                                                   verbose=verbose)
 
     network.G = network_train
     network.node_list = [node for node in network.node_list if node in network_train.nodes()]
-    print("validation edges", [(k, len(v)) for k,v in val_edges_dict.items()])
-    print("test edges", [(k, len(v)) for k, v in test_edges_dict.items()])
+    print("validation edges", len(val_edges))
+    print("test edges", len(test_edges))
 
-    return network, val_edges_dict, test_edges_dict, val_nodes, test_nodes
+    return network, test_edges, val_edges, test_nodes, val_nodes
 
 # Convert sparse matrix to tuple
 def sparse_to_tuple(sparse_mx):
@@ -130,8 +116,6 @@ def mask_test_edges_by_nodes(network, node_list, edge_types=["u", "d"],
         else:
             test_edges_add_back.append((u, v, d))
 
-
-
     val_nodes = []
     val_edges = []
     val_edges_add_back = []
@@ -155,39 +139,25 @@ def mask_test_edges_by_nodes(network, node_list, edge_types=["u", "d"],
         print('removed', no_of_edges_before-g.number_of_edges(), "edges, and ",
               no_of_nodes_before-g.number_of_nodes(), "nodes.")
 
-    return g, val_edges, test_edges, val_nodes, test_nodes
+    return g, test_edges, val_edges, test_nodes, val_nodes
 
 
-
-
-
-def mask_test_edges(network, node_list, edge_types=["u", "d"], databases=[],
+def mask_test_edges(network, node_list, edge_types=["u", "d"], databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                              test_frac=.10, val_frac=.05,
                              seed=0, verbose=False):
-
-    def condition(d):
-        if d["type"] in edge_types and d["database"] in databases:
-            return True
-        else:
-            return False
-
     if verbose == True:
         print('preprocessing...')
 
     g = network.G
-    nodes_dict = network.nodes
 
-    # g.remove_nodes_from(list(nx.isolates(g)))
-    no_of_edges_before = g.number_of_edges()
-    print("no_of_edges_before", no_of_edges_before) if verbose else None
-
-
-    edges_to_remove = [(u,v,d) for u,v,d in g.edges(data=True) if (u in node_list) and (v in node_list) and condition(d)]
+    edges_to_remove = [(u, v, d) for u, v, d in g.edges(data=True) if d["type"] in edge_types and d["database"] in databases]
     print("edges_to_remove", len(edges_to_remove)) if verbose else None
 
-    # Make sure to not take away MST edges to test or val set
-    mst_edges = set(nx.minimum_spanning_tree(g.to_undirected() if g.is_directed() else g).edges(data=False))
-    edges_to_remove = [(u,v,d) for u,v,d in edges_to_remove if ~((u, v) in mst_edges or (v, u) in mst_edges)]
+    # Avoid removing edges in the MST
+    mst_edges = set(nx.minimum_spanning_tree(nx.from_edgelist(edges_to_remove, create_using=nx.Graph())).edges(data=False))
+    edges_to_remove = [(u,v,d) for u,v,d in edges_to_remove if (u in node_list) and (v in node_list) and
+                       ~((u, v) in mst_edges or (v, u) in mst_edges)]
+    print("edges_to_remove (after MST)", len(edges_to_remove)) if verbose else None
     np.random.seed(seed)
     np.random.shuffle(edges_to_remove)
 
@@ -199,18 +169,14 @@ def mask_test_edges(network, node_list, edge_types=["u", "d"], databases=[],
     test_edges = edges_to_remove[0: test_edges_size]
     val_edges = edges_to_remove[test_edges_size: test_edges_size+val_edges_size]
 
-    train_edges = [(u,v,d) for u,v,d in g.edges(data=True) if (u in node_list) and (v in node_list)
-                   and ~((u,v,d) in test_edges or (u,v,d) in val_edges)]
-    train_edges.extend(edges_to_remove[test_edges_size+val_edges_size: ])
-    print("train_edges", len(train_edges)) if verbose else None
 
-    return train_edges, test_edges, val_edges
+    return test_edges, val_edges
 
 
 
 
 @DeprecationWarning
-def mask_test_edges(adj, is_directed=True, test_frac=.1, val_frac=.05,
+def mask_test_edges_old(adj, is_directed=True, test_frac=.1, val_frac=.05,
                     prevent_disconnect=True, only_largest_wcc=False, seed=0, verbose=False):
     """
     Perform train-test split of the adjacency matrix and return the train-set and test-set edgelist (indices
