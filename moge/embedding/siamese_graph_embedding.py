@@ -7,15 +7,15 @@ from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
 from keras.models import load_model
-from keras.optimizers import RMSprop, Adam
+from keras.optimizers import RMSprop
 from keras.utils import multi_gpu_model
 from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
+from moge.evaluation.link_prediction import largest_indices
 from moge.evaluation.metrics import accuracy, precision, recall, auc_roc
 from moge.network.data_generator import DataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
-from moge.evaluation.link_prediction import largest_indices
 
 
 def contrastive_loss(y_true, y_pred):
@@ -37,7 +37,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         self._d = d
         self.input_shape = input_shape
         self.batch_size = batch_size
-        # self.lr = lr
+        self.lr = lr
         self.epochs = epochs
         self.negative_sampling_ratio = negative_sampling_ratio
         self.max_length = max_length
@@ -162,7 +162,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         my_callbacks = [EarlyStopping(monitor='auc_roc', patience=300, verbose=1, mode='max')]
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,
-                                 optimizer=Adam(),
+                                 optimizer=RMSprop(lr=self.lr),
                                  metrics=[accuracy, precision, recall, auc_roc])
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
