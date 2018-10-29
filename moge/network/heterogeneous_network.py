@@ -18,6 +18,7 @@ class HeterogeneousNetwork():
         self.G = nx.DiGraph()
 
         self.preprocess_graph()
+        self.process_genes_info()
 
     def preprocess_graph(self):
         self.nodes = {}
@@ -27,6 +28,7 @@ class HeterogeneousNetwork():
         for modality in self.modalities:
             self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
+            self.nodes[modality] = [node for node in self.nodes[modality]]
 
             for gene in self.multi_omics_data[modality].get_genes_list():
                 self.node_to_modality[gene] = modality
@@ -36,7 +38,27 @@ class HeterogeneousNetwork():
 
         print("Total nodes:", len(self.node_list))
 
-    def add_directed_edges_from_edgelist(self, edgelist, modalities, database_name,
+    def process_genes_info(self):
+        MIR = self.multi_omics_data.MIR.get_genes_info()
+        LNC = self.multi_omics_data.LNC.get_genes_info()
+        GE = self.multi_omics_data.GE.get_genes_info()
+
+        MIR.rename(columns={'miR family': 'Family'}, inplace=True)
+        LNC.rename(columns={'Transcript Type': 'Family'}, inplace=True) # TODO Find family data for lncRNA's
+        GE.rename(columns={'gene_family': 'Family'}, inplace=True)
+
+        self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
+        self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[0] # TODO Selects only first family annotation
+        print("Genes info columns:", self.genes_info.columns.tolist())
+
+        self.node_seq_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
+        print("Number of nodes without seq removed:", len(self.node_list) - len(self.node_seq_list))
+
+        self.node_list = [node for node in self.node_list if node in self.node_seq_list]
+        print("Total nodes (filtered):", len(self.node_list))
+
+
+    def add_directed_edges_from_edgelist(self, edgelist, modalities, database,
                                          correlation_weights=False, threshold=None):
         if not (modalities is None):
             source_genes = set([edge[0] for edge in edgelist])
@@ -52,7 +74,7 @@ class HeterogeneousNetwork():
                   "genes (target), but only matching", len(target_genes_matched), "nodes")
 
         if correlation_weights == False:
-            self.G.add_edges_from(edgelist, type="d", source=modalities[0], target=modalities[1])
+            self.G.add_edges_from(edgelist, type="d", source=modalities[0], target=modalities[1], database=database)
             print(len(edgelist), "edges added.")
         else:
             node_list = [node for node in self.node_list if
@@ -72,7 +94,7 @@ class HeterogeneousNetwork():
                 print("Filtered out", no_edges, "-", len(edgelist_weighted), "edges by correlation weight.")
 
             self.G.add_edges_from(edgelist_weighted, type="d", source=modalities[0], target=modalities[1],
-                                  database=database_name)
+                                  database=database)
             print(len(edgelist_weighted),
                   "weighted (directed interaction) edges added. Note: only added edges that are in the modalities:",
                   modalities)

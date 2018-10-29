@@ -158,6 +158,58 @@ def mask_test_edges_by_nodes(network, node_list, edge_types=["u", "d"],
     return g, val_edges, test_edges, val_nodes, test_nodes
 
 
+
+
+
+def mask_test_edges(network, node_list, edge_types=["u", "d"], databases=[],
+                             test_frac=.10, val_frac=.05,
+                             seed=0, verbose=False):
+
+    def condition(d):
+        if d["type"] in edge_types and d["database"] in databases:
+            return True
+        else:
+            return False
+
+    if verbose == True:
+        print('preprocessing...')
+
+    g = network.G
+    nodes_dict = network.nodes
+
+    # g.remove_nodes_from(list(nx.isolates(g)))
+    no_of_edges_before = g.number_of_edges()
+    print("no_of_edges_before", no_of_edges_before) if verbose else None
+
+
+    edges_to_remove = [(u,v,d) for u,v,d in g.edges(data=True) if (u in node_list) and (v in node_list) and condition(d)]
+    print("edges_to_remove", len(edges_to_remove)) if verbose else None
+
+    # Make sure to not take away MST edges to test or val set
+    mst_edges = set(nx.minimum_spanning_tree(g.to_undirected() if g.is_directed() else g).edges(data=False))
+    edges_to_remove = [(u,v,d) for u,v,d in edges_to_remove if ~((u, v) in mst_edges or (v, u) in mst_edges)]
+    np.random.seed(seed)
+    np.random.shuffle(edges_to_remove)
+
+    test_edges_size = int(len(edges_to_remove) * test_frac)
+    val_edges_size = int(len(edges_to_remove) * val_frac)
+    print("test_edges_size", test_edges_size) if verbose else None
+    print("val_edges_size", val_edges_size) if verbose else None
+
+    test_edges = edges_to_remove[0: test_edges_size]
+    val_edges = edges_to_remove[test_edges_size: test_edges_size+val_edges_size]
+
+    train_edges = [(u,v,d) for u,v,d in g.edges(data=True) if (u in node_list) and (v in node_list)
+                   and ~((u,v,d) in test_edges or (u,v,d) in val_edges)]
+    train_edges.extend(edges_to_remove[test_edges_size+val_edges_size: ])
+    print("train_edges", len(train_edges)) if verbose else None
+
+    return train_edges, test_edges, val_edges
+
+
+
+
+@DeprecationWarning
 def mask_test_edges(adj, is_directed=True, test_frac=.1, val_frac=.05,
                     prevent_disconnect=True, only_largest_wcc=False, seed=0, verbose=False):
     """

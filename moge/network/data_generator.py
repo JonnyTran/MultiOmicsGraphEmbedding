@@ -1,6 +1,5 @@
 import keras
 import numpy as np
-import pandas as pd
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from scipy.linalg import triu as dense_triu
@@ -48,31 +47,14 @@ class DataGenerator(keras.utils.Sequence):
         self.seed = seed
         np.random.seed(seed)
 
-        self.process_genes_info(network)
-        self.filter_node_list()
+        self.genes_info = network.genes_info
         self.process_sequence_tokenizer()
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
 
         self.on_epoch_end()
 
-    def process_genes_info(self, network):
-        MIR = network.multi_omics_data.MIR.get_genes_info()
-        LNC = network.multi_omics_data.LNC.get_genes_info()
-        GE = network.multi_omics_data.GE.get_genes_info()
 
-        MIR.rename(columns={'miR family': 'Family'}, inplace=True)
-        LNC.rename(columns={'Transcript Type': 'Family'}, inplace=True) # TODO Find family data for lncRNA's
-        GE.rename(columns={'gene_family': 'Family'}, inplace=True)
-
-        self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
-        self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[0]
-        print("Genes info columns:", self.genes_info.columns.tolist())
-
-
-    def filter_node_list(self):
-        self.node_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
-        print("Number of nodes without seq removed:", len(self.network.node_list) - len(self.node_list))
 
     def process_sequence_tokenizer(self):
         self.tokenizer = Tokenizer(char_level=True, lower=False)
