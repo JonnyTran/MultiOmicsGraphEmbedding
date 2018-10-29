@@ -16,7 +16,7 @@ DIRECTED_EDGE = 'd'
 
 class DataGenerator(keras.utils.Sequence):
 
-    def __init__(self, network: HeterogeneousNetwork,
+    def __init__(self, network: HeterogeneousNetwork, node_list,
                  batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False,
                  maxlen=600, padding='post', truncating='post',
                  shuffle=True, seed=0):
@@ -40,6 +40,7 @@ class DataGenerator(keras.utils.Sequence):
         self.batch_size = batch_size
         self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
+        self.node_list = node_list
         self.shuffle = shuffle
         self.padding = padding
         self.maxlen = maxlen
@@ -136,7 +137,6 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, y
 
-
     def __data_generation(self, edges_batch):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
@@ -159,7 +159,7 @@ class DataGenerator(keras.utils.Sequence):
             elif edge_type == DIRECTED_NEG_EDGE:
                 X_list.append(
                     (self.Ens_rows[id], self.Ens_cols[id], DIRECTED_EDGE_TYPE, 0))  # E_ij of negative edges should be 0
-                
+
         # assert self.batch_size == len(X_list)
         X_list = np.array(X_list, dtype="O")
 
@@ -174,14 +174,45 @@ class DataGenerator(keras.utils.Sequence):
 
     def make_dataset(self):
         # Returns the y_true labels. Only run this before running .`on_epoch_end`() since it may reindex the samples
-        y_true = []
+        X = []
+        y = []
         for i in range(self.__len__()):
-            _, y_i = self.__getitem__(i)
-            y_true.append(y_i)
+            X_i, y_i = self.get_training_edges(i)
+            X.append(X_i)
+            y.append(y_i)
 
-        y_true = np.vstack(y_true)
+        X = np.vstack(X)
+        y = np.vstack(y)
 
-        return None, y_true
+        return X, y
+
+    def get_training_edges(self, training_index):
+        # Generate indexes of the batch
+        indices = self.indexes[training_index * self.batch_size: (training_index + 1) * self.batch_size]
+
+        # Find list of IDs
+        edges_batch = [self.split_index(i) for i in indices]
+
+        X_list = []
+        y_list = []
+        for id, edge_type in edges_batch:
+            if edge_type == DIRECTED_EDGE:
+                X_list.append((self.node_list[self.Ed_rows[id]], self.node_list[self.Ed_cols[id]]))
+                y_list.append(self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]])
+            elif edge_type == UNDIRECTED_EDGE:
+                X_list.append((self.node_list[self.Eu_rows[id]], self.node_list[self.Eu_cols[id]]))
+                y_list.append(self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]])
+            elif edge_type == UNDIRECTED_NEG_EDGE:
+                X_list.append((self.node_list[self.En_rows[id]], self.node_list[self.En_cols[id]]))
+                y_list.append(0)
+            elif edge_type == DIRECTED_NEG_EDGE:
+                X_list.append((self.node_list[self.Ens_rows[id]], self.node_list[self.Ens_cols[id]]))
+                y_list.append(0)
+
+        # assert self.batch_size == len(X_list)
+        X_list = np.array(X_list, dtype="O")
+        y_list = np.array(y_list)
+        return X_list, y_list
 
     def get_sequence_data(self, node_list_ids, variable_length=False, minlen=None):
         """

@@ -142,7 +142,8 @@ def mask_test_edges_by_nodes(network, node_list, edge_types=["u", "d"],
     return g, test_edges, val_edges, test_nodes, val_nodes
 
 
-def mask_test_edges(network, node_list, edge_types=["u", "d"], databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
+def mask_test_edges(network, node_list, edge_types=["u", "d"],
+                    databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                              test_frac=.10, val_frac=.05,
                              seed=0, verbose=False):
     if verbose == True:
@@ -151,14 +152,15 @@ def mask_test_edges(network, node_list, edge_types=["u", "d"], databases=["miRTa
     g = network.G
 
     edges_to_remove = [(u, v, d) for u, v, d in g.edges(data=True) if d["type"] in edge_types and d["database"] in databases]
+    edges_to_remove = [(u, v, d) for u, v, d in edges_to_remove if (u in node_list) and (v in node_list)]
     print("edges_to_remove", len(edges_to_remove)) if verbose else None
 
     # Avoid removing edges in the MST
-    mst_edges = nx.minimum_spanning_tree(nx.from_edgelist([(u, v) for u, v, d in edges_to_remove],
-                                                          create_using=nx.Graph())).edges(data=False)
-    edges_to_remove = [(u,v,d) for u,v,d in edges_to_remove if (u in node_list) and (v in node_list) and
-                       ~((u, v) in mst_edges or (v, u) in mst_edges)]
+    temp_graph = nx.from_edgelist(edges_to_remove, create_using=nx.Graph())
+    mst_edges = nx.minimum_spanning_tree(temp_graph).edges(data=False)
+    edges_to_remove = [(u,v,d) for u,v,d in edges_to_remove if ~((u, v) in mst_edges or (v, u) in mst_edges)]
     print("edges_to_remove (after MST)", len(edges_to_remove)) if verbose else None
+
     np.random.seed(seed)
     np.random.shuffle(edges_to_remove)
 

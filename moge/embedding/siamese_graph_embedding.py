@@ -108,14 +108,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
 
-        self.generator_train = DataGenerator(network=network,
+        self.generator_train = DataGenerator(network=network, node_list=network.node_list,
                                              maxlen=self.max_length, padding='post', truncating=self.truncating,
                                              negative_sampling_ratio=self.negative_sampling_ratio,
                                              batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
         self.node_list = self.generator_train.node_list
 
         if network_val:
-            self.generator_val = DataGenerator(network=network_val,
+            self.generator_val = DataGenerator(network=network_val, node_list=network_val.node_list,
                                                maxlen=self.max_length, padding='post', truncating=self.truncating,
                                                negative_sampling_ratio=2.0,
                                                batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)

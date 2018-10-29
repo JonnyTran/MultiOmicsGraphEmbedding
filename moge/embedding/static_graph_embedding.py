@@ -1,5 +1,7 @@
 from abc import ABCMeta
+
 import numpy as np
+
 
 class StaticGraphEmbedding:
     __metaclass__ = ABCMeta
@@ -182,3 +184,6 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
     def softmax(self, X):
         exps = np.exp(X)
         return exps/np.sum(exps, axis=0)
+
+    def predict(self, X):
+        pass
