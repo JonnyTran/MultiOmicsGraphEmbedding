@@ -154,8 +154,8 @@ def mask_test_edges(network, node_list, edge_types=["u", "d"], databases=["miRTa
     print("edges_to_remove", len(edges_to_remove)) if verbose else None
 
     # Avoid removing edges in the MST
-    mst_edges = set(nx.minimum_spanning_tree(nx.from_edgelist([(u, v) for u, v, d in edges_to_remove],
-                                                              create_using=nx.Graph())).edges(data=False))
+    mst_edges = nx.minimum_spanning_tree(nx.from_edgelist([(u, v) for u, v, d in edges_to_remove],
+                                                          create_using=nx.Graph())).edges(data=False)
     edges_to_remove = [(u,v,d) for u,v,d in edges_to_remove if (u in node_list) and (v in node_list) and
                        ~((u, v) in mst_edges or (v, u) in mst_edges)]
     print("edges_to_remove (after MST)", len(edges_to_remove)) if verbose else None
