@@ -116,7 +116,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         Return:
             A numpy array of size #nodes * d
         '''
-        pass
+        return self._X
 
     def get_edge_weight(self, i, j):
         '''Compute the weight for edge between node i and node j
@@ -134,6 +134,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         with open(file, "r") as fin:
             node_num, size = [int(x) for x in fin.readline().strip().split()]
             vectors = {}
+            self.node_list = []
+
+            # Read embedding file
             while 1:
                 l = fin.readline()
                 if l == '':
@@ -150,8 +153,10 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
                 self.embedding_t = []
 
                 for node in node_list:
-                    self.embedding_s.append(vectors[node][0 : int(self._d/2)])
-                    self.embedding_t.append(vectors[node][int(self._d/2) : int(self._d)])
+                    if node in vectors.keys():
+                        self.embedding_s.append(vectors[node][0 : int(self._d/2)])
+                        self.embedding_t.append(vectors[node][int(self._d/2) : int(self._d)])
+                        self.node_list.append(node)
 
                 self.embedding_s = np.array(self.embedding_s)
                 self.embedding_t = np.array(self.embedding_t)
@@ -163,14 +168,13 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
                 for node in node_list:
                     if node in vectors.keys():
                         self._X.append(vectors[node])
+                        self.node_list.append(node)
                 self._X = np.array(self._X)
-
-            self.node_list = vectors.keys()
 
         return self._X
 
 
-    def get_reconstructed_adj(self, edge_type=None, node_list=None):
+    def get_reconstructed_adj(self, edge_type=None, node_l=None):
         '''Compute the adjacency matrix from the learned embedding
 
         Returns:
@@ -186,4 +190,15 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         return exps/np.sum(exps, axis=0)
 
     def predict(self, X):
-        pass
+        reconstructed_adj = self.get_reconstructed_adj()
+
+        y_pred = []
+        for u, v in X:
+            if u in self.node_list and v in self.node_list:
+                y_pred.append(reconstructed_adj[self.node_list.index(u), self.node_list.index(v)])
+            else:
+                y_pred.append(0.0)
+
+        y_pred = np.array(y_pred, dtype=np.float).reshape((-1, 1))
+        return y_pred
+

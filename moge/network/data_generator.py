@@ -14,9 +14,11 @@ UNDIRECTED_NEG_EDGE = 'u_n'
 UNDIRECTED_EDGE = 'u'
 DIRECTED_EDGE = 'd'
 
+
+
 class DataGenerator(keras.utils.Sequence):
 
-    def __init__(self, network: HeterogeneousNetwork, node_list,
+    def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False,
                  maxlen=600, padding='post', truncating='post',
                  shuffle=True, seed=0):
@@ -40,7 +42,7 @@ class DataGenerator(keras.utils.Sequence):
         self.batch_size = batch_size
         self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
-        self.node_list = node_list
+        self.node_list = network.node_list
         self.shuffle = shuffle
         self.padding = padding
         self.maxlen = maxlen
@@ -50,6 +52,7 @@ class DataGenerator(keras.utils.Sequence):
 
         self.genes_info = network.genes_info
         self.process_sequence_tokenizer()
+
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
 
@@ -211,7 +214,7 @@ class DataGenerator(keras.utils.Sequence):
 
         # assert self.batch_size == len(X_list)
         X_list = np.array(X_list, dtype="O")
-        y_list = np.array(y_list)
+        y_list = np.array(y_list).reshape((-1, 1))
         return X_list, y_list
 
     def get_sequence_data(self, node_list_ids, variable_length=False, minlen=None):
@@ -261,6 +264,90 @@ class DataGenerator(keras.utils.Sequence):
         exp_pad_seqs = np.expand_dims(padded_seqs, axis=-1)
 
         return np.array([self.tokenizer.sequences_to_matrix(s) for s in exp_pad_seqs])
+
+
+
+
+class SampledDataGenerator(DataGenerator):
+    def __init__(self, network: HeterogeneousNetwork,
+                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False, compression_func="sqrt",
+                 maxlen=600, padding='post', truncating='post',
+                 shuffle=True, seed=0):
+        self.process_sampling_table(network)
+        self.compression_func = compression_func
+        super().__init__(network,
+                 batch_size, dim, negative_sampling_ratio, subsample,
+                 maxlen, padding, truncating,
+                 shuffle, seed)
+
+    def process_sampling_table(self, network):
+        self.node_degrees_dict = dict(network.G.degree(nbunch=network.node_list))
+        self.node_degrees = list(self.node_degrees_dict.values()) # Ordered node degrees
+
+        if self.compression_func == "sqrt":
+            compression = np.sqrt
+        elif self.compression_func == "sqrt3":
+            compression = lambda x: x**(1/3)
+        else:
+            compression = lambda x: x
+
+        denominator = sum(compression(np.array(self.node_degrees)))
+
+        self.node_sampling_freq = compression(np.array(self.node_degrees))/denominator
+
+        self.edge_dict = {}
+        for node in network.node_list:
+            self.edge_dict[node] = list(network.G.edges(nbunch=[node], data=True))
+
+
+    def __len__(self):
+        return int(np.floor((self.Ed_count + self.Eu_count + self.En_count + self.Ens_count) / self.batch_size))
+
+    def __getitem__(self, item):
+        sampling_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
+                                          p=self.node_sampling_freq)
+        sampled_edges = []
+        for node in sampling_nodes:
+            edge_sampling_index = np.random.choice(range(self.node_degrees_dict[node]), size=1, replace=False)
+            sampled_edges.append(self.edge_dict[node][edge_sampling_index])
+
+    def __data_generation(self, sampled_edges):
+        'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
+        X_list = []
+        for u,v,d in sampled_edges:
+            u_ind = self.node_list.index(u)
+            v_ind = self.node_list.index(v)
+            if d["type"] == DIRECTED_EDGE:
+                X_list.append((u_ind, v_ind, DIRECTED_EDGE_TYPE,
+                               self.adj_directed[u_ind, v_ind]))
+            elif d["type"] == UNDIRECTED_EDGE:
+                X_list.append(
+                    (u_ind, v_ind, UNDIRECTED_EDGE_TYPE,
+                     self.adj_undirected[u_ind, v_ind]))
+            elif d["type"] == UNDIRECTED_NEG_EDGE:
+                X_list.append(
+                    (u_ind, v_ind, UNDIRECTED_EDGE_TYPE, 0))
+            elif d["type"] == DIRECTED_NEG_EDGE:
+                X_list.append(
+                    (u_ind, v_ind, DIRECTED_EDGE_TYPE, 0))
+
+        # assert self.batch_size == len(X_list)
+        X_list = np.array(X_list, dtype="O")
+
+        X = {}
+        X["input_seq_j"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
+        X["input_seq_i"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
+        X["is_directed"] = np.expand_dims(X_list[:,2], axis=-1)
+
+        y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
+
+        return X, y
+
+
+    def on_epoch_end(self):
+        pass
+
+
 
 
 
