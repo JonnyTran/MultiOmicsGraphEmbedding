@@ -45,9 +45,9 @@ def compute_annotation_affinities(genes_info, node_list, modality, correlation_d
         if modality == "GE":
             features = ["locus_type", "gene_family_id", "location", "Transcript length", "Transcript sequence"]
         elif modality == "MIR":
-            features = ["miR family", "location", "Mature sequence"]
+            features = ["Family", "location", "Mature sequence"]
         elif modality == "LNC":
-            features = ["Transcript Type", "Location", "Transcript length", "Transcript sequence"]
+            features = ["Transcript Type", "Location", "Strand", "Transcript length", "Transcript sequence"]
 
     gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=None, correlation_dist=correlation_dist,
                                  multiprocessing=multiprocessing)  # Returns a condensed distance matrix
@@ -85,7 +85,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
             print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
-        elif column == "miR family":
+        elif column == "miR family" or column == "Family":
             print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies("/"), 'dice')
 
@@ -95,7 +95,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
 
         elif column in ["Mature sequence", "Transcript sequence"]:
             print("Global alignment seq score")
-            feature_dist = scipy_pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
+            feature_dist = pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
         elif column == "Location": # LNC Locations
@@ -141,7 +141,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
         individual_variable_distances.append(correlation_dist)
 
     if agg_func is None:
-        agg_func = lambda x: np.nanmean(x, axis=0)
+        agg_func = lambda x: np.mean(x, axis=0, dtype=np.float64)
 
     pdists_mean_reduced = agg_func(np.array(individual_variable_distances))
 

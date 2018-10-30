@@ -273,15 +273,18 @@ class SampledDataGenerator(DataGenerator):
                  batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False, compression_func="sqrt",
                  maxlen=600, padding='post', truncating='post',
                  shuffle=True, seed=0):
-        self.process_sampling_table(network)
         self.compression_func = compression_func
+
+        self.process_sampling_table(network)
         super().__init__(network,
                  batch_size, dim, negative_sampling_ratio, subsample,
                  maxlen, padding, truncating,
                  shuffle, seed)
 
     def process_sampling_table(self, network):
-        self.node_degrees_dict = dict(network.G.degree(nbunch=network.node_list))
+        graph = network.G.subgraph(nodes=network.node_list)
+
+        self.node_degrees_dict = dict(graph.degree(nbunch=network.node_list))
         self.node_degrees = list(self.node_degrees_dict.values()) # Ordered node degrees
 
         if self.compression_func == "sqrt":
@@ -297,19 +300,26 @@ class SampledDataGenerator(DataGenerator):
 
         self.edge_dict = {}
         for node in network.node_list:
-            self.edge_dict[node] = list(network.G.edges(nbunch=[node], data=True))
+            self.edge_dict[node] = list(graph.edges(nbunch=[node], data=True))
 
 
     def __len__(self):
         return int(np.floor((self.Ed_count + self.Eu_count + self.En_count + self.Ens_count) / self.batch_size))
 
     def __getitem__(self, item):
-        sampling_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
+        sampling_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=True,
                                           p=self.node_sampling_freq)
         sampled_edges = []
         for node in sampling_nodes:
-            edge_sampling_index = np.random.choice(range(self.node_degrees_dict[node]), size=1, replace=False)
+            num_edges_for_node = len(self.edge_dict[node])
+            if num_edges_for_node < 1:
+                continue
+            edge_sampling_index = np.random.choice(range(num_edges_for_node), size=1, replace=False)[0]
             sampled_edges.append(self.edge_dict[node][edge_sampling_index])
+
+        X, y = self.__data_generation(sampled_edges)
+
+        return X, y
 
     def __data_generation(self, sampled_edges):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
