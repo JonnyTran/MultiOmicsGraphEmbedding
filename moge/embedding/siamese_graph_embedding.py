@@ -195,8 +195,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         return adj
 
-    def save_embeddings(self, filepath):
-        embs = self.get_embedding()
+    def save_embeddings(self, filepath, variable_length=True):
+        embs = self.get_embedding(variable_length=variable_length, recompute=True)
         assert len(self.node_list) == embs.shape[0]
         fout = open(filepath, 'w')
         fout.write("{} {}\n".format(len(self.node_list), self._d))

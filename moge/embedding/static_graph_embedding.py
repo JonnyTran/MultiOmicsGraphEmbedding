@@ -184,6 +184,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         if self._method_name == "LINE":
 
             return np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
+
         elif self._method_name == "node2vec":
             return self.softmax(np.dot(self._X, self._X.T))
 
@@ -200,13 +201,20 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
     def predict(self, X):
         reconstructed_adj = self.get_reconstructed_adj()
+        node_set = set(self.node_list)
 
-        y_pred = []
-        for u, v in X:
-            if u in self.node_list and v in self.node_list:
-                y_pred.append(reconstructed_adj[self.node_list.index(u), self.node_list.index(v)])
-            else:
-                y_pred.append(0.0)
+        X_u_inx = [u for u, v in X if u in node_set and v in node_set]
+        X_v_inx = [v for u, v in X if u in node_set and v in node_set]
+
+        if len(X_u_inx) == len(self.node_list) and len(X_v_inx) == len(self.node_list):
+            y_pred = reconstructed_adj[X_u_inx, X_v_inx]
+        else:
+            y_pred = []
+            for u, v in X:
+                if u in node_set and v in node_set:
+                    y_pred.append(reconstructed_adj[self.node_list.index(u), self.node_list.index(v)])
+                else:
+                    y_pred.append(0.0)
 
         y_pred = np.array(y_pred, dtype=np.float).reshape((-1, 1))
         return y_pred
