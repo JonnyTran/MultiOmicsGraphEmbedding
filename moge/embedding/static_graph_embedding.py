@@ -1,6 +1,7 @@
 from abc import ABCMeta
 
 import numpy as np
+from sklearn.metrics import pairwise_distances
 
 
 class StaticGraphEmbedding:
@@ -181,9 +182,17 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             A numpy array of size #nodes * #nodes containing the reconstructed adjacency matrix.
         '''
         if self._method_name == "LINE":
-            return np.divide(1, 1 + np.power(np.e, -np.matmul(self._X, self._X.T)))
+
+            return np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
         elif self._method_name == "node2vec":
             return self.softmax(np.dot(self._X, self._X.T))
+
+        elif self._method_name == "source_target_graph_embedding":
+            adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
+                                     Y=self._X[:, int(self._d / 2):self._d],
+                                     metric="euclidean", n_jobs=8)
+            adj = np.exp(-2.0 * adj)
+            return adj
 
     def softmax(self, X):
         exps = np.exp(X)

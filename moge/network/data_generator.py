@@ -20,7 +20,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False,
-                 maxlen=600, padding='post', truncating='post',
+                 maxlen=700, padding='post', truncating='post',
                  shuffle=True, seed=0):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
@@ -271,7 +271,7 @@ class DataGenerator(keras.utils.Sequence):
 class SampledDataGenerator(DataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False, compression_func="sqrt",
-                 maxlen=600, padding='post', truncating='post',
+                 maxlen=700, padding='post', truncating='post',
                  shuffle=True, seed=0):
         self.compression_func = compression_func
 
