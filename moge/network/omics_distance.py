@@ -38,7 +38,7 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
         return squareform_(X_multiomics_corr_df, checks=False) # Returns condensed distance matrix
 
 
-def compute_annotation_affinities(genes_info, node_list, modality, correlation_dist=None, features=None,
+def compute_annotation_affinities(genes_info, node_list, modality, correlation_dist=None, features=None, weights=None,
                                   squareform=True,
                                   multiprocessing=True):
     if features is None:
@@ -50,6 +50,7 @@ def compute_annotation_affinities(genes_info, node_list, modality, correlation_d
             features = ["Transcript Type", "Location", "Strand", "Transcript length", "Transcript sequence"]
 
     gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=None, correlation_dist=correlation_dist,
+                                 weights=weights,
                                  multiprocessing=multiprocessing)  # Returns a condensed distance matrix
 
     if squareform:
@@ -59,7 +60,7 @@ def compute_annotation_affinities(genes_info, node_list, modality, correlation_d
     # return np.exp(-beta * gower_dists)
 
 
-def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True, n_jobs=-2):
+def gower_distance(X, agg_func=None, correlation_dist=None, weights=None, multiprocessing=True, n_jobs=-2):
     """
     This function expects a pandas dataframe as input
     The data frame is to contain the features along the columns. Based on these features a
@@ -89,9 +90,13 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
             print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies("/"), 'dice')
 
-        elif column == "GO terms":
+        elif column == "GO terms" or column == "Rfams":
             print("Dice distance")
-            feature_dist = pdist(feature.str.get_dummies(","), 'dice')
+            feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
+
+        elif column == "Disease association":
+            print("Dice distance")
+            feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
         elif column in ["Mature sequence", "Transcript sequence"]:
             print("Global alignment seq score")
@@ -141,7 +146,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
         individual_variable_distances.append(correlation_dist)
 
     if agg_func is None:
-        agg_func = lambda x: np.mean(x, axis=0, dtype=np.float64)
+        agg_func = lambda x: np.nanmean(x, axis=0)
 
     pdists_mean_reduced = agg_func(np.array(individual_variable_distances))
 

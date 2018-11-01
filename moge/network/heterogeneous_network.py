@@ -16,6 +16,7 @@ class HeterogeneousNetwork():
         self.modalities = modalities
         self.multi_omics_data = multi_omics_data
         self.G = nx.DiGraph()
+        self.affinities = {}
 
         self.preprocess_graph()
         if process_genes_info:
@@ -155,7 +156,7 @@ class HeterogeneousNetwork():
         return edgelist
 
 
-    def add_edges_from_nodes_similarity(self, modality, node_list, features=None, similarity_threshold=0.7,
+    def add_edges_from_nodes_similarity(self, modality, node_list, features=None, weights=None, similarity_threshold=0.7,
                                         dissimilarity_threshold=0.1, negative_sampling_ratio=2.0,
                                         compute_correlation=True, histological_subtypes=[], pathologic_stages=[],
                                         epsilon=1e-16):
@@ -185,8 +186,10 @@ network if the similarity measures passes the threshold
         annotation_affinities_df = pd.DataFrame(
             data=compute_annotation_affinities(genes_info, node_list=node_list, modality=modality,
                                                correlation_dist=correlation_dist,
-                                               features=features, squareform=True),
+                                               features=features, weights=weights, squareform=True),
             index=node_list)
+
+        self.affinities[modality] = annotation_affinities_df
 
         # Selects positive edges with high affinity in the affinity matrix
         similarity_filtered = np.triu(annotation_affinities_df >= similarity_threshold, k=1) # A True/False matrix
@@ -209,8 +212,6 @@ network if the similarity measures passes the threshold
         self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
-
-        return annotation_affinities_df
 
 
     def add_sampled_negative_edges(self, n_edges, modalities=[]):

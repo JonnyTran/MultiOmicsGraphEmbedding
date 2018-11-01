@@ -182,18 +182,19 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             A numpy array of size #nodes * #nodes containing the reconstructed adjacency matrix.
         '''
         if self._method_name == "LINE":
-
             return np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
 
         elif self._method_name == "node2vec":
             return self.softmax(np.dot(self._X, self._X.T))
 
         elif self._method_name == "source_target_graph_embedding":
-            adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
-                                     Y=self._X[:, int(self._d / 2):self._d],
+            adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)], Y=self._X[:, int(self._d / 2):self._d],
                                      metric="euclidean", n_jobs=8)
             adj = np.exp(-2.0 * adj)
             return adj
+
+        elif self._method_name == "HOPE":
+            return np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
 
     def softmax(self, X):
         exps = np.exp(X)
@@ -206,7 +207,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         X_u_inx = [u for u, v in X if u in node_set and v in node_set]
         X_v_inx = [v for u, v in X if u in node_set and v in node_set]
 
-        if len(X_u_inx) == len(self.node_list) and len(X_v_inx) == len(self.node_list):
+        if len(X_u_inx) == X.shape[0] and len(X_v_inx) == X.shape[0]:
             y_pred = reconstructed_adj[X_u_inx, X_v_inx]
         else:
             y_pred = []
