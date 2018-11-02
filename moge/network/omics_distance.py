@@ -38,18 +38,23 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
         return squareform_(X_multiomics_corr_df, checks=False) # Returns condensed distance matrix
 
 
-def compute_annotation_affinities(genes_info, node_list, modality, correlation_dist=None, features=None, weights=None,
-                                  squareform=True,
+def compute_annotation_affinities(genes_info, node_list, modality=None, correlation_dist=None, features=None, weights=None,
+                                  squareform=True, nanmean=True,
                                   multiprocessing=True):
     if features is None:
         if modality == "GE":
-            features = ["locus_type", "gene_family_id", "location", "Transcript length", "Transcript sequence"]
+            features = ["locus_type", "gene_family_id", "location", "Disease association", "Transcript sequence"]
         elif modality == "MIR":
-            features = ["Family", "location", "Mature sequence"]
+            features = ["Family", "location", "GO Terms", "Rfams", "Disease association", "Transcript sequence"]
         elif modality == "LNC":
-            features = ["Transcript Type", "Location", "Strand", "Transcript length", "Transcript sequence"]
+            features = ["Transcript type", "Strand", "tag", "GO Terms", "Rfams", "Disease association", "Transcript sequence"]
 
-    gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=None, correlation_dist=correlation_dist,
+    if nanmean:
+        agg_func = lambda x: np.nanmean(x, axis=0)
+    else:
+        agg_func = lambda x: np.average(x, axis=0, weights=weights)
+
+    gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=agg_func, correlation_dist=correlation_dist,
                                  weights=weights,
                                  multiprocessing=multiprocessing)  # Returns a condensed distance matrix
 
@@ -71,7 +76,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, weights=None, multip
     Nominal variables: Dice distance (https://en.wikipedia.org/wiki/S%C3%B8rensen%E2%80%93Dice_coefficient)
     Numeric variables: Manhattan distance normalized by the range of the variable (https://en.wikipedia.org/wiki/Taxicab_geometry)
     """
-    individual_variable_distances = []
+    individual_variable_dists = []
 
     if multiprocessing:
         pdist = lambda X, metric: squareform_(pairwise_distances(X=X, metric=metric, n_jobs=n_jobs), checks=False)
@@ -82,7 +87,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, weights=None, multip
         feature = X.loc[:, column]
         print("Gower's dissimilarity: Computing", column, ", dtype:", feature.dtypes, ", shape:", feature.shape)
 
-        if column in ["gene_family_id", "gene_family", "locus_type"]:
+        if column in ["gene_family_id", "gene_family", "locus_type", "Transcript type", "tag"]:
             print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
@@ -100,6 +105,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, weights=None, multip
 
         elif column in ["Mature sequence", "Transcript sequence"]:
             print("Global alignment seq score")
+            # TODO If doesn't work, modify _pairwise_callable Line 1083  # X, Y = check_pairwise_arrays(X, Y)
             feature_dist = pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
@@ -139,16 +145,16 @@ def gower_distance(X, agg_func=None, correlation_dist=None, weights=None, multip
         else:
             raise Exception("Invalid column dtype")
 
-        individual_variable_distances.append(feature_dist)
+        individual_variable_dists.append(feature_dist)
 
     if correlation_dist is not None:
         print("Correlation distance", correlation_dist.shape)
-        individual_variable_distances.append(correlation_dist)
+        individual_variable_dists.append(correlation_dist)
 
     if agg_func is None:
         agg_func = lambda x: np.nanmean(x, axis=0)
 
-    pdists_mean_reduced = agg_func(np.array(individual_variable_distances))
+    pdists_mean_reduced = agg_func(np.array(individual_variable_dists))
 
     return pdists_mean_reduced
 
@@ -164,7 +170,7 @@ def hierarchical_distance_aggregate_score(X):
 
 def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=600):
     if (type(u[0]) is str and type(v[0]) is str):
-        if truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
+        if ~truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
             return np.nan
         return pairwise2.align.globalxx(u[0], v[0], score_only=True) / min(len(u[0]), len(v[0]))
     else:

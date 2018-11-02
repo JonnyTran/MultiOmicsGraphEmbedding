@@ -2,14 +2,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.sparse import coo_matrix
 
-import seaborn
 
-
-def matrix_heatmap(matrix, figsize=(15, 15), cmap='gray', **kwargs):
+def matrix_heatmap(matrix, figsize=(12,12), cmap='gray', **kwargs):
     # Scatter plot of the graph adjacency matrix
 
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111)
+
+    if np.isnan(matrix).any():
+        matrix = np.nan_to_num(matrix)
+
     cax = ax.matshow(matrix, interpolation='nearest', cmap=cmap, **kwargs)
     fig.colorbar(cax)
 

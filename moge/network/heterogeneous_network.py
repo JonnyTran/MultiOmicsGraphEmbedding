@@ -46,7 +46,7 @@ class HeterogeneousNetwork():
         GE = self.multi_omics_data.GE.get_genes_info()
 
         MIR.rename(columns={'miR family': 'Family'}, inplace=True)
-        LNC.rename(columns={'Transcript Type': 'Family'}, inplace=True) # TODO Find family data for lncRNA's
+        LNC.rename(columns={'Transcript type': 'Family'}, inplace=True) # TODO Find family data for lncRNA's
         GE.rename(columns={'gene_family': 'Family'}, inplace=True)
 
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
@@ -156,10 +156,12 @@ class HeterogeneousNetwork():
         return edgelist
 
 
-    def add_edges_from_nodes_similarity(self, modality, node_list, features=None, weights=None, similarity_threshold=0.7,
-                                        dissimilarity_threshold=0.1, negative_sampling_ratio=2.0,
+    def add_edges_from_nodes_similarity(self, modality, node_list, features=None, weights=None,
+                                        nanmean=True,
+                                        similarity_threshold=0.7, dissimilarity_threshold=0.1,
+                                        negative_sampling_ratio=2.0, max_positive_edges=None,
                                         compute_correlation=True, histological_subtypes=[], pathologic_stages=[],
-                                        epsilon=1e-16):
+                                        epsilon=1e-16, tag="affinity"):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the
 network if the similarity measures passes the threshold
@@ -185,7 +187,7 @@ network if the similarity measures passes the threshold
 
         annotation_affinities_df = pd.DataFrame(
             data=compute_annotation_affinities(genes_info, node_list=node_list, modality=modality,
-                                               correlation_dist=correlation_dist,
+                                               correlation_dist=correlation_dist, nanmean=nanmean,
                                                features=features, weights=weights, squareform=True),
             index=node_list)
 
@@ -195,8 +197,18 @@ network if the similarity measures passes the threshold
         similarity_filtered = np.triu(annotation_affinities_df >= similarity_threshold, k=1) # A True/False matrix
         sim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y]) for x, y in
                                zip(*np.nonzero(similarity_filtered))]
-        self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u")
+        # Sample
+        if max_positive_edges is not None:
+            sample_indices = np.random.choice(a=range(len(sim_edgelist_ebunch)),
+                                              size=min(max_positive_edges, len(sim_edgelist_ebunch)), replace=False)
+            self.G.add_weighted_edges_from(sim_edgelist_ebunch[sample_indices], type="u", tag=tag)
+        else:
+            self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
+
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
+
+
+
 
         # Select negative edges at affinity close to zero in the affinity matrix
         max_negative_edges = int(negative_sampling_ratio * len(sim_edgelist_ebunch))
@@ -204,12 +216,13 @@ network if the similarity measures passes the threshold
 
         dissimilarity_index_rows, dissimilarity_index_cols = np.nonzero(dissimilarity_filtered)
         sample_indices = np.random.choice(a=dissimilarity_index_rows.shape[0],
-                                          size=min(max_negative_edges, dissimilarity_index_rows.shape[0]))
+                                          size=min(max_negative_edges, dissimilarity_index_rows.shape[0]),
+                                          replace=False)
         # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
         dissim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y] + epsilon) for i, (x, y) in
                                   enumerate(zip(dissimilarity_index_rows[sample_indices],
                                                 dissimilarity_index_cols[sample_indices])) if i < max_negative_edges]
-        self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n")
+        self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n", tag=tag)
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
 
