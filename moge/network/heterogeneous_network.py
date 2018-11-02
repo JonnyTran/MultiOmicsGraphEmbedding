@@ -201,7 +201,8 @@ network if the similarity measures passes the threshold
         if max_positive_edges is not None:
             sample_indices = np.random.choice(a=range(len(sim_edgelist_ebunch)),
                                               size=min(max_positive_edges, len(sim_edgelist_ebunch)), replace=False)
-            self.G.add_weighted_edges_from(np.array(sim_edgelist_ebunch)[sample_indices], type="u", tag=tag)
+            sim_edgelist_ebunch = [(u, v, d) for i, (u, v, d) in enumerate(sim_edgelist_ebunch) if i in sample_indices]
+            self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
         else:
             self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
 
