@@ -291,7 +291,7 @@ class SampledDataGenerator(DataGenerator):
                          maxlen, padding, truncating,
                          shuffle, seed)
 
-
+        # TODO add negative directed sampling edges
 
     def process_sampling_table(self, network):
         node_list = network.node_list

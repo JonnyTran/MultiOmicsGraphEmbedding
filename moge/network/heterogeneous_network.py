@@ -54,6 +54,7 @@ class HeterogeneousNetwork():
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
         self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[0] # TODO Selects only first family annotation
         print("Genes info columns:", self.genes_info.columns.tolist())
+        self.genes_info = self.genes_info[~self.genes_info.index.duplicated()]
 
         self.node_seq_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
         print("Number of nodes without seq removed:", len(self.node_list) - len(self.node_seq_list))
