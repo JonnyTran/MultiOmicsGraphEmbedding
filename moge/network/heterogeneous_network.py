@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import networkx as nx
 import scipy.sparse as sp
 
@@ -58,6 +60,8 @@ class HeterogeneousNetwork():
 
         self.node_list = [node for node in self.node_list if node in self.node_seq_list]
         print("Total nodes (filtered):", len(self.node_list))
+
+        self.node_list = list(OrderedDict.fromkeys(self.node_list))
 
 
     def add_directed_edges_from_edgelist(self, edgelist, modalities, database,
@@ -190,8 +194,6 @@ network if the similarity measures passes the threshold
                                                correlation_dist=correlation_dist, nanmean=nanmean,
                                                features=features, weights=weights, squareform=True),
             index=node_list)
-
-        self.affinities[modality] = annotation_affinities_df
 
         # Selects positive edges with high affinity in the affinity matrix
         similarity_filtered = np.triu(annotation_affinities_df >= similarity_threshold, k=1) # A True/False matrix

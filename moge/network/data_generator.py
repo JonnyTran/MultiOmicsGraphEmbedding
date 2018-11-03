@@ -1,3 +1,6 @@
+import random
+from collections import OrderedDict
+
 import keras
 import numpy as np
 from keras.preprocessing.sequence import pad_sequences
@@ -43,6 +46,7 @@ class DataGenerator(keras.utils.Sequence):
         self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
         self.node_list = network.node_list
+        self.node_list = list(OrderedDict.fromkeys(self.node_list))
         self.shuffle = shuffle
         self.padding = padding
         self.maxlen = maxlen
@@ -57,8 +61,6 @@ class DataGenerator(keras.utils.Sequence):
         self.process_negative_sampling_edges()
 
         self.on_epoch_end()
-
-
 
     def process_sequence_tokenizer(self):
         self.tokenizer = Tokenizer(char_level=True, lower=False)
@@ -228,15 +230,18 @@ class DataGenerator(keras.utils.Sequence):
         node_list = [self.node_list[i] for i in node_list_ids]
 
         if variable_length == False:
-            padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
+            padded_encoded_sequences = self.encode_texts(self.sample_sequences(self.genes_info.loc[node_list, "Transcript sequence"]),
                                                          maxlen=self.maxlen)
         else:
             padded_encoded_sequences = [
-                self.encode_texts([self.genes_info.loc[node, "Transcript sequence"]], minlen=minlen)
+                self.encode_texts([self.sample_sequences(self.genes_info.loc[node, "Transcript sequence"])], minlen=minlen)
                 for node in
                 node_list]
 
         return padded_encoded_sequences
+
+    def sample_sequences(self, sequences):
+        return sequences.map(lambda x: random.choice(x) if type(x) is list else x)
 
     def encode_texts(self, texts, maxlen=None, minlen=None):
         """
@@ -277,69 +282,86 @@ class SampledDataGenerator(DataGenerator):
 
         self.process_sampling_table(network)
         super().__init__(network,
-                 batch_size, dim, negative_sampling_ratio, subsample,
-                 maxlen, padding, truncating,
-                 shuffle, seed)
+                         batch_size, dim, negative_sampling_ratio, subsample,
+                         maxlen, padding, truncating,
+                         shuffle, seed)
 
     def process_sampling_table(self, network):
-        graph = network.G.subgraph(nodes=network.node_list)
+        node_list = network.node_list
+        node_list = list(OrderedDict.fromkeys(node_list))
 
-        self.node_degrees_dict = dict(graph.degree(nbunch=network.node_list))
-        self.node_degrees = list(self.node_degrees_dict.values()) # Ordered node degrees
+        graph = network.G.subgraph(nodes=node_list)
 
+        self.edge_dict = {}
+        self.edge_dict_degree = {}
+        self.node_degrees_dict = {}
+        for node in network.node_list:
+            self.edge_dict[node] = {}
+            self.edge_dict_degree[node] = {}
+
+            edgelist_bunch = graph.edges(node, data=True)
+            self.node_degrees_dict[node] = len(edgelist_bunch)
+
+            for u,v,d in edgelist_bunch:
+                if d["type"] in self.edge_dict[node]:
+                    self.edge_dict[node][d["type"]].append((u, v, d["type"]))
+                else:
+                    self.edge_dict[node][d["type"]] = [(u,v, d["type"])]
+
+            for edge_type in self.edge_dict[node].keys():
+                self.edge_dict_degree[node][edge_type] = len(self.edge_dict[node][edge_type])
+
+        self.node_degrees_list = [self.node_degrees_dict[node] for node in node_list]
+        self.node_sampling_freq = self.compute_node_sampling_feq(self.node_degrees_list)
+
+
+    def compute_node_sampling_feq(self, node_degrees):
         if self.compression_func == "sqrt":
             compression = np.sqrt
         elif self.compression_func == "sqrt3":
-            compression = lambda x: x**(1/3)
+            compression = lambda x: x ** (1 / 3)
+        elif self.compression_func == "log":
+            compression = lambda x: np.log(1 + x)
         else:
             compression = lambda x: x
 
-        denominator = sum(compression(np.array(self.node_degrees)))
-
-        self.node_sampling_freq = compression(np.array(self.node_degrees))/denominator
-
-        self.edge_dict = {}
-        for node in network.node_list:
-            self.edge_dict[node] = list(graph.edges(nbunch=[node], data=True))
-
+        denominator = sum(compression(np.array(node_degrees)))
+        return compression(np.array(node_degrees)) / denominator
 
     def __len__(self):
-        return int(np.floor((self.Ed_count + self.Eu_count + self.En_count + self.Ens_count) / self.batch_size))
+        return 1
 
     def __getitem__(self, item):
         sampling_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=True,
                                           p=self.node_sampling_freq)
-        sampled_edges = []
-        for node in sampling_nodes:
-            num_edges_for_node = len(self.edge_dict[node])
-            if num_edges_for_node < 1:
-                continue
-            edge_sampling_index = np.random.choice(range(num_edges_for_node), size=1, replace=False)[0]
-            sampled_edges.append(self.edge_dict[node][edge_sampling_index])
+
+        sampled_edges = [self.sample_edge_from_node(node) for node in sampling_nodes]
 
         X, y = self.__data_generation(sampled_edges)
 
         return X, y
 
+    def sample_edge_from_node(self, node):
+        edge_types = list(self.edge_dict[node].keys())
+        sample_edge_type = random.choice(edge_types)
+
+        return random.choice(self.edge_dict[node][sample_edge_type])
+
     def __data_generation(self, sampled_edges):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
-        for u,v,d in sampled_edges:
-            u_ind = self.node_list.index(u)
-            v_ind = self.node_list.index(v)
-            if d["type"] == DIRECTED_EDGE:
-                X_list.append((u_ind, v_ind, DIRECTED_EDGE_TYPE,
-                               self.adj_directed[u_ind, v_ind]))
-            elif d["type"] == UNDIRECTED_EDGE:
+        for u,v,type in sampled_edges:
+            if type == DIRECTED_EDGE:
+                X_list.append((u, v, DIRECTED_EDGE_TYPE, 1))
+            elif type == UNDIRECTED_EDGE:
                 X_list.append(
-                    (u_ind, v_ind, UNDIRECTED_EDGE_TYPE,
-                     self.adj_undirected[u_ind, v_ind]))
-            elif d["type"] == UNDIRECTED_NEG_EDGE:
+                    (u, v, UNDIRECTED_EDGE_TYPE, 1))
+            elif type == UNDIRECTED_NEG_EDGE:
                 X_list.append(
-                    (u_ind, v_ind, UNDIRECTED_EDGE_TYPE, 0))
-            elif d["type"] == DIRECTED_NEG_EDGE:
+                    (u, v, UNDIRECTED_EDGE_TYPE, 0))
+            elif type == DIRECTED_NEG_EDGE:
                 X_list.append(
-                    (u_ind, v_ind, DIRECTED_EDGE_TYPE, 0))
+                    (u, v, DIRECTED_EDGE_TYPE, 0))
 
         # assert self.batch_size == len(X_list)
         X_list = np.array(X_list, dtype="O")
@@ -353,10 +375,31 @@ class SampledDataGenerator(DataGenerator):
 
         return X, y
 
+    def get_sequence_data(self, node_list_ids, variable_length=False, minlen=None):
+        """
+        Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
+        (indexing from self.node_list)
+        :param variable_length: returns a list of sequences with different timestep length
+        :param minlen: pad all sequences with length lower than this minlen
+        """
+        print(len(node_list_ids))
+        if variable_length == False:
+            padded_encoded_sequences = self.encode_texts(self.sample_sequences(self.genes_info.loc[node_list_ids, "Transcript sequence"]),
+                                                         maxlen=self.maxlen)
+        else:
+            padded_encoded_sequences = [
+                self.encode_texts([self.sample_sequences(self.genes_info.loc[node, "Transcript sequence"])], minlen=minlen)
+                for node in
+                node_list_ids]
+
+        return padded_encoded_sequences
+
 
     def on_epoch_end(self):
-        pass
+        'Updates indexes after each epoch and shuffle'
+        # self.update_negative_samples()
 
+        self.indexes = np.arange(1)
 
 
 

@@ -14,7 +14,7 @@ from sklearn.metrics import pairwise_distances
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.link_prediction import largest_indices
 from moge.evaluation.metrics import accuracy, precision, recall, auc_roc
-from moge.network.data_generator import DataGenerator
+from moge.network.data_generator import DataGenerator, SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
@@ -105,10 +105,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         dot_undirected = Dot(axes=1)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
+    def learn_embedding(self, network: HeterogeneousNetwork, compression_func="log", network_val=None, multi_gpu=False,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
 
-        self.generator_train = DataGenerator(network=network,
+        self.generator_train = SampledDataGenerator(network=network,
                                              maxlen=self.max_length, padding='post', truncating=self.truncating,
                                              negative_sampling_ratio=self.negative_sampling_ratio,
                                              batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
