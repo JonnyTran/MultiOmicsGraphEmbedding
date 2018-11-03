@@ -22,7 +22,7 @@ DIRECTED_EDGE = 'd'
 class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
-                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False,
+                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3,
                  maxlen=700, padding='post', truncating='post',
                  shuffle=True, seed=0):
         """
@@ -99,8 +99,8 @@ class DataGenerator(keras.utils.Sequence):
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         # self.update_negative_samples()
-        self.genes_info = self.network.genes_info.copy()
-        self.genes_info["Transcript sequence"] = self.sample_sequences(self.genes_info["Transcript sequence"])
+        # self.genes_info = self.network.genes_info.copy()
+        # self.genes_info["Transcript sequence"] = self.sample_sequences(self.genes_info["Transcript sequence"])
 
 
         self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count + self.Ens_count)
@@ -150,15 +150,15 @@ class DataGenerator(keras.utils.Sequence):
         X_list = []
         for id, edge_type in edges_batch:
             if edge_type == DIRECTED_EDGE:
-                # X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE, 1))
-                X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE,
-                               self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
+                X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE, 1))
+                # X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE,
+                #                self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
             elif edge_type == UNDIRECTED_EDGE:
-                # X_list.append(
-                # (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE, 1))
                 X_list.append(
-                    (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE,
-                     self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
+                (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE, 1))
+                # X_list.append(
+                    # (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE,
+                    #  self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
                 # self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]
             elif edge_type == UNDIRECTED_NEG_EDGE:
                 X_list.append(
@@ -278,16 +278,20 @@ class DataGenerator(keras.utils.Sequence):
 
 class SampledDataGenerator(DataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
-                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3, subsample=False, compression_func="sqrt",
+                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=700, padding='post', truncating='post',
                  shuffle=True, seed=0):
         self.compression_func = compression_func
+        self.n_steps = n_steps
+
         print("Using SampledDataGenerator")
         self.process_sampling_table(network)
         super().__init__(network,
-                         batch_size, dim, negative_sampling_ratio, subsample,
+                         batch_size, dim, negative_sampling_ratio,
                          maxlen, padding, truncating,
                          shuffle, seed)
+
+
 
     def process_sampling_table(self, network):
         node_list = network.node_list
@@ -332,7 +336,7 @@ class SampledDataGenerator(DataGenerator):
         return compression(np.array(node_degrees)) / denominator
 
     def __len__(self):
-        return 1
+        return self.n_steps
 
     def __getitem__(self, item):
         sampling_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=True,
@@ -385,7 +389,6 @@ class SampledDataGenerator(DataGenerator):
         :param variable_length: returns a list of sequences with different timestep length
         :param minlen: pad all sequences with length lower than this minlen
         """
-        print(len(node_list_ids))
         if variable_length == False:
             padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list_ids, "Transcript sequence"],
                                                          maxlen=self.maxlen)
@@ -400,7 +403,7 @@ class SampledDataGenerator(DataGenerator):
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
-        self.indexes = np.arange(1)
+        self.indexes = np.arange(self.n_steps)
         self.genes_info = self.network.genes_info.copy()
         self.genes_info["Transcript sequence"] = self.sample_sequences(self.genes_info["Transcript sequence"])
 

@@ -14,7 +14,7 @@ from sklearn.metrics import pairwise_distances
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.link_prediction import largest_indices
 from moge.evaluation.metrics import accuracy, precision, recall, auc_roc
-from moge.network.data_generator import DataGenerator
+from moge.network.data_generator import DataGenerator, SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
@@ -105,13 +105,21 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         dot_undirected = Dot(axes=1)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
 
-    def learn_embedding(self, network: HeterogeneousNetwork, compression_func="log", network_val=None, multi_gpu=False,
+    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, compression_func="log",
+                        multi_gpu=False, subsample=True, n_steps=500,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
-
-        self.generator_train = DataGenerator(network=network,
+        self.subsample = subsample
+        if subsample:
+            self.generator_train = SampledDataGenerator(network=network, compression_func=compression_func, n_steps=n_steps,
+                                                        maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                                        negative_sampling_ratio=self.negative_sampling_ratio,
+                                                        batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
+        else:
+            self.generator_train = DataGenerator(network=network,
                                              maxlen=self.max_length, padding='post', truncating=self.truncating,
                                              negative_sampling_ratio=self.negative_sampling_ratio,
                                              batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
+
         self.node_list = self.generator_train.node_list
 
         if network_val:
@@ -218,7 +226,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
     def get_embedding(self, variable_length=False, recompute=False):
         if (not hasattr(self, "_X") or recompute):
-            seqs = self.generator_train.get_sequence_data(range(len(self.generator_train.node_list)),
+            if self.subsample:
+                nodelist = self.generator_train.node_list
+            else:
+                nodelist = range(len(self.generator_train.node_list))
+            seqs = self.generator_train.get_sequence_data(nodelist,
                                                           variable_length=variable_length)
             if variable_length:
                 embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
