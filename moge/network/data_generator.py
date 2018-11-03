@@ -54,7 +54,7 @@ class DataGenerator(keras.utils.Sequence):
         self.seed = seed
         np.random.seed(seed)
 
-        self.genes_info = network.genes_info
+        self.genes_info = network.genes_info.copy()
         self.process_sequence_tokenizer()
 
         self.process_training_edges_data()
@@ -99,6 +99,9 @@ class DataGenerator(keras.utils.Sequence):
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         # self.update_negative_samples()
+        self.genes_info = self.network.genes_info.copy()
+        self.genes_info["Transcript sequence"] = self.sample_sequences(self.genes_info["Transcript sequence"])
+
 
         self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count + self.Ens_count)
 
@@ -230,18 +233,18 @@ class DataGenerator(keras.utils.Sequence):
         node_list = [self.node_list[i] for i in node_list_ids]
 
         if variable_length == False:
-            padded_encoded_sequences = self.encode_texts(self.sample_sequences(self.genes_info.loc[node_list, "Transcript sequence"]),
+            padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
             padded_encoded_sequences = [
-                self.encode_texts([self.sample_sequences(self.genes_info.loc[node, "Transcript sequence"])], minlen=minlen)
+                self.encode_texts([self.genes_info.loc[node, "Transcript sequence"]], minlen=minlen)
                 for node in
                 node_list]
 
         return padded_encoded_sequences
 
     def sample_sequences(self, sequences):
-        return sequences.map(lambda x: random.choice(x) if type(x) is list else x)
+        return sequences.apply(lambda x: random.choice(x) if type(x) is list else x)
 
     def encode_texts(self, texts, maxlen=None, minlen=None):
         """
@@ -279,7 +282,7 @@ class SampledDataGenerator(DataGenerator):
                  maxlen=700, padding='post', truncating='post',
                  shuffle=True, seed=0):
         self.compression_func = compression_func
-
+        print("Using SampledDataGenerator")
         self.process_sampling_table(network)
         super().__init__(network,
                          batch_size, dim, negative_sampling_ratio, subsample,
@@ -384,11 +387,11 @@ class SampledDataGenerator(DataGenerator):
         """
         print(len(node_list_ids))
         if variable_length == False:
-            padded_encoded_sequences = self.encode_texts(self.sample_sequences(self.genes_info.loc[node_list_ids, "Transcript sequence"]),
+            padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list_ids, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
             padded_encoded_sequences = [
-                self.encode_texts([self.sample_sequences(self.genes_info.loc[node, "Transcript sequence"])], minlen=minlen)
+                self.encode_texts([self.genes_info.loc[node, "Transcript sequence"]], minlen=minlen)
                 for node in
                 node_list_ids]
 
@@ -397,9 +400,9 @@ class SampledDataGenerator(DataGenerator):
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
-        # self.update_negative_samples()
-
         self.indexes = np.arange(1)
+        self.genes_info = self.network.genes_info.copy()
+        self.genes_info["Transcript sequence"] = self.sample_sequences(self.genes_info["Transcript sequence"])
 
 
 
