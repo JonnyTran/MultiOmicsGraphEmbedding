@@ -1,11 +1,12 @@
 import random
+from collections import Generator
 from collections import OrderedDict
 
 import keras
 import numpy as np
+import scipy.sparse as sp
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
-from scipy.linalg import triu as dense_triu
 from scipy.sparse import triu
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
@@ -54,13 +55,13 @@ class DataGenerator(keras.utils.Sequence):
         self.seed = seed
         np.random.seed(seed)
 
-        self.genes_info = network.genes_info.copy()
-        self.process_sequence_tokenizer()
+        self.genes_info = network.genes_info
+        self.transcripts_to_sample = network.genes_info["Transcript sequence"].copy()
 
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
-
         self.on_epoch_end()
+        self.process_sequence_tokenizer()
 
     def process_sequence_tokenizer(self):
         self.tokenizer = Tokenizer(char_level=True, lower=False)
@@ -88,20 +89,18 @@ class DataGenerator(keras.utils.Sequence):
     def process_negative_sampling_edges(self):
         # Negative Directed Edges (sampled)
         adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
-        self.Ens_rows, self.Ens_cols = np.where(dense_triu(adj_positive.todense() == 0, k=1))
+        self.Ens_rows, self.Ens_cols = np.where(adj_positive.todense() == 0)
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ens_count:", self.Ens_count)
 
-        sample_indices = np.random.choice(self.Ens_rows.shape[0], self.Ens_count)
+        sample_indices = np.random.choice(self.Ens_rows.shape[0], self.Ens_count, replace=False)
         self.Ens_rows = self.Ens_rows[sample_indices]
         self.Ens_cols = self.Ens_cols[sample_indices]
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         # self.update_negative_samples()
-        # self.genes_info = self.network.genes_info.copy()
-        # self.genes_info["Transcript sequence"] = self.sample_sequences(self.genes_info["Transcript sequence"])
-
+        self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
 
         self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count + self.Ens_count)
 
@@ -283,31 +282,29 @@ class SampledDataGenerator(DataGenerator):
                  shuffle=True, seed=0):
         self.compression_func = compression_func
         self.n_steps = n_steps
-
         print("Using SampledDataGenerator")
-        self.process_sampling_table(network)
         super().__init__(network,
                          batch_size, dim, negative_sampling_ratio,
                          maxlen, padding, truncating,
                          shuffle, seed)
-
-        # TODO add negative directed sampling edges
+        self.process_sampling_table(network)
 
     def process_sampling_table(self, network):
         node_list = network.node_list
         node_list = list(OrderedDict.fromkeys(node_list))
 
         graph = network.G.subgraph(nodes=node_list)
+        # negative_sampled_graph = pass
 
         self.edge_dict = {}
-        self.edge_dict_degree = {}
-        self.node_degrees_dict = {}
+        self.edge_counts_dict = {}
+        self.node_degrees = {}
         for node in network.node_list:
             self.edge_dict[node] = {}
-            self.edge_dict_degree[node] = {}
+            self.edge_counts_dict[node] = {}
 
             edgelist_bunch = graph.edges(node, data=True)
-            self.node_degrees_dict[node] = len(edgelist_bunch)
+            self.node_degrees[node] = len(edgelist_bunch)
 
             for u,v,d in edgelist_bunch:
                 if d["type"] in self.edge_dict[node]:
@@ -316,13 +313,37 @@ class SampledDataGenerator(DataGenerator):
                     self.edge_dict[node][d["type"]] = [(u,v, d["type"])]
 
             for edge_type in self.edge_dict[node].keys():
-                self.edge_dict_degree[node][edge_type] = len(self.edge_dict[node][edge_type])
+                self.edge_counts_dict[node][edge_type] = len(self.edge_dict[node][edge_type])
 
-        self.node_degrees_list = [self.node_degrees_dict[node] for node in node_list]
-        self.node_sampling_freq = self.compute_node_sampling_feq(self.node_degrees_list)
+        for node in network.node_list:
+            if node in self.edge_dict:
+                edge_types = list(self.edge_dict[node].keys())
+                for edge_type in edge_types:
+                    self.edge_dict[node][edge_type] = SampleEdgelistGenerator(self.edge_dict[node][edge_type])
 
 
-    def compute_node_sampling_feq(self, node_degrees):
+        self.node_degrees_list = [self.node_degrees[node] for node in node_list]
+        self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list)
+
+    def get_negative_sampled_edges(self, node_u):
+        node_idx = self.node_list.index(node_u)
+        _, col = self.adj_negative_sampled[node_idx].nonzero()
+        node_v = self.node_list[np.random.choice(col)]
+        return (node_u, node_v, DIRECTED_NEG_EDGE)
+
+
+    def process_negative_sampling_edges(self):
+        # Negative Directed Edges (sampled)
+        adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative + sp.dia_matrix(np.eye(*self.adj_directed.shape))
+        self.adj_negative_sampled = adj_positive == 0
+
+        self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio) # Used to calculate sampling ratio to sample negative directed edges
+        self.Ens_count_ratio = float(self.Ens_count / (self.Ed_count + self.Eu_count + self.En_count + self.Ens_count))
+        print("Ens_count:", self.Ens_count, ", Ens_count_ratio", self.Ens_count_ratio)
+
+
+
+    def compute_node_sampling_freq(self, node_degrees):
         if self.compression_func == "sqrt":
             compression = np.sqrt
         elif self.compression_func == "sqrt3":
@@ -352,7 +373,13 @@ class SampledDataGenerator(DataGenerator):
         edge_types = list(self.edge_dict[node].keys())
         sample_edge_type = random.choice(edge_types)
 
-        return random.choice(self.edge_dict[node][sample_edge_type])
+        if sample_edge_type == DIRECTED_EDGE:
+            if random.random() < self.Ens_count_ratio:
+                return self.get_negative_sampled_edges(node)
+            else:
+                return next(self.edge_dict[node][sample_edge_type])  # Sample from the node's edges
+        else:
+            return next(self.edge_dict[node][sample_edge_type]) # Sample from the node's edges
 
     def __data_generation(self, sampled_edges):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
@@ -382,6 +409,7 @@ class SampledDataGenerator(DataGenerator):
 
         return X, y
 
+
     def get_sequence_data(self, node_list_ids, variable_length=False, minlen=None):
         """
         Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
@@ -400,12 +428,30 @@ class SampledDataGenerator(DataGenerator):
 
         return padded_encoded_sequences
 
-
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         self.indexes = np.arange(self.n_steps)
-        self.genes_info = self.network.genes_info.copy()
-        self.genes_info["Transcript sequence"] = self.sample_sequences(self.genes_info["Transcript sequence"])
+        self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
+
+
+class SampleEdgelistGenerator(Generator):
+    def __init__(self, edgelist):
+        self.edgelist = edgelist
+        self.sampled_idx = list(np.random.choice(range(len(self.edgelist)), size=len(self.edgelist), replace=False))
+
+    def send(self, ignored_arg=None):
+        while True:
+            if len(self.sampled_idx) > 0:
+                return self.edgelist[self.sampled_idx.pop()]
+            else:
+                self.sampled_idx = list(
+                    np.random.choice(range(len(self.edgelist)), size=len(self.edgelist), replace=False))
+
+    def throw(self, type=None, value=None, traceback=None):
+        raise StopIteration
+
+    def __len__(self):
+        return len(self.edgelist)
 
 
 

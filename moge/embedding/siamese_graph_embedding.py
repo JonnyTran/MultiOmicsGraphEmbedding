@@ -106,7 +106,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, compression_func="log",
-                        multi_gpu=False, subsample=True, n_steps=500,
+                        multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
         self.subsample = subsample
         if subsample:
@@ -134,6 +134,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                       validation_data=self.generator_val,
+                                                      validation_steps=validation_steps,
                                                       use_multiprocessing=True, workers=8)
 
     def build_keras_model(self, multi_gpu):
