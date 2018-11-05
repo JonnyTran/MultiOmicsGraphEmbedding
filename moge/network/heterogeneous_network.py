@@ -49,7 +49,7 @@ class HeterogeneousNetwork():
 
         GE.rename(columns={'gene_family': 'Family'}, inplace=True)
         MIR.rename(columns={'miR family': 'Family'}, inplace=True)
-        LNC.rename(columns={'Transcript Type': 'Family'}, inplace=True)
+        LNC.rename(columns={'Rfams': 'Family'}, inplace=True)
 
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
         self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[0] # TODO Selects only first family annotation

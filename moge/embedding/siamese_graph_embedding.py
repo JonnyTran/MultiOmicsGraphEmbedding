@@ -72,7 +72,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("conv1d_2", x) if self.verbose else None
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_2", x) if self.verbose else None
-        x = BatchNormalization(center=False, scale=True)(x)
 
         x = Dropout(0.2)(x)
         x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)
@@ -80,9 +79,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         x = Dropout(0.2)(x)
 
         x = Dense(1024, activation='relu')(x)
-        x = Dropout(0.1)(x)
+        x = Dropout(0.2)(x)
         x = Dense(925, activation='relu')(x)
-        x = Dropout(0.1)(x)
+        x = Dropout(0.2)(x)
         x = Dense(self._d, activation='linear')(x)  # Embedding space
         print("embedding", x) if self.verbose else None
         return Model(input, x)
