@@ -1,8 +1,8 @@
-from moge.network.heterogeneous_network import HeterogeneousNetwork
-from moge.evaluation.utils import getRandomEdgePairs
-from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 import numpy as np
-import networkx as nx
+
+from moge.embedding.static_graph_embedding import StaticGraphEmbedding
+from moge.evaluation.utils import getRandomEdgePairs
+from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 
@@ -11,7 +11,7 @@ def evaluateStaticGraphReconstruction(network:HeterogeneousNetwork, graph_emb:St
                                       edge_type, modalities=None, train_embedding=False,
                                       node_list=None, sample_ratio=0.1, seed=0):
 
-    if node_list != None:
+    if node_list is not None:
         node_list = node_list
     elif modalities != None:
         node_list = flatten([network.modality_to_nodes[modality] for modality in modalities])

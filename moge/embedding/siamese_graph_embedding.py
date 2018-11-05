@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import EarlyStopping
-from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional
+from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional, BatchNormalization
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
 from keras.models import load_model
@@ -72,6 +72,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("conv1d_2", x) if self.verbose else None
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_2", x) if self.verbose else None
+        x = BatchNormalization(center=False, scale=True)(x)
 
         x = Dropout(0.2)(x)
         x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)
@@ -270,6 +271,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                 nodes = [n for n in nodes if n in self.generator_train.network.nodes[modality]]
 
         estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)
+        np.fill_diagonal(estimated_adj, 0)
 
         if remove_training_edges:
             training_adj = self.generator_train.network.get_adjacency_matrix(edge_types=[edge_type], node_list=nodes)
@@ -278,7 +280,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             estimated_adj[rows, cols] = 0
 
         top_k_indices = largest_indices(estimated_adj, top_k, smallest=False)
-        top_k_pred_edges = [x for x in zip(*top_k_indices)]
+        top_k_pred_edges = [(node_list[x[0]], node_list[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
 
         return top_k_pred_edges
 

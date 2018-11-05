@@ -4,7 +4,6 @@ from collections import OrderedDict
 
 import keras
 import numpy as np
-import scipy.sparse as sp
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from scipy.sparse import triu
@@ -88,7 +87,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_negative_sampling_edges(self):
         # Negative Directed Edges (sampled)
-        adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative + sp.dia_matrix(np.eye(*self.adj_directed.shape))
+        adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
         self.Ens_rows, self.Ens_cols = np.where(adj_positive.todense() == 0)
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ens_count:", self.Ens_count)
@@ -328,7 +327,7 @@ class SampledDataGenerator(DataGenerator):
 
     def process_negative_sampling_edges(self):
         # Negative Directed Edges (sampled)
-        adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative + sp.dia_matrix(np.eye(*self.adj_directed.shape))
+        adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
         self.adj_negative_sampled = adj_positive == 0
 
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio) # Used to calculate sampling ratio to sample negative directed edges

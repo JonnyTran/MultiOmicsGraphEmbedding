@@ -1,8 +1,9 @@
+import matplotlib.cm as cm
+import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import networkx as nx
 from sklearn.manifold import TSNE
-import matplotlib.colors as colors
-import matplotlib.cm as cm
+
 
 def plot_embedding2D(node_pos, node_list, di_graph=None,
                      legend=True, node_labels=None, node_colormap=None, legend_size=10,
@@ -19,8 +20,8 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
     ax = fig.add_subplot(1, 1, 1)
 
     if legend and node_labels is not None and node_colormap is not None and node_colors is not None:
-        scalarMap = cm.ScalarMappable(norm=colors.Normalize(vmin=0.0, vmax=1.0), cmap=cmap)
-        top_node_labels = node_labels.value_counts()[:legend_size].index  # Get top most popular legends labels
+        scalarMap = cm.ScalarMappable(norm=colors.Normalize(vmin=0.0, vmax=1.0, clip=True), cmap=cmap)
+        top_node_labels = node_labels.value_counts()[:legend_size].index  # Get top k most popular legends labels
         for label in top_node_labels:
             ax.plot([0], [0],
                     color=scalarMap.to_rgba(node_colormap[label]),

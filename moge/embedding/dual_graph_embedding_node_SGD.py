@@ -1,9 +1,10 @@
 import networkx as nx
-import tensorflow as tf
 import numpy as np
-from scipy.sparse import triu
-from moge.embedding.static_graph_embedding import StaticGraphEmbedding, ImportedGraphEmbedding
+import tensorflow as tf
+
+from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
+
 
 def convert_sparse_matrix_to_sparse_tensor(X):
     coo = X.tocoo()
@@ -107,7 +108,7 @@ class SourceTargetGraphEmbedding(StaticGraphEmbedding):
             session.as_default()
             session.run(init_op)
 
-            if self.batch_size == None or self.batch_size == -1:
+            if self.batch_size is None or self.batch_size == -1:
                 self.batch_size = self.n_nodes
 
             self.iterations = int(np.floor(self.epochs * self.n_nodes / self.batch_size))

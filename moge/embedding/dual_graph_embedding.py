@@ -1,10 +1,9 @@
-import tensorflow as tf
-import networkx as nx
 import numpy as np
+import tensorflow as tf
 from scipy.sparse import triu
+
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
-from keras import backend as K
 
 
 class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
@@ -99,7 +98,7 @@ class SourceTargetGraphEmbedding(ImportedGraphEmbedding):
             session.as_default()
             session.run(init_op)
 
-            if self.batch_size == None or self.batch_size == -1:
+            if self.batch_size is None or self.batch_size == -1:
                 self.batch_size = Ed_count + Eu_count
 
             self.iterations = int(self.epochs * (Ed_count + Eu_count) / self.batch_size)
