@@ -12,7 +12,7 @@ def matrix_heatmap(matrix, figsize=(12,12), cmap='gray', **kwargs):
     if np.isnan(matrix).any():
         matrix = np.nan_to_num(matrix)
 
-    cax = ax.matshow(matrix, interpolation='nearest', cmap=cmap, **kwargs)
+    cax = ax.matshow(matrix, cmap=cmap, **kwargs)
     fig.colorbar(cax)
 
 def plot_coo_matrix(m):
