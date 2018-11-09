@@ -155,9 +155,12 @@ class HeterogeneousNetwork():
 
         return self.G.subgraph(nodes) # returned subgraph is not mutable
 
-    def get_edgelist(self, edge_types, node_list):
-        edgelist = [(u, v) for u, v, d in self.G.edges(data=True) if
-                    d['type'] in edge_types and (u in node_list and v in node_list)]
+    def get_edgelist(self, edge_types, node_list, inclusive=True):
+        edgelist = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
+                    d['type'] in edge_types]
+        if inclusive:
+            edgelist = [(u, v) for u, v in edgelist if (u in node_list and v in node_list)]
+
         return edgelist
 
 
@@ -272,7 +275,7 @@ network if the similarity measures passes the threshold
 
 
     def remove_extra_nodes(self):
-        self.G = self.get_subgraph(self.modalities)
+        self.G = self.get_subgraph(self.modalities).copy()
 
     def remove_edges_from(self, edgelist):
         self.G.remove_edges_from(edgelist)
@@ -286,10 +289,6 @@ network if the similarity measures passes the threshold
 
     def get_non_zero_degree_nodes(self):
         return [k for k, v in self.G.degree() if v > 0]
-
-
-    def get_combined_gene_info(self, modalities):
-        pass
 
 
 
