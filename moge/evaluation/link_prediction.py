@@ -1,12 +1,11 @@
 import numpy as np
 
-from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 from moge.evaluation.metrics import link_prediction_score
 from moge.evaluation.utils import mask_test_edges, split_train_test_edges
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-def evaluate_top_k_link_prediction(top_k, network:HeterogeneousNetwork, graph_emb:StaticGraphEmbedding,
+def evaluate_top_k_link_prediction(top_k, network: HeterogeneousNetwork, graph_emb,
                                    edge_type, node_list, is_directed=True,
                                    test_frac=0.01, val_frac=0., seed=0,
                                    train_embedding=True,
