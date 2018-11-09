@@ -173,7 +173,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
                         self.node_list.append(node)
                 self._X = np.array(self._X)
 
-        return self._X
+        print(self.get_method_name(), "imported", self._X.shape)
 
 
     def get_reconstructed_adj(self, edge_type=None, node_l=None):
@@ -201,7 +201,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             return reconstructed_adj
         elif set(node_l) < set(self.node_list):
             idx = [self.node_list.index(node) for node in node_l]
-            return reconstructed_adj[idx, idx]
+            return reconstructed_adj[idx, :][:, idx]
         else:
             raise Exception("A node in node_l is not in self.node_list.")
 
