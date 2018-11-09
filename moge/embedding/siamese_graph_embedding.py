@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import EarlyStopping
-from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional, BatchNormalization
+from keras.layers import Dense, Dropout, Input, Lambda, LSTM, Bidirectional, BatchNormalization, Masking
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
 from keras.models import load_model
@@ -61,8 +61,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         """ Base network to be shared (eq. to feature extraction).
         """
         input = Input(shape=input_shape)
-
-        x = Convolution1D(filters=192, kernel_size=6, input_shape=input_shape, activation='relu')(input)
+        x = Masking(mask_value=0, input_shape=input_shape)(input)
+        x = Convolution1D(filters=192, kernel_size=6, input_shape=input_shape, activation='relu')(x)
         print("conv1d_1", x) if self.verbose else None
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_1", x) if self.verbose else None
@@ -72,10 +72,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_2", x) if self.verbose else None
 
-        # x = Dropout(0.2)(x)
+        x = Dropout(0.2)(x)
         x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)
         print("brnn", x) if self.verbose else None
-        # x = Dropout(0.2)(x)
+        x = Dropout(0.2)(x)
 
         x = Dense(1024, activation='relu')(x)
         x = Dropout(0.2)(x)

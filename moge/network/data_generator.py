@@ -318,22 +318,13 @@ class SampledDataGenerator(DataGenerator):
         self.node_degrees_list = [self.node_degrees[node] for node in node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list)
 
-    def get_negative_sampled_edges(self, node_u):
-        node_idx = self.node_list.index(node_u)
-        _, col = self.adj_negative_sampled[node_idx].nonzero()
-        node_v = self.node_list[np.random.choice(col)]
-        return (node_u, node_v, DIRECTED_NEG_EDGE_TYPE)
-
-
     def process_negative_sampling_edges(self):
         # Negative Directed Edges (sampled)
         adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
         self.adj_negative_sampled = adj_positive == 0
 
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio) # Used to calculate sampling ratio to sample negative directed edges
-        self.Ens_count_ratio = float(self.Ens_count / (self.Ed_count + self.Eu_count + self.En_count + self.Ens_count))
-        print("Ens_count:", self.Ens_count, ", Ens_count_ratio", self.Ens_count_ratio)
-
+        print("Ens_count:", self.Ens_count)
 
 
     def compute_node_sampling_freq(self, node_degrees):
@@ -363,16 +354,34 @@ class SampledDataGenerator(DataGenerator):
         return X, y
 
     def sample_edge_from_node(self, node):
-        edge_types = list(self.edge_dict[node].keys())
-        sample_edge_type = random.choice(edge_types)
+        sample_edge_type = self.sample_edge_type(self.edge_dict[node].keys())
 
-        if sample_edge_type == DIRECTED_EDGE_TYPE:
-            if random.random() < self.Ens_count_ratio:
-                return self.get_negative_sampled_edges(node)
-            else:
-                return next(self.edge_dict[node][sample_edge_type])  # Sample from the node's edges
+        if sample_edge_type == DIRECTED_NEG_EDGE_TYPE:
+            return self.get_negative_sampled_edges(node)
         else:
-            return next(self.edge_dict[node][sample_edge_type]) # Sample from the node's edges
+            return next(self.edge_dict[node][sample_edge_type])
+
+    def sample_edge_type(self, edge_types):
+        if DIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_EDGE_TYPE in edge_types:
+            sample_edge_type = random.choice([DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE])
+        elif DIRECTED_EDGE_TYPE in edge_types:
+            sample_edge_type = DIRECTED_EDGE_TYPE
+        elif UNDIRECTED_EDGE_TYPE in edge_types:
+            sample_edge_type = UNDIRECTED_EDGE_TYPE
+
+        if random.random() < (self.negative_sampling_ratio / (1 + self.negative_sampling_ratio)):
+            if sample_edge_type == DIRECTED_EDGE_TYPE:
+                sample_edge_type = DIRECTED_NEG_EDGE_TYPE
+            elif sample_edge_type == UNDIRECTED_EDGE_TYPE and UNDIRECTED_NEG_EDGE_TYPE in edge_types:
+                sample_edge_type = UNDIRECTED_NEG_EDGE_TYPE
+
+        return sample_edge_type
+
+    def get_negative_sampled_edges(self, node_u):
+        node_idx = self.node_list.index(node_u)
+        _, col = self.adj_negative_sampled[node_idx].nonzero()
+        node_v = self.node_list[np.random.choice(col)]
+        return (node_u, node_v, DIRECTED_NEG_EDGE_TYPE)
 
     def __data_generation(self, sampled_edges):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
@@ -393,7 +402,7 @@ class SampledDataGenerator(DataGenerator):
                 X_list.append(
                     (u, v, IS_DIRECTED, 0))
             else:
-                raise Exception("Edge type is wrong"+u+v+type)
+                raise Exception("Edge type is wrong:" + u + v + type)
 
         # assert self.batch_size == len(X_list)
         X_list = np.array(X_list, dtype="O")
