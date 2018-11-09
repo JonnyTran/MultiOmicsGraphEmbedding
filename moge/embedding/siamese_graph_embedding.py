@@ -104,8 +104,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         dot_undirected = Dot(axes=1)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, compression_func="log",
-                        multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
+    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
+                        subsample=True, compression_func="log",
+                        n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
         self.subsample = subsample
         if subsample:
