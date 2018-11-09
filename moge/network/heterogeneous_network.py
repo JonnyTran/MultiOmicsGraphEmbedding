@@ -47,12 +47,13 @@ class HeterogeneousNetwork():
         MIR = self.multi_omics_data.MIR.get_genes_info()
         LNC = self.multi_omics_data.LNC.get_genes_info()
 
-        GE["Family"] = GE["gene_family"] if "Family" in GE else None
-        MIR["Family"] = MIR["miR family"] if "Family" in MIR else None
-        LNC["Family"] = LNC["Rfams"] if "Family" in LNC else None
+        GE["Family"] = GE["gene_family"] if "Family" not in GE else None
+        MIR["Family"] = MIR["miR family"] if "Family" not in MIR else None
+        LNC["Family"] = LNC["Rfams"] if "Family" not in LNC else None
 
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
-        self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[0] # TODO Selects only first family annotation
+        self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[
+            0]  # TODO Selects only first family annotation if an RNA belongs to multiple
         print("Genes info columns:", self.genes_info.columns.tolist())
         self.genes_info = self.genes_info[~self.genes_info.index.duplicated()]
 
