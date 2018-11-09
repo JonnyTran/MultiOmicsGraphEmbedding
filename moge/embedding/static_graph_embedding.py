@@ -149,7 +149,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             fin.close()
             assert len(vectors) == node_num
 
-            if self.get_method_name() == "source_target_graph_embedding":
+            if self.get_method_name() == "rna2rna":
                 self._d = size
                 self.embedding_s = []
                 self.embedding_t = []
@@ -188,7 +188,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         elif self._method_name == "node2vec":
             reconstructed_adj = self.softmax(np.dot(self._X, self._X.T))
 
-        elif self._method_name == "source_target_graph_embedding":
+        elif self._method_name == "rna2rna":
             reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
                                                    Y=self._X[:, int(self._d / 2):self._d],
                                                    metric="euclidean", n_jobs=8)
@@ -196,6 +196,12 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         elif self._method_name == "HOPE":
             reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
+
+        elif self._method_name == "SDNE":
+            reconstructed_adj = pairwise_distances(X=self._X, Y=self._X, metric="euclidean")
+
+        else:
+            raise Exception("Method" + self.get_method_name() + "not supported")
 
         if node_l == self.node_list:
             return reconstructed_adj
