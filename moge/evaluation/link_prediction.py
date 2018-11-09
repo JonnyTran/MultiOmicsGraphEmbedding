@@ -1,6 +1,6 @@
 import numpy as np
 
-from moge.embedding.dual_graph_embedding_node_SGD import StaticGraphEmbedding
+from moge.embedding.static_graph_embedding import StaticGraphEmbedding
 from moge.evaluation.metrics import link_prediction_score
 from moge.evaluation.utils import mask_test_edges, split_train_test_edges
 from moge.network.heterogeneous_network import HeterogeneousNetwork
