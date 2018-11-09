@@ -23,7 +23,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, dim=(None, 6), negative_sampling_ratio=3,
-                 maxlen=700, padding='post', truncating='post',
+                 maxlen=700, padding='post', truncating='post', sequence_to_matrix=True,
                  shuffle=True, seed=0):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
@@ -36,7 +36,8 @@ class DataGenerator(keras.utils.Sequence):
         :param dim: Dimensionality of the sample input
         :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
         :param maxlen: pad all RNA sequence strings to this length
-        :param padding: ['post', 'pre']
+        :param padding: ['post', 'pre', None]
+        :param sequence_to_matrix: [True, False]
         :param truncating: ['post', 'pre', 'random']. If 'random', then 'post' or 'pre' truncating is chosen randomly for each sequence at each iteration
         :param shuffle:
         :param seed:
@@ -52,6 +53,7 @@ class DataGenerator(keras.utils.Sequence):
         self.maxlen = maxlen
         self.truncating = truncating
         self.seed = seed
+        self.sequence_to_matrix = sequence_to_matrix
         np.random.seed(seed)
 
         self.genes_info = network.genes_info
@@ -259,17 +261,16 @@ class DataGenerator(keras.utils.Sequence):
             maxlen = minlen
 
         # pad encoded sequences
-        if self.truncating == "random":
-            truncating = np.random.choice(["post", "pre"])
+        encoded = pad_sequences(encoded, maxlen=maxlen, padding=self.padding,
+                                truncating=np.random.choice(
+                                    ["post", "pre"]) if self.truncating == "random" else self.truncating)
+
+        if self.sequence_to_matrix:
+            encoded_expanded = np.expand_dims(encoded, axis=-1)
+
+            return np.array([self.tokenizer.sequences_to_matrix(s) for s in encoded_expanded])
         else:
-            truncating = self.truncating
-
-        padded_seqs = pad_sequences(encoded, maxlen=maxlen, padding=self.padding, truncating=truncating)
-
-        # Sequence to matrix
-        exp_pad_seqs = np.expand_dims(padded_seqs, axis=-1)
-
-        return np.array([self.tokenizer.sequences_to_matrix(s) for s in exp_pad_seqs])
+            return encoded
 
 
 
@@ -277,14 +278,14 @@ class DataGenerator(keras.utils.Sequence):
 class SampledDataGenerator(DataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, dim=(None, 6), negative_sampling_ratio=3, n_steps=500, compression_func="log",
-                 maxlen=700, padding='post', truncating='post',
+                 maxlen=700, padding='post', truncating='post', sequence_to_matrix=True,
                  shuffle=True, seed=0):
         self.compression_func = compression_func
         self.n_steps = n_steps
         print("Using SampledDataGenerator")
         super().__init__(network,
                          batch_size, dim, negative_sampling_ratio,
-                         maxlen, padding, truncating,
+                         maxlen, padding, truncating, sequence_to_matrix,
                          shuffle, seed)
         self.process_sampling_table(network)
 

@@ -55,7 +55,6 @@ def compute_annotation_affinities(genes_info, node_list, modality=None, correlat
         agg_func = lambda x: np.average(x, axis=0, weights=weights)
 
     gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=agg_func, correlation_dist=correlation_dist,
-                                 weights=weights,
                                  multiprocessing=multiprocessing)  # Returns a condensed distance matrix
 
     if squareform:
@@ -65,7 +64,7 @@ def compute_annotation_affinities(genes_info, node_list, modality=None, correlat
     # return np.exp(-beta * gower_dists)
 
 
-def gower_distance(X, agg_func=None, correlation_dist=None, weights=None, multiprocessing=True, n_jobs=-2):
+def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True, n_jobs=-2):
     """
     This function expects a pandas dataframe as input
     The data frame is to contain the features along the columns. Based on these features a
