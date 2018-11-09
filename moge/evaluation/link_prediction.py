@@ -6,10 +6,13 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
 def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, edge_type="d", top_k=100):
+    nodes = embedding.node_list
+    nodes = [node for node in nodes if node in node_list]
+
     edges_pred = embedding.get_top_k_predicted_edges(edge_type=edge_type, top_k=top_k,
-                                                     node_list=node_list,
+                                                     node_list=nodes,
                                                      training_network=network_train)
-    edges_true = network_test.get_edgelist(edge_types=[edge_type], node_list=node_list)
+    edges_true = network_test.get_edgelist(edge_types=[edge_type], node_list=nodes, inclusive=True)
 
     results = {}
     results["precision"] = precision(edges_true, edges_pred)
