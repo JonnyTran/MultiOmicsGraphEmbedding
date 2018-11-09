@@ -203,7 +203,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         else:
             raise Exception("Method" + self.get_method_name() + "not supported")
 
-        if node_l == self.node_list:
+        if node_l == None or node_l == self.node_list:
             return reconstructed_adj
         elif set(node_l) < set(self.node_list):
             idx = [self.node_list.index(node) for node in node_l]
