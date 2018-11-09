@@ -47,9 +47,9 @@ class HeterogeneousNetwork():
         MIR = self.multi_omics_data.MIR.get_genes_info()
         LNC = self.multi_omics_data.LNC.get_genes_info()
 
-        GE["Family"] = GE["gene_family"]
-        MIR["Family"] = MIR["miR family"]
-        LNC["Family"] = LNC["Rfams"]
+        GE["Family"] = GE["gene_family"] if "Family" in GE else None
+        MIR["Family"] = MIR["miR family"] if "Family" in MIR else None
+        LNC["Family"] = LNC["Rfams"] if "Family" in LNC else None
 
         self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
         self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[0] # TODO Selects only first family annotation

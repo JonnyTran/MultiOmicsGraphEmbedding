@@ -12,13 +12,14 @@ def visualize_embedding(embedding, network_train, edgelist=None, node_label="loc
     embs = embedding.get_embedding()
     embs_pca = PCA(n_components=2).fit_transform(embs)
     node_pos = TSNE(init=embs_pca, perplexity=80, n_jobs=8).fit_transform(embs)
-    genes_info = network_train.genes_info
+
 
     if edgelist is None:
         edgelist = embedding.get_top_k_predicted_edges(edge_type="d", top_k=5000,
                                                        node_list=nodelist, training_network=network_train)
 
-    if node_label:
+    if node_label is not None:
+        genes_info = network_train.genes_info
         node_with_lable = genes_info[node_label].notnull().index
         nodelist = [node for node in nodelist if node in node_with_lable]
         node_labels = genes_info.loc[nodelist][node_label].astype(str)
