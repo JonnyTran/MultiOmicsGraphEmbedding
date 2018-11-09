@@ -2,6 +2,7 @@ from abc import ABCMeta
 
 import numpy as np
 from sklearn.metrics import pairwise_distances
+from moge.evaluation.link_prediction import largest_indices
 
 
 class StaticGraphEmbedding:
@@ -182,23 +183,52 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             A numpy array of size #nodes * #nodes containing the reconstructed adjacency matrix.
         '''
         if self._method_name == "LINE":
-            return np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
+            reconstructed_adj = np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
 
         elif self._method_name == "node2vec":
-            return self.softmax(np.dot(self._X, self._X.T))
+            reconstructed_adj = self.softmax(np.dot(self._X, self._X.T))
 
         elif self._method_name == "source_target_graph_embedding":
-            adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)], Y=self._X[:, int(self._d / 2):self._d],
-                                     metric="euclidean", n_jobs=8)
-            adj = np.exp(-2.0 * adj)
-            return adj
+            reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
+                                                   Y=self._X[:, int(self._d / 2):self._d],
+                                                   metric="euclidean", n_jobs=8)
+            reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
 
         elif self._method_name == "HOPE":
-            return np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
+            reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
+
+        if node_l == self.node_list:
+            return reconstructed_adj
+        elif set(node_l) < set(self.node_list):
+            idx = [self.node_list.index(node) for node in node_l]
+            return reconstructed_adj[idx, idx]
+        else:
+            raise Exception("A node in node_l is not in self.node_list.")
+
 
     def softmax(self, X):
         exps = np.exp(X)
         return exps/np.sum(exps, axis=0)
+
+    def get_top_k_predicted_edges(self, edge_type, top_k, node_list=None, training_network=None):
+        nodes = self.node_list
+        if node_list is not None:
+            nodes = [n for n in nodes if n in node_list]
+
+        estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)
+        np.fill_diagonal(estimated_adj, 0)
+
+        if training_network is not None:
+            training_adj = training_network.get_adjacency_matrix(edge_types=[edge_type], node_list=nodes)
+            assert estimated_adj.shape == training_adj.shape
+            rows, cols = training_adj.nonzero()
+            estimated_adj[rows, cols] = 0
+
+        top_k_indices = largest_indices(estimated_adj, top_k, smallest=False)
+        top_k_pred_edges = [(node_list[x[0]], node_list[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
+
+        return top_k_pred_edges
+
 
     def predict(self, X):
         reconstructed_adj = self.get_reconstructed_adj()
