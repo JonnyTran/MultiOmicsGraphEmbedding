@@ -8,11 +8,10 @@ from MulticoreTSNE import MulticoreTSNE as TSNE
 
 
 def visualize_embedding(embedding, network_train, edgelist=None, node_label="locus_type"):
+    nodelist = embedding.node_list
     embs = embedding.get_embedding()
-    nodelist = embs.node_list
     embs_pca = PCA(n_components=2).fit_transform(embs)
-    tsne = TSNE(init=embs_pca, perplexity=80, n_jobs=8)
-    node_pos = tsne.fit_transform(embs)
+    node_pos = TSNE(init=embs_pca, perplexity=80, n_jobs=8).fit_transform(embs)
     genes_info = network_train.genes_info
 
     if edgelist is None:
