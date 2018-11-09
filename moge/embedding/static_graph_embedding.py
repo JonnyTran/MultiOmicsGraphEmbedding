@@ -3,7 +3,8 @@ from abc import ABCMeta
 import numpy as np
 from sklearn.metrics import pairwise_distances
 from moge.evaluation.link_prediction import largest_indices
-
+from sklearn.decomposition import PCA
+from MulticoreTSNE import MulticoreTSNE as TSNE
 
 class StaticGraphEmbedding:
     __metaclass__ = ABCMeta
@@ -256,3 +257,14 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         y_pred = np.array(y_pred, dtype=np.float).reshape((-1, 1))
         return y_pred
 
+    def process_tsne_node_pos(self, perplexity=80):
+        embs = self.get_embedding()
+        embs_pca = PCA(n_components=2).fit_transform(embs)
+        self.node_pos = TSNE(init=embs_pca, perplexity=perplexity, n_jobs=8).fit_transform(embs)
+
+    def get_tsne_node_pos(self):
+        if hasattr(self, "node_pos"):
+            return self.node_pos
+        else:
+            self.process_tsne_node_pos()
+            return self.node_pos

@@ -3,26 +3,23 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import networkx as nx
 from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
-from MulticoreTSNE import MulticoreTSNE as TSNE
+
 import random
 
 
-def visualize_embedding(embedding, network_train, edgelist=None, node_label="locus_type", cmap="viridis"):
+def visualize_embedding(embedding, network_train, edgelist=None, top_k=10000,
+                        node_label="locus_type", cmap="viridis"):
     nodelist = embedding.node_list
-    embs = embedding.get_embedding()
-    embs_pca = PCA(n_components=2).fit_transform(embs)
-    node_pos = TSNE(init=embs_pca, perplexity=80, n_jobs=8).fit_transform(embs)
-
+    node_pos = embedding.get_tsne_node_pos()
 
     if edgelist is None:
-        edgelist = embedding.get_top_k_predicted_edges(edge_type="d", top_k=5000,
+        edgelist = embedding.get_top_k_predicted_edges(edge_type="d", top_k=top_k,
                                                        node_list=nodelist, training_network=network_train)
 
     if node_label is not None:
         genes_info = network_train.genes_info
-        node_with_lable = genes_info[node_label].notnull().index
-        nodelist = [node for node in nodelist if node in node_with_lable]
+        # node_with_lable = genes_info[node_label].notnull().index
+        # nodelist = [node for node in nodelist if node in node_with_lable]
         node_labels = genes_info.loc[nodelist][node_label].astype(str)
         sorted_node_labels = sorted(node_labels.unique(), reverse=random.choice([True, False]))
         node_colormap = {f: sorted_node_labels.index(f) / len(sorted_node_labels) for f in node_labels.unique()}
