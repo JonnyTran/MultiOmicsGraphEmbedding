@@ -191,19 +191,19 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         elif self._method_name == "rna2rna":
             reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
                                                    Y=self._X[:, int(self._d / 2):self._d],
-                                                   metric="euclidean", n_jobs=8)
+                                                   metric="euclidean", n_jobs=-2)
             reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
 
         elif self._method_name == "HOPE":
             reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
 
         elif self._method_name == "SDNE":
-            reconstructed_adj = pairwise_distances(X=self._X, Y=self._X, metric="euclidean")
+            reconstructed_adj = pairwise_distances(X=self._X, Y=self._X, metric="euclidean", n_jobs=-2)
 
         else:
             raise Exception("Method" + self.get_method_name() + "not supported")
 
-        if node_l == None or node_l == self.node_list:
+        if node_l is None or node_l == self.node_list:
             return reconstructed_adj
         elif set(node_l) < set(self.node_list):
             idx = [self.node_list.index(node) for node in node_l]
@@ -231,7 +231,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             estimated_adj[rows, cols] = 0
 
         top_k_indices = largest_indices(estimated_adj, top_k, smallest=False)
-        top_k_pred_edges = [(node_list[x[0]], node_list[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
+        top_k_pred_edges = [(nodes[x[0]], nodes[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
 
         return top_k_pred_edges
 
