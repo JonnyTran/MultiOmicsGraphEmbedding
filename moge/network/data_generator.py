@@ -47,7 +47,7 @@ class DataGenerator(keras.utils.Sequence):
         self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
         self.node_list = network.node_list
-        self.node_list = list(OrderedDict.fromkeys(self.node_list))
+        self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
         self.shuffle = shuffle
         self.padding = padding
         self.maxlen = maxlen
@@ -364,7 +364,7 @@ class SampledDataGenerator(DataGenerator):
         elif UNDIRECTED_NEG_EDGE_TYPE in edge_types:
             edge_type = UNDIRECTED_NEG_EDGE_TYPE
         else:
-            raise Exception("No edge type selected: " + str(edge_types))
+            raise Exception("No edge type selected in " + str(edge_types))
 
         if random.random() < (self.negative_sampling_ratio / (1 + self.negative_sampling_ratio)):
             if edge_type == DIRECTED_EDGE_TYPE:

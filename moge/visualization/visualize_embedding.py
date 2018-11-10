@@ -8,7 +8,7 @@ import random
 
 
 def visualize_embedding(embedding, network_train, edgelist=None, top_k=10000,
-                        node_label="locus_type", cmap="viridis"):
+                        node_label="locus_type", cmap="gist_ncar", **kwargs):
     nodelist = embedding.node_list
     node_pos = embedding.get_tsne_node_pos()
 
@@ -22,19 +22,19 @@ def visualize_embedding(embedding, network_train, edgelist=None, top_k=10000,
         # nodelist = [node for node in nodelist if node in node_with_lable]
         node_labels = genes_info.loc[nodelist][node_label].astype(str)
         sorted_node_labels = sorted(node_labels.unique(), reverse=random.choice([True, False]))
-        node_colormap = {f: sorted_node_labels.index(f) / len(sorted_node_labels) for f in node_labels.unique()}
+        node_colormap = {f: hash(f) % len(sorted_node_labels) / len(sorted_node_labels) for f in node_labels.unique()}
         node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
 
         plot_embedding2D(node_pos, node_list=embedding.node_list, node_colors=node_colors,
                          legend=True, node_labels=node_labels, node_colormap=node_colormap, legend_size=20,
                          di_graph=network_train.G, cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         with_labels=False, figsize=(20, 15))
+                         with_labels=False, figsize=(20, 15), **kwargs)
     else:
         plot_embedding2D(node_pos, node_list=embedding.node_list,
                          di_graph=network_train.G, cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         with_labels=False, figsize=(20, 15))
+                         with_labels=False, figsize=(20, 15), **kwargs)
 
 
 def plot_embedding2D(node_pos, node_list, di_graph=None,
