@@ -361,6 +361,8 @@ class SampledDataGenerator(DataGenerator):
             edge_type = DIRECTED_EDGE_TYPE
         elif UNDIRECTED_EDGE_TYPE in edge_types:
             edge_type = UNDIRECTED_EDGE_TYPE
+        elif UNDIRECTED_NEG_EDGE_TYPE in edge_types:
+            edge_type = UNDIRECTED_NEG_EDGE_TYPE
         else:
             raise Exception("No edge type selected: " + str(edge_types))
 
