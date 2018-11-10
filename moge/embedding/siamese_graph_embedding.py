@@ -236,9 +236,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         exps = np.exp(X)
         return exps / np.sum(exps, axis=0)
 
-    def get_embedding(self, variable_length=False, recompute=False):
+    def get_embedding(self, variable_length=False, recompute=False, batch_size=1):
         if (not hasattr(self, "_X") or recompute):
-            if self.subsample:
+            if self.generator_train is SampledDataGenerator:
                 nodelist = self.generator_train.node_list
             else:
                 nodelist = range(len(self.generator_train.node_list))
@@ -247,7 +247,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             if variable_length:
                 embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
             else:
-                embs = self.lstm_network.predict(seqs, batch_size=256)
+                embs = self.lstm_network.predict(seqs, batch_size=batch_size)
 
             embs = np.array(embs)
             embs = embs.reshape(embs.shape[0], embs.shape[-1])
