@@ -355,12 +355,12 @@ class SampledDataGenerator(DataGenerator):
         return X, y
 
     def sample_edge_from_node(self, node):
-        sample_edge_type = self.sample_edge_type(self.edge_dict[node].keys())
+        sampled_edge_type = self.sample_edge_type(self.edge_dict[node].keys())
 
-        if sample_edge_type == DIRECTED_NEG_EDGE_TYPE:
+        if sampled_edge_type == DIRECTED_NEG_EDGE_TYPE:
             return self.get_negative_sampled_edges(node)
         else:
-            return next(self.edge_dict[node][sample_edge_type])
+            return next(self.edge_dict[node][sampled_edge_type])
 
     def sample_edge_type(self, edge_types):
         if DIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_EDGE_TYPE in edge_types:
