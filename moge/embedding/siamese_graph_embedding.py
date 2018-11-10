@@ -5,7 +5,7 @@ from keras import backend as K
 from keras.callbacks import EarlyStopping
 from keras.layers import Dense, Dropout, SpatialDropout1D, Input, Lambda, LSTM, Bidirectional, BatchNormalization, \
     Masking
-from keras.layers import Conv2D, ConvLSTM2D, Dense, Dropout, Bidirectional, TimeDistributed, SpatialDropout1D, Embedding
+from keras.layers import Conv2D, ConvLSTM2D, Dense, Dropout, Bidirectional, CuDNNLSTM, SpatialDropout1D, Embedding
 
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.models import Model
@@ -31,7 +31,7 @@ def contrastive_loss(y_true, y_pred):
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
-    def __init__(self, d=512, input_shape=(None, 6), batch_size=1024, lr=0.001, epochs=10,
+    def __init__(self, d=512, input_shape=(None,), batch_size=1024, lr=0.001, epochs=10,
                  negative_sampling_ratio=2.0,
                  max_length=700, truncating="post", seed=0, verbose=False, **kwargs):
         super().__init__(d)
@@ -65,7 +65,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         """
         input = Input(shape=input_shape)
         x = Embedding(6, 5, input_length=None, mask_zero=True, trainable=True)(input)
-        # x = Masking(6, 5, input_length=None, mask_zero=True, trainable=True)(input)
+        # x = Masking()(input)
         print("Embedding", x) if self.verbose else None
 
         x = Lambda(lambda y: K.expand_dims(y, axis=2))(x)
@@ -84,7 +84,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("max pooling_2", x) if self.verbose else None
 
         x = SpatialDropout1D(0.1)(x)
-        x = Bidirectional(LSTM(320, return_sequences=False, return_state=False))(x)
+        x = Bidirectional(CuDNNLSTM(320, return_sequences=False, return_state=False))(x)
         print("brnn", x) if self.verbose else None
         x = Dropout(0.1)(x)
 
