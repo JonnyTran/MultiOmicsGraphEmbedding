@@ -123,7 +123,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         '''
         if node_list is None:
             return self._X
-        elif set(node_list) <= self.node_list:
+        elif set(node_list) <= set(self.node_list):
             idx = [self.node_list.index(node) for node in node_list]
             return self._X[idx, :]
         else:
