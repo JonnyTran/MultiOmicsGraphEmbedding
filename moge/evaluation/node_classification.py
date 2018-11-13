@@ -15,6 +15,7 @@ def evaluate_classification(embedding, network, node_label="Family", cv=5, multi
 
     X = embedding.get_embedding()
     X = X[nodelist, :]
+    assert len(nodelist) == X.shape[0]
     if multilabel:
         labels = genes_info.loc[nodelist, node_label].str.split("|", expand=False)
         labeler = MultiLabelBinarizer()
