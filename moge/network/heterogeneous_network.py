@@ -43,15 +43,21 @@ class HeterogeneousNetwork():
         print("Total nodes:", len(self.node_list))
 
     def process_genes_info(self):
-        GE = self.multi_omics_data.GE.get_genes_info()
-        MIR = self.multi_omics_data.MIR.get_genes_info()
-        LNC = self.multi_omics_data.LNC.get_genes_info()
+        genes_info_list = []
 
-        GE["Family"] = GE["gene_family"] if "Family" not in GE else None
-        MIR["Family"] = MIR["miR family"] if "Family" not in MIR else None
-        LNC["Family"] = LNC["Rfams"] if "Family" not in LNC else None
+        for modality in self.modalities:
+            gene_info = self.multi_omics_data[modality].get_genes_info()
 
-        self.genes_info = pd.concat([GE, MIR, LNC], join="inner", copy=True)
+            if "Family" not in gene_info:
+                if modality == "GE":
+                    gene_info["Family"] = gene_info["gene_family"]
+                elif modality == "MIR":
+                    gene_info["Family"] = gene_info["miR family"]
+                elif modality == "LNC":
+                    gene_info["Family"] = gene_info["Rfams"]
+            genes_info_list.append(gene_info)
+
+        self.genes_info = pd.concat(genes_info_list, join="inner", copy=True)
         self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[
             0]  # TODO Selects only first family annotation if an RNA belongs to multiple
         print("Genes info columns:", self.genes_info.columns.tolist())
