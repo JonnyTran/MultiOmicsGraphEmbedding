@@ -13,8 +13,7 @@ def evaluate_classification(embedding, network, node_label="Family", cv=5, multi
     nodelist = [node for node in nodelist if node in nodes_with_label]
     nodes_split_by_group = genes_info.loc[nodelist, "locus_type"]
 
-    X = embedding.get_embedding()
-    X = X[nodelist, :]
+    X = embedding.get_embedding(node_list=nodelist)
     assert len(nodelist) == X.shape[0]
     if multilabel:
         labels = genes_info.loc[nodelist, node_label].str.split("|", expand=False)
