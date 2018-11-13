@@ -5,6 +5,8 @@ from sklearn.metrics import pairwise_distances
 from moge.evaluation.link_prediction import largest_indices
 from sklearn.decomposition import PCA
 from MulticoreTSNE import MulticoreTSNE as TSNE
+from sklearn.cluster import KMeans
+
 
 class StaticGraphEmbedding:
     __metaclass__ = ABCMeta
@@ -268,3 +270,14 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         else:
             self.process_tsne_node_pos()
             return self.node_pos
+
+    def predict_cluster(self, n_clusters=8, node_list=None):
+        embs = self.get_embedding()
+        kmeans = KMeans(n_clusters, n_jobs=-2)
+        y_pred = kmeans.fit_predict(embs)
+
+        if node_list is not None and set(node_list) <= set(self.node_list) and node_list != self.node_list:
+            idx = [self.node_list.index(node) for node in node_list]
+            y_pred = np.array(y_pred)[idx]
+
+        return y_pred
