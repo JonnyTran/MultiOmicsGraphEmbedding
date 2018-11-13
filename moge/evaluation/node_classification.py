@@ -11,15 +11,14 @@ def evaluate_classification(embedding, network, node_label="Family", cv=5, multi
     genes_info = network.genes_info
     nodes_with_label = genes_info[genes_info[node_label].notna()].index
     nodelist = [node for node in nodelist if node in nodes_with_label]
-    nodes_split_by_group = genes_info.loc[nodelist, "locus_type"]
+    nodes_split_by_group = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
 
     X = embedding.get_embedding(node_list=nodelist)
     assert len(nodelist) == X.shape[0]
     if multilabel:
         labels = genes_info.loc[nodelist, node_label].str.split("|", expand=False)
-        labeler = MultiLabelBinarizer()
-        y = labeler.fit_transform(labels.tolist())
-        clf = KNeighborsClassifier(n_neighbors=10, weights="distance", algorithm="auto", metric="euclidean")
+        y = MultiLabelBinarizer().fit_transform(labels.tolist())
+        clf = KNeighborsClassifier(n_neighbors=50, weights="distance", algorithm="auto", metric="euclidean")
 
     else:  # Multiclass classification (only single label each sample)
         y = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
