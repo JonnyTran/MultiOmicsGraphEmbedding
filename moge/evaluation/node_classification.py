@@ -14,7 +14,7 @@ def evaluate_classification(embedding, network, node_label="Family", cv=5,
     node_groups = genes_info.loc[nodelist, "locus_type"]
 
     X = embedding.get_embedding()
-    y = genes_info.loc[nodelist, node_label]
+    y = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
 
     clf = svm.LinearSVC(multi_class="crammer_singer")
     scores = cross_validate(clf, X, y, groups=node_groups, cv=cv, n_jobs=-2, scoring=scoring)
