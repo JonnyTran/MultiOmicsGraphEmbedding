@@ -115,13 +115,19 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         '''
         pass
 
-    def get_embedding(self):
+    def get_embedding(self, node_list=None):
         ''' Returns the learnt embedding
 
         Return:
             A numpy array of size #nodes * d
         '''
-        return self._X
+        if node_list is None:
+            return self._X
+        elif set(node_list) <= self.node_list:
+            idx = [self.node_list.index(node) for node in node_list]
+            return self._X[idx, :]
+        else:
+            raise Exception("node_list contains node not included in trained embeddings")
 
     def get_edge_weight(self, i, j):
         '''Compute the weight for edge between node i and node j
