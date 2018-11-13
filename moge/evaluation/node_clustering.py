@@ -1,8 +1,8 @@
 from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score
 
 
-def evaluate_cluevaluate_clusteringstering(embedding, network, node_label="locus_type", n_clusters=8,
-                                           metrics=["homogeneity", "nmi", "completeness"]):
+def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=8,
+                        metrics=["homogeneity", "nmi", "completeness"]):
     nodelist = embedding.node_list
     genes_info = network.genes_info
     nodes_with_label = genes_info[genes_info[node_label].notna()].index
