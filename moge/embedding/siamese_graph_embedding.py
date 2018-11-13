@@ -31,7 +31,7 @@ def contrastive_loss(y_true, y_pred):
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
-    def __init__(self, d=512, input_shape=(None,), batch_size=1024, lr=0.001, epochs=10,
+    def __init__(self, d=512, input_shape=(None, None), batch_size=1024, lr=0.001, epochs=10,
                  negative_sampling_ratio=2.0,
                  max_length=700, truncating="post", seed=0, verbose=False, **kwargs):
         super().__init__(d)
@@ -60,39 +60,40 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def get_method_summary(self):
         return '%s_%d' % (self._method_name, self._d)
 
-    def create_base_network(self, input_shape):
+    def create_base_network(self):
         """ Base network to be shared (eq. to feature extraction).
         """
-        input = Input(shape=input_shape)
-        x = Embedding(6, 5, input_length=None, mask_zero=True, trainable=True)(input)
+        input = Input(batch_shape=(None, None))  # (batch_number, sequence_length)
+        x = Embedding(6, 5, input_length=None, mask_zero=True, trainable=True)(
+            input)  # (batch_number, sequence_length, 5)
         # x = Masking()(input)
         print("Embedding", x) if self.verbose else None
 
-        x = Lambda(lambda y: K.expand_dims(y, axis=2))(x)
-        x = Conv2D(filters=192, kernel_size=(6, 1), activation='relu', data_format="channels_last")(x)
-        x = Lambda(lambda y: K.squeeze(y, axis=2))(x)
+        x = Lambda(lambda y: K.expand_dims(y, axis=2))(x)  # (batch_number, sequence_length, 1, 5)
+        x = Conv2D(filters=320, kernel_size=(6, 1), activation='relu', data_format="channels_last")(
+            x)  # (batch_number, sequence_length-5, 1, 192)
+        x = Lambda(lambda y: K.squeeze(y, axis=2))(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
 
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_1", x) if self.verbose else None
         x = SpatialDropout1D(0.1)(x)
 
-
-        x = Convolution1D(filters=320, kernel_size=3, activation='relu')(x)
+        x = Convolution1D(filters=192, kernel_size=3, activation='relu')(x)
         print("conv1d_2", x) if self.verbose else None
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_2", x) if self.verbose else None
-
         x = SpatialDropout1D(0.1)(x)
-        x = Bidirectional(CuDNNLSTM(320, return_sequences=False, return_state=False))(x)
+
+        x = Bidirectional(CuDNNLSTM(320, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None
         x = Dropout(0.1)(x)
 
-        x = Dense(1024, activation='relu')(x)
+        x = Dense(1024, activation='relu')(x)  # (batch_number, 1024)
         x = Dropout(0.2)(x)
-        x = Dense(925, activation='relu')(x)
+        x = Dense(925, activation='relu')(x)  # (batch_number, 925)
         x = Dropout(0.2)(x)
-        x = Dense(self._d, activation='linear')(x)  # Embedding space
+        x = Dense(self._d, activation='linear')(x)  # Embedding space (batch_number, 128)
         print("embedding", x) if self.verbose else None
         return Model(input, x)
 
@@ -124,12 +125,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             self.generator_train = SampledDataGenerator(network=network, compression_func=compression_func, n_steps=n_steps,
                                                         maxlen=self.max_length, padding='post', truncating=self.truncating,
                                                         negative_sampling_ratio=self.negative_sampling_ratio,
-                                                        batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
+                                                        batch_size=self.batch_size, shuffle=True, seed=0)
         else:
             self.generator_train = DataGenerator(network=network,
-                                             maxlen=self.max_length, padding='post', truncating=self.truncating,
-                                             negative_sampling_ratio=self.negative_sampling_ratio,
-                                             batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
+                                                 maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                                 negative_sampling_ratio=self.negative_sampling_ratio,
+                                                 batch_size=self.batch_size, shuffle=True, seed=0)
 
         self.node_list = self.generator_train.node_list
 
@@ -137,7 +138,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             self.generator_val = DataGenerator(network=network_val,
                                                maxlen=self.max_length, padding='post', truncating="post",
                                                negative_sampling_ratio=2.0,
-                                               batch_size=self.batch_size, dim=self.input_shape, shuffle=True, seed=0)
+                                               batch_size=self.batch_size, shuffle=True, seed=0)
         else:
             self.generator_val = None
 
@@ -167,7 +168,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.bool, name="is_directed")
 
             # build create_base_network to use in each siamese 'leg'
-            self.lstm_network = self.create_base_network(input_shape=self.input_shape)
+            self.lstm_network = self.create_base_network()
 
             # encode each of the two inputs into a vector with the convnet
             encoded_i = self.lstm_network(input_seq_i)

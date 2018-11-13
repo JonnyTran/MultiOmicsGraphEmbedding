@@ -22,7 +22,7 @@ DIRECTED_EDGE_TYPE = 'd'
 class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
-                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3,
+                 batch_size=1, negative_sampling_ratio=3,
                  maxlen=700, padding='post', truncating='post', sequence_to_matrix=True,
                  shuffle=True, seed=0):
         """
@@ -42,7 +42,6 @@ class DataGenerator(keras.utils.Sequence):
         :param shuffle:
         :param seed:
         """
-        self.dim = dim
         self.batch_size = batch_size
         self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
@@ -277,14 +276,14 @@ class DataGenerator(keras.utils.Sequence):
 
 class SampledDataGenerator(DataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
-                 batch_size=1, dim=(None, 6), negative_sampling_ratio=3, n_steps=500, compression_func="log",
+                 batch_size=1, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=700, padding='post', truncating='post', sequence_to_matrix=True,
                  shuffle=True, seed=0):
         self.compression_func = compression_func
         self.n_steps = n_steps
         print("Using SampledDataGenerator")
         super().__init__(network,
-                         batch_size, dim, negative_sampling_ratio,
+                         batch_size, negative_sampling_ratio,
                          maxlen, padding, truncating, sequence_to_matrix,
                          shuffle, seed)
         self.process_sampling_table(network)
