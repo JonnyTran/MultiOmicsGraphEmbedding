@@ -271,9 +271,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             self.process_tsne_node_pos()
             return self.node_pos
 
-    def predict_cluster(self, n_clusters=8, node_list=None):
+    def predict_cluster(self, n_clusters=8, node_list=None, n_jobs=-2):
         embs = self.get_embedding()
-        kmeans = KMeans(n_clusters, n_jobs=-2)
+        kmeans = KMeans(n_clusters, n_jobs=n_jobs)
         y_pred = kmeans.fit_predict(embs)
 
         if node_list is not None and set(node_list) <= set(self.node_list) and node_list != self.node_list:
