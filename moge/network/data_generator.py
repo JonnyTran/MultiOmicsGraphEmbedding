@@ -317,6 +317,7 @@ class SampledDataGenerator(DataGenerator):
 
         self.node_degrees_list = [self.node_degrees[node] for node in node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list)
+        print("# of nodes to sample from (non-zero degree):", np.count_nonzero(self.node_sampling_freq))
 
     def process_negative_sampling_edges(self):
         # Negative Directed Edges (sampled)
