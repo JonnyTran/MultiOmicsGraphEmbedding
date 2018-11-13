@@ -127,7 +127,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             idx = [self.node_list.index(node) for node in node_list]
             return self._X[idx, :]
         else:
-            raise Exception("node_list contains node not included in trained embeddings")
+            raise Exception("node_list contains a node not included in trained embeddings")
 
     def get_edge_weight(self, i, j):
         '''Compute the weight for edge between node i and node j
@@ -208,6 +208,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         elif self._method_name == "SDNE":
             reconstructed_adj = pairwise_distances(X=self._X, Y=self._X, metric="euclidean", n_jobs=-2)
+            reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
 
         else:
             raise Exception("Method" + self.get_method_name() + "not supported")

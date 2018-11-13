@@ -229,7 +229,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def load_model(self, filepath, generator):
         self.generator_train = generator
         self.node_list = self.generator_train.node_list
-        self.build_keras_model(multi_gpu=False)
+        # self.build_keras_model(multi_gpu=False)
         self.lstm_network = load_model(filepath)
         print(self.lstm_network.summary())
 
