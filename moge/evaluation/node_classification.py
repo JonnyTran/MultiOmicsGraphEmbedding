@@ -6,7 +6,7 @@ from sklearn import svm
 
 
 def evaluate_classification(embedding, network, node_label="Family", cv=5, multilabel=False,
-                            scoring=['precision_macro', 'recall_macro']):
+                            scoring=['precision_micro', 'recall_micro', "f1_micro", "roc_auc"]):
     nodelist = embedding.node_list
     genes_info = network.genes_info
     nodes_with_label = genes_info[genes_info[node_label].notna()].index
@@ -18,7 +18,7 @@ def evaluate_classification(embedding, network, node_label="Family", cv=5, multi
     if multilabel:
         labels = genes_info.loc[nodelist, node_label].str.split("|", expand=False)
         y = MultiLabelBinarizer().fit_transform(labels.tolist())
-        clf = KNeighborsClassifier(n_neighbors=50, weights="distance", algorithm="auto", metric="euclidean")
+        clf = KNeighborsClassifier(n_neighbors=10, weights="distance", algorithm="auto", metric="euclidean")
 
     else:  # Multiclass classification (only single label each sample)
         y = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
