@@ -29,9 +29,9 @@ def contrastive_loss(y_true, y_pred):
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
-    def __init__(self, d=512, input_shape=(None, None), batch_size=1024, lr=0.001, epochs=10,
+    def __init__(self, d=128, input_shape=(None, None), batch_size=2048, lr=0.001, epochs=10,
                  negative_sampling_ratio=2.0,
-                 max_length=700, truncating="post", seed=0, verbose=False, **kwargs):
+                 max_length=1400, truncating="post", seed=0, verbose=False, **kwargs):
         super().__init__(d)
 
         self._d = d
@@ -68,7 +68,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("Embedding", x) if self.verbose else None
 
         x = Lambda(lambda y: K.expand_dims(y, axis=2))(x)  # (batch_number, sequence_length, 1, 5)
-        x = Conv2D(filters=320, kernel_size=(6, 1), activation='relu', data_format="channels_last")(
+        x = Conv2D(filters=192, kernel_size=(6, 1), activation='relu', data_format="channels_last")(
             x)  # (batch_number, sequence_length-5, 1, 192)
         x = Lambda(lambda y: K.squeeze(y, axis=2))(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
@@ -77,7 +77,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("max pooling_1", x) if self.verbose else None
         x = SpatialDropout1D(0.1)(x)
 
-        x = Convolution1D(filters=192, kernel_size=3, activation='relu')(x)
+        x = Convolution1D(filters=320, kernel_size=3, activation='relu')(x)
         print("conv1d_2", x) if self.verbose else None
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_2", x) if self.verbose else None
@@ -85,7 +85,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         x = Bidirectional(CuDNNLSTM(320, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None
-        x = Dropout(0.1)(x)
+        x = Dropout(0.2)(x)
 
         x = Dense(1024, activation='relu')(x)  # (batch_number, 1024)
         x = Dropout(0.2)(x)
@@ -236,27 +236,29 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
     def get_embedding(self, variable_length=False, recompute=False, batch_size=1, node_list=None):
         if (not hasattr(self, "_X") or recompute):
-            if self.generator_train is SampledDataGenerator:
-                nodelist = self.generator_train.node_list
-            else:
-                nodelist = range(len(self.generator_train.node_list))
-            seqs = self.generator_train.get_sequence_data(nodelist,
-                                                          variable_length=variable_length)
-            if variable_length:
-                embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
-            else:
-                embs = self.lstm_network.predict(seqs, batch_size=batch_size)
+            self.process_embeddings(batch_size, variable_length)
 
-            embs = np.array(embs)
-            embs = embs.reshape(embs.shape[0], embs.shape[-1])
-            self._X = embs
-            return self._X
+        if node_list is not None:
+            idx = [self.node_list.index(node) for node in node_list if node in self.node_list]
+            return self._X[idx, :]
         else:
-            if node_list is not None:
-                idx = [self.node_list.index(node) for node in node_list if node in self.node_list]
-                return self._X[idx, :]
-            else:
-                return self._X
+            return self._X
+
+    def process_embeddings(self, batch_size, variable_length):
+        if self.generator_train is SampledDataGenerator:
+            nodelist = self.generator_train.node_list
+        else:
+            nodelist = range(len(self.generator_train.node_list))
+        seqs = self.generator_train.get_sequence_data(nodelist,
+                                                      variable_length=variable_length)
+        if variable_length:
+            embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
+        else:
+            embs = self.lstm_network.predict(seqs, batch_size=batch_size)
+
+        embs = np.array(embs)
+        embs = embs.reshape(embs.shape[0], embs.shape[-1])
+        self._X = embs
 
     def predict_generator(self, generator):
         y_pred = self.siamese_net.predict_generator(generator, use_multiprocessing=True, workers=8)

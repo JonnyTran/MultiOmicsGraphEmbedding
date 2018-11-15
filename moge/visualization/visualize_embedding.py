@@ -30,7 +30,7 @@ def visualize_embedding(embedding, network, edgelist=None, top_k=5000, test_node
         kwargs["labels"] = labels_dict
         kwargs["with_labels"] = True
         kwargs["font_weight"] = "bold"
-        kwargs["font_size"] = 18
+        kwargs["font_size"] = 7
 
     if node_label is not None:
         genes_info = network.genes_info
@@ -78,6 +78,8 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         kwargs["node_size"] = 25
     if "with_labels" not in kwargs or "labels" not in kwargs:
         kwargs["with_labels"] = False
+    if "font_size" not in kwargs:
+        kwargs["font_size"] = 5
 
     if di_graph is None:
         # Plot using plt scatter
@@ -92,12 +94,12 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
             nx.draw_networkx_nodes(di_graph, pos,
                                    node_color=node_colors, cmap=cmap, ax=ax,
                                    width=0.1,
-                                   alpha=0.8, font_size=5, **kwargs)
+                                   alpha=0.8, **kwargs)
         else:
             nx.draw_networkx(di_graph, pos,
                              node_color=node_colors, cmap=cmap, ax=ax,
                              width=0.1, arrows=True,
-                             alpha=0.8, font_size=5, **kwargs)
+                             alpha=0.8, **kwargs)
 
         if legend:
             plt.legend(loc='best')
