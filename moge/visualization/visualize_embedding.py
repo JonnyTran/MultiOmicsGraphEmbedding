@@ -29,7 +29,6 @@ def visualize_embedding(embedding, network, edgelist=None, top_k=5000, test_node
         labels_dict = {node:node for node in test_nodes if node in nodelist}
         kwargs["labels"] = labels_dict
         kwargs["with_labels"] = True
-        kwargs["font_weight"] = "bold"
         kwargs["font_size"] = 7
 
     if node_label is not None:
