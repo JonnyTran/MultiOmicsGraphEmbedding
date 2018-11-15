@@ -3,11 +3,9 @@ import numpy as np
 import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import EarlyStopping
-from keras.layers import Dense, Dropout, SpatialDropout1D, Input, Lambda, LSTM, Bidirectional, BatchNormalization, \
-    Masking
-from keras.layers import Conv2D, ConvLSTM2D, Dense, Dropout, Bidirectional, CuDNNLSTM, SpatialDropout1D, Embedding
-
+from keras.layers import Conv2D, Dense, Dropout, Bidirectional, CuDNNLSTM, SpatialDropout1D, Embedding
 from keras.layers import Dot, MaxPooling1D, Convolution1D
+from keras.layers import Input, Lambda
 from keras.models import Model
 from keras.models import load_model
 from keras.optimizers import RMSprop
@@ -203,7 +201,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         if node_l is not None:
             indices = [i for i in range(embs.shape[0]) if self.node_list[i] in node_l]
             embs = embs[indices, :]
-            print("Embeddings filtered by node list", embs.shape)
 
         if edge_type == 'd':
             adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
