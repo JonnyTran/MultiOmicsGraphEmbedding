@@ -73,7 +73,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         x = Lambda(lambda y: K.squeeze(y, axis=2))(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
 
-        x = MaxPooling1D(pool_size=3, padding="same")(x)
+        x = MaxPooling1D(pool_size=6, padding="same")(x)
         print("max pooling_1", x) if self.verbose else None
         x = SpatialDropout1D(0.1)(x)
 

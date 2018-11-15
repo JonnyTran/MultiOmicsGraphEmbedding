@@ -8,7 +8,7 @@ import numpy as np
 from sklearn.manifold import TSNE
 
 
-def visualize_embedding(embedding, network, edgelist=None, top_k=10000, test_nodes=None,
+def visualize_embedding(embedding, network, edgelist=None, top_k=5000, test_nodes=None,
                         node_label="locus_type", cmap="gist_ncar", **kwargs):
     nodelist = embedding.node_list
     node_pos = embedding.get_tsne_node_pos()
@@ -23,12 +23,14 @@ def visualize_embedding(embedding, network, edgelist=None, top_k=10000, test_nod
             kwargs["edge_cmap"] = cm.get_cmap("binary")
             kwargs["edge_vmin"] = 0.0
             kwargs["edge_vmax"] = 1.0
-        kwargs["style"] = "dashed"
+            kwargs["style"] = "dashed"
 
     if test_nodes is not None:
         labels_dict = {node:node for node in test_nodes if node in nodelist}
         kwargs["labels"] = labels_dict
         kwargs["with_labels"] = True
+        kwargs["font_weight"] = "bold"
+        kwargs["font_size"] = 18
 
     if node_label is not None:
         genes_info = network.genes_info

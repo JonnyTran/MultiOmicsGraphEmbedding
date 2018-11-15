@@ -1,17 +1,27 @@
-from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import cross_validate
-from sklearn.preprocessing import MultiLabelBinarizer, LabelBinarizer
 from sklearn import svm
+from sklearn.model_selection import cross_validate
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import MultiLabelBinarizer
 
 
-def evaluate_classification(embedding, network, node_label="Family", cv=5, multilabel=False,
-                            scoring=['precision_micro', 'recall_micro', "f1_micro"]):
+def evaluate_classification(embedding, network, cv=5, node_label="Family", multilabel=False,
+                            scoring=['precision_micro', 'recall_micro', "f1_micro"], verbose=False):
     nodelist = embedding.node_list
     genes_info = network.genes_info
-    nodes_with_label = genes_info[genes_info[node_label].notna()].index
+
+    # Filter labels that have enough samples
+    if multilabel:
+        labels_to_test = [i for (i, v) in (genes_info[genes_info[node_label].notnull()][node_label].str.get_dummies(
+            "|", sparse=True).sum(axis=0) >= cv).items() if v == True]
+        nodes_with_label = [i for (i, v) in genes_info[genes_info[node_label].notnull()][node_label].str.contains(
+            "|".join(labels_to_test)).items() if v == True]
+    else:
+        labels_to_test = [i for (i, v) in (genes_info[node_label].value_counts() >= cv).items() if v == True]
+        nodes_with_label = genes_info[genes_info[node_label].isin(labels_to_test)].index
+
     nodelist = [node for node in nodelist if node in nodes_with_label]
     nodes_split_by_group = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
+    print("# of labels with >cv samples:", len(labels_to_test), ", # of nodes to train/test:", len(nodelist)) if verbose else None
 
     X = embedding.get_embedding(node_list=nodelist)
     assert len(nodelist) == X.shape[0]
