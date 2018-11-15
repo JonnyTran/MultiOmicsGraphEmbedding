@@ -29,13 +29,12 @@ def contrastive_loss(y_true, y_pred):
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
-    def __init__(self, d=128, input_shape=(None, None), batch_size=2048, lr=0.001, epochs=10,
+    def __init__(self, d=128, batch_size=2048, lr=0.001, epochs=10,
                  negative_sampling_ratio=2.0,
                  max_length=1400, truncating="post", seed=0, verbose=False, **kwargs):
         super().__init__(d)
 
         self._d = d
-        self.input_shape = input_shape
         self.batch_size = batch_size
         self.lr = lr
         self.epochs = epochs
@@ -94,6 +93,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         x = Dense(self._d, activation='linear')(x)  # Embedding space (batch_number, 128)
         print("embedding", x) if self.verbose else None
         return Model(input, x)
+
 
     def euclidean_distance(self, inputs):
         x, y = inputs
@@ -161,8 +161,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         with tf.device(device):
             # Inputs
             E_ij = Input(batch_shape=(self.batch_size, 1), name="E_ij")
-            input_seq_i = Input(batch_shape=(self.batch_size, *self.input_shape), name="input_seq_i")
-            input_seq_j = Input(batch_shape=(self.batch_size, *self.input_shape), name="input_seq_j")
+            input_seq_i = Input(batch_shape=(self.batch_size, None), name="input_seq_i")
+            input_seq_j = Input(batch_shape=(self.batch_size, None), name="input_seq_j")
             is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.bool, name="is_directed")
 
             # build create_base_network to use in each siamese 'leg'
@@ -208,6 +208,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                      metric="euclidean", n_jobs=8)
         elif edge_type == 'u':
             adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
+        else:
+            raise Exception("Unsupported edge_type", edge_type)
 
         adj = np.exp(-beta * adj)
 

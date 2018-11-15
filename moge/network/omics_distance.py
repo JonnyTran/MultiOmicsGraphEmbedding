@@ -43,7 +43,7 @@ def compute_annotation_affinities(genes_info, node_list, modality=None, correlat
                                   multiprocessing=True):
     if features is None:
         if modality == "GE":
-            features = ["locus_type", "gene_family_id", "location", "Disease association", "Transcript sequence"]
+            features = ["locus_type", "gene_family_id", "GO Terms", "location", "Disease association", "Transcript sequence"]
         elif modality == "MIR":
             features = ["Family", "location", "GO Terms", "Rfams", "Disease association", "Transcript sequence"]
         elif modality == "LNC":
