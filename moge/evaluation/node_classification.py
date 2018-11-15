@@ -12,7 +12,7 @@ def evaluate_classification(embedding, network, cv=5, node_label="Family", multi
     # Filter labels that have enough samples
     if multilabel:
         labels_to_test = [i for (i, v) in (genes_info[genes_info[node_label].notnull()][node_label].str.get_dummies(
-            "|", sparse=True).sum(axis=0) >= cv).items() if v == True]
+            "|").sum(axis=0) >= cv).items() if v == True]
         nodes_with_label = [i for (i, v) in genes_info[genes_info[node_label].notnull()][node_label].str.contains(
             "|".join(labels_to_test)).items() if v == True]
     else:
@@ -21,6 +21,7 @@ def evaluate_classification(embedding, network, cv=5, node_label="Family", multi
 
     nodelist = [node for node in nodelist if node in nodes_with_label]
     nodes_split_by_group = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
+    print("labels_to_test", labels_to_test) if verbose else None
     print("# of labels with >cv samples:", len(labels_to_test), ", # of nodes to train/test:", len(nodelist)) if verbose else None
 
     X = embedding.get_embedding(node_list=nodelist)
