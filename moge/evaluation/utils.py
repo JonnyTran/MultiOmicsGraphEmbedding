@@ -158,7 +158,6 @@ def mask_test_edges(network, node_list, edge_types=["u", "d"],
     # Avoid removing edges in the MST
     temp_graph = nx.Graph(incoming_graph_data=edges_to_remove)
     mst_edges = nx.minimum_spanning_edges(temp_graph, data=False, ignore_nan=True)
-    print("mst_edges", len(mst_edges), mst_edges[:5])
     edges_to_remove = [(u,v,d) for u,v,d in edges_to_remove if not ((u, v) in mst_edges or (v, u) in mst_edges)]
     print("edges_to_remove (after MST)", len(edges_to_remove)) if verbose else None
 
