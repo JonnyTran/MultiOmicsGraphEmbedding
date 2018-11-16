@@ -222,8 +222,6 @@ network if the similarity measures passes the threshold
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
 
-
-
         # Select negative edges at affinity close to zero in the affinity matrix
         max_negative_edges = int(negative_sampling_ratio * len(sim_edgelist_ebunch))
         dissimilarity_filtered = np.triu(annotation_affinities_df <= dissimilarity_threshold, k=1)
