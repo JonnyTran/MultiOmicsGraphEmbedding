@@ -149,15 +149,14 @@ class DataGenerator(keras.utils.Sequence):
         X_list = []
         for id, edge_type in edges_batch:
             if edge_type == DIRECTED_EDGE_TYPE:
-                # X_list.append((self.Ed_rows[id], self.Ed_cols[id], IS_DIRECTED, 1))
-                X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE,
-                               self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
+                X_list.append((self.Ed_rows[id], self.Ed_cols[id], IS_DIRECTED, 1))
+                # X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE,
+                #                self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
             elif edge_type == UNDIRECTED_EDGE_TYPE:
+                X_list.append((self.Eu_rows[id], self.Eu_cols[id], IS_UNDIRECTED, 1))
                 # X_list.append(
-                # (self.Eu_rows[id], self.Eu_cols[id], IS_UNDIRECTED, 1))
-                X_list.append(
-                    (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE,
-                     self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
+                #     (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE,
+                #      self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
             elif edge_type == UNDIRECTED_NEG_EDGE_TYPE:
                 X_list.append(
                     (self.En_rows[id], self.En_cols[id], IS_UNDIRECTED, 0))
@@ -392,12 +391,12 @@ class SampledDataGenerator(DataGenerator):
         X_list = []
         for u,v,type in sampled_edges:
             if type == DIRECTED_EDGE_TYPE:
-                X_list.append((u, v, IS_DIRECTED, self.adj_directed[self.node_list.index(u), self.node_list.index(v)]))
-
+                X_list.append((u, v, IS_DIRECTED, 1))
+                # self.adj_directed[self.node_list.index(u), self.node_list.index(v)]
             elif type == UNDIRECTED_EDGE_TYPE:
                 X_list.append(
-                    (u, v, IS_UNDIRECTED, self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]))
-
+                    (u, v, IS_UNDIRECTED, 1))
+                # self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]
             elif type == UNDIRECTED_NEG_EDGE_TYPE:
                 X_list.append(
                     (u, v, IS_UNDIRECTED, 0))
