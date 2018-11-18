@@ -246,13 +246,13 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             return self._X
 
-    def process_embeddings(self, batch_size, variable_length):
+    def process_embeddings(self, batch_size, variable_length, minlen=None):
         if self.generator_train is SampledDataGenerator:
             nodelist = self.generator_train.node_list
         else:
             nodelist = range(len(self.generator_train.node_list))
         seqs = self.generator_train.get_sequence_data(nodelist,
-                                                      variable_length=variable_length)
+                                                      variable_length=variable_length, minlen=minlen)
         if variable_length:
             embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
         else:
