@@ -5,6 +5,10 @@ from moge.evaluation.utils import mask_test_edges, split_train_test_edges
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
+def evaluate_pr_curve_link_pred(embeddings, X, y):
+    pass
+
+
 def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, edge_type="d", top_k=100):
     nodes = embedding.node_list
     nodes = [node for node in nodes if node in node_list]

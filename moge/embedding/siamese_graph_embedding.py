@@ -215,8 +215,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         return adj
 
-    def save_embeddings(self, filepath, variable_length=True, recompute=True):
-        embs = self.get_embedding(variable_length=variable_length, recompute=recompute)
+    def save_embeddings(self, filepath, variable_length=True, recompute=True, minlen=None):
+        embs = self.get_embedding(variable_length=variable_length, recompute=recompute, minlen=minlen)
         assert len(self.node_list) == embs.shape[0]
         fout = open(filepath, 'w')
         fout.write("{} {}\n".format(len(self.node_list), self._d))
@@ -236,9 +236,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         exps = np.exp(X)
         return exps / np.sum(exps, axis=0)
 
-    def get_embedding(self, variable_length=False, recompute=False, batch_size=1, node_list=None):
+    def get_embedding(self, variable_length=False, recompute=False, batch_size=1, node_list=None, minlen=None):
         if (not hasattr(self, "_X") or recompute):
-            self.process_embeddings(batch_size, variable_length)
+            self.process_embeddings(batch_size, variable_length, minlen=minlen)
 
         if node_list is not None:
             idx = [self.node_list.index(node) for node in node_list if node in self.node_list]
@@ -247,10 +247,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             return self._X
 
     def process_embeddings(self, batch_size, variable_length, minlen=None):
-        if self.generator_train is SampledDataGenerator:
+        if isinstance(self.generator_train, SampledDataGenerator):
             nodelist = self.generator_train.node_list
         else:
             nodelist = range(len(self.generator_train.node_list))
+
         seqs = self.generator_train.get_sequence_data(nodelist,
                                                       variable_length=variable_length, minlen=minlen)
         if variable_length:
