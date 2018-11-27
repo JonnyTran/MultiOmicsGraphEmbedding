@@ -2,7 +2,7 @@ from sklearn.metrics import homogeneity_score, completeness_score, normalized_mu
 
 
 def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=None,
-                        metrics=["homogeneity", "completeness", "nmi"], verbose=True):
+                        metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True):
     nodelist = embedding.node_list
     genes_info = network.genes_info
     nodes_with_label = genes_info[genes_info[node_label].notna()].index
@@ -11,7 +11,7 @@ def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=
     y_true = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
 
     if n_clusters is None:
-        n_clusters = len(y_true.unique())
+        n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())
         print("Clustering", len(nodelist), "nodes with n_clusters:", n_clusters) if verbose else None
 
     y_pred = embedding.predict_cluster(n_clusters, node_list=nodelist)
