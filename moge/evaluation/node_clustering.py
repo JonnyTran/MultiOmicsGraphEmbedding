@@ -8,7 +8,7 @@ def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=
     nodes_with_label = genes_info[genes_info[node_label].notna()].index
     nodelist = [node for node in nodelist if node in nodes_with_label]
 
-    y_true = genes_info.loc[nodelist, node_label]
+    y_true = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
 
     if n_clusters is None:
         n_clusters = len(y_true.unique())
