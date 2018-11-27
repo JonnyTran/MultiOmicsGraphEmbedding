@@ -118,7 +118,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                         subsample=True, compression_func="log",
                         n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
-        self.subsample = subsample
         if subsample:
             self.generator_train = SampledDataGenerator(network=network, compression_func=compression_func, n_steps=n_steps,
                                                         maxlen=self.max_length, padding='post', truncating=self.truncating,
