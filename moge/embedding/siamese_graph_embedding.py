@@ -155,8 +155,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             allow_soft_placement = False
         K.clear_session()
         tf.reset_default_graph()
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True))
-
+        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
         # Build model
         with tf.device(device):
             # Inputs
