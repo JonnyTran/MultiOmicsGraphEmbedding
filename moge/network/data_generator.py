@@ -87,19 +87,20 @@ class DataGenerator(keras.utils.Sequence):
         print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count)
 
     def process_negative_sampling_edges(self):
-        # Negative Directed Edges (sampled)
+        # All Negative Directed Edges (non-positive edges)
         adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
-        self.Ens_rows, self.Ens_cols = np.where(adj_positive.todense() == 0)
+        self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ens_count:", self.Ens_count)
 
-        sample_indices = np.random.choice(self.Ens_rows.shape[0], self.Ens_count, replace=False)
-        self.Ens_rows = self.Ens_rows[sample_indices]
-        self.Ens_cols = self.Ens_cols[sample_indices]
+    def update_negative_samples(self):
+        sample_indices = np.random.choice(self.Ens_rows_all.shape[0], self.Ens_count, replace=False)
+        self.Ens_rows = self.Ens_rows_all[sample_indices]
+        self.Ens_cols = self.Ens_cols_all[sample_indices]
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
-        # self.update_negative_samples()
+        self.update_negative_samples()
         self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
 
         self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count + self.Ens_count)
