@@ -39,7 +39,7 @@ def evaluate_classification(embedding, network, cv=5, node_label="Family", multi
         y = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
         clf = svm.LinearSVC(multi_class="ovr")
 
-    if classifier:
+    if classifier is not None:
         clf = classifier
 
     scores = cross_validate(clf, X, y, groups=nodes_split_by_group, cv=cv, n_jobs=-2, scoring=scoring,
