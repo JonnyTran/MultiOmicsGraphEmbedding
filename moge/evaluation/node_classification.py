@@ -1,9 +1,7 @@
 from sklearn import svm
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
 from sklearn.model_selection import cross_validate
-from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import MultiLabelBinarizer
 
 
 def evaluate_classification(embedding, network, cv=5, node_label="Family", multilabel=False, classifier=None,
@@ -32,15 +30,16 @@ def evaluate_classification(embedding, network, cv=5, node_label="Family", multi
     if multilabel:
         labels = genes_info.loc[nodelist, node_label].str.split("|", expand=False)
         y = MultiLabelBinarizer().fit_transform(labels.tolist())
-        clf = KNeighborsClassifier(n_neighbors=10, weights="distance", algorithm="auto", metric="euclidean")
-        # clf = RandomForestClassifier(n_estimators=10)
-
     else:  # Multiclass classification (only single label each sample)
         y = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
-        clf = svm.LinearSVC(multi_class="ovr")
 
     if classifier is not None:
         clf = classifier
+    else:
+        if multilabel:
+            clf = KNeighborsClassifier(n_neighbors=10, weights="distance", algorithm="auto", metric="euclidean")
+        else:
+            clf = svm.LinearSVC(multi_class="ovr")
 
     scores = cross_validate(clf, X, y, groups=nodes_split_by_group, cv=cv, n_jobs=-2, scoring=scoring,
                             return_train_score=False)
