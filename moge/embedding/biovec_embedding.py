@@ -11,21 +11,26 @@ class BioVecEmbedding(ImportedGraphEmbedding):
         for modality in model_path_dict:
             models[modality] = biovec.models.load_protvec(model_path_dict[modality])
 
-        self.node_list = network.node_list
-        self._X = np.zeros((len(self.node_list), d))
+        self.node_list = []
+        self._X = []
+        # self._X = np.zeros((len(self.node_list), d))
 
-        for modality in model_path_dict:
-            for node in network.nodes[modality]:
-                if node not in self.node_list:
-                    continue
-                node_seq = network.genes_info.loc[node, "Transcript sequence"]
+        for node in network.node_list:
+            modality = network.node_to_modality[node]
+            node_seq = network.genes_info.loc[node, "Transcript sequence"]
+            if type(node_seq) is list:
+                node_seq = node_seq[0]
+            elif node_seq is None:
+                continue
 
-                if type(node_seq) is list:
-                    node_seq = node_seq[0]
-                elif node_seq is None:
-                    continue
-
-                print(node, len(node_seq))
+            try:
                 node_emb = np.array(models[modality].to_vecs(node_seq)).sum(axis=0)
-                self._X[self.node_list.index(node)] = node_emb
+            except Exception:
+                print("Failed to get vectors for", node)
+                continue
 
+            self._X.append(node_emb)
+            self.node_list.append(node)
+
+        assert len(self._X) == len(self.node_list)
+        self._X = np.array(self._X)
