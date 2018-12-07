@@ -1,11 +1,12 @@
 from abc import ABCMeta
 
 import numpy as np
-from sklearn.metrics import pairwise_distances
-from moge.evaluation.link_prediction import largest_indices
-from sklearn.decomposition import PCA
 from MulticoreTSNE import MulticoreTSNE as TSNE
 from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.metrics import pairwise_distances
+
+from moge.evaluation.link_prediction import largest_indices
 
 
 class StaticGraphEmbedding:
@@ -195,6 +196,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             reconstructed_adj = np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
 
         elif self._method_name == "node2vec":
+            reconstructed_adj = self.softmax(np.dot(self._X, self._X.T))
+
+        elif self._method_name == "BioVec":
             reconstructed_adj = self.softmax(np.dot(self._X, self._X.T))
 
         elif self._method_name == "rna2rna":

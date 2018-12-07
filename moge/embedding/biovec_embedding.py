@@ -1,6 +1,7 @@
-from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 import biovec
 import numpy as np
+
+from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 
 
 class BioVecEmbedding(ImportedGraphEmbedding):
@@ -13,7 +14,6 @@ class BioVecEmbedding(ImportedGraphEmbedding):
 
         self.node_list = []
         self._X = []
-        # self._X = np.zeros((len(self.node_list), d))
 
         for node in network.node_list:
             modality = network.node_to_modality[node]
@@ -29,8 +29,8 @@ class BioVecEmbedding(ImportedGraphEmbedding):
                 print("Failed to get vectors for", node)
                 continue
 
-            self._X.append(node_emb)
             self.node_list.append(node)
+            self._X.append(node_emb)
 
         assert len(self._X) == len(self.node_list)
         self._X = np.array(self._X)
