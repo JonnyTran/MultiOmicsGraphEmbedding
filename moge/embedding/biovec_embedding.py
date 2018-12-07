@@ -25,5 +25,7 @@ class BioVecEmbedding(ImportedGraphEmbedding):
                 elif node_seq is None:
                     continue
 
+                print(node, len(node_seq))
                 node_emb = np.array(models[modality].to_vecs(node_seq)).sum(axis=0)
                 self._X[self.node_list.index(node)] = node_emb
+
