@@ -1,5 +1,6 @@
 import biovec
 import numpy as np
+import pandas as pd
 from gensim.models import Word2Vec
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
@@ -66,3 +67,15 @@ class iDeepVEmbedding(ImportedGraphEmbedding):
 
         assert len(self._X) == len(self.node_list)
         self._X = np.array(self._X)
+
+
+class LncTarInteraction(ImportedGraphEmbedding):
+    def __init__(self, table_file):
+        self.table = pd.read_table(table_file)
+        # self.edges_pred = self.table[["Query", "Target"]]
+        self.node_list = list(set(self.table["Query"].unique()) | set(self.table["Target"].unique()))
+        print("node_list size", len(self.node_list))
+
+    def get_top_k_predicted_edges(self, edge_type=None, top_k=100, node_list=None, training_network=None):
+        table = self.table[self.table["Query"].isin(node_list) & self.table["Target"].isin(node_list)]
+        return table.sort_values(by="ndG").loc[:top_k, ["Query", "Target", "ndG"]].values.tolist()

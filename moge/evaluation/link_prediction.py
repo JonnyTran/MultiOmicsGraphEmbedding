@@ -26,7 +26,7 @@ def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, 
 
 def precision(edges_true, edges_pred):
     if len(edges_pred[0]) > 2:
-        edges_pred = [(u, v) for u, v, w in edges_pred]
+        edges_pred = [(u, v) for u, v, _ in edges_pred]
 
     true_positives = len(set(edges_true) & set(edges_pred))
     return true_positives / len(edges_pred)
@@ -34,7 +34,7 @@ def precision(edges_true, edges_pred):
 
 def recall(edges_true, edges_pred):
     if len(edges_pred[0]) > 2:
-        edges_pred = [(u, v) for u, v, w in edges_pred]
+        edges_pred = [(u, v) for u, v, _ in edges_pred]
 
     true_positives = len(set(edges_true) & set(edges_pred))
     return true_positives / len(edges_true)
