@@ -77,5 +77,15 @@ class LncTarInteraction(ImportedGraphEmbedding):
         print("node_list size", len(self.node_list))
 
     def get_top_k_predicted_edges(self, edge_type=None, top_k=100, node_list=None, training_network=None):
+        nodes = self.node_list
+        if node_list is not None:
+            nodes = [n for n in nodes if n in node_list]
+
         table = self.table[self.table["Query"].isin(node_list) & self.table["Target"].isin(node_list)]
+
+        if training_network is not None:
+            training_adj = training_network.get_adjacency_matrix(edge_types=[edge_type], node_list=nodes)
+            rows, cols = training_adj.nonzero()
+            # estimated_adj[rows, cols] = 0
+
         return table.sort_values(by="ndG").loc[:top_k, ["Query", "Target", "ndG"]].values.tolist()

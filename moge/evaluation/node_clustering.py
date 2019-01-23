@@ -14,7 +14,12 @@ def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())
         print("Clustering", len(nodelist), "nodes with n_clusters:", n_clusters) if verbose else None
 
-    y_pred = embedding.predict_cluster(n_clusters, node_list=nodelist)
+    try:
+        y_pred = embedding.predict_cluster(n_clusters, node_list=nodelist)
+    except AttributeError as e:
+        print(e)
+        return
+
     assert len(y_pred) == len(y_true)
 
     results = {}
