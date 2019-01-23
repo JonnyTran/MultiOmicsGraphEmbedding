@@ -101,6 +101,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         x, y = inputs
         return K.sqrt(K.maximum(K.sum(K.square(x - y), axis=1, keepdims=True), K.epsilon()))
 
+    def get_abs_diff(self, vects):
+        x, y = vects
+        return K.abs(x - y)
+
     def st_euclidean_distance(self, inputs):
         emb_i, emb_j, is_directed = inputs
         sum_directed = K.sum(K.square(emb_i[:, 0:int(self._d / 2)] - emb_j[:, int(self._d / 2):self._d]), axis=1,
@@ -112,20 +116,72 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def st_l1_distance(self, inputs):
         emb_i, emb_j, is_directed = inputs
         abs_diff_directed = K.abs(emb_i[:, 0:int(self._d / 2)] - emb_j[:, int(self._d / 2):self._d])
-        l1_distance_directed = Dense(1, activation='sigmoid', name="directed_distance_layer")(abs_diff_directed)
+        self.alpha_directed = Dense(1, activation='sigmoid', trainable=True, name="alpha_directed")(abs_diff_directed)
 
         abs_diff_undirected = K.abs(emb_i - emb_j)
-        l1_distance_undirected = Dense(1, activation='sigmoid', name="undirected_distance_layer")(abs_diff_undirected)
+        self.alpha_undirected = Dense(1, activation='sigmoid', trainable=True, name="alpha_undirected")(abs_diff_undirected)
 
-        sum_switch = K.switch(is_directed, l1_distance_directed, l1_distance_undirected)
-        return K.maximum(sum_switch, K.epsilon())
-
+        y_pred = K.switch(is_directed, self.alpha_directed, self.alpha_undirected)
+        return y_pred
 
     def st_emb_probability(self, inputs):
         emb_i, emb_j, is_directed = inputs
         dot_directed = Dot(axes=1)([emb_i[:, 0:int(self._d / 2)], emb_j[:, int(self._d / 2):self._d]])
         dot_undirected = Dot(axes=1)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
+
+    def build_keras_model(self, multi_gpu):
+        if multi_gpu:
+            device = "/cpu:0"
+            allow_soft_placement = True
+        else:
+            device = "/gpu:0"
+            allow_soft_placement = False
+
+        K.clear_session()
+        tf.reset_default_graph()
+        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
+
+        # Build model
+        with tf.device(device):
+            # Inputs
+            E_ij = Input(batch_shape=(self.batch_size, 1), name="E_ij")
+            input_seq_i = Input(batch_shape=(self.batch_size, None), name="input_seq_i")
+            input_seq_j = Input(batch_shape=(self.batch_size, None), name="input_seq_j")
+            is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.bool, name="is_directed")
+
+            # build create_base_network to use in each siamese 'leg'
+            self.lstm_network = self.create_base_network()
+
+            # encode each of the two inputs into a vector with the convnet
+            encoded_i = self.lstm_network(input_seq_i)
+            encoded_j = self.lstm_network(input_seq_j)
+
+            # abs_diff_directed = Lambda(self.get_abs_diff)([encoded_i[:, 0:int(self._d/2)], encoded_j[:, int(self._d/2):self._d]])
+            # print("abs_diff_directed", abs_diff_directed)
+            # alpha_directed = Dense(1, activation='sigmoid', name="alpha_directed")(abs_diff_directed)
+            # print("pred_directed", alpha_directed)
+            #
+            # abs_diff_undirected = Lambda(self.get_abs_diff)([encoded_i, encoded_j])
+            # alpha_undirected = Dense(1, activation='sigmoid', name="alpha_undirected")(abs_diff_undirected)
+            #
+            # output = Lambda(lambda x: K.switch(x[2], x[0], x[1]), name="output")([alpha_directed, alpha_undirected, is_directed])
+            output = Lambda(self.st_l1_distance)([encoded_i, encoded_j, is_directed])
+            print("output", output)
+            self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=output)
+
+        # Multi-gpu parallelization
+        if multi_gpu:
+            self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
+        # my_callbacks = [EarlyStopping(monitor='auc_roc', patience=300, verbose=1, mode='max')]
+
+        # Compile & train
+        self.siamese_net.compile(loss='binary_crossentropy', # kullback_leibler_divergence, binary_crossentropy
+                                 optimizer=RMSprop(),
+                                 # metrics=[accuracy_from_dist, precision_from_dist, recall_from_dist, auc_roc_from_dist],
+                                 metrics=["accuracy", precision, recall],
+                                 )
+        print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
                         subsample=True, compression_func="log",
@@ -159,50 +215,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                                       validation_steps=validation_steps,
                                                       use_multiprocessing=True, workers=8)
 
-    def build_keras_model(self, multi_gpu):
-        if multi_gpu:
-            device = "/cpu:0"
-            allow_soft_placement = True
-        else:
-            device = "/gpu:0"
-            allow_soft_placement = False
-
-        K.clear_session()
-        tf.reset_default_graph()
-        sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
-
-        # Build model
-        with tf.device(device):
-            # Inputs
-            E_ij = Input(batch_shape=(self.batch_size, 1), name="E_ij")
-            input_seq_i = Input(batch_shape=(self.batch_size, None), name="input_seq_i")
-            input_seq_j = Input(batch_shape=(self.batch_size, None), name="input_seq_j")
-            is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.bool, name="is_directed")
-
-            # build create_base_network to use in each siamese 'leg'
-            self.lstm_network = self.create_base_network()
-
-            # encode each of the two inputs into a vector with the convnet
-            encoded_i = self.lstm_network(input_seq_i)
-            encoded_j = self.lstm_network(input_seq_j)
-
-            output = Lambda(self.st_l1_distance, name="output")([encoded_i, encoded_j, is_directed])
-            print("output", output)
-            self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=output)
-
-        # Multi-gpu parallelization
-        if multi_gpu:
-            self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
-        # my_callbacks = [EarlyStopping(monitor='auc_roc', patience=300, verbose=1, mode='max')]
-
-        # Compile & train
-        self.siamese_net.compile(loss='binary_crossentropy', # kullback_leibler_divergence, binary_crossentropy
-                                 optimizer=RMSprop(lr=self.lr),
-                                 # metrics=[accuracy_from_dist, precision_from_dist, recall_from_dist, auc_roc_from_dist],
-                                 metrics=["accuracy", precision, recall, auc_roc],
-                                 )
-        print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
-
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
         """
         For inter-modality, we calculate the directed first-order proximity, for intra-modality, we calculate the
@@ -229,7 +241,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             raise Exception("Unsupported edge_type", edge_type)
 
-        # adj = np.exp(-beta * adj)
+        adj = np.exp(-beta * adj)
 
         return adj
 
