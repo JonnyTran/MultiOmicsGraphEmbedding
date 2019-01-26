@@ -275,11 +275,12 @@ class DataGenerator(keras.utils.Sequence):
 
 class SampledDataGenerator(DataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
-                 batch_size=1, negative_sampling_ratio=3, n_steps=500, compression_func="log",
+                 batch_size=1, directed_proba=0.8, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  shuffle=True, seed=0):
         self.compression_func = compression_func
         self.n_steps = n_steps
+        self.directed_proba = directed_proba
         print("Using SampledDataGenerator")
         super().__init__(network,
                          batch_size, negative_sampling_ratio,
@@ -355,7 +356,7 @@ class SampledDataGenerator(DataGenerator):
 
     def sample_edge_type(self, edge_types):
         if DIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_EDGE_TYPE in edge_types:
-            edge_type = random.choice([DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE])
+            edge_type = np.random.choice([DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE], p=[self.directed_proba, 1-self.directed_proba])
         elif DIRECTED_EDGE_TYPE in edge_types:
             edge_type = DIRECTED_EDGE_TYPE
         elif UNDIRECTED_EDGE_TYPE in edge_types:

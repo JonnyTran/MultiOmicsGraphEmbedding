@@ -292,3 +292,6 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             y_pred = np.array(y_pred)[idx]
 
         return y_pred
+
+    def get_scale_free_score(self):
+        pass # TODO
