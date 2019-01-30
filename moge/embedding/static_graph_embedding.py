@@ -195,7 +195,10 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         Returns:
             A numpy array of size #nodes * #nodes containing the reconstructed adjacency matrix.
         '''
-        if self._method_name == "LINE":
+        if hasattr(self, "reconstructed_adj"):
+            reconstructed_adj = self.reconstructed_adj
+
+        elif self._method_name == "LINE":
             reconstructed_adj = np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
 
         elif self._method_name == "node2vec":
@@ -224,6 +227,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             reconstructed_adj = np.interp(reconstructed_adj, (reconstructed_adj.min(), reconstructed_adj.max()), (0, 1))
 
         if node_l is None or node_l == self.node_list:
+            self.reconstructed_adj = reconstructed_adj
             return reconstructed_adj
         elif set(node_l) < set(self.node_list):
             idx = [self.node_list.index(node) for node in node_l]
@@ -295,25 +299,26 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         """
         Bulk predict whether an edge exists between a pair of nodes, provided as a collection in X.
         :param X: [n_pairs, 2], where each element is the string name of a node
-        :return:
+        :return y_pred: [n_pairs]
         """
-        reconstructed_adj = self.get_reconstructed_adj()
+        estimated_adj = self.get_reconstructed_adj()
         node_set = set(self.node_list)
+        node_set_in_X = set(node for pair in X for node in pair)
 
-        X_u_inx = [u for u, v in X if u in node_set and v in node_set]
-        X_v_inx = [v for u, v in X if u in node_set and v in node_set]
-
-        if len(X_u_inx) == X.shape[0] and len(X_v_inx) == X.shape[0]:
-            y_pred = reconstructed_adj[X_u_inx, X_v_inx]
+        if node_set >= node_set_in_X:
+            X_u_inx = [self.node_list.index(u) for u, v in X if u in node_set and v in node_set]
+            X_v_inx = [self.node_list.index(v) for u, v in X if u in node_set and v in node_set]
+            y_pred = estimated_adj[X_u_inx, X_v_inx]
         else:
             y_pred = []
             for u, v in X:
                 if u in node_set and v in node_set:
-                    y_pred.append(reconstructed_adj[self.node_list.index(u), self.node_list.index(v)])
+                    y_pred.append(estimated_adj[self.node_list.index(u), self.node_list.index(v)])
                 else:
                     y_pred.append(0.0)
 
         y_pred = np.array(y_pred, dtype=np.float).reshape((-1, 1))
+        assert y_pred.shape[0] == X.shape[0]
         return y_pred
 
     def process_tsne_node_pos(self, perplexity=80):
@@ -328,7 +333,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             self.process_tsne_node_pos()
             return self.node_pos
 
-    def predict_cluster(self, n_clusters=8, node_list=None, n_jobs=-2, return_clusters  =False):
+    def predict_cluster(self, n_clusters=8, node_list=None, n_jobs=-2, return_clusters=False):
         embs = self.get_embedding()
         kmeans = KMeans(n_clusters, n_jobs=n_jobs)
         y_pred = kmeans.fit_predict(embs)

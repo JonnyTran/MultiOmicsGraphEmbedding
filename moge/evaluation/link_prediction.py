@@ -1,12 +1,34 @@
 import numpy as np
-
+import matplotlib.pyplot as plt
+from sklearn.utils.fixes import signature
+from sklearn.metrics import average_precision_score ,precision_recall_curve
 from moge.evaluation.metrics import link_prediction_score
 from moge.evaluation.utils import mask_test_edges, split_train_test_edges
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-def evaluate_pr_curve_link_pred(embeddings, X, y):
-    pass
+def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300):
+    fig = plt.figure(figsize=(4, 4), dpi=dpi)
+    ax = fig.add_subplot(111)
+
+    color_dict = {"LINE":"b", "HOPE":"b", "SDNE":"y", "node2vec":"g", "rna2rna":"r", "siamese":"r"}
+    ls_dict = {"LINE":":", "HOPE":"-", "SDNE":"--", "node2vec":"--", "rna2rna":"-", "siamese":":"}
+
+    for method in methods.keys():
+        y_prob_pred = methods[method].predict(X)
+        average_precision = average_precision_score(y_true=y_true, y_score=y_prob_pred)
+        precision, recall, _ = precision_recall_curve(y_true=y_true, probas_pred=y_prob_pred, pos_label=1)
+
+        ax.plot(recall, precision, color=color_dict[method], ls=ls_dict[method],
+                label=method + '. AUPR={0:0.2f}'.format(average_precision))
+
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.00])
+    plt.xlim([0.0, 1.0])
+    plt.legend(loc="lower right")
+    plt.title(title)
+    plt.show()
 
 
 def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, edge_type="d", top_k=100):
