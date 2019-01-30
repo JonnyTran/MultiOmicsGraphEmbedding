@@ -66,7 +66,7 @@ class DataGenerator(keras.utils.Sequence):
     def process_sequence_tokenizer(self):
         self.tokenizer = Tokenizer(char_level=True, lower=True)
         self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
-        print("num_words:", self.tokenizer.num_words, self.tokenizer.word_index, self.tokenizer.index_word, self.tokenizer.index_docs)
+        print("num_words:", self.tokenizer.num_words, self.tokenizer.word_index, self.tokenizer.index_docs)
 
     def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)

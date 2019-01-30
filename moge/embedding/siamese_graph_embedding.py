@@ -137,10 +137,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("abs_diff_undirected:", abs_diff_undirected)
 
         alpha_directed = Dense(1, activation='sigmoid',
-                               kernel_regularizer=keras.regularizers.l1(),
+                               kernel_regularizer=keras.regularizers.l1(), kernel_constraint=NonNeg(),
                                trainable=True, name="alpha_directed")(abs_diff_directed)
         alpha_undirected = Dense(1, activation='sigmoid',
-                                 kernel_regularizer=keras.regularizers.l1(),
+                                 kernel_regularizer=keras.regularizers.l1(), kernel_constraint=NonNeg(),
                                  trainable=True, name="alpha_undirected")(abs_diff_undirected)
         print("alpha_directed:", alpha_directed)
         print("alpha_undirected:", alpha_undirected)
