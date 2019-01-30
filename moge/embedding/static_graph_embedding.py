@@ -1,6 +1,9 @@
 from abc import ABCMeta
 
 import numpy as np
+import scipy
+import matplotlib.pyplot as plt
+
 from MulticoreTSNE import MulticoreTSNE as TSNE
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -199,7 +202,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             reconstructed_adj = self.softmax(np.dot(self._X, self._X.T))
 
         elif self._method_name == "BioVec":
-            reconstructed_adj = self.softmax(np.dot(self._X, self._X.T))
+            reconstructed_adj = self.softmax(np.dot(self._X, self._X.T)) # TODO Double check paper
 
         elif self._method_name == "rna2rna":
             reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
@@ -217,6 +220,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         else:
             raise Exception("Method" + self.get_method_name() + "not supported")
 
+        if not ((reconstructed_adj >= 0).all() and (reconstructed_adj <= 1).all()):
+            reconstructed_adj = np.interp(reconstructed_adj, (reconstructed_adj.min(), reconstructed_adj.max()), (0, 1))
+
         if node_l is None or node_l == self.node_list:
             return reconstructed_adj
         elif set(node_l) < set(self.node_list):
@@ -224,7 +230,6 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             return reconstructed_adj[idx, :][:, idx]
         else:
             raise Exception("A node in node_l is not in self.node_list.")
-
 
     def softmax(self, X):
         exps = np.exp(X)
@@ -249,8 +254,49 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         return top_k_pred_edges
 
+    def get_bipartite_adj(self, node_list_A, node_list_B, edge_type=None):
+        nodes_A = [n for n in self.node_list if n in node_list_A]
+        nodes_B = [n for n in self.node_list if n in node_list_B]
+        nodes = list(set(nodes_A) | set(nodes_B))
+
+        estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)
+        assert len(nodes) == estimated_adj.shape[0]
+        nodes_A_idx = [nodes.index(node) for node in nodes_A if node in nodes]
+        nodes_B_idx = [nodes.index(node) for node in nodes_B if node in nodes]
+        bipartite_adj = estimated_adj[nodes_A_idx, :][:, nodes_B_idx]
+        return bipartite_adj
+
+    def get_scalefree_fit_score(self, node_list_A, node_list_B, k_power=1, plot=False):
+        bipartite_adj = self.get_bipartite_adj(node_list_A, node_list_B)
+        adj_list = bipartite_adj.flatten()
+
+        cosine_adj_hist = np.histogram(np.power(adj_list, k_power), bins=500)
+        cosine_adj_hist_dist = scipy.stats.rv_histogram(cosine_adj_hist)
+
+        k_power = 1
+        c = np.log10(np.power(adj_list, k_power))
+        d = np.log10(cosine_adj_hist_dist.pdf(np.power(adj_list, k_power)))
+
+        if plot:
+            plt.scatter(x=c, y=d, marker='.')
+            plt.xlabel("np.log10(k)")
+            plt.ylabel("np.log10(P(k))")
+            plt.show()
+
+        d_ = d[np.where(c != -np.inf)]
+        d_ = d_[np.where(d_ != -np.inf)]
+        c_ = c[np.where(d != -np.inf)]
+        c_ = c_[np.where(c_ != -np.inf)]
+
+        r_square = np.power(scipy.stats.pearsonr(c_, d_)[0], 2)
+        return r_square
 
     def predict(self, X):
+        """
+        Bulk predict whether an edge exists between a pair of nodes, provided as a collection in X.
+        :param X: [n_pairs, 2], where each element is the string name of a node
+        :return:
+        """
         reconstructed_adj = self.get_reconstructed_adj()
         node_set = set(self.node_list)
 

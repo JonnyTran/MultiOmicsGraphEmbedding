@@ -162,9 +162,14 @@ class HeterogeneousNetwork():
 
         return self.G.subgraph(nodes) # returned subgraph is not mutable
 
-    def get_edgelist(self, edge_types, node_list, inclusive=True):
-        edgelist = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
-                    d['type'] in edge_types]
+    def get_edgelist(self, edge_types, node_list, databases=None, inclusive=True):
+        if databases is not None:
+            edgelist = [(u, v, d) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
+                        'database' in d and d['database'] in databases]
+        else:
+            edgelist = self.G.edges(nbunch=node_list, data=True)
+
+        edgelist = [(u, v) for u, v, d in edgelist if d['type'] in edge_types]
         if inclusive:
             edgelist = [(u, v) for u, v in edgelist if (u in node_list and v in node_list)]
 
