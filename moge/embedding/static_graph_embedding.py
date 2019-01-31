@@ -189,7 +189,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         print(self.get_method_name(), "imported", self._X.shape)
 
 
-    def get_reconstructed_adj(self, edge_type=None, node_l=None):
+    def get_reconstructed_adj(self, edge_type=None, node_l=None, ):
         '''Compute the adjacency matrix from the learned embedding
 
         Returns:
@@ -263,7 +263,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         nodes_B = [n for n in self.node_list if n in node_list_B]
         nodes = list(set(nodes_A) | set(nodes_B))
 
-        estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)
+        estimated_adj = self.get_reconstructed_adj(node_l=nodes)
         assert len(nodes) == estimated_adj.shape[0]
         nodes_A_idx = [nodes.index(node) for node in nodes_A if node in nodes]
         nodes_B_idx = [nodes.index(node) for node in nodes_B if node in nodes]

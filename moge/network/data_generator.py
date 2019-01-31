@@ -64,7 +64,7 @@ class DataGenerator(keras.utils.Sequence):
         self.process_sequence_tokenizer()
 
     def process_sequence_tokenizer(self):
-        self.tokenizer = Tokenizer(char_level=True, lower=True)
+        self.tokenizer = Tokenizer(char_level=True, lower=False)
         self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
         print("num_words:", self.tokenizer.num_words, self.tokenizer.word_index, self.tokenizer.index_docs)
 
@@ -150,14 +150,14 @@ class DataGenerator(keras.utils.Sequence):
         X_list = []
         for id, edge_type in edges_batch:
             if edge_type == DIRECTED_EDGE_TYPE:
-                # X_list.append((self.Ed_rows[id], self.Ed_cols[id], IS_DIRECTED, 1))
-                X_list.append((self.Ed_rows[id], self.Ed_cols[id], DIRECTED_EDGE_TYPE,
-                               self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
+                X_list.append((self.Ed_rows[id], self.Ed_cols[id], IS_DIRECTED, 1))
+                # X_list.append((self.Ed_rows[id], self.Ed_cols[id], IS_DIRECTED,
+                #                self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]]))
             elif edge_type == UNDIRECTED_EDGE_TYPE:
-                # X_list.append((self.Eu_rows[id], self.Eu_cols[id], IS_UNDIRECTED, 1))
-                X_list.append(
-                    (self.Eu_rows[id], self.Eu_cols[id], UNDIRECTED_EDGE_TYPE,
-                     self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
+                X_list.append((self.Eu_rows[id], self.Eu_cols[id], IS_UNDIRECTED, 1))
+                # X_list.append(
+                #     (self.Eu_rows[id], self.Eu_cols[id], IS_UNDIRECTED,
+                #      self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]]))
             elif edge_type == UNDIRECTED_NEG_EDGE_TYPE:
                 X_list.append(
                     (self.En_rows[id], self.En_cols[id], IS_UNDIRECTED, 0))
@@ -193,6 +193,11 @@ class DataGenerator(keras.utils.Sequence):
         return X, y
 
     def get_training_edges(self, training_index):
+        """
+        Generate training edges (for right now only works with directed edges)
+        :param training_index:
+        :return:
+        """
         # Generate indexes of the batch
         indices = self.indexes[training_index * self.batch_size: (training_index + 1) * self.batch_size]
 
@@ -275,7 +280,7 @@ class DataGenerator(keras.utils.Sequence):
 
 class SampledDataGenerator(DataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
-                 batch_size=1, directed_proba=0.8, negative_sampling_ratio=3, n_steps=500, compression_func="log",
+                 batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  shuffle=True, seed=0):
         self.compression_func = compression_func
@@ -393,11 +398,11 @@ class SampledDataGenerator(DataGenerator):
         X_list = []
         for u,v,type in sampled_edges:
             if type == DIRECTED_EDGE_TYPE:
-                X_list.append((u, v, IS_DIRECTED, self.adj_directed[self.node_list.index(u), self.node_list.index(v)]))
+                X_list.append((u, v, IS_DIRECTED, 1))
                 # self.adj_directed[self.node_list.index(u), self.node_list.index(v)]
             elif type == UNDIRECTED_EDGE_TYPE:
                 X_list.append(
-                    (u, v, IS_UNDIRECTED, self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]))
+                    (u, v, IS_UNDIRECTED, 1))
                 # self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]
             elif type == UNDIRECTED_NEG_EDGE_TYPE:
                 X_list.append(

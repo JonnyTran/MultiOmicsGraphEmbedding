@@ -56,9 +56,19 @@ def switch(inputs):
     is_directed, directed, undirected = inputs
     return K.switch(is_directed, directed, undirected)
 
-def switch_multiplier(inputs):
-    is_directed, directed, undirected = inputs
-    return K.cast(is_directed, dtype="float32") * directed + (1-K.cast(is_directed, dtype="float32")) * undirected
+def softmax(X):
+    exps = np.exp(X)
+    return exps / np.sum(exps, axis=0)
+
+def sigmoid(x):
+    return 1/(1+np.exp(-x))
+
+def l1_diff_alpha(u, v, weights):
+    l1_diff = np.abs(u - v)
+    matmul = np.dot(l1_diff, weights[0]) + weights[1]
+    return sigmoid(matmul)
+
+
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding):
     def __init__(self, d=128, batch_size=2048, lr=0.001, epochs=10,
@@ -137,10 +147,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("abs_diff_undirected:", abs_diff_undirected)
 
         alpha_directed = Dense(1, activation='sigmoid',
-                               kernel_regularizer=keras.regularizers.l1(), kernel_constraint=NonNeg(),
+                               # kernel_regularizer=keras.regularizers.l1(l=0.01),
                                trainable=True, name="alpha_directed")(abs_diff_directed)
         alpha_undirected = Dense(1, activation='sigmoid',
-                                 kernel_regularizer=keras.regularizers.l1(), kernel_constraint=NonNeg(),
+                                 # kernel_regularizer=keras.regularizers.l1(l=0.01),
                                  trainable=True, name="alpha_undirected")(abs_diff_undirected)
         print("alpha_directed:", alpha_directed)
         print("alpha_undirected:", alpha_undirected)
@@ -190,29 +200,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             encoded_j = self.lstm_network(input_seq_j)
 
             # output = Lambda(self.st_euclidean_distance)([encoded_i, encoded_j, is_directed])
-
             self.alpha_network = self.create_alpha_network()
             output = self.alpha_network([encoded_i, encoded_j, is_directed])
-            # pred = Reshape((-1,))(output)
-            # print("pred:", pred)
-            # abs_diff_directed = Lambda(lambda tup: K.abs(tup[0][:, 0:int(self._d/2)] - tup[1][:, int(self._d/2):self._d]),
-            #                            output_shape=(self.batch_size, int(self._d/2)))([encoded_i, encoded_j])
-            # alpha_directed = Dense(1, activation="sigmoid", input_shape=(self.batch_size, int(self._d/2)),
-            #                        trainable=True, name="alpha_directed")(abs_diff_directed)
-            #
-            # abs_diff_undirected = Lambda(lambda x: K.abs(x[0] - x[1]),
-            #                              output_shape=(self.batch_size, self._d))([encoded_i, encoded_j])
-            # alpha_undirected = Dense(1, activation="sigmoid", input_shape=(self.batch_size, self._d),
-            #                          trainable=True, name="alpha_undirected")(abs_diff_undirected)
-            #
-            # output = Lambda(switch)([is_directed, alpha_directed, alpha_undirected])
 
             self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=output)
 
         # Multi-gpu parallelization
         if multi_gpu:
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
-        # my_callbacks = [EarlyStopping(monitor='auc_roc', patience=300, verbose=1, mode='max')]
 
         # Compile & train
         self.siamese_net.compile(loss="binary_crossentropy", # binary_crossentropy
@@ -220,7 +215,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                  # metrics=[accuracy_from_dist, precision_from_dist, recall_from_dist, auc_roc_from_dist],
                                  metrics=["accuracy", precision, recall],
                                  )
-        print("Network total weights:", self.siamese_net.count_params(), "") if self.verbose else None
+        print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
                         subsample=True, compression_func="log", directed_proba=0.8,
@@ -250,41 +245,50 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
 
-        self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
+        try:
+            self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                       validation_data=self.generator_val,
                                                       validation_steps=validation_steps,
                                                       use_multiprocessing=True, workers=8)
+        except KeyboardInterrupt:
+            print("Stop training")
+        finally:
+            self.save_alpha_layers()
 
-    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d", from_dist=False):
+    def save_alpha_layers(self):
+        self.alpha_directed = self.alpha_network.get_layer(name="alpha_directed").get_weights()
+        self.alpha_undirected = self.alpha_network.get_layer(name="alpha_undirected").get_weights()
+
+    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
         """
-        For inter-modality, we calculate the directed first-order proximity, for intra-modality, we calculate the
-        second-order proximity.
-        The combined will be the adjacency matrix.
-
         :param X:
         :param node_l: list of node names
         :param edge_type:
         :return:
         """
-        embs = self.get_embedding()
-        assert len(self.node_list) == embs.shape[0]
-        if node_l is not None:
-            indices = [i for i in range(embs.shape[0]) if self.node_list[i] in node_l]
-            embs = embs[indices, :]
-
-        if edge_type == 'd':
-            adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
-                                     Y=embs[:, int(self._d / 2):self._d],
-                                     metric="euclidean", n_jobs=8)
-        elif edge_type == 'u':
-            adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=8)
+        if hasattr(self, "reconstructed_adj") and edge_type=="d":
+            adj = self.reconstructed_adj
         else:
-            raise Exception("Unsupported edge_type", edge_type)
+            embs = self.get_embedding()
+            assert len(self.node_list) == embs.shape[0]
 
-        if from_dist:
-            adj = np.exp(-beta * adj)
+            if edge_type == 'd':
+                adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
+                                         Y=embs[:, int(self._d / 2):self._d],
+                                         metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
+            elif edge_type == 'u':
+                adj = pairwise_distances(X=embs, metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
+            else:
+                raise Exception("Unsupported edge_type", edge_type)
 
-        return adj
+        if (node_l is None or node_l == self.node_list) and edge_type=="d":
+            self.reconstructed_adj = adj
+            return adj
+        elif set(node_l) < set(self.node_list):
+            idx = [self.node_list.index(node) for node in node_l]
+            return adj[idx, :][:, idx]
+        else:
+            raise Exception("A node in node_l is not in self.node_list.")
 
     def save_embeddings(self, filepath, variable_length=True, recompute=True, minlen=None):
         embs = self.get_embedding(variable_length=variable_length, recompute=recompute, minlen=minlen)
@@ -296,17 +300,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                         ' '.join([str(x) for x in embs[i]])))
         fout.close()
 
-    def load_model(self, filepath, generator):
-        self.generator_train = generator
-        self.node_list = self.generator_train.node_list
-        # self.build_keras_model(multi_gpu=False)
-        self.lstm_network = load_model(filepath)
-        print(self.lstm_network.summary())
-
-    def softmax(self, X):
-        exps = np.exp(X)
-        return exps / np.sum(exps, axis=0)
-
     def get_embedding(self, variable_length=False, recompute=False, batch_size=1, node_list=None, minlen=None):
         if (not hasattr(self, "_X") or recompute):
             self.process_embeddings(batch_size, variable_length, minlen=minlen)
@@ -316,6 +309,15 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             return self._X[idx, :]
         else:
             return self._X
+
+    def load_model(self, siamese_weights, alpha_weights, generator):
+        self.generator_train = generator
+        self.node_list = self.generator_train.node_list
+        self.build_keras_model(multi_gpu=False)
+        self.lstm_network.load_weights(siamese_weights, by_name=True)
+        self.alpha_network.load_weights(alpha_weights, by_name=True)
+        self.save_alpha_layers()
+        print(self.siamese_net.summary())
 
     def process_embeddings(self, batch_size, variable_length, minlen=None):
         if isinstance(self.generator_train, SampledDataGenerator):
@@ -336,56 +338,20 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
     def predict_generator(self, generator):
         y_pred = self.siamese_net.predict_generator(generator, use_multiprocessing=True, workers=8)
-        # y_pred = np.exp(-2.0 * y_pred)
         return y_pred
 
     def get_edge_weight(self, i, j, edge_type='d'):
         embs = self.get_embedding()
+        if not type(i) is int and type(j) is int:
+            i = self.node_list.index(i)
+            j = self.node_list.index(j)
 
         if edge_type == 'd':
             return pairwise_distances(X=embs[i, 0:int(self._d / 2)],
                                       Y=embs[j, int(self._d / 2):self._d],
-                                      metric="euclidean", n_jobs=8)
+                                      metric=l1_diff_alpha, weights=self.alpha_directed)
         else:
-            return pairwise_distances(X=embs[i], Y=embs[j], metric="euclidean", n_jobs=8)
-
-
-class SourceTargetMetric(tf.keras.layers.Layer):
-    def __init__(self, num_outputs=1, directed_regularizer=False, undirected_regularizer=True):
-        super(SourceTargetMetric, self).__init__()
-        self.num_outputs = num_outputs
-
-    def build(self, input_shape):
-        is_directed_shape, encoded_i_shape, encoded_j_shape = input_shape
-        self.alpha_directed = self.add_variable("alpha_directed",
-                                                shape=[int(int(encoded_i_shape[-1])/2),
-                                                       self.num_outputs],
-                                                dtype=tf.float32)
-
-        self.abs_diff_undirected = self.add_variable("abs_diff_undirected",
-                                                     shape=[int(encoded_i_shape[-1]),
-                                                            self.num_outputs],
-                                                     dtype=tf.float32)
-
-    def call(self, input, **kwargs):
-        is_directed, encoded_i, encoded_j = input
-
-        _d = int(encoded_i.get_shape()[-1])
-        encoded_i_s = tf.slice(encoded_i, [-1, 0],
-                               [encoded_i.get_shape()[0], int(_d/2)])
-        encoded_j_t = tf.slice(encoded_j, [-1, int(_d/2)],
-                               [encoded_i.get_shape()[0], int(_d/2)])
-
-        abs_diff_directed = tf.abs(encoded_i_s - encoded_j_t)
-        abs_diff_undirected = tf.abs(encoded_i - encoded_j)
-        print(abs_diff_directed)
-        print(abs_diff_undirected)
-        print(is_directed)
-
-        pred_directed = tf.sigmoid(tf.matmul(abs_diff_directed, self.alpha_directed))
-        pred_undirected = tf.sigmoid(tf.matmul(abs_diff_undirected, self.abs_diff_undirected))
-
-        return tf.keras.backend.switch(is_directed, pred_directed, pred_undirected)
+            return pairwise_distances(X=embs[i], Y=embs[j], metric=l1_diff_alpha, weights=self.alpha_directed)
 
 
 if __name__ == '__main__':

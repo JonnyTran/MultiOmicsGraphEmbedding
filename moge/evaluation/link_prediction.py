@@ -7,7 +7,7 @@ from moge.evaluation.utils import mask_test_edges, split_train_test_edges
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300):
+def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, fig_save_path=None):
     fig = plt.figure(figsize=(4, 4), dpi=dpi)
     ax = fig.add_subplot(111)
 
@@ -15,6 +15,7 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300):
     ls_dict = {"LINE":":", "HOPE":"-", "SDNE":"--", "node2vec":"--", "rna2rna":"-", "siamese":":"}
 
     for method in methods.keys():
+        print("Method:", method)
         y_prob_pred = methods[method].predict(X)
         average_precision = average_precision_score(y_true=y_true, y_score=y_prob_pred)
         precision, recall, _ = precision_recall_curve(y_true=y_true, probas_pred=y_prob_pred, pos_label=1)
@@ -29,6 +30,8 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300):
     plt.legend(loc="lower right")
     plt.title(title)
     plt.show()
+    if fig_save_path is not None:
+        fig.savefig(fig_save_path, bbox_inches='tight')
 
 
 def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, edge_type="d", top_k=100):
