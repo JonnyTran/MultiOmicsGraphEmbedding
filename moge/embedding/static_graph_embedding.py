@@ -1,8 +1,6 @@
 from abc import ABCMeta
 
 import numpy as np
-import scipy
-import matplotlib.pyplot as plt
 
 from MulticoreTSNE import MulticoreTSNE as TSNE
 from sklearn.cluster import KMeans
@@ -10,6 +8,7 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import pairwise_distances
 
 from moge.evaluation.link_prediction import largest_indices
+from moge.evaluation.utils import get_scalefree_fit_score
 
 
 class StaticGraphEmbedding:
@@ -274,26 +273,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         bipartite_adj = self.get_bipartite_adj(node_list_A, node_list_B)
         adj_list = bipartite_adj.flatten()
 
-        cosine_adj_hist = np.histogram(np.power(adj_list, k_power), bins=500)
-        cosine_adj_hist_dist = scipy.stats.rv_histogram(cosine_adj_hist)
-
-        k_power = 1
-        c = np.log10(np.power(adj_list, k_power))
-        d = np.log10(cosine_adj_hist_dist.pdf(np.power(adj_list, k_power)))
-
-        if plot:
-            plt.scatter(x=c, y=d, marker='.')
-            plt.xlabel("np.log10(k)")
-            plt.ylabel("np.log10(P(k))")
-            plt.show()
-
-        d_ = d[np.where(c != -np.inf)]
-        d_ = d_[np.where(d_ != -np.inf)]
-        c_ = c[np.where(d != -np.inf)]
-        c_ = c_[np.where(c_ != -np.inf)]
-
-        r_square = np.power(scipy.stats.pearsonr(c_, d_)[0], 2)
-        return r_square
+        return get_scalefree_fit_score(adj_list, k_power, plot)
 
     def predict(self, X):
         """

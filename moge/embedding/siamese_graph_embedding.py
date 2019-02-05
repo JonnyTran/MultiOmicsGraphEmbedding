@@ -281,8 +281,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
-        if (node_l is None or node_l == self.node_list) and edge_type=="d":
-            self.reconstructed_adj = adj
+        adj = adj.T # Transpose matrix since there's a bug
+
+        if (node_l is None or node_l == self.node_list):
+            if edge_type=="d": self.reconstructed_adj = adj
+
             return adj
         elif set(node_l) < set(self.node_list):
             idx = [self.node_list.index(node) for node in node_l]

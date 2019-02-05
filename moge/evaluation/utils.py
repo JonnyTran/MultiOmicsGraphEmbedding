@@ -2,8 +2,28 @@ import random
 
 import networkx as nx
 import numpy as np
+import scipy
 import scipy.sparse as sp
+import matplotlib.pyplot as plt
 
+
+def get_scalefree_fit_score(adj_list, k_power=1, plot=False):
+    cosine_adj_hist = np.histogram(np.power(adj_list, k_power), bins=500)
+    cosine_adj_hist_dist = scipy.stats.rv_histogram(cosine_adj_hist)
+
+    c = np.log10(np.power(adj_list, k_power))
+    d = np.log10(cosine_adj_hist_dist.pdf(np.power(adj_list, k_power)))
+    if plot:
+        plt.scatter(x=c, y=d, marker='.')
+        plt.xlabel("np.log10(k)")
+        plt.ylabel("np.log10(P(k))")
+        plt.show()
+    d_ = d[np.where(c != -np.inf)]
+    d_ = d_[np.where(d_ != -np.inf)]
+    c_ = c[np.where(d != -np.inf)]
+    c_ = c_[np.where(c_ != -np.inf)]
+    r_square = np.power(scipy.stats.pearsonr(c_, d_)[0], 2)
+    return r_square
 
 def sample_edges(nodes_A, nodes_B, n_edges, edge_type="u_n", edge_weight=1e-8):
     edges_u = np.random.choice(nodes_A, size=n_edges, replace=True)
@@ -67,8 +87,8 @@ def split_train_test_nodes(network, node_list, edge_types=["u", "d", "u_n"],
     print("test edges", len(test_edges))
 
     return network, test_edges, val_edges, test_nodes, val_nodes
-
 # Convert sparse matrix to tuple
+
 def sparse_to_tuple(sparse_mx):
     if not sp.isspmatrix_coo(sparse_mx):
         sparse_mx = sparse_mx.tocoo()
@@ -76,8 +96,9 @@ def sparse_to_tuple(sparse_mx):
     values = sparse_mx.data
     shape = sparse_mx.shape
     return coords, values, shape
-
 # Get normalized adjacency matrix: A_norm
+
+
 def preprocess_graph(adj):
     adj = sp.coo_matrix(adj)
     adj_ = adj + sp.eye(adj.shape[0])
@@ -142,6 +163,8 @@ def mask_test_edges_by_nodes(network, node_list, edge_types=["u", "d"],
     return g, test_edges, val_edges, test_nodes, val_nodes
 
 
+
+
 def mask_test_edges(network, node_list, edge_types=["u", "d"],
                     databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                              test_frac=.10, val_frac=.05,
@@ -174,8 +197,6 @@ def mask_test_edges(network, node_list, edge_types=["u", "d"],
 
 
     return test_edges, val_edges
-
-
 
 
 @DeprecationWarning
