@@ -16,7 +16,7 @@ from keras.utils import multi_gpu_model
 from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
-from moge.evaluation.metrics import accuracy_from_dist, precision_from_dist, recall_from_dist, auc_roc_from_dist, precision, recall, auc_roc
+from moge.evaluation.metrics import accuracy_d, precision_d, recall_d, auc_roc_d, precision, recall, auc_roc
 from moge.network.data_generator import DataGenerator, SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
@@ -28,6 +28,9 @@ def contrastive_loss(y_true, y_pred):
     margin = 1.0
     return K.mean(y_true * K.square(y_pred) +
                   (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
+
+def cross_entropy(y_true, y_pred):
+    return -K.sum(y_true * K.log(y_pred)) - K.sum((1-y_true) * K.log(1 - y_pred))
 
 def euclidean_distance(inputs):
     x, y = inputs
@@ -48,9 +51,6 @@ def get_st_abs_diff(inputs):
 def abs_diff_output_shape(shapes):
     shape1, shape2 = shapes
     return shape1
-
-def cross_entropy(y_true, y_pred):
-    return -K.sum(y_true * K.log(y_pred)) - K.sum((1-y_true) * K.log(1 - y_pred))
 
 def switch(inputs):
     is_directed, directed, undirected = inputs
@@ -103,7 +103,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         """ Base network to be shared (eq. to feature extraction).
         """
         input = Input(batch_shape=(None, None))  # (batch_number, sequence_length)
-        x = Embedding(6, 5, input_length=None, mask_zero=True, trainable=True)(input)  # (batch_number, sequence_length, 5)
+        x = Embedding(5, 4, input_length=None, mask_zero=True, trainable=True)(input)  # (batch_number, sequence_length, 5)
         # x = Masking()(input)
         print("Embedding", x) if self.verbose else None
 
@@ -162,7 +162,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
     def st_euclidean_distance(self, inputs):
         emb_i, emb_j, is_directed = inputs
-        sum_directed = K.sum(K.square(emb_i[:, 0:int(self._d / 2)] - emb_j[:, int(self._d / 2):self._d]), axis=1,
+        sum_directed = K.sum(K.square(emb_i[:, 0:int(self._d/2)] - emb_j[:, int(self._d/2):self._d]), axis=1,
                              keepdims=True)
         sum_undirected = K.sum(K.square(emb_i - emb_j), axis=1, keepdims=True)
         sum_switch = K.switch(is_directed, sum_directed, sum_undirected)
@@ -171,9 +171,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
     def st_emb_probability(self, inputs):
         emb_i, emb_j, is_directed = inputs
-        dot_directed = Dot(axes=1, normalize=False)([emb_i[:, 0:int(self._d / 2)], emb_j[:, int(self._d / 2):self._d]])
+        dot_directed = Lambda(lambda x: K.sum(x[0][:, 0:int(self._d/2)] * x[1][:, int(self._d/2):self._d],
+                                              axis=-1, keepdims=True))([emb_i, emb_j])
         dot_undirected = Dot(axes=1, normalize=False)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
+
 
     def build_keras_model(self, multi_gpu):
         if multi_gpu:
@@ -199,9 +201,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             encoded_i = self.lstm_network(input_seq_i)
             encoded_j = self.lstm_network(input_seq_j)
 
-            # output = Lambda(self.st_euclidean_distance)([encoded_i, encoded_j, is_directed])
-            self.alpha_network = self.create_alpha_network()
-            output = self.alpha_network([encoded_i, encoded_j, is_directed])
+            output = Lambda(self.st_euclidean_distance)([encoded_i, encoded_j, is_directed])
+            # self.alpha_network = self.create_alpha_network()
+            # output = self.alpha_network([encoded_i, encoded_j, is_directed])
 
             self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=output)
 
@@ -210,10 +212,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
         # Compile & train
-        self.siamese_net.compile(loss="binary_crossentropy", # binary_crossentropy
+        self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy
                                  optimizer=RMSprop(lr=self.lr),
-                                 # metrics=[accuracy_from_dist, precision_from_dist, recall_from_dist, auc_roc_from_dist],
-                                 metrics=["accuracy", precision, recall],
+                                 metrics=[accuracy_d, precision_d, recall_d, auc_roc_d],
+                                 # metrics=["accuracy", precision, recall],
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
@@ -256,8 +258,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             self.save_alpha_layers()
 
     def save_alpha_layers(self):
-        self.alpha_directed = self.alpha_network.get_layer(name="alpha_directed").get_weights()
-        self.alpha_undirected = self.alpha_network.get_layer(name="alpha_undirected").get_weights()
+        if hasattr(self, "alpha_network"):
+            self.alpha_directed = self.alpha_network.get_layer(name="alpha_directed").get_weights()
+            self.alpha_undirected = self.alpha_network.get_layer(name="alpha_undirected").get_weights()
 
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
         """
@@ -275,9 +278,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             if edge_type == 'd':
                 adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
                                          Y=embs[:, int(self._d / 2):self._d],
-                                         metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
+                                         metric="euclidean", n_jobs=-2)
+                                         # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
+                adj = np.exp(-2.0 * adj)
             elif edge_type == 'u':
-                adj = pairwise_distances(X=embs, metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
+                adj = pairwise_distances(X=embs,
+                                         metric="euclidean", n_jobs=-2)
+                                         # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
+                adj = np.exp(-2.0 * adj)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
@@ -313,13 +321,20 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             return self._X
 
-    def load_model(self, siamese_weights, alpha_weights, generator):
+    def load_weights(self, siamese_weights, alpha_weights, generator):
         self.generator_train = generator
         self.node_list = self.generator_train.node_list
         self.build_keras_model(multi_gpu=False)
         self.lstm_network.load_weights(siamese_weights, by_name=True)
         self.alpha_network.load_weights(alpha_weights, by_name=True)
         self.save_alpha_layers()
+        print(self.siamese_net.summary())
+
+    def load_model(self, lstm_model, generator):
+        self.generator_train = generator
+        self.node_list = self.generator_train.node_list
+        self.build_keras_model(multi_gpu=False)
+        self.lstm_network = load_model(lstm_model)
         print(self.siamese_net.summary())
 
     def process_embeddings(self, batch_size, variable_length, minlen=None):
@@ -341,6 +356,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
     def predict_generator(self, generator):
         y_pred = self.siamese_net.predict_generator(generator, use_multiprocessing=True, workers=8)
+        y_pred = np.exp(-2.0*y_pred)
         return y_pred
 
     def get_edge_weight(self, i, j, edge_type='d'):

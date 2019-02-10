@@ -66,7 +66,7 @@ class DataGenerator(keras.utils.Sequence):
     def process_sequence_tokenizer(self):
         self.tokenizer = Tokenizer(char_level=True, lower=False)
         self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
-        print("num_words:", self.tokenizer.num_words, self.tokenizer.word_index, self.tokenizer.index_docs)
+        print("word index:", self.tokenizer.word_index)
 
     def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)
@@ -359,6 +359,14 @@ class SampledDataGenerator(DataGenerator):
 
         return X, y
 
+    def sample_edge_from_node(self, node):
+        edge_type = self.sample_edge_type(self.edge_dict[node].keys())
+
+        if edge_type == DIRECTED_NEG_EDGE_TYPE:
+            return self.get_negative_sampled_edges(node)
+        else:
+            return next(self.edge_dict[node][edge_type])
+
     def sample_edge_type(self, edge_types):
         if DIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_EDGE_TYPE in edge_types:
             edge_type = np.random.choice([DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE], p=[self.directed_proba, 1-self.directed_proba])
@@ -385,14 +393,6 @@ class SampledDataGenerator(DataGenerator):
         node_v = self.node_list[np.random.choice(col)]
         return (node_u, node_v, DIRECTED_NEG_EDGE_TYPE)
 
-    def sample_edge_from_node(self, node):
-        edge_type = self.sample_edge_type(self.edge_dict[node].keys())
-
-        if edge_type == DIRECTED_NEG_EDGE_TYPE:
-            return self.get_negative_sampled_edges(node)
-        else:
-            return next(self.edge_dict[node][edge_type])
-
     def __data_generation(self, sampled_edges):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
@@ -402,7 +402,7 @@ class SampledDataGenerator(DataGenerator):
                 # self.adj_directed[self.node_list.index(u), self.node_list.index(v)]
             elif type == UNDIRECTED_EDGE_TYPE:
                 X_list.append(
-                    (u, v, IS_UNDIRECTED, 1))
+                    (u, v, IS_UNDIRECTED, self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]))
                 # self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]
             elif type == UNDIRECTED_NEG_EDGE_TYPE:
                 X_list.append(
@@ -453,6 +453,10 @@ class SampledDataGenerator(DataGenerator):
 
 class SampleEdgelistGenerator(Generator):
     def __init__(self, edgelist:list):
+        """
+        This class is used to perform sampling without replacement from a node's edgelist
+        :param edgelist:
+        """
         assert type(edgelist) is list
         self.edgelist = edgelist
         self.sampled_idx = list(np.random.choice(range(len(self.edgelist)), size=len(self.edgelist), replace=False))

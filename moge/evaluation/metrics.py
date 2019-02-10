@@ -4,7 +4,7 @@ import tensorflow as tf
 from sklearn.metrics import roc_auc_score, average_precision_score
 
 
-def precision_from_dist(y_true, y_pred):
+def precision_d(y_true, y_pred):
     """Precision metric for keras models
 
     Only computes a batch-wise average of precision.
@@ -33,7 +33,7 @@ def precision(y_true, y_pred):
     return precision
 
 
-def recall_from_dist(y_true, y_pred):
+def recall_d(y_true, y_pred):
     """Recall metric for keras models
 
     Only computes a batch-wise average of recall.
@@ -68,13 +68,13 @@ def f1(y_true, y_pred):
     return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
 
 
-def accuracy_from_dist(y_true, y_pred):
+def accuracy_d(y_true, y_pred):
     ''' Compute classification accuracy with a fixed threshold on distances.
     '''
     return K.mean(K.equal(y_true, K.cast(y_pred < 0.5, y_true.dtype)))
 
 
-def auc_roc_from_dist(y_true, y_pred):
+def auc_roc_d(y_true, y_pred):
     # any tensorflow metric
     y_pred = K.exp(-2 * y_pred)
     value, update_op = tf.contrib.metrics.streaming_auc(y_pred, y_true)

@@ -205,12 +205,14 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         elif self._method_name == "BioVec":
             reconstructed_adj = self.softmax(np.dot(self._X, self._X.T)) # TODO Double check paper
+            reconstructed_adj = reconstructed_adj.T  # Transpose matrix since there's a bug
 
         elif self._method_name == "rna2rna":
             reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
                                                    Y=self._X[:, int(self._d / 2):self._d],
                                                    metric="euclidean", n_jobs=-2)
             reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
+            reconstructed_adj = reconstructed_adj.T  # Transpose matrix since there's a bug
 
         elif self._method_name == "HOPE":
             reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
@@ -222,8 +224,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         else:
             raise Exception("Method" + self.get_method_name() + "not supported")
 
-        if not ((reconstructed_adj >= 0).all() and (reconstructed_adj <= 1).all()):
-            reconstructed_adj = np.interp(reconstructed_adj, (reconstructed_adj.min(), reconstructed_adj.max()), (0, 1))
+        # if not ((reconstructed_adj >= 0).all() and (reconstructed_adj <= 1).all()):
+        #     reconstructed_adj = np.interp(reconstructed_adj, (reconstructed_adj.min(), reconstructed_adj.max()), (0, 1))
 
         if node_l is None or node_l == self.node_list:
             self.reconstructed_adj = reconstructed_adj
@@ -285,7 +287,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         node_set = set(self.node_list)
         node_set_in_X = set(node for pair in X for node in pair)
 
-        if node_set >= node_set_in_X:
+        if node_set_in_X <= node_set:
             X_u_inx = [self.node_list.index(u) for u, v in X if u in node_set and v in node_set]
             X_v_inx = [self.node_list.index(v) for u, v in X if u in node_set and v in node_set]
             y_pred = estimated_adj[X_u_inx, X_v_inx]
