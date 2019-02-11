@@ -7,12 +7,12 @@ import scipy.sparse as sp
 import matplotlib.pyplot as plt
 
 
-def get_scalefree_fit_score(adj_list, k_power=1, plot=False):
-    cosine_adj_hist = np.histogram(np.power(adj_list, k_power), bins=500)
+def get_scalefree_fit_score(degrees, k_power=1, plot=False):
+    cosine_adj_hist = np.histogram(np.power(degrees, k_power), bins=500)
     cosine_adj_hist_dist = scipy.stats.rv_histogram(cosine_adj_hist)
 
-    c = np.log10(np.power(adj_list, k_power))
-    d = np.log10(cosine_adj_hist_dist.pdf(np.power(adj_list, k_power)))
+    c = np.log10(np.power(degrees, k_power))
+    d = np.log10(cosine_adj_hist_dist.pdf(np.power(degrees, k_power)))
     if plot:
         plt.scatter(x=c, y=d, marker='.')
         plt.xlabel("np.log10(k)")

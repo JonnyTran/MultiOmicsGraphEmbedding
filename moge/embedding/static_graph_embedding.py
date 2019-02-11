@@ -273,9 +273,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
     def get_scalefree_fit_score(self, node_list_A, node_list_B, k_power=1, plot=False):
         bipartite_adj = self.get_bipartite_adj(node_list_A, node_list_B)
-        adj_list = bipartite_adj.flatten()
+        degrees_A = np.sum(bipartite_adj, axis=1)
 
-        return get_scalefree_fit_score(adj_list, k_power, plot)
+        return get_scalefree_fit_score(degrees_A, k_power, plot)
 
     def predict(self, X):
         """

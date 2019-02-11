@@ -213,7 +213,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy
-                                 optimizer=RMSprop(lr=self.lr),
+                                 optimizer=RMSprop(lr=self.lr, decay=0.01),
                                  metrics=[accuracy_d, precision_d, recall_d, auc_roc_d],
                                  # metrics=["accuracy", precision, recall],
                                  )
