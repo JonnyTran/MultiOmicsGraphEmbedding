@@ -8,7 +8,10 @@ import matplotlib.pyplot as plt
 
 
 def get_scalefree_fit_score(degrees, k_power=1, plot=False):
-    cosine_adj_hist = np.histogram(np.power(degrees, k_power), bins=500)
+    if len(degrees.shape) > 1:
+        degrees = np.ravel(degrees)
+
+    cosine_adj_hist = np.histogram(np.power(degrees, k_power), bins=1000)
     cosine_adj_hist_dist = scipy.stats.rv_histogram(cosine_adj_hist)
 
     c = np.log10(np.power(degrees, k_power))
