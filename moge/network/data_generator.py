@@ -23,7 +23,6 @@ class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, negative_sampling_ratio=3,
-                 databases=None,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  shuffle=True, seed=0):
         """
@@ -51,7 +50,6 @@ class DataGenerator(keras.utils.Sequence):
         self.shuffle = shuffle
         self.padding = padding
         self.maxlen = maxlen
-        self.databases = databases
         self.truncating = truncating
         self.seed = seed
         self.sequence_to_matrix = sequence_to_matrix
@@ -70,13 +68,19 @@ class DataGenerator(keras.utils.Sequence):
         self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
         print("word index:", self.tokenizer.word_index)
 
+    def reload_directed_edges_data(self, edge_types=["d"], databases=None):
+        self.adj_directed = self.network.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
+                                                              databases=databases)
+        self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
+        self.Ed_count = len(self.Ed_rows)
+
+        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count)
+        self.on_epoch_end()
+
+
     def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)
-        if self.databases is not None:
-            self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list,
-                                                                  databases=self.databases)
-        else:
-            self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list)
+        self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list)
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
 
@@ -455,22 +459,6 @@ class SampledDataGenerator(DataGenerator):
         'Updates indexes after each epoch and shuffle'
         self.indexes = np.arange(self.n_steps)
         self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
-
-
-
-class TestGenerator(keras.utils.Sequence):
-
-    def __init__(self, network, ):
-        super().__init__()
-
-    def __getitem__(self, index):
-        pass
-
-    def on_epoch_end(self):
-        super().on_epoch_end()
-
-    def __len__(self):
-        pass
 
 
 class SampleEdgelistGenerator(Generator):

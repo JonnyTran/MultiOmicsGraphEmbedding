@@ -7,8 +7,15 @@ from moge.evaluation.utils import mask_test_edges, split_train_test_edges
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-def evaluate_pr_curve_link_pred_by_database(methods, databases=[]):
-    pass
+def evaluate_pr_curve_link_pred_by_database(methods, data_generator,
+                                            databases=["lncrna2target_high", "miRTarBase", "BioGRID", "lncRInter"]):
+    for database in databases:
+        data_generator.reload_directed_edges_data(edge_types=["d"], databases=[database, ])
+        X, y_true = data_generator.make_dataset()
+        y_true = y_true.astype(int)
+        print(database, ", shape:", y_true.shape)
+        evaluate_pr_curve_link_pred(methods, X, y_true, title=database + "PR curve")
+
 
 def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, fig_save_path=None):
     fig = plt.figure(figsize=(4, 4), dpi=dpi)
