@@ -78,7 +78,6 @@ class DataGenerator(keras.utils.Sequence):
         print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count)
         self.on_epoch_end()
 
-
     def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)
         self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list)
