@@ -1,9 +1,10 @@
 
+from time import time
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
 import keras
-from keras.callbacks import EarlyStopping
+from keras.callbacks import TensorBoard, EarlyStopping
 from keras.layers import Conv2D, Dense, Dropout, Bidirectional, CuDNNLSTM, SpatialDropout1D, Embedding
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.layers import Input, Lambda, Activation, Subtract, Reshape
@@ -131,7 +132,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         x = Dropout(0.2)(x)
         x = Dense(925, activation='relu')(x)  # (batch_number, 925)
         x = Dropout(0.2)(x)
-        x = Dense(self._d, activation='linear')(x)  # Embedding space (batch_number, 128)
+        x = Dense(self._d, activation='linear', name="embedding_output")(x)  # Embedding space (batch_number, 128)
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
 
@@ -201,9 +202,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             encoded_i = self.lstm_network(input_seq_i)
             encoded_j = self.lstm_network(input_seq_j)
 
-            output = Lambda(self.st_euclidean_distance)([encoded_i, encoded_j, is_directed])
-            # self.alpha_network = self.create_alpha_network()
-            # output = self.alpha_network([encoded_i, encoded_j, is_directed])
+            # output = Lambda(self.st_euclidean_distance)([encoded_i, encoded_j, is_directed])
+            self.alpha_network = self.create_alpha_network()
+            output = self.alpha_network([encoded_i, encoded_j, is_directed])
 
             self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, is_directed], outputs=output)
 
@@ -211,8 +212,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         if multi_gpu:
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
+
         # Compile & train
-        self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy
+        self.siamese_net.compile(loss="binary_crossentropy",  # binary_crossentropy , contrastive_loss
                                  optimizer=RMSprop(lr=self.lr, decay=0.01),
                                  metrics=[accuracy_d, precision_d, recall_d, auc_roc_d],
                                  # metrics=["accuracy", precision, recall],
@@ -247,11 +249,16 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
 
+        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time()),
+                                       write_grads=True, write_graph=False,
+                                       embeddings_layer_names=["embedding_output"])
+
         try:
             self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
-                                                      validation_data=self.generator_val,
-                                                      validation_steps=validation_steps,
-                                                      use_multiprocessing=True, workers=8)
+                                                          validation_data=self.generator_val,
+                                                          validation_steps=validation_steps,
+                                                          callbacks=[self.tensorboard],
+                                                          use_multiprocessing=True, workers=8)
         except KeyboardInterrupt:
             print("Stop training")
         finally:

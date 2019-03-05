@@ -192,6 +192,7 @@ class DataGenerator(keras.utils.Sequence):
         # Returns the y_true labels. Only run this before running .`on_epoch_end`() since it may reindex the samples
         X = []
         y = []
+        print(self.__len__())
         for i in range(self.__len__()):
             X_i, y_i = self.get_training_edges(i)
             X.append(X_i)

@@ -14,11 +14,10 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator,
         data_generator.reload_directed_edges_data(edge_types=["d"], databases=[database, ])
         X, y_true = data_generator.make_dataset()
         y_true = y_true.astype(int)
-        print("y_true.shape", y_true.shape)
-        evaluate_pr_curve_link_pred(methods, X, y_true, title=database + "PR curve")
+        evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
 
 
-def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, fig_save_path=None):
+def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, fig_save_path=None, data_generator=None):
     fig = plt.figure(figsize=(4, 4), dpi=dpi)
     ax = fig.add_subplot(111)
 
@@ -26,8 +25,10 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, f
     ls_dict = {"LINE":":", "HOPE":"-", "SDNE":"--", "node2vec":"--", "rna2rna":"-", "siamese":":"}
 
     for method in methods.keys():
-        print("Method:", method)
-        y_prob_pred = methods[method].predict(X)
+        if method is not "siamese":
+            y_prob_pred = methods[method].predict(X)
+        else:
+            y_prob_pred = methods[method].predict_generator(data_generator)
         average_precision = average_precision_score(y_true=y_true, y_score=y_prob_pred)
         precision, recall, _ = precision_recall_curve(y_true=y_true, probas_pred=y_prob_pred, pos_label=1)
 
