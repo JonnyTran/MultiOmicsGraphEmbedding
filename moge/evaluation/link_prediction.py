@@ -10,10 +10,10 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 def evaluate_pr_curve_link_pred_by_database(methods, data_generator,
                                             databases=["lncrna2target_high", "miRTarBase", "BioGRID", "lncRInter"]):
     for database in databases:
+        print(database)
         data_generator.reload_directed_edges_data(edge_types=["d"], databases=[database, ])
         X, y_true = data_generator.make_dataset()
         y_true = y_true.astype(int)
-        print(database, ", shape:", y_true.shape)
         evaluate_pr_curve_link_pred(methods, X, y_true, title=database + "PR curve")
 
 
