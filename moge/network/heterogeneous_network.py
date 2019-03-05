@@ -128,7 +128,7 @@ class HeterogeneousNetwork():
         else:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, edge_types=["u", "d"], node_list=None):
+    def get_adjacency_matrix(self, edge_types=["u", "d"], node_list=None, databases=None):
         """
         Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
          :param node_list:.
@@ -147,6 +147,9 @@ class HeterogeneousNetwork():
                 edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_types]
             else:
                 edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_types]
+
+        if databases is not None:
+            edge_list = [(u, v, d) for u, v, d in edge_list if 'database' in d and d['database'] in databases]
 
         # Also add reverse edges for undirected edges
         if 'u' in edge_types or "u_n" in edge_types:

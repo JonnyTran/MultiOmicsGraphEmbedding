@@ -23,6 +23,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, negative_sampling_ratio=3,
+                 databases=None,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  shuffle=True, seed=0):
         """
@@ -50,6 +51,7 @@ class DataGenerator(keras.utils.Sequence):
         self.shuffle = shuffle
         self.padding = padding
         self.maxlen = maxlen
+        self.databases = databases
         self.truncating = truncating
         self.seed = seed
         self.sequence_to_matrix = sequence_to_matrix
@@ -70,7 +72,11 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)
-        self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list)
+        if self.databases is not None:
+            self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list,
+                                                                  databases=self.databases)
+        else:
+            self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list)
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
 
@@ -454,7 +460,7 @@ class SampledDataGenerator(DataGenerator):
 
 class TestGenerator(keras.utils.Sequence):
 
-    def __init__(self, network):
+    def __init__(self, network, ):
         super().__init__()
 
     def __getitem__(self, index):
