@@ -451,6 +451,22 @@ class SampledDataGenerator(DataGenerator):
         self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
 
 
+
+class TestGenerator(keras.utils.Sequence):
+
+    def __init__(self, network):
+        super().__init__()
+
+    def __getitem__(self, index):
+        pass
+
+    def on_epoch_end(self):
+        super().on_epoch_end()
+
+    def __len__(self):
+        pass
+
+
 class SampleEdgelistGenerator(Generator):
     def __init__(self, edgelist:list):
         """

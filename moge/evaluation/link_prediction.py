@@ -7,6 +7,9 @@ from moge.evaluation.utils import mask_test_edges, split_train_test_edges
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
+def evaluate_pr_curve_link_pred_by_database(methods, databases=[]):
+    pass
+
 def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, fig_save_path=None):
     fig = plt.figure(figsize=(4, 4), dpi=dpi)
     ax = fig.add_subplot(111)
