@@ -74,6 +74,7 @@ class DataGenerator(keras.utils.Sequence):
         self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
         self.Ed_count = len(self.Ed_rows)
 
+        self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count)
         self.on_epoch_end()
 
