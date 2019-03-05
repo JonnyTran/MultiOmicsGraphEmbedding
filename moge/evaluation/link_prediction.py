@@ -14,6 +14,7 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator,
         data_generator.reload_directed_edges_data(edge_types=["d"], databases=[database, ])
         X, y_true = data_generator.make_dataset()
         y_true = y_true.astype(int)
+        print("y_true.shape", y_true.shape)
         evaluate_pr_curve_link_pred(methods, X, y_true, title=database + "PR curve")
 
 
