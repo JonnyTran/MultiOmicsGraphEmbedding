@@ -299,7 +299,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             y_pred = estimated_adj[X_u_inx, X_v_inx]
         else:
             y_pred = []
-            for u, v in X:
+            for tup in X:
+                u = tup[0]
+                v = tup[1]
                 if u in node_set and v in node_set:
                     y_pred.append(estimated_adj[self.node_list.index(u), self.node_list.index(v)])
                 else:

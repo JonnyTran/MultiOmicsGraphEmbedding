@@ -10,8 +10,8 @@ from scipy.sparse import triu
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
-IS_UNDIRECTED = False
-IS_DIRECTED = True
+IS_UNDIRECTED = 0
+IS_DIRECTED = 1
 DIRECTED_NEG_EDGE_TYPE = 'd_n'
 UNDIRECTED_NEG_EDGE_TYPE = 'u_n'
 UNDIRECTED_EDGE_TYPE = 'u'
@@ -188,11 +188,10 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, y
 
-    def make_dataset(self):
+    def make_dataset(self, return_sequence_data=False):
         # Returns the y_true labels. Only run this before running .`on_epoch_end`() since it may reindex the samples
         X = []
         y = []
-        print(self.__len__())
         for i in range(self.__len__()):
             X_i, y_i = self.get_training_edges(i)
             X.append(X_i)
@@ -200,6 +199,16 @@ class DataGenerator(keras.utils.Sequence):
 
         X = np.vstack(X)
         y = np.vstack(y)
+        X = np.array(X, dtype="O")
+
+        if return_sequence_data:
+            X_seq = {}
+            X[:, 0] = [self.node_list.index(node) for node in X[:, 0].tolist()]
+            X[:, 1] = [self.node_list.index(node) for node in X[:, 1].tolist()]
+            X_seq["input_seq_j"] = self.get_sequence_data(X[:, 0].tolist(), variable_length=False)
+            X_seq["input_seq_i"] = self.get_sequence_data(X[:, 1].tolist(), variable_length=False)
+            X_seq["is_directed"] = np.expand_dims(X[:, 2], axis=-1)
+            X = X_seq
 
         return X, y
 
@@ -219,16 +228,16 @@ class DataGenerator(keras.utils.Sequence):
         y_list = []
         for id, edge_type in edges_batch:
             if edge_type == DIRECTED_EDGE_TYPE:
-                X_list.append((self.node_list[self.Ed_rows[id]], self.node_list[self.Ed_cols[id]]))
+                X_list.append((self.node_list[self.Ed_rows[id]], self.node_list[self.Ed_cols[id]], IS_DIRECTED))
                 y_list.append(self.adj_directed[self.Ed_rows[id], self.Ed_cols[id]])
             elif edge_type == UNDIRECTED_EDGE_TYPE:
-                X_list.append((self.node_list[self.Eu_rows[id]], self.node_list[self.Eu_cols[id]]))
+                X_list.append((self.node_list[self.Eu_rows[id]], self.node_list[self.Eu_cols[id]], IS_UNDIRECTED))
                 y_list.append(self.adj_undirected[self.Eu_rows[id], self.Eu_cols[id]])
             elif edge_type == UNDIRECTED_NEG_EDGE_TYPE:
-                X_list.append((self.node_list[self.En_rows[id]], self.node_list[self.En_cols[id]]))
+                X_list.append((self.node_list[self.En_rows[id]], self.node_list[self.En_cols[id]], IS_UNDIRECTED))
                 y_list.append(0)
             elif edge_type == DIRECTED_NEG_EDGE_TYPE:
-                X_list.append((self.node_list[self.Ens_rows[id]], self.node_list[self.Ens_cols[id]]))
+                X_list.append((self.node_list[self.Ens_rows[id]], self.node_list[self.Ens_cols[id]], IS_DIRECTED))
                 y_list.append(0)
 
         # assert self.batch_size == len(X_list)
