@@ -108,10 +108,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         # x = Masking()(input)
         print("Embedding", x) if self.verbose else None
 
-        x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm:lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
+        x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm_lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
         x = Conv2D(filters=192, kernel_size=(6, 1), activation='relu', data_format="channels_last")(
             x)  # (batch_number, sequence_length-5, 1, 192)
-        x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm:lambda_2")(x)  # (batch_number, sequence_length-5, 192)
+        x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
 
         x = MaxPooling1D(pool_size=6, padding="same")(x)
@@ -156,7 +156,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("alpha_directed:", alpha_directed)
         print("alpha_undirected:", alpha_undirected)
 
-        output = Lambda(switch, output_shape=(None, ), name="alpha:lambda_output")([is_directed, alpha_directed, alpha_undirected])
+        output = Lambda(switch, output_shape=(None, ), name="alpha_lambda_output")([is_directed, alpha_directed, alpha_undirected])
         print("output", output)
         return Model(inputs=[encoded_i, encoded_j, is_directed], outputs=output, name="alpha_network")
 
@@ -253,7 +253,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
 
-        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=1,
+        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
                                        write_grads=True, write_graph=False, write_images=False,
                                         batch_size=self.batch_size,
                                        # update_freq=100000, embeddings_freq=1,
@@ -304,8 +304,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                 adj = np.exp(-2.0 * adj)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
-
-        adj = adj.T # Transpose matrix since there's a bug
 
         if (node_l is None or node_l == self.node_list):
             if edge_type=="d": self.reconstructed_adj = adj

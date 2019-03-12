@@ -180,8 +180,8 @@ class DataGenerator(keras.utils.Sequence):
         X_list = np.array(X_list, dtype="O")
 
         X = {}
-        X["input_seq_j"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
-        X["input_seq_i"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
+        X["input_seq_i"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
+        X["input_seq_j"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
         X["is_directed"] = np.expand_dims(X_list[:,2], axis=-1)
 
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
@@ -209,8 +209,8 @@ class DataGenerator(keras.utils.Sequence):
             X_seq = {}
             X[:, 0] = [self.node_list.index(node) for node in X[:, 0].tolist()]
             X[:, 1] = [self.node_list.index(node) for node in X[:, 1].tolist()]
-            X_seq["input_seq_j"] = self.get_sequence_data(X[:, 0].tolist(), variable_length=False)
-            X_seq["input_seq_i"] = self.get_sequence_data(X[:, 1].tolist(), variable_length=False)
+            X_seq["input_seq_i"] = self.get_sequence_data(X[:, 0].tolist(), variable_length=False)
+            X_seq["input_seq_j"] = self.get_sequence_data(X[:, 1].tolist(), variable_length=False)
             X_seq["is_directed"] = np.expand_dims(X[:, 2], axis=-1)
             X = X_seq
 
@@ -442,8 +442,8 @@ class SampledDataGenerator(DataGenerator):
         X_list = np.array(X_list, dtype="O")
 
         X = {}
-        X["input_seq_j"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
-        X["input_seq_i"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
+        X["input_seq_i"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
+        X["input_seq_j"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
         X["is_directed"] = np.expand_dims(X_list[:,2], axis=-1)
 
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
@@ -473,6 +473,70 @@ class SampledDataGenerator(DataGenerator):
         'Updates indexes after each epoch and shuffle'
         self.indexes = np.arange(self.n_steps)
         self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
+
+
+
+class SampledTripletDataGenerator(SampledDataGenerator):
+    def __init__(self, network: HeterogeneousNetwork,
+                 batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
+                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
+                 shuffle=True, seed=0):
+        self.compression_func = compression_func
+        self.n_steps = n_steps
+        self.directed_proba = directed_proba
+        print("Using SampledTripletDataGenerator")
+        super().__init__(network,
+                         batch_size, negative_sampling_ratio,
+                         maxlen, padding, truncating, sequence_to_matrix,
+                         shuffle, seed)
+        self.process_sampling_table(network)
+
+    def __getitem__(self, item):
+        sampling_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=True,
+                                          p=self.node_sampling_freq)
+
+        sampled_edges = [self.sample_edge_from_node(node) for node in sampling_nodes]
+
+        X, y = self.__data_generation(sampled_edges)
+
+        return X, y
+
+    def sample_edge_from_node(self, node):
+        edge_type = self.sample_edge_type(self.edge_dict[node].keys())
+
+        if edge_type == DIRECTED_NEG_EDGE_TYPE:
+            return self.get_negative_sampled_edges(node)
+        else:
+            return next(self.edge_dict[node][edge_type])
+
+
+    def __data_generation(self, sampled_edges):
+        'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
+        X_list = []
+        for u,v,w, type in sampled_edges:
+            if type == DIRECTED_EDGE_TYPE:
+                X_list.append((u, v, w, IS_DIRECTED, 1))
+                # self.adj_directed[self.node_list.index(u), self.node_list.index(v)]
+            elif type == UNDIRECTED_EDGE_TYPE:
+                X_list.append(
+                    (u, v, w, IS_UNDIRECTED, self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]))
+                # self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]
+            else:
+                raise Exception("Edge type is wrong:" + u + v + w + type)
+
+        # assert self.batch_size == len(X_list)
+        X_list = np.array(X_list, dtype="O")
+
+        X = {}
+        X["input_seq_i"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
+        X["input_seq_j"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
+        X["input_seq_k"] = self.get_sequence_data(X_list[:, 2].tolist(), variable_length=False)
+        X["is_directed"] = np.expand_dims(X_list[:, 3], axis=-1)
+
+        y = np.expand_dims(X_list[:, 4].astype(np.float32), axis=-1)
+
+        return X, y
+
 
 
 class SampleEdgelistGenerator(Generator):
