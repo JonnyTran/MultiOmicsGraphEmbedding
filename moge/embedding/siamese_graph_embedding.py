@@ -1,5 +1,5 @@
 
-from time import time
+import time
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
@@ -108,10 +108,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         # x = Masking()(input)
         print("Embedding", x) if self.verbose else None
 
-        x = Lambda(lambda y: K.expand_dims(y, axis=2))(x)  # (batch_number, sequence_length, 1, 5)
+        x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm:lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
         x = Conv2D(filters=192, kernel_size=(6, 1), activation='relu', data_format="channels_last")(
             x)  # (batch_number, sequence_length-5, 1, 192)
-        x = Lambda(lambda y: K.squeeze(y, axis=2))(x)  # (batch_number, sequence_length-5, 192)
+        x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm:lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
 
         x = MaxPooling1D(pool_size=6, padding="same")(x)
@@ -142,9 +142,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         is_directed = Input(batch_shape=(None, 1), dtype=tf.int8)
 
         abs_diff_directed = Lambda(lambda tup: K.abs(tup[0][:, 0:int(self._d/2)] - tup[1][:, int(self._d/2):self._d]),
-                                   output_shape=(None, int(self._d/2)))([encoded_i, encoded_j])
+                                   output_shape=(None, int(self._d/2)), name="Lambda_abs_diff_directed")([encoded_i, encoded_j])
         print("abs_diff_directed:", abs_diff_directed)
-        abs_diff_undirected = Lambda(get_abs_diff, output_shape=(None, self._d))([encoded_i, encoded_j])
+        abs_diff_undirected = Lambda(get_abs_diff, output_shape=(None, self._d), name="Lambda_abs_diff_directed")([encoded_i, encoded_j])
         print("abs_diff_undirected:", abs_diff_undirected)
 
         alpha_directed = Dense(1, activation='sigmoid',
@@ -156,7 +156,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("alpha_directed:", alpha_directed)
         print("alpha_undirected:", alpha_undirected)
 
-        output = Lambda(switch, output_shape=(None, ), name="output")([is_directed, alpha_directed, alpha_undirected])
+        output = Lambda(switch, output_shape=(None, ), name="alpha:lambda_output")([is_directed, alpha_directed, alpha_undirected])
         print("output", output)
         return Model(inputs=[encoded_i, encoded_j, is_directed], outputs=output, name="alpha_network")
 
@@ -204,7 +204,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             encoded_j = self.lstm_network(input_seq_j)
             print(encoded_j)
 
-            output = Lambda(self.st_euclidean_distance)([encoded_i, encoded_j, is_directed])
+            output = Lambda(self.st_euclidean_distance, name="lambda_output")([encoded_i, encoded_j, is_directed])
             # self.alpha_network = self.create_alpha_network()
             # output = self.alpha_network([encoded_i, encoded_j, is_directed])
 
@@ -251,14 +251,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         else:
             self.generator_val = None
 
-        if validation_make_data:
-            X, y = self.generator_val.make_dataset(return_sequence_data=True)
-
         if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
 
-        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time()), histogram_freq=0,
-                                       write_grads=True, write_graph=False, write_images=True,
-                                       batch_size=100,
+        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=1,
+                                       write_grads=True, write_graph=False, write_images=False,
+                                        batch_size=self.batch_size,
                                        # update_freq=100000, embeddings_freq=1,
                                        # embeddings_data=self.generator_val.__getitem__(0)[0],
                                        # embeddings_layer_names=["embedding_output"],
@@ -266,7 +263,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         try:
             self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
-                                                          validation_data=X if validation_make_data else self.generator_val,
+                                                          validation_data=self.generator_val.make_dataset(
+                                                              return_sequence_data=True, batch_size=5) if validation_make_data else self.generator_val,
                                                           validation_steps=validation_steps,
                                                           callbacks=[self.tensorboard],
                                                           use_multiprocessing=True, workers=8)

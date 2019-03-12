@@ -188,14 +188,18 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, y
 
-    def make_dataset(self, return_sequence_data=False):
-        # Returns the y_true labels. Only run this before running .`on_epoch_end`() since it may reindex the samples
+    def make_dataset(self, return_sequence_data=False, batch_size=None):
+        # Returns the y_true labels. Note: run this before running .`on_epoch_end`() since it may reindex the samples
         X = []
         y = []
         for i in range(self.__len__()):
             X_i, y_i = self.get_training_edges(i)
             X.append(X_i)
             y.append(y_i)
+
+        if batch_size:
+            X = X[0: batch_size]
+            y = y[0: batch_size]
 
         X = np.vstack(X)
         y = np.vstack(y)
