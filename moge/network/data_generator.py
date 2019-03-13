@@ -338,7 +338,7 @@ class SampledDataGenerator(DataGenerator):
                 if d["type"] in self.edge_dict[node]:
                     self.edge_dict[node][d["type"]].append((u, v, d["type"]))
                 else:
-                    self.edge_dict[node][d["type"]] = SampleEdgelistGenerator([(u,v, d["type"])])
+                    self.edge_dict[node][d["type"]] = SampleEdgelistGenerator([(u, v, d["type"])])
 
             for edge_type in self.edge_dict[node].keys():
                 self.edge_counts_dict[node][edge_type] = len(self.edge_dict[node][edge_type])
@@ -481,46 +481,62 @@ class SampledTripletDataGenerator(SampledDataGenerator):
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  shuffle=True, seed=0):
-        self.compression_func = compression_func
-        self.n_steps = n_steps
-        self.directed_proba = directed_proba
         print("Using SampledTripletDataGenerator")
-        super().__init__(network,
-                         batch_size, negative_sampling_ratio,
-                         maxlen, padding, truncating, sequence_to_matrix,
-                         shuffle, seed)
-        self.process_sampling_table(network)
+        super().__init__(network=network,
+                         batch_size=batch_size, negative_sampling_ratio=negative_sampling_ratio, n_steps=n_steps,
+                         directed_proba=directed_proba, compression_func=compression_func,
+                         maxlen=maxlen, padding=padding, truncating=truncating, sequence_to_matrix=sequence_to_matrix,
+                         shuffle=shuffle, seed=seed)
 
     def __getitem__(self, item):
-        sampling_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=True,
-                                          p=self.node_sampling_freq)
-
-        sampled_edges = [self.sample_edge_from_node(node) for node in sampling_nodes]
-
+        sampled_edges = []
+        while len(sampled_edges) < self.batch_size:
+            sampled_node = np.random.choice(self.node_list, size=1, replace=True,
+                                              p=self.node_sampling_freq)
+            sampled_triplet = self.sample_triplet_from_node(sampled_node[0])
+            if sampled_triplet is not None:
+                sampled_edges.append(sampled_triplet)
+            else:
+                continue
         X, y = self.__data_generation(sampled_edges)
 
         return X, y
 
-    def sample_edge_from_node(self, node):
-        edge_type = self.sample_edge_type(self.edge_dict[node].keys())
+    def sample_triplet_from_node(self, anchor_node):
+        edge_type = self.sample_edge_type(self.edge_dict[anchor_node].keys())
+        if edge_type == DIRECTED_EDGE_TYPE:
+            pos_sample = next(self.edge_dict[anchor_node][edge_type]) # ((node_u, node_v, edge_type)
+            neg_sample = self.get_negative_sampled_edges(anchor_node)
 
-        if edge_type == DIRECTED_NEG_EDGE_TYPE:
-            return self.get_negative_sampled_edges(node)
+        elif edge_type == UNDIRECTED_EDGE_TYPE:
+            pos_sample = next(self.edge_dict[anchor_node][edge_type])
+            neg_sample = next(self.edge_dict[anchor_node][UNDIRECTED_NEG_EDGE_TYPE]) if UNDIRECTED_NEG_EDGE_TYPE in self.edge_dict[anchor_node].keys() else self.get_negative_sampled_edges(anchor_node)
         else:
-            return next(self.edge_dict[node][edge_type])
+            return None
+
+        return (anchor_node, pos_sample[1], neg_sample[1], edge_type)
+
+    def sample_edge_type(self, edge_types):
+        if DIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_EDGE_TYPE in edge_types:
+            edge_type = np.random.choice([DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE], p=[self.directed_proba, 1-self.directed_proba])
+        elif DIRECTED_EDGE_TYPE in edge_types:
+            edge_type = DIRECTED_EDGE_TYPE
+        elif UNDIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_NEG_EDGE_TYPE in edge_types:
+            edge_type = UNDIRECTED_EDGE_TYPE
+        else:
+            return None
+
+        return edge_type
 
 
     def __data_generation(self, sampled_edges):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
-        for u,v,w, type in sampled_edges:
+        for u,v,w,type in sampled_edges:
             if type == DIRECTED_EDGE_TYPE:
-                X_list.append((u, v, w, IS_DIRECTED, 1))
-                # self.adj_directed[self.node_list.index(u), self.node_list.index(v)]
+                X_list.append((u, v, w, IS_DIRECTED))
             elif type == UNDIRECTED_EDGE_TYPE:
-                X_list.append(
-                    (u, v, w, IS_UNDIRECTED, self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]))
-                # self.adj_undirected[self.node_list.index(u), self.node_list.index(v)]
+                X_list.append((u, v, w, IS_UNDIRECTED))
             else:
                 raise Exception("Edge type is wrong:" + u + v + w + type)
 
@@ -533,7 +549,7 @@ class SampledTripletDataGenerator(SampledDataGenerator):
         X["input_seq_k"] = self.get_sequence_data(X_list[:, 2].tolist(), variable_length=False)
         X["is_directed"] = np.expand_dims(X_list[:, 3], axis=-1)
 
-        y = np.expand_dims(X_list[:, 4].astype(np.float32), axis=-1)
+        y = np.zeros(X_list[:, 3].shape)
 
         return X, y
 
