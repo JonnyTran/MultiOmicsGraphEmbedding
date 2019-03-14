@@ -25,10 +25,10 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, f
     ls_dict = {"LINE":":", "HOPE":"-", "SDNE":"--", "node2vec":"--", "rna2rna":"-", "siamese":":"}
 
     for method in methods.keys():
-        if method is "siamese" and method == list(methods.keys())[-1]:
-            y_prob_pred = methods[method].predict_generator(data_generator)
-        else:
-            y_prob_pred = methods[method].predict(X)
+        # if method is "siamese" and method == list(methods.keys())[-1]:
+        #     y_prob_pred = methods[method].predict_generator(data_generator)
+        # else:
+        y_prob_pred = methods[method].predict(X)
         average_precision = average_precision_score(y_true=y_true, y_score=y_prob_pred)
         precision, recall, _ = precision_recall_curve(y_true=y_true, probas_pred=y_prob_pred, pos_label=1)
 

@@ -104,7 +104,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
 
         elif column in ["Mature sequence", "Transcript sequence"]:
             print("Global alignment seq score")
-            # TODO If doesn't work, modify _pairwise_callable Line 1083  # X, Y = check_pairwise_arrays(X, Y)
+            # Note: If doesn't work, modify _pairwise_callable Line 1083  # X, Y = check_pairwise_arrays(X, Y)
             feature_dist = pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
             feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
 
@@ -114,7 +114,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
             hierarchical_columns = ["Chromosome", "start"]
             location_features.columns = hierarchical_columns
             location_features["start"] = location_features["start"].astype(np.float64)
-            # location_features["end"] = location_features["end"].astype(np.float64) TODO Add bp region length
+            location_features["end"] = location_features["end"].astype(np.float64) # TODO Add bp region length
 
             feature_dist = gower_distance(location_features, agg_func=hierarchical_distance_aggregate_score,
                                           multiprocessing=True)
@@ -124,7 +124,8 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
             location_features = feature.str.split("[pq.]", expand=True).filter(items=[0, 1])
             location_features.columns = ["Chromosome", "region"]
             location_features["arm"] = feature.str.extract(r'(?P<arm>[pq])', expand=True)
-            location_features = location_features[["Chromosome", "arm", "region"]] # TODO Add band #
+            location_features["band"] = feature.str.split("[pq.-]", expand=True)[2]
+            location_features = location_features[["Chromosome", "arm", "region", "band"]] # TODO Add band #
             # print(location_features)
             feature_dist = gower_distance(location_features, agg_func=hierarchical_distance_aggregate_score,
                                           multiprocessing=True)

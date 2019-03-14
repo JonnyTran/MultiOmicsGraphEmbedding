@@ -5,7 +5,7 @@ import tensorflow as tf
 from keras import backend as K
 import keras
 from keras.callbacks import TensorBoard, EarlyStopping
-from keras.layers import Conv2D, Dense, Dropout, Bidirectional, CuDNNLSTM, SpatialDropout1D, Embedding
+from keras.layers import Conv2D, Dense, Dropout, Bidirectional, CuDNNLSTM, SpatialDropout1D, Embedding, BatchNormalization
 from keras.layers import Dot, MaxPooling1D, Convolution1D
 from keras.layers import Input, Lambda, Activation, Subtract, Reshape
 from keras.constraints import NonNeg
@@ -116,13 +116,13 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         x = MaxPooling1D(pool_size=6, padding="same")(x)
         print("max pooling_1", x) if self.verbose else None
-        x = SpatialDropout1D(0.1)(x)
+        x = SpatialDropout1D(0.2)(x)
 
-        x = Convolution1D(filters=320, kernel_size=3, activation='relu')(x)
+        x = Convolution1D(filters=320, kernel_size=4, activation='relu')(x)
         print("conv1d_2", x) if self.verbose else None
-        x = MaxPooling1D(pool_size=3, padding="same")(x)
+        x = MaxPooling1D(pool_size=4, padding="same")(x)
         print("max pooling_2", x) if self.verbose else None
-        x = SpatialDropout1D(0.1)(x)
+        x = SpatialDropout1D(0.2)(x)
 
         x = Bidirectional(CuDNNLSTM(320, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None
@@ -133,6 +133,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         x = Dense(925, activation='relu')(x)  # (batch_number, 925)
         x = Dropout(0.2)(x)
         x = Dense(self._d, activation='linear', name="embedding_output")(x)  # Embedding space (batch_number, 128)
+        # x = BatchNormalization(center=False, scale=True, name="embedding_output_normalized")(x)
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
 
@@ -217,7 +218,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
-                                 optimizer=RMSprop(lr=self.lr, decay=0.01),
+                                 optimizer=RMSprop(lr=self.lr, decay=0.9, momentum=0.9, epsilon=1.0),
                                  metrics=[accuracy_d, precision_d, recall_d, auc_roc_d],
                                  # metrics=["accuracy", precision, recall],
                                  )
@@ -253,8 +254,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
 
-        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
-                                       write_grads=True, write_graph=False, write_images=False,
+        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d%l-%M%p')), histogram_freq=1,
+                                       write_grads=True, write_graph=False, write_images=True,
                                         batch_size=self.batch_size,
                                        # update_freq=100000, embeddings_freq=1,
                                        # embeddings_data=self.generator_val.__getitem__(0)[0],
@@ -263,8 +264,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         try:
             self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
-                                                          validation_data=self.generator_val.make_dataset(
-                                                              return_sequence_data=True, batch_size=5) if validation_make_data else self.generator_val,
+                                                          validation_data=self.generator_val.__getitem__(0) if validation_make_data else self.generator_val,
                                                           validation_steps=validation_steps,
                                                           callbacks=[self.tensorboard],
                                                           use_multiprocessing=True, workers=8)
@@ -296,12 +296,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                          Y=embs[:, int(self._d / 2):self._d],
                                          metric="euclidean", n_jobs=-2)
                                          # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
-                adj = np.exp(-2.0 * adj)
+                adj = np.exp(-1.38 * adj)
             elif edge_type == 'u':
                 adj = pairwise_distances(X=embs,
                                          metric="euclidean", n_jobs=-2)
                                          # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
-                adj = np.exp(-2.0 * adj)
+                adj = np.exp(-1.38 * adj)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
@@ -388,7 +388,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
 
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
-    def __init__(self, d=128, margin=1.0, batch_size=2048, lr=0.001, epochs=10,
+    def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10,
                  negative_sampling_ratio=2.0,
                  max_length=1400, truncating="post", seed=0, verbose=False, **kwargs):
         super().__init__(d)
@@ -463,7 +463,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         # Compile & train
         self.siamese_net.compile(loss=self.identity_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
-                                 optimizer=Adam(),
+                                 optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=0.1),
                                  # metrics=[accuracy_d, precision_d, recall_d, auc_roc_d], # constrastive_loss
                                  # metrics=["accuracy", precision, recall], # cross_entropy
                                  )
@@ -492,8 +492,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
 
-        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
-                                       write_grads=True, write_graph=False, write_images=False,
+        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=1,
+                                       write_grads=True, write_graph=False, write_images=True,
                                         batch_size=self.batch_size,
                                        # update_freq=100000, embeddings_freq=1,
                                        # embeddings_data=self.generator_val.__getitem__(0)[0],
@@ -502,7 +502,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         try:
             self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
-                                          validation_data=self.generator_val,
+                                          validation_data=self.generator_val.__getitem__(0) if validation_make_data else self.generator_val,
                                           validation_steps=validation_steps,
                                           callbacks=[self.tensorboard],
                                           use_multiprocessing=True, workers=8)
@@ -510,6 +510,41 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             print("Stop training")
         finally:
             self.save_alpha_layers()
+
+    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
+        """
+        :param X:
+        :param node_l: list of node names
+        :param edge_type:
+        :return:
+        """
+        if hasattr(self, "reconstructed_adj") and edge_type=="d":
+            adj = self.reconstructed_adj
+        else:
+            embs = self.get_embedding()
+            assert len(self.node_list) == embs.shape[0]
+
+            if edge_type == 'd':
+                adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
+                                         Y=embs[:, int(self._d / 2):self._d],
+                                         metric="euclidean", n_jobs=-2)
+                adj = np.exp(-1.38 * adj)
+            elif edge_type == 'u':
+                adj = pairwise_distances(X=embs,
+                                         metric="euclidean", n_jobs=-2)
+                adj = np.exp(-1.38 * adj)
+            else:
+                raise Exception("Unsupported edge_type", edge_type)
+
+        if (node_l is None or node_l == self.node_list):
+            if edge_type=="d": self.reconstructed_adj = adj
+
+            return adj
+        elif set(node_l) < set(self.node_list):
+            idx = [self.node_list.index(node) for node in node_l]
+            return adj[idx, :][:, idx]
+        else:
+            raise Exception("A node in node_l is not in self.node_list.")
 
 
 if __name__ == '__main__':

@@ -98,7 +98,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_negative_sampling_edges(self):
         # All Negative Directed Edges (non-positive edges)
-        adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
+        adj_positive = self.adj_directed + self.adj_undirected
         self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ens_count:", self.Ens_count)
@@ -322,7 +322,6 @@ class SampledDataGenerator(DataGenerator):
         node_list = list(OrderedDict.fromkeys(node_list))
 
         graph = network.G.subgraph(nodes=node_list)
-        # negative_sampled_graph = pass
 
         self.edge_dict = {}
         self.edge_counts_dict = {}
@@ -476,12 +475,14 @@ class SampledDataGenerator(DataGenerator):
 
 
 
-class SampledTripletDataGenerator(SampledDataGenerator):
+class SampledTripletDataGenerator(SampledDataGenerator, keras.callbacks.Callback):
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  shuffle=True, seed=0):
         print("Using SampledTripletDataGenerator")
+        # self.set_model(model)
+
         super().__init__(network=network,
                          batch_size=batch_size, negative_sampling_ratio=negative_sampling_ratio, n_steps=n_steps,
                          directed_proba=directed_proba, compression_func=compression_func,
@@ -521,7 +522,7 @@ class SampledTripletDataGenerator(SampledDataGenerator):
             edge_type = np.random.choice([DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE], p=[self.directed_proba, 1-self.directed_proba])
         elif DIRECTED_EDGE_TYPE in edge_types:
             edge_type = DIRECTED_EDGE_TYPE
-        elif UNDIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_NEG_EDGE_TYPE in edge_types:
+        elif UNDIRECTED_EDGE_TYPE in edge_types:
             edge_type = UNDIRECTED_EDGE_TYPE
         else:
             return None
@@ -553,6 +554,9 @@ class SampledTripletDataGenerator(SampledDataGenerator):
 
         return X, y
 
+
+    def on_epoch_begin(self, epoch, logs=None):
+        pass
 
 
 class SampleEdgelistGenerator(Generator):
