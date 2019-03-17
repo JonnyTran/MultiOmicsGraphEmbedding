@@ -349,7 +349,7 @@ class SampledDataGenerator(DataGenerator):
 
     def process_negative_sampling_edges(self):
         # Negative Directed Edges (sampled)
-        adj_positive = self.adj_directed + self.adj_undirected + self.adj_negative
+        adj_positive = self.adj_directed + self.adj_undirected
         self.adj_negative_sampled = adj_positive == 0
 
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio) # Used to calculate sampling ratio to sample negative directed edges

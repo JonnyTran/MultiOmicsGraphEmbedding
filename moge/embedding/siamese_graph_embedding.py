@@ -109,7 +109,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("Embedding", x) if self.verbose else None
 
         x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm_lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
-        x = Conv2D(filters=192, kernel_size=(6, 1), activation='relu', data_format="channels_last")(
+        x = Conv2D(filters=320, kernel_size=(12, 1), activation='relu', data_format="channels_last")(
             x)  # (batch_number, sequence_length-5, 1, 192)
         x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
@@ -118,9 +118,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("max pooling_1", x) if self.verbose else None
         x = SpatialDropout1D(0.2)(x)
 
-        x = Convolution1D(filters=320, kernel_size=4, activation='relu')(x)
+        x = Convolution1D(filters=192, kernel_size=6, activation='relu')(x)
         print("conv1d_2", x) if self.verbose else None
-        x = MaxPooling1D(pool_size=4, padding="same")(x)
+        x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_2", x) if self.verbose else None
         x = SpatialDropout1D(0.2)(x)
 
@@ -130,7 +130,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         x = Dense(1024, activation='relu')(x)  # (batch_number, 1024)
         x = Dropout(0.2)(x)
-        x = Dense(925, activation='relu')(x)  # (batch_number, 925)
+        x = Dense(512, activation='relu')(x)  # (batch_number, 925)
         x = Dropout(0.2)(x)
         x = Dense(self._d, activation='linear', name="embedding_output")(x)  # Embedding space (batch_number, 128)
         # x = BatchNormalization(center=False, scale=True, name="embedding_output_normalized")(x)
@@ -296,12 +296,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                                          Y=embs[:, int(self._d / 2):self._d],
                                          metric="euclidean", n_jobs=-2)
                                          # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
-                adj = np.exp(-1.38 * adj)
+                adj = np.exp(-2 * adj)
             elif edge_type == 'u':
                 adj = pairwise_distances(X=embs,
                                          metric="euclidean", n_jobs=-2)
                                          # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
-                adj = np.exp(-1.38 * adj)
+                adj = np.exp(-2 * adj)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
@@ -492,7 +492,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
 
-        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=1,
+        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
                                        write_grads=True, write_graph=False, write_images=True,
                                         batch_size=self.batch_size,
                                        # update_freq=100000, embeddings_freq=1,
@@ -528,11 +528,11 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
                                          Y=embs[:, int(self._d / 2):self._d],
                                          metric="euclidean", n_jobs=-2)
-                adj = np.exp(-1.38 * adj)
+                adj = np.exp(-2 * (adj-0.2))
             elif edge_type == 'u':
                 adj = pairwise_distances(X=embs,
                                          metric="euclidean", n_jobs=-2)
-                adj = np.exp(-1.38 * adj)
+                adj = np.exp(-4 * adj)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
