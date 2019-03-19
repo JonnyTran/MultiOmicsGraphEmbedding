@@ -244,7 +244,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, validation_make_data=False, multi_gpu=False,
                         subsample=True, n_steps=500, validation_steps=None,
-                        edge_f=None, is_weighted=False, no_python=False, seed=0):
+                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
         if subsample:
             self.generator_train = SampledDataGenerator(network=network, compression_func=self.compression_func, n_steps=n_steps,
                                                         maxlen=self.max_length, padding='post', truncating=self.truncating,
@@ -269,7 +269,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         else:
             self.generator_val = None
 
-        self.build_keras_model(multi_gpu)
+        if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
         self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d%l-%M%p')), histogram_freq=1,
                                        write_grads=True, write_graph=False, write_images=True,
@@ -426,7 +426,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         negative_distance = Lambda(self.st_euclidean_distance, name="lambda_negative_distances")([encoded_i, encoded_k, is_directed])
         return K.mean(K.maximum(0.0, positive_distance - negative_distance + self.margin))
 
-    def build_keras_model(self, multi_gpu):
+    def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
             device = "/cpu:0"
             allow_soft_placement = True
@@ -476,7 +476,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, validation_make_data=False, multi_gpu=False,
                         subsample=True, n_steps=500, validation_steps=None,
-                        edge_f=None, is_weighted=False, no_python=False, seed=0):
+                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
 
         self.generator_train = SampledTripletDataGenerator(network=network, compression_func=self.compression_func, n_steps=n_steps,
                                                            maxlen=self.max_length, padding='post', truncating=self.truncating,
@@ -495,15 +495,15 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         else:
             self.generator_val = None
 
-        if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
+        if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
-        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
-                                       write_grads=True, write_graph=False, write_images=True,
-                                        batch_size=self.batch_size,
-                                       # update_freq=100000, embeddings_freq=1,
-                                       # embeddings_data=self.generator_val.__getitem__(0)[0],
-                                       # embeddings_layer_names=["embedding_output"],
-                                       )
+        # self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
+        #                                write_grads=True, write_graph=False, write_images=True,
+        #                                 batch_size=self.batch_size,
+        #                                # update_freq=100000, embeddings_freq=1,
+        #                                # embeddings_data=self.generator_val.__getitem__(0)[0],
+        #                                # embeddings_layer_names=["embedding_output"],
+        #                                )
 
         try:
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
