@@ -24,7 +24,7 @@ class DataGenerator(keras.utils.Sequence):
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, negative_sampling_ratio=3,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
-                 shuffle=True, seed=0):
+                 shuffle=True, seed=0, verbose=True):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
         each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
@@ -53,6 +53,7 @@ class DataGenerator(keras.utils.Sequence):
         self.truncating = truncating
         self.seed = seed
         self.sequence_to_matrix = sequence_to_matrix
+        self.verbose = verbose
         np.random.seed(seed)
 
         self.genes_info = network.genes_info
@@ -66,7 +67,7 @@ class DataGenerator(keras.utils.Sequence):
     def process_sequence_tokenizer(self):
         self.tokenizer = Tokenizer(char_level=True, lower=False)
         self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
-        print("word index:", self.tokenizer.word_index)
+        print("word index:", self.tokenizer.word_index) if self.verbose else None
 
     def reload_directed_edges_data(self, edge_types=["d"], databases=None):
         self.adj_directed = self.network.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
@@ -75,7 +76,7 @@ class DataGenerator(keras.utils.Sequence):
         self.Ed_count = len(self.Ed_rows)
 
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
-        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count)
+        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count) if self.verbose else None
         self.on_epoch_end()
 
     def process_training_edges_data(self):
@@ -94,14 +95,14 @@ class DataGenerator(keras.utils.Sequence):
         self.En_rows, self.En_cols = triu(self.adj_negative, k=1).nonzero()
         self.En_count = len(self.En_rows)
 
-        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count)
+        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count) if self.verbose else None
 
     def process_negative_sampling_edges(self):
         # All Negative Directed Edges (non-positive edges)
         adj_positive = self.adj_directed + self.adj_undirected
         self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
-        print("Ens_count:", self.Ens_count)
+        print("Ens_count:", self.Ens_count) if self.verbose else None
 
     def update_negative_samples(self):
         sample_indices = np.random.choice(self.Ens_rows_all.shape[0], self.Ens_count, replace=False)
@@ -306,15 +307,15 @@ class SampledDataGenerator(DataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
-                 shuffle=True, seed=0):
+                 shuffle=True, seed=0, verbose=True):
         self.compression_func = compression_func
         self.n_steps = n_steps
         self.directed_proba = directed_proba
-        print("Using SampledDataGenerator")
+        print("Using SampledDataGenerator") if self.verbose else None
         super().__init__(network,
                          batch_size, negative_sampling_ratio,
                          maxlen, padding, truncating, sequence_to_matrix,
-                         shuffle, seed)
+                         shuffle, seed, verbose)
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):
@@ -345,7 +346,7 @@ class SampledDataGenerator(DataGenerator):
 
         self.node_degrees_list = [self.node_degrees[node] for node in node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list)
-        print("# of nodes to sample from (non-zero degree):", np.count_nonzero(self.node_sampling_freq))
+        print("# of nodes to sample from (non-zero degree):", np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
 
     def process_negative_sampling_edges(self):
         # Negative Directed Edges (sampled)
@@ -353,7 +354,7 @@ class SampledDataGenerator(DataGenerator):
         self.adj_negative_sampled = adj_positive == 0
 
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio) # Used to calculate sampling ratio to sample negative directed edges
-        print("Ens_count:", self.Ens_count)
+        print("Ens_count:", self.Ens_count) if self.verbose else None
 
 
     def compute_node_sampling_freq(self, node_degrees):
@@ -479,15 +480,15 @@ class SampledTripletDataGenerator(SampledDataGenerator, keras.callbacks.Callback
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
-                 shuffle=True, seed=0):
-        print("Using SampledTripletDataGenerator")
+                 shuffle=True, seed=0, verbose=True):
+        print("Using SampledTripletDataGenerator") if self.verbose else None
         # self.set_model(model)
 
         super().__init__(network=network,
                          batch_size=batch_size, negative_sampling_ratio=negative_sampling_ratio, n_steps=n_steps,
                          directed_proba=directed_proba, compression_func=compression_func,
                          maxlen=maxlen, padding=padding, truncating=truncating, sequence_to_matrix=sequence_to_matrix,
-                         shuffle=shuffle, seed=seed)
+                         shuffle=shuffle, seed=seed, verbose=verbose)
 
     def __getitem__(self, item):
         sampled_edges = []

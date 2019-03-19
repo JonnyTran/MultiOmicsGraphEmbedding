@@ -2,8 +2,11 @@
 import time
 import numpy as np
 import tensorflow as tf
+
+from sklearn.base import BaseEstimator, ClassifierMixin
+
 from keras import backend as K
-import keras
+from keras.wrappers.scikit_learn import KerasClassifier
 from keras.callbacks import TensorBoard, EarlyStopping
 from keras.layers import Conv2D, Dense, Dropout, Bidirectional, CuDNNLSTM, SpatialDropout1D, Embedding, BatchNormalization
 from keras.layers import Dot, MaxPooling1D, Convolution1D
@@ -71,21 +74,35 @@ def l1_diff_alpha(u, v, weights):
 
 
 
-class SiameseGraphEmbedding(ImportedGraphEmbedding):
-    def __init__(self, d=128, batch_size=2048, lr=0.001, epochs=10,
-                 negative_sampling_ratio=2.0,
-                 max_length=1400, truncating="post", seed=0, verbose=False, **kwargs):
+class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
+    def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5,
+                 compression_func="sqrt", negative_sampling_ratio=2.0,
+                 max_length=1400, truncating="post", seed=0, verbose=False,
+                 conv1_kernel_size=12, max1_pool_size=6, conv2_kernel_size=6, max2_pool_size=3,
+                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512,
+                 **kwargs):
         super().__init__(d)
 
         self._d = d
         self.batch_size = batch_size
+        self.margin = margin
         self.lr = lr
         self.epochs = epochs
+        self.compression_func = compression_func
+        self.directed_proba = directed_proba
         self.negative_sampling_ratio = negative_sampling_ratio
         self.max_length = max_length
         self.truncating = truncating
         self.seed = seed
         self.verbose = verbose
+
+        self.conv1_kernel_size = conv1_kernel_size
+        self.max1_pool_size = max1_pool_size
+        self.conv2_kernel_size = conv2_kernel_size
+        self.max2_pool_size = max2_pool_size
+        self.lstm_unit_size = lstm_unit_size
+        self.dense1_unit_size = dense1_unit_size
+        self.dense2_unit_size = dense2_unit_size
 
         hyper_params = {
             'method_name': 'siamese_graph_embedding'
@@ -109,31 +126,32 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         print("Embedding", x) if self.verbose else None
 
         x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm_lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
-        x = Conv2D(filters=320, kernel_size=(12, 1), activation='relu', data_format="channels_last")(
+        x = Conv2D(filters=320, kernel_size=(self.conv1_kernel_size, 1), activation='relu', data_format="channels_last", name="lstm_conv_1")(
             x)  # (batch_number, sequence_length-5, 1, 192)
         x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
-
-        x = MaxPooling1D(pool_size=6, padding="same")(x)
+        x = MaxPooling1D(pool_size=self.max1_pool_size, padding="same")(x)
         print("max pooling_1", x) if self.verbose else None
-        x = SpatialDropout1D(0.2)(x)
+        x = Dropout(0.2)(x)
 
-        x = Convolution1D(filters=192, kernel_size=6, activation='relu')(x)
+
+        x = Convolution1D(filters=192, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
         print("conv1d_2", x) if self.verbose else None
-        x = MaxPooling1D(pool_size=3, padding="same")(x)
+        x = MaxPooling1D(pool_size=self.max2_pool_size, padding="same")(x)
         print("max pooling_2", x) if self.verbose else None
-        x = SpatialDropout1D(0.2)(x)
+        x = Dropout(0.2)(x)
 
-        x = Bidirectional(CuDNNLSTM(320, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
+        x = Bidirectional(CuDNNLSTM(self.lstm_unit_size, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None
         x = Dropout(0.2)(x)
 
-        x = Dense(1024, activation='relu')(x)  # (batch_number, 1024)
+        x = Dense(self.dense1_unit_size, activation='relu', name="lstm_dense_1")(x)  # (batch_number, 1024)
         x = Dropout(0.2)(x)
-        x = Dense(512, activation='relu')(x)  # (batch_number, 925)
-        x = Dropout(0.2)(x)
+        if self.dense2_unit_size is not None:
+            x = Dense(self.dense2_unit_size, activation='relu', name="lstm_dense_2")(x)  # (batch_number, 925)
+            x = Dropout(0.2)(x)
         x = Dense(self._d, activation='linear', name="embedding_output")(x)  # Embedding space (batch_number, 128)
-        # x = BatchNormalization(center=False, scale=True, name="embedding_output_normalized")(x)
+        # x = BatchNormalization(center=False, scale=True, name="embedding_output_normalized")(x) # To make embedding output l2norm = 1
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
 
@@ -160,7 +178,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
         output = Lambda(switch, output_shape=(None, ), name="alpha_lambda_output")([is_directed, alpha_directed, alpha_undirected])
         print("output", output)
         return Model(inputs=[encoded_i, encoded_j, is_directed], outputs=output, name="alpha_network")
-
 
     def st_euclidean_distance(self, inputs):
         emb_i, emb_j, is_directed = inputs
@@ -218,28 +235,28 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
 
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
-                                 optimizer=RMSprop(lr=self.lr, decay=0.9, momentum=0.9, epsilon=1.0),
+                                 optimizer=RMSprop(lr=self.lr),
                                  metrics=[accuracy_d, precision_d, recall_d, auc_roc_d],
                                  # metrics=["accuracy", precision, recall],
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
+
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, validation_make_data=False, multi_gpu=False,
-                        subsample=True, compression_func="log", directed_proba=0.8,
-                        n_steps=500, validation_steps=None,
+                        subsample=True, n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
         if subsample:
-            self.generator_train = SampledDataGenerator(network=network, compression_func=compression_func, n_steps=n_steps,
+            self.generator_train = SampledDataGenerator(network=network, compression_func=self.compression_func, n_steps=n_steps,
                                                         maxlen=self.max_length, padding='post', truncating=self.truncating,
                                                         negative_sampling_ratio=self.negative_sampling_ratio,
-                                                        directed_proba=directed_proba,
-                                                        batch_size=self.batch_size, shuffle=True, seed=0) \
+                                                        directed_proba=self.directed_proba,
+                                                        batch_size=self.batch_size, shuffle=True, seed=0, verbose=self.verbose) \
                 if not hasattr(self, "generator_train") else self.generator_train
         else:
             self.generator_train = DataGenerator(network=network,
                                                  maxlen=self.max_length, padding='post', truncating=self.truncating,
                                                  negative_sampling_ratio=self.negative_sampling_ratio,
-                                                 batch_size=self.batch_size, shuffle=True, seed=0) \
+                                                 batch_size=self.batch_size, shuffle=True, seed=0, verbose=self.verbose) \
                 if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
 
@@ -247,16 +264,16 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             self.generator_val = DataGenerator(network=network_val,
                                                maxlen=self.max_length, padding='post', truncating="post",
                                                negative_sampling_ratio=1.0,
-                                               batch_size=self.batch_size, shuffle=True, seed=0) \
+                                               batch_size=self.batch_size, shuffle=True, seed=0, verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
 
-        if not hasattr(self, "siamese_net"): self.build_keras_model(multi_gpu)
+        self.build_keras_model(multi_gpu)
 
         self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d%l-%M%p')), histogram_freq=1,
                                        write_grads=True, write_graph=False, write_images=True,
-                                        batch_size=self.batch_size,
+                                       batch_size=self.batch_size,
                                        # update_freq=100000, embeddings_freq=1,
                                        # embeddings_data=self.generator_val.__getitem__(0)[0],
                                        # embeddings_layer_names=["embedding_output"],
@@ -266,7 +283,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             self.history = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                           validation_data=self.generator_val.__getitem__(0) if validation_make_data else self.generator_val,
                                                           validation_steps=validation_steps,
-                                                          callbacks=[self.tensorboard],
+                                                          # callbacks=[self.tensorboard],
                                                           use_multiprocessing=True, workers=8)
         except KeyboardInterrupt:
             print("Stop training")
@@ -295,12 +312,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
                 adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
                                          Y=embs[:, int(self._d / 2):self._d],
                                          metric="euclidean", n_jobs=-2)
-                                         # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
+                # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
                 adj = np.exp(-2 * adj)
             elif edge_type == 'u':
                 adj = pairwise_distances(X=embs,
                                          metric="euclidean", n_jobs=-2)
-                                         # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
+                # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
                 adj = np.exp(-2 * adj)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
@@ -387,29 +404,17 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding):
             return pairwise_distances(X=embs[i], Y=embs[j], metric=l1_diff_alpha, weights=self.alpha_directed)
 
 
+
+
+
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
-    def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10,
-                 negative_sampling_ratio=2.0,
-                 max_length=1400, truncating="post", seed=0, verbose=False, **kwargs):
-        super().__init__(d)
-
-        self._d = d
-        self.margin = margin
-        self.batch_size = batch_size
-        self.lr = lr
-        self.epochs = epochs
-        self.negative_sampling_ratio = negative_sampling_ratio
-        self.max_length = max_length
-        self.truncating = truncating
-        self.seed = seed
-        self.verbose = verbose
-
-        hyper_params = {
-            'method_name': 'siamese_graph_embedding'
-        }
-        hyper_params.update(kwargs)
-        for key in hyper_params.keys():
-            self.__setattr__('_%s' % key, hyper_params[key])
+    def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5,
+                 compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
+                 verbose=False, conv1_kernel_size=12, max1_pool_size=6, conv2_kernel_size=6, max2_pool_size=3,
+                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512, **kwargs):
+        super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
+                         max_length, truncating, seed, verbose, conv1_kernel_size, max1_pool_size, conv2_kernel_size,
+                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, **kwargs)
 
     def identity_loss(self, y_true, y_pred):
         return K.mean(y_pred - 0 * y_true)
@@ -470,14 +475,15 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, validation_make_data=False, multi_gpu=False,
-                        subsample=True, compression_func="log", directed_proba=0.8,
+                        subsample=True,
                         n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, seed=0):
-        self.generator_train = SampledTripletDataGenerator(network=network, compression_func=compression_func, n_steps=n_steps,
-                                                    maxlen=self.max_length, padding='post', truncating=self.truncating,
-                                                    negative_sampling_ratio=self.negative_sampling_ratio,
-                                                    directed_proba=directed_proba,
-                                                    batch_size=self.batch_size, shuffle=True, seed=0) \
+
+        self.generator_train = SampledTripletDataGenerator(network=network, compression_func=self.compression_func, n_steps=n_steps,
+                                                           maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                                           negative_sampling_ratio=self.negative_sampling_ratio,
+                                                           directed_proba=self.directed_proba,
+                                                           batch_size=self.batch_size, shuffle=True, seed=0) \
             if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
 
@@ -504,7 +510,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                           validation_data=self.generator_val.__getitem__(0) if validation_make_data else self.generator_val,
                                           validation_steps=validation_steps,
-                                          callbacks=[self.tensorboard],
+                                          # callbacks=[self.tensorboard],
                                           use_multiprocessing=True, workers=8)
         except KeyboardInterrupt:
             print("Stop training")
