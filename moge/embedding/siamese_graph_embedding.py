@@ -126,7 +126,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         print("Embedding", x) if self.verbose else None
 
         x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm_lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
-        x = Conv2D(filters=320, kernel_size=(self.conv1_kernel_size, 1), activation='relu', data_format="channels_last", name="lstm_conv_1")(
+        x = Conv2D(filters=192, kernel_size=(self.conv1_kernel_size, 1), activation='relu', data_format="channels_last", name="lstm_conv_1")(
             x)  # (batch_number, sequence_length-5, 1, 192)
         x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
@@ -134,12 +134,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         print("max pooling_1", x) if self.verbose else None
         x = Dropout(0.2)(x)
 
-
-        x = Convolution1D(filters=192, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
-        print("conv1d_2", x) if self.verbose else None
-        x = MaxPooling1D(pool_size=self.max2_pool_size, padding="same")(x)
-        print("max pooling_2", x) if self.verbose else None
-        x = Dropout(0.2)(x)
+        if self.conv2_kernel_size is not None:
+            x = Convolution1D(filters=192, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
+            print("conv1d_2", x) if self.verbose else None
+            x = MaxPooling1D(pool_size=self.max2_pool_size, padding="same")(x)
+            print("max pooling_2", x) if self.verbose else None
+            x = Dropout(0.2)(x)
 
         x = Bidirectional(CuDNNLSTM(self.lstm_unit_size, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None
@@ -236,7 +236,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
                                  optimizer=RMSprop(lr=self.lr),
-                                 metrics=[accuracy_d, precision_d, recall_d],
+                                 # metrics=[accuracy_d, precision_d, recall_d],
                                  # metrics=["accuracy", precision, recall],
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
