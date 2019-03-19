@@ -311,7 +311,7 @@ class SampledDataGenerator(DataGenerator):
         self.compression_func = compression_func
         self.n_steps = n_steps
         self.directed_proba = directed_proba
-        print("Using SampledDataGenerator") if self.verbose else None
+        print("Using SampledDataGenerator") if verbose else None
         super().__init__(network,
                          batch_size, negative_sampling_ratio,
                          maxlen, padding, truncating, sequence_to_matrix,
@@ -476,14 +476,11 @@ class SampledDataGenerator(DataGenerator):
 
 
 
-class SampledTripletDataGenerator(SampledDataGenerator, keras.callbacks.Callback):
+class SampledTripletDataGenerator(SampledDataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  shuffle=True, seed=0, verbose=True):
-        print("Using SampledTripletDataGenerator") if self.verbose else None
-        # self.set_model(model)
-
         super().__init__(network=network,
                          batch_size=batch_size, negative_sampling_ratio=negative_sampling_ratio, n_steps=n_steps,
                          directed_proba=directed_proba, compression_func=compression_func,
@@ -554,10 +551,6 @@ class SampledTripletDataGenerator(SampledDataGenerator, keras.callbacks.Callback
         y = np.zeros(X_list[:, 3].shape)
 
         return X, y
-
-
-    def on_epoch_begin(self, epoch, logs=None):
-        pass
 
 
 class SampleEdgelistGenerator(Generator):
