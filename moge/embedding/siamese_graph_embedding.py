@@ -21,7 +21,8 @@ from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.metrics import accuracy_d, precision_d, recall_d, auc_roc_d, precision, recall, auc_roc
-from moge.network.data_generator import DataGenerator, SampledDataGenerator, SampledTripletDataGenerator
+from moge.network.edge_generator import DataGenerator, SampledDataGenerator
+from moge.network.triplet_generator import SampledTripletDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
