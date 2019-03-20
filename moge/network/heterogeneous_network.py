@@ -6,6 +6,9 @@ import scipy.sparse as sp
 from moge.evaluation.utils import sample_edges
 from moge.network.omics_distance import *
 
+EPSILON = 1e-16
+
+
 def get_rename_dict(dataframe, alias_col_name):
     dataframe = dataframe[dataframe[alias_col_name].notnull()]
     b = pd.DataFrame(dataframe[alias_col_name].str.split('|').tolist(), index=dataframe.index).stack()
@@ -192,7 +195,7 @@ class HeterogeneousNetwork():
                                         similarity_threshold=0.7, dissimilarity_threshold=0.1,
                                         negative_sampling_ratio=2.0, max_positive_edges=None,
                                         compute_correlation=True, histological_subtypes=[], pathologic_stages=[],
-                                        epsilon=1e-16, tag="affinity"):
+                                        epsilon=EPSILON, tag="affinity"):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the
 network if the similarity measures passes the threshold

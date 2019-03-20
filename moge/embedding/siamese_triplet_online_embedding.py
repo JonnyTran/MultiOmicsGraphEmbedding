@@ -1,10 +1,14 @@
 import numpy as np
 import tensorflow as tf
 
-from keras import backend as K
+from keras import backend as K, Input, Model
 from keras.layers import Input, Lambda, Activation, Subtract, Reshape
+from keras.optimizers import Adam
+from keras.utils import multi_gpu_model
+from sklearn.metrics import pairwise_distances
 
 from moge.embedding.siamese_graph_embedding import *
+from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.metrics import accuracy_d, precision_d, recall_d, auc_roc_d, precision, recall, auc_roc
 from moge.network.edge_generator import DataGenerator, SampledDataGenerator
@@ -12,7 +16,152 @@ from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTr
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-class SiameseTripletGraphEmbedding(SiameseTripletGraphEmbedding):
+class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
+    def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5,
+                 compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
+                 verbose=False, conv1_kernel_size=12, max1_pool_size=6, conv2_kernel_size=6, max2_pool_size=3,
+                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512, **kwargs):
+        super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
+                         max_length, truncating, seed, verbose, conv1_kernel_size, max1_pool_size, conv2_kernel_size,
+                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, **kwargs)
+
+    def identity_loss(self, y_true, y_pred):
+        return K.mean(y_pred - 0 * y_true)
+
+    def triplet_loss(self, inputs):
+        encoded_i, encoded_j, encoded_k, is_directed = inputs
+
+        positive_distance = Lambda(self.st_euclidean_distance, name="lambda_positive_distances")([encoded_i, encoded_j, is_directed])
+        negative_distance = Lambda(self.st_euclidean_distance, name="lambda_negative_distances")([encoded_i, encoded_k, is_directed])
+        return K.mean(K.maximum(0.0, positive_distance - negative_distance + self.margin))
+
+    def build_keras_model(self, multi_gpu=False):
+        if multi_gpu:
+            device = "/cpu:0"
+            allow_soft_placement = True
+        else:
+            device = "/gpu:0"
+            allow_soft_placement = False
+
+        K.clear_session()
+        tf.reset_default_graph()
+        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
+
+        with tf.device(device):
+            input_seq_i = Input(batch_shape=(self.batch_size, None), name="input_seq_i")
+            input_seq_j = Input(batch_shape=(self.batch_size, None), name="input_seq_j")
+            input_seq_k = Input(batch_shape=(self.batch_size, None), name="input_seq_k")
+            is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.int8, name="is_directed")
+
+            # build create_lstm_network to use in each siamese 'leg'
+            self.lstm_network = self.create_lstm_network()
+
+            # encode each of the two inputs into a vector with the conv_lstm_network
+            encoded_i = self.lstm_network(input_seq_i)
+            print(encoded_i) if self.verbose else None
+            encoded_j = self.lstm_network(input_seq_j)
+            print(encoded_j) if self.verbose else None
+            encoded_k = self.lstm_network(input_seq_k)
+            print(encoded_k) if self.verbose else None
+
+            output = Lambda(self.triplet_loss, name="lambda_triplet_loss_output")([encoded_i, encoded_j, encoded_k, is_directed])
+            # self.alpha_network = self.create_alpha_network()
+            # output = self.alpha_network([encoded_i, encoded_j, is_directed])
+
+            self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, input_seq_k, is_directed], outputs=output)
+
+        # Multi-gpu parallelization
+        if multi_gpu:
+            self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
+
+
+        # Compile & train
+        self.siamese_net.compile(loss=self.identity_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
+                                 optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=0.1),
+                                 # metrics=[accuracy_d, precision_d, recall_d, auc_roc_d], # constrastive_loss
+                                 # metrics=["accuracy", precision, recall], # cross_entropy
+                                 )
+        print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
+
+    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, validation_make_data=False, multi_gpu=False,
+                        subsample=True, n_steps=500, validation_steps=None,
+                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
+
+        self.generator_train = SampledTripletDataGenerator(network=network, compression_func=self.compression_func, n_steps=n_steps,
+                                                           maxlen=self.max_length, padding='post', truncating=self.truncating,
+                                                           negative_sampling_ratio=self.negative_sampling_ratio,
+                                                           directed_proba=self.directed_proba,
+                                                           batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
+            if not hasattr(self, "generator_train") else self.generator_train
+        self.node_list = self.generator_train.node_list
+
+        if network_val is not None:
+            self.generator_val = SampledTripletDataGenerator(network=network_val,
+                                               maxlen=self.max_length, padding='post', truncating="post",
+                                               negative_sampling_ratio=1.0,
+                                               batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
+                if not hasattr(self, "generator_val") else self.generator_val
+        else:
+            self.generator_val = None
+
+        if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
+
+        # self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
+        #                                write_grads=True, write_graph=False, write_images=True,
+        #                                 batch_size=self.batch_size,
+        #                                # update_freq=100000, embeddings_freq=1,
+        #                                # embeddings_data=self.generator_val.__getitem__(0)[0],
+        #                                # embeddings_layer_names=["embedding_output"],
+        #                                )
+
+        try:
+            self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
+                                                       validation_data=self.generator_val.__getitem__(0) if validation_make_data else self.generator_val,
+                                                       validation_steps=validation_steps,
+                                                       # callbacks=[self.tensorboard],
+                                                       use_multiprocessing=True, workers=8)
+        except KeyboardInterrupt:
+            print("Stop training")
+        finally:
+            self.save_alpha_layers()
+
+    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
+        """
+        :param X:
+        :param node_l: list of node names
+        :param edge_type:
+        :return:
+        """
+        if hasattr(self, "reconstructed_adj") and edge_type=="d":
+            adj = self.reconstructed_adj
+        else:
+            embs = self.get_embedding()
+            assert len(self.node_list) == embs.shape[0]
+
+            if edge_type == 'd':
+                adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
+                                         Y=embs[:, int(self._d / 2):self._d],
+                                         metric="euclidean", n_jobs=-2)
+                adj = np.exp(-2 * (adj-0.2))
+            elif edge_type == 'u':
+                adj = pairwise_distances(X=embs,
+                                         metric="euclidean", n_jobs=-2)
+                adj = np.exp(-4 * adj)
+            else:
+                raise Exception("Unsupported edge_type", edge_type)
+
+        if (node_l is None or node_l == self.node_list):
+            if edge_type=="d": self.reconstructed_adj = adj
+
+            return adj
+        elif set(node_l) < set(self.node_list):
+            idx = [self.node_list.index(node) for node in node_l]
+            return adj[idx, :][:, idx]
+        else:
+            raise Exception("A node in node_l is not in self.node_list.")
+
+
+class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
     def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5,
                  compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
@@ -48,8 +197,8 @@ class SiameseTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             input_seqs = self.lstm_network(input_seqs)
             print("input_seqs", input_seqs) if self.verbose else None
 
-            output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin/2)(
-                [input_seqs, labels_directed, labels_undirected])
+            output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin/2,
+                                       trainable=False)([input_seqs, labels_directed, labels_undirected])
             print("output", output) if self.verbose else None
 
             self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=output)
@@ -112,9 +261,9 @@ class SiameseTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
 
 class OnlineTripletLoss(tf.keras.layers.Layer):
-    def __init__(self, num_outputs=1, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0):
-        super(OnlineTripletLoss, self).__init__()
-        self.num_outputs = num_outputs
+    def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, **kwargs):
+        super(OnlineTripletLoss, self).__init__(**kwargs)
+        self.output_dim = ()
         self.directed_margin = directed_margin
         self.undirected_margin = undirected_margin
         self.undirected_weight = undirected_weight
@@ -125,6 +274,7 @@ class OnlineTripletLoss(tf.keras.layers.Layer):
         # self.kernel = self.add_variable("kernel",
         #                                 shape=[int(input_shape[-1]),
         #                                        self.num_outputs])
+        super(OnlineTripletLoss, self).build(input_shape)
 
     def call(self, input, **kwargs):
         embeddings, labels_directed, labels_undirected = input
@@ -139,6 +289,13 @@ class OnlineTripletLoss(tf.keras.layers.Layer):
         undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels_undirected, self.undirected_margin)
         print("undirected_loss", undirected_loss)
         return tf.add(directed_loss, undirected_loss)
+
+    @property
+    def outbound_nodes(self):
+        if hasattr(self, '_outbound_nodes'):
+            print("outbound_nodes called but _outbound_nodes found")
+        return getattr(self, '_outbound_nodes', [])
+
 
 
 def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
