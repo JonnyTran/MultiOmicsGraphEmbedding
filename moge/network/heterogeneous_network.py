@@ -137,10 +137,10 @@ class HeterogeneousNetwork():
         :param node_list: A list of node names
         :return: A csr_matrix sparse adjacency matrix
         """
-        if node_list == None:
+        if node_list is None:
             node_list = self.node_list
 
-        if edge_types == None:
+        if edge_types is None:
             edge_list = self.G.edges(nbunch=node_list, data=True)
         else:
             if type(edge_types) == list:

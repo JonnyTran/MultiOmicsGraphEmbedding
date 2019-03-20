@@ -1,10 +1,14 @@
 import numpy as np
-import networkx as nx
 
 from moge.network.edge_generator import SampledDataGenerator, DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE, \
     UNDIRECTED_NEG_EDGE_TYPE, IS_DIRECTED, IS_UNDIRECTED
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
+
+def convert_sparse_matrix_to_sparse_tensor(X):
+    coo = X.tocoo()
+    indices = np.mat([coo.row, coo.col]).transpose()
+    return indices, coo.data.astype(np.float), coo.shape
 
 class SampledTripletDataGenerator(SampledDataGenerator):
     def __init__(self, network: HeterogeneousNetwork,
@@ -91,21 +95,18 @@ class OnlineTripletGenerator(SampledDataGenerator):
                          maxlen, padding, truncating, sequence_to_matrix, shuffle, seed, verbose)
 
     def __getitem__(self, item):
-        sampled_node_ids = np.random.choice(range(len(self.node_list)), size=self.batch_size, replace=False,
+        sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
                                         p=self.node_sampling_freq)
-
-        X, y = self.__data_generation(sampled_node_ids)
+        X, y = self.__data_generation(sampled_nodes)
 
         return X, y
 
-    def __data_generation(self, sampled_node_ids):
+    def __data_generation(self, sampled_nodes):
         X = {}
-        X["input_seqs"] = self.get_sequence_data(sampled_node_ids, variable_length=False)
-        X["labels_directed"] = self.network.get_adjacency_matrix(edge_types=["d"],
-                                                                 node_list=[self.node_list[i] for i in sampled_node_ids])
-        X["labels_undirected"] = self.network.get_adjacency_matrix(edge_types=["u", "u_n"],
-                                                                 node_list=[self.node_list[i] for i in
-                                                                            sampled_node_ids])
+        X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
+        X["labels_directed"] = convert_sparse_matrix_to_sparse_tensor(self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes))
+        X["labels_undirected"] = convert_sparse_matrix_to_sparse_tensor(self.network.get_adjacency_matrix(edge_types=["u", "u_n"], node_list=sampled_nodes))
+
         y = np.zeros(X["input_seqs"].shape[0])
         return X, y
 

@@ -451,7 +451,7 @@ class SampledDataGenerator(DataGenerator):
         return X, y
 
 
-    def get_sequence_data(self, node_list_ids, variable_length=False, minlen=None):
+    def get_sequence_data(self, node_list, variable_length=False, minlen=None):
         """
         Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
         (indexing from self.node_list)
@@ -459,13 +459,13 @@ class SampledDataGenerator(DataGenerator):
         :param minlen: pad all sequences with length lower than this minlen
         """
         if variable_length == False:
-            padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list_ids, "Transcript sequence"],
+            padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
             padded_encoded_sequences = [
                 self.encode_texts([self.genes_info.loc[node, "Transcript sequence"]], minlen=minlen)
                 for node in
-                node_list_ids]
+                node_list]
 
         return padded_encoded_sequences
 
