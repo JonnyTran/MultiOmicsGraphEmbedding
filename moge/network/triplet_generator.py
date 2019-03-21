@@ -120,9 +120,10 @@ class OnlineTripletGenerator(SampledDataGenerator):
         """
         pos_rows, pos_cols = adj.nonzero()
         Ed_count = len(pos_rows)
+        sample_neg_count = min(int(Ed_count * self.negative_sampling_ratio), np.power(adj.shape[0], 2) * 0.25)
 
+        # TODO implement random edge sampling based on the unigram distribution
         neg_rows, neg_cols = np.where(adj.todense() == 0)
-        sample_neg_count = int(Ed_count * self.negative_sampling_ratio)
         sample_indices = np.random.choice(neg_rows.shape[0], sample_neg_count, replace=False)
         adj[neg_rows[sample_indices], neg_cols[sample_indices]] = EPSILON
 

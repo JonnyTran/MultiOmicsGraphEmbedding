@@ -1,19 +1,9 @@
-import numpy as np
-import tensorflow as tf
-
-from keras import backend as K, Input, Model
-from keras.layers import Input, Lambda, Activation, Subtract, Reshape
 from keras.optimizers import Adam
-from keras.utils import multi_gpu_model
-from sklearn.metrics import pairwise_distances
 
 from moge.embedding.siamese_graph_embedding import *
 from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding
-from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
-from moge.evaluation.metrics import accuracy_d, precision_d, recall_d, auc_roc_d, precision, recall, auc_roc
-from moge.network.edge_generator import DataGenerator, SampledDataGenerator
-from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTripletGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
+from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTripletGenerator
 
 
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
@@ -163,13 +153,29 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
 class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
-    def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5,
+    def __init__(self, d=128, margin=0.2, batch_size=256, lr=0.001, epochs=10, directed_proba=0.5,
                  compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
                  verbose=False, conv1_kernel_size=12, max1_pool_size=6, conv2_kernel_size=6, max2_pool_size=3,
                  lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512, **kwargs):
+        self.directed_margin = margin
+        self.undirected_margin = margin / 2
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, max1_pool_size, conv2_kernel_size,
                          max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, **kwargs)
+
+    def online_triplet_loss(self, input):
+        embeddings, labels_directed, labels_undirected = input
+
+        embeddings_s = tf.slice(embeddings, [-1, 0],
+                                [embeddings.get_shape()[0], int(self._d / 2)])
+        embeddings_t = tf.slice(embeddings, [-1, int(self._d / 2)],
+                                [embeddings.get_shape()[0], int(self._d / 2)])
+
+        directed_loss = batch_hard_triplet_loss(embeddings_t, embeddings_s, labels_directed, self.directed_margin)
+        print("directed_loss", directed_loss)
+        undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels_undirected, self.undirected_margin)
+        print("undirected_loss", undirected_loss)
+        return tf.add(directed_loss, undirected_loss)
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
@@ -194,14 +200,17 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.lstm_network = self.create_lstm_network()
 
             # encode each of the inputs into a list of embedding vectors with the conv_lstm_network
-            input_seqs = self.lstm_network(input_seqs)
-            print("input_seqs", input_seqs) if self.verbose else None
+            embeddings = self.lstm_network(input_seqs)
+            print("embeddings", embeddings) if self.verbose else None
 
             output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin/2,
-                                       trainable=False)([input_seqs, labels_directed, labels_undirected])
+                                       trainable=False)([embeddings, labels_directed, labels_undirected])
+            # output = Lambda(self.online_triplet_loss)([embeddings, labels_directed, labels_undirected])
+            lambda_ouput = Lambda(lambda x: x)(output)
+
             print("output", output) if self.verbose else None
 
-            self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=output)
+            self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=lambda_ouput)
 
         # Multi-gpu parallelization
         if multi_gpu:
@@ -269,14 +278,14 @@ class OnlineTripletLoss(tf.keras.layers.Layer):
         self.undirected_weight = undirected_weight
 
     def build(self, input_shape):
+        assert isinstance(input_shape, list)
         embeddings_shape, labels_directed_shape, labels_undirected_shape = input_shape
         self._d = int(embeddings_shape[-1])
-        # self.kernel = self.add_variable("kernel",
-        #                                 shape=[int(input_shape[-1]),
-        #                                        self.num_outputs])
         super(OnlineTripletLoss, self).build(input_shape)
 
+
     def call(self, input, **kwargs):
+        assert isinstance(input, list)
         embeddings, labels_directed, labels_undirected = input
 
         embeddings_s = tf.slice(embeddings, [-1, 0],
@@ -286,16 +295,10 @@ class OnlineTripletLoss(tf.keras.layers.Layer):
 
         directed_loss = batch_hard_triplet_loss(embeddings_t, embeddings_s, labels_directed, self.directed_margin)
         print("directed_loss", directed_loss)
-        undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels_undirected, self.undirected_margin)
+        undirected_loss = self.undirected_weight * batch_hard_triplet_loss(embeddings, embeddings,
+                                                                           labels_undirected, self.undirected_margin)
         print("undirected_loss", undirected_loss)
         return tf.add(directed_loss, undirected_loss)
-
-    @property
-    def outbound_nodes(self):
-        if hasattr(self, '_outbound_nodes'):
-            print("outbound_nodes called but _outbound_nodes found")
-        return getattr(self, '_outbound_nodes', [])
-
 
 
 def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
@@ -346,12 +349,11 @@ def _get_anchor_positive_triplet_mask(labels):
         mask: tf.bool `Tensor` with shape [batch_size, batch_size]
     """
     positive_edges = tf.sparse_retain(labels, tf.greater(labels.values, 0.5))
-    mask = tf.sparse.to_dense(tf.SparseTensor(positive_edges.indices,
-                                              tf.ones_like(positive_edges.values, dtype=tf.bool),
-                                              labels.dense_shape),
-                              default_value=False)
-
-    return mask
+    positive_mask = tf.sparse.to_dense(tf.SparseTensor(positive_edges.indices,
+                                                       tf.ones_like(positive_edges.values, dtype=tf.bool),
+                                                       labels.dense_shape),
+                                       default_value=False)
+    return positive_mask
 
 
 def _get_anchor_negative_triplet_mask(labels):
@@ -362,12 +364,11 @@ def _get_anchor_negative_triplet_mask(labels):
         mask: tf.bool `Tensor` with shape [batch_size, batch_size]
     """
     negative_edges = tf.sparse_retain(labels, tf.less(labels.values, 0.5))
-    mask = tf.sparse.to_dense(tf.SparseTensor(negative_edges.indices,
-                                              tf.ones_like(negative_edges.values, dtype=tf.bool),
-                                              labels.dense_shape),
-                              default_value=False)
-
-    return mask
+    negative_mask = tf.sparse.to_dense(tf.SparseTensor(negative_edges.indices,
+                                                       tf.ones_like(negative_edges.values, dtype=tf.bool),
+                                                       labels.dense_shape),
+                                       default_value=False)
+    return negative_mask
 
 
 def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=False):
