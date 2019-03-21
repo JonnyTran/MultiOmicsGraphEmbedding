@@ -209,9 +209,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-            output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin/2,
+            output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
                                        trainable=False)([embeddings, labels_directed, labels_undirected])
-            # output = Lambda(lambda x: x)([embeddings, labels_directed, labels_undirected])
+
             print("output", output) if self.verbose else None
 
             self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=output)
@@ -222,7 +222,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         # Compile & train
         self.siamese_net.compile(loss=self.identity_loss,
-                                 optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=0.1),
+                                 optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999),
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
@@ -252,7 +252,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
-        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
+        self.tensorboard = TensorBoard(log_dir="logs/triple_online_{}".format(time.strftime('%m-%d_%l-%M%p')),
+                                       histogram_freq=0,
                                        write_grads=True, write_graph=False, write_images=True,
                                        batch_size=self.batch_size,
                                        # update_freq=100000, embeddings_freq=1,
