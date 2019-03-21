@@ -200,8 +200,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                     name="labels_directed")
             labels_undirected = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True,
                                       name="labels_undirected")
-            print("labels_directed", labels_directed)
-            print("labels_undirected", labels_undirected)
+            print("labels_directed", labels_directed) if self.verbose else None
+            print("labels_undirected", labels_undirected) if self.verbose else None
             # build create_lstm_network to use in each siamese 'leg'
             self.lstm_network = self.create_lstm_network()
 
@@ -252,13 +252,13 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
-        # self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
-        #                                write_grads=True, write_graph=False, write_images=True,
-        #                                 batch_size=self.batch_size,
-        #                                # update_freq=100000, embeddings_freq=1,
-        #                                # embeddings_data=self.generator_val.__getitem__(0)[0],
-        #                                # embeddings_layer_names=["embedding_output"],
-        #                                )
+        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
+                                       write_grads=True, write_graph=False, write_images=True,
+                                       batch_size=self.batch_size,
+                                       # update_freq=100000, embeddings_freq=1,
+                                       # embeddings_data=self.generator_val.__getitem__(0)[0],
+                                       # embeddings_layer_names=["embedding_output"],
+                                       )
 
         try:
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
@@ -294,17 +294,20 @@ class OnlineTripletLoss(Layer):
         assert isinstance(input, list), "{}".format("(embeddings, labels_directed, labels_undirected) expected")
         embeddings, labels_directed, labels_undirected = input
 
-        embeddings_s = tf.slice(embeddings, [-1, 0],
-                                [embeddings.get_shape()[0], int(self._d / 2)])
-        embeddings_t = tf.slice(embeddings, [-1, int(self._d / 2)],
-                                [embeddings.get_shape()[0], int(self._d / 2)])
+        # embeddings_s = tf.slice(embeddings, [-1, 0],
+        #                         [embeddings.get_shape()[0], int(self._d / 2)])
+        # embeddings_t = tf.slice(embeddings, [-1, int(self._d / 2)],
+        #                         [embeddings.get_shape()[0], int(self._d / 2)])
+        embeddings_s = embeddings[:, 0:int(self._d / 2)]
+        embeddings_t = embeddings[:, int(self._d / 2):self._d]
 
-        directed_loss = batch_hard_triplet_loss(embeddings_t, embeddings_s, labels_directed, self.directed_margin)
+        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels_directed, self.directed_margin)
         print("directed_loss", directed_loss)
         undirected_loss = self.undirected_weight * batch_hard_triplet_loss(embeddings, embeddings,
                                                                            labels_undirected, self.undirected_margin)
         print("undirected_loss", undirected_loss)
         return tf.add(directed_loss, undirected_loss)
+        # return undirected_loss
 
 
 def _pairwise_distances(embeddings_A, embeddings_B, squared=False):

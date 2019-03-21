@@ -94,6 +94,12 @@ class OnlineTripletGenerator(SampledDataGenerator):
         super().__init__(network, batch_size, directed_proba, negative_sampling_ratio, n_steps, compression_func,
                          maxlen, padding, truncating, sequence_to_matrix, shuffle, seed, verbose)
 
+    def process_negative_sampling_edges(self):
+        pass  # Not needed
+
+    def process_training_edges_data(self):
+        pass  # Not needed
+
     def __getitem__(self, item):
         sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
                                          p=self.node_sampling_freq)
@@ -105,8 +111,8 @@ class OnlineTripletGenerator(SampledDataGenerator):
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         sampled_directed_adj = self.sample_directed_negative_edges(self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes))
-        X["labels_directed"] = sparse_matrix_to_sparse_tensor(sampled_directed_adj)
-        X["labels_undirected"] = sparse_matrix_to_sparse_tensor(self.network.get_adjacency_matrix(edge_types=["u", "u_n"], node_list=sampled_nodes))
+        X["labels_directed"] = sampled_directed_adj
+        X["labels_undirected"] = self.network.get_adjacency_matrix(edge_types=["u", "u_n"], node_list=sampled_nodes)
 
         y = np.zeros(X["input_seqs"].shape[0]) # Dummy vector
         return X, y
@@ -125,6 +131,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
         # TODO implement random edge sampling based on the unigram distribution
         neg_rows, neg_cols = np.where(adj.todense() == 0)
         sample_indices = np.random.choice(neg_rows.shape[0], sample_neg_count, replace=False)
+        adj = adj.tolil()
         adj[neg_rows[sample_indices], neg_cols[sample_indices]] = EPSILON
 
         return adj
