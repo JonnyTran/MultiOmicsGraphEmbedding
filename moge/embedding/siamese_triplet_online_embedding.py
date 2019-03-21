@@ -1,3 +1,4 @@
+from keras.layers import Layer
 from keras.optimizers import Adam
 
 from moge.embedding.siamese_graph_embedding import *
@@ -163,15 +164,19 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                          max_length, truncating, seed, verbose, conv1_kernel_size, max1_pool_size, conv2_kernel_size,
                          max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, **kwargs)
 
+    def custom_loss(self, loss):
+        def loss(y_true, y_pred):
+            return K.identity(loss)
+
+        return loss
+
     def online_triplet_loss(self, input):
         embeddings, labels_directed, labels_undirected = input
 
-        embeddings_s = tf.slice(embeddings, [-1, 0],
-                                [embeddings.get_shape()[0], int(self._d / 2)])
-        embeddings_t = tf.slice(embeddings, [-1, int(self._d / 2)],
-                                [embeddings.get_shape()[0], int(self._d / 2)])
+        embeddings_s = embeddings[:, 0:int(self._d / 2)]
+        embeddings_t = embeddings[:, int(self._d / 2):self._d]
 
-        directed_loss = batch_hard_triplet_loss(embeddings_t, embeddings_s, labels_directed, self.directed_margin)
+        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels_directed, self.directed_margin)
         print("directed_loss", directed_loss)
         undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels_undirected, self.undirected_margin)
         print("undirected_loss", undirected_loss)
@@ -195,7 +200,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                     name="labels_directed")
             labels_undirected = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True,
                                       name="labels_undirected")
-
+            print("labels_directed", labels_directed)
+            print("labels_undirected", labels_undirected)
             # build create_lstm_network to use in each siamese 'leg'
             self.lstm_network = self.create_lstm_network()
 
@@ -205,12 +211,10 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin/2,
                                        trainable=False)([embeddings, labels_directed, labels_undirected])
-            # output = Lambda(self.online_triplet_loss)([embeddings, labels_directed, labels_undirected])
-            lambda_ouput = Lambda(lambda x: x)(output)
-
+            # output = Lambda(lambda x: x)([embeddings, labels_directed, labels_undirected])
             print("output", output) if self.verbose else None
 
-            self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=lambda_ouput)
+            self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=output)
 
         # Multi-gpu parallelization
         if multi_gpu:
@@ -269,7 +273,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.save_alpha_layers()
 
 
-class OnlineTripletLoss(tf.keras.layers.Layer):
+class OnlineTripletLoss(Layer):
     def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, **kwargs):
         super(OnlineTripletLoss, self).__init__(**kwargs)
         self.output_dim = ()
@@ -283,9 +287,11 @@ class OnlineTripletLoss(tf.keras.layers.Layer):
         self._d = int(embeddings_shape[-1])
         super(OnlineTripletLoss, self).build(input_shape)
 
+    def compute_output_shape(self, input_shape):
+        return ()
 
     def call(self, input, **kwargs):
-        assert isinstance(input, list)
+        assert isinstance(input, list), "{}".format("(embeddings, labels_directed, labels_undirected) expected")
         embeddings, labels_directed, labels_undirected = input
 
         embeddings_s = tf.slice(embeddings, [-1, 0],
