@@ -181,8 +181,10 @@ class DataGenerator(keras.utils.Sequence):
         X_list = np.array(X_list, dtype="O")
 
         X = {}
-        X["input_seq_i"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
-        X["input_seq_j"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
+        X["input_seq_i"] = self.get_sequence_data([self.node_list[node_id] for node_id in X_list[:, 0].tolist()],
+                                                  variable_length=False)
+        X["input_seq_j"] = self.get_sequence_data([self.node_list[node_id] for node_id in X_list[:, 1].tolist()],
+                                                  variable_length=False)
         X["is_directed"] = np.expand_dims(X_list[:,2], axis=-1)
 
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
@@ -210,8 +212,10 @@ class DataGenerator(keras.utils.Sequence):
             X_seq = {}
             X[:, 0] = [self.node_list.index(node) for node in X[:, 0].tolist()]
             X[:, 1] = [self.node_list.index(node) for node in X[:, 1].tolist()]
-            X_seq["input_seq_i"] = self.get_sequence_data(X[:, 0].tolist(), variable_length=False)
-            X_seq["input_seq_j"] = self.get_sequence_data(X[:, 1].tolist(), variable_length=False)
+            X_seq["input_seq_i"] = self.get_sequence_data([self.node_list[node_id] for node_id in X[:, 0].tolist()],
+                                                          variable_length=False)
+            X_seq["input_seq_j"] = self.get_sequence_data([self.node_list[node_id] for node_id in X[:, 1].tolist()],
+                                                          variable_length=False)
             X_seq["is_directed"] = np.expand_dims(X[:, 2], axis=-1)
             X = X_seq
 
@@ -250,16 +254,14 @@ class DataGenerator(keras.utils.Sequence):
         y_list = np.array(y_list).reshape((-1, 1))
         return X_list, y_list
 
-    def get_sequence_data(self, node_list_ids, variable_length=False, minlen=None):
+    def get_sequence_data(self, node_list, variable_length=False, minlen=None):
         """
         Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
         (indexing from self.node_list)
+        :param node_list: a list of node names to fetch transcript sequences
         :param variable_length: returns a list of sequences with different timestep length
         :param minlen: pad all sequences with length lower than this minlen
         """
-
-        node_list = [self.node_list[i] for i in node_list_ids]
-
         if variable_length == False:
             padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
@@ -449,25 +451,6 @@ class SampledDataGenerator(DataGenerator):
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
 
         return X, y
-
-
-    def get_sequence_data(self, node_list, variable_length=False, minlen=None):
-        """
-        Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
-        (indexing from self.node_list)
-        :param variable_length: returns a list of sequences with different timestep length
-        :param minlen: pad all sequences with length lower than this minlen
-        """
-        if variable_length == False:
-            padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
-                                                         maxlen=self.maxlen)
-        else:
-            padded_encoded_sequences = [
-                self.encode_texts([self.genes_info.loc[node, "Transcript sequence"]], minlen=minlen)
-                for node in
-                node_list]
-
-        return padded_encoded_sequences
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'

@@ -1,20 +1,18 @@
 
 import time
+
 import numpy as np
 import tensorflow as tf
-
-from sklearn.base import BaseEstimator
-
 from keras import backend as K
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Dense, Dropout, Bidirectional, CuDNNLSTM, Embedding
-from keras.layers import Dot, MaxPooling1D, Convolution1D
+from keras.layers import Dot, MaxPooling1D, Convolution1D, BatchNormalization
 from keras.layers import Input, Lambda
-
 from keras.models import Model
 from keras.models import load_model
 from keras.optimizers import RMSprop
 from keras.utils import multi_gpu_model
+from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
@@ -76,7 +74,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                  compression_func="sqrt", negative_sampling_ratio=2.0,
                  max_length=1400, truncating="post", seed=0, verbose=False,
                  conv1_kernel_size=12, max1_pool_size=6, conv2_kernel_size=6, max2_pool_size=3,
-                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512,
+                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512, embedding_normalization=False,
                  **kwargs):
         super().__init__(d)
 
@@ -100,6 +98,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.lstm_unit_size = lstm_unit_size
         self.dense1_unit_size = dense1_unit_size
         self.dense2_unit_size = dense2_unit_size
+        self.embedding_normalization = embedding_normalization
 
         hyper_params = {
             'method_name': 'siamese_graph_embedding'
@@ -148,7 +147,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             x = Dense(self.dense2_unit_size, activation='relu', name="lstm_dense_2")(x)  # (batch_number, 925)
             x = Dropout(0.2)(x)
         x = Dense(self._d, activation='linear', name="embedding_output")(x)  # Embedding space (batch_number, 128)
-        # x = BatchNormalization(center=False, scale=True, name="embedding_output_normalized")(x) # To make embedding output l2norm = 1
+        if self.embedding_normalization:
+            x = BatchNormalization(center=True, scale=True, name="embedding_output_normalized")(
+                x)  # To make embedding output l2norm = 1
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
 
@@ -292,7 +293,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             self.alpha_directed = self.alpha_network.get_layer(name="alpha_directed").get_weights()
             self.alpha_undirected = self.alpha_network.get_layer(name="alpha_undirected").get_weights()
 
-    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
+    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d", var_len=False):
         """
         :param X:
         :param node_l: list of node names
@@ -302,7 +303,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if hasattr(self, "reconstructed_adj") and edge_type=="d":
             adj = self.reconstructed_adj
         else:
-            embs = self.get_embedding()
+            embs = self.get_embedding(variable_length=var_len)
             assert len(self.node_list) == embs.shape[0]
 
             if edge_type == 'd':
@@ -341,13 +342,27 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def get_embedding(self, variable_length=False, recompute=False, batch_size=1, node_list=None, minlen=None):
         if (not hasattr(self, "_X") or recompute):
-            self.process_embeddings(batch_size, variable_length, minlen=minlen)
+            self.process_embeddings(variable_length, batch_size, minlen=minlen)
 
         if node_list is not None:
             idx = [self.node_list.index(node) for node in node_list if node in self.node_list]
             return self._X[idx, :]
         else:
             return self._X
+
+    def process_embeddings(self, variable_length, batch_size=256, minlen=None):
+        nodelist = self.generator_train.node_list
+
+        seqs = self.generator_train.get_sequence_data(nodelist, variable_length=variable_length, minlen=minlen)
+
+        if variable_length:
+            embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
+        else:
+            embs = self.lstm_network.predict(seqs, batch_size=batch_size)
+
+        embs = np.array(embs)
+        embs = embs.reshape(embs.shape[0], embs.shape[-1])
+        self._X = embs
 
     def load_weights(self, siamese_weights, alpha_weights, generator):
         self.generator_train = generator
@@ -364,23 +379,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.build_keras_model(multi_gpu=False)
         self.lstm_network = load_model(lstm_model)
         print(self.siamese_net.summary())
-
-    def process_embeddings(self, batch_size, variable_length, minlen=None):
-        if isinstance(self.generator_train, SampledDataGenerator):
-            nodelist = self.generator_train.node_list
-        else:
-            nodelist = range(len(self.generator_train.node_list))
-
-        seqs = self.generator_train.get_sequence_data(nodelist,
-                                                      variable_length=variable_length, minlen=minlen)
-        if variable_length:
-            embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
-        else:
-            embs = self.lstm_network.predict(seqs, batch_size=batch_size)
-
-        embs = np.array(embs)
-        embs = embs.reshape(embs.shape[0], embs.shape[-1])
-        self._X = embs
 
     def predict_generator(self, generator):
         y_pred = self.siamese_net.predict_generator(generator, use_multiprocessing=True, workers=8)
