@@ -161,7 +161,7 @@ class HeterogeneousNetwork():
         adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         # Eliminate self-edges
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
-        return adj
+        return adj.astype(float)
 
     def get_edge(self, i, j):
         return self.G.get_edge_data(i, j)

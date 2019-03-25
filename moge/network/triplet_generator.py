@@ -110,16 +110,44 @@ class OnlineTripletGenerator(SampledDataGenerator):
     def __data_generation(self, sampled_nodes):
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
-        sampled_directed_adj = self.sample_directed_negative_edges(self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes))
+        sampled_directed_adj = self.sample_directed_negative_edges(
+            self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes), sampled_nodes)
         X["labels_directed"] = sampled_directed_adj
         X["labels_undirected"] = self.network.get_adjacency_matrix(edge_types=["u", "u_n"], node_list=sampled_nodes)
 
         y = np.zeros(X["input_seqs"].shape[0]) # Dummy vector
         return X, y
 
-    def sample_directed_negative_edges(self, adj):
+    def sample_directed_negative_edges(self, pos_adj, sampled_nodes):
         """
-        This samples a number of negative edges in proportion to the number of positive edges in the adjacency matrix
+        Samples a number of negative edges with context to the number of positive edges in the adjacency matrix.
+        For each node, if n is the number of its positive connections, this function will sample n*k negative connections,
+        based on the unigram distribution of the node degrees, while excluding accidental hits of positive connections.
+
+        :param pos_adj: a sparse csr_matrix of shape [batch_size, batch_size] representing a sampled adjacency matrix containing only positive interactions
+        :return: a lil sparse matrix containing both positive interactions and sampled negative interactions
+        """
+        node_degrees_list = [self.node_degrees[node] for node in sampled_nodes]
+
+        sampled_adj = pos_adj.tolil().astype(float)
+        for idx, node in enumerate(sampled_nodes):
+            _, pos_nodes = pos_adj[idx].nonzero()
+            node_neg_sample_count = min(int(len(pos_nodes) * self.negative_sampling_ratio),
+                                        pos_adj.shape[1] - len(pos_nodes))
+            if node_neg_sample_count > 0:
+                node_degrees = [degree if (id not in pos_nodes) else 0 for id, degree in
+                                enumerate(node_degrees_list)]  # Prevent accidental candidate sampling
+                sample_neg_indices = np.random.choice(range(len(sampled_nodes)), node_neg_sample_count, replace=False,
+                                                      p=self.compute_node_sampling_freq(node_degrees))
+                sampled_adj[idx, sample_neg_indices] = EPSILON
+
+        return sampled_adj
+
+    @DeprecationWarning
+    def sample_random_negative_edges(self, adj):
+        """
+        This samples a number of negative edges in proportion to the number of positive edges in the adjacency matrix,
+        by sampling uniformly random edges.
 
         :param adj: a sparse csr_matrix of shape [batch_size, batch_size] representing a sampled adjacency matrix containing only positive interactions
         :return: a sparse matrix containing both positive interactions and sampled negative interactions
@@ -135,7 +163,6 @@ class OnlineTripletGenerator(SampledDataGenerator):
         adj[neg_rows[sample_indices], neg_cols[sample_indices]] = EPSILON
 
         return adj
-
 
 
 

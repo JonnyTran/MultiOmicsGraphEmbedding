@@ -73,8 +73,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
     def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5,
                  compression_func="sqrt", negative_sampling_ratio=2.0,
                  max_length=1400, truncating="post", seed=0, verbose=False,
-                 conv1_kernel_size=12, max1_pool_size=6, conv2_kernel_size=6, max2_pool_size=3,
-                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512, embedding_normalization=False,
+                 conv1_kernel_size=12, conv1_batch_norm=False, max1_pool_size=6, conv2_kernel_size=6,
+                 conv2_batch_norm=True,
+                 max2_pool_size=3, lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512,
+                 embedding_normalization=False,
                  **kwargs):
         super().__init__(d)
 
@@ -92,8 +94,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.verbose = verbose
 
         self.conv1_kernel_size = conv1_kernel_size
+        self.conv1_batch_norm = conv1_batch_norm
         self.max1_pool_size = max1_pool_size
         self.conv2_kernel_size = conv2_kernel_size
+        self.conv2_batch_norm = conv2_batch_norm
         self.max2_pool_size = max2_pool_size
         self.lstm_unit_size = lstm_unit_size
         self.dense1_unit_size = dense1_unit_size
@@ -126,13 +130,18 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             x)  # (batch_number, sequence_length-5, 1, 192)
         x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
+
+        if self.conv1_batch_norm:
+            x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
         x = MaxPooling1D(pool_size=self.max1_pool_size, padding="same")(x)
         print("max pooling_1", x) if self.verbose else None
         x = Dropout(0.2)(x)
 
-        if self.conv2_kernel_size is not None:
+        if self.conv2_kernel_size is not None and self.conv2_kernel_size != 0:
             x = Convolution1D(filters=192, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
             print("conv1d_2", x) if self.verbose else None
+            if self.conv2_batch_norm:
+                x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
             x = MaxPooling1D(pool_size=self.max2_pool_size, padding="same")(x)
             print("max pooling_2", x) if self.verbose else None
             x = Dropout(0.2)(x)
@@ -143,10 +152,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
         x = Dense(self.dense1_unit_size, activation='relu', name="lstm_dense_1")(x)  # (batch_number, 1024)
         x = Dropout(0.2)(x)
-        if self.dense2_unit_size is not None:
+        if self.dense2_unit_size is not None and self.dense2_unit_size != 0:
             x = Dense(self.dense2_unit_size, activation='relu', name="lstm_dense_2")(x)  # (batch_number, 925)
             x = Dropout(0.2)(x)
         x = Dense(self._d, activation='linear', name="embedding_output")(x)  # Embedding space (batch_number, 128)
+
         if self.embedding_normalization:
             x = BatchNormalization(center=True, scale=True, name="embedding_output_normalized")(
                 x)  # To make embedding output l2norm = 1
@@ -406,7 +416,7 @@ if __name__ == '__main__':
         network = pickle.load(input_file)
 
     ##### Run graph embedding #####
-    gf = SiameseGraphEmbedding(d=128, reg=1.0, lr=0.05, epochs=50, batch_size=10000)
+    gf = SiameseGraphEmbedding(d=128, batch_size=10000, lr=0.05, epochs=50, reg=1.0)
 
 
 
