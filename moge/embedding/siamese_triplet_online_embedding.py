@@ -120,7 +120,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         finally:
             self.save_alpha_layers()
 
-    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d"):
+    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d", interpolate=False):
         """
         :param X:
         :param node_l: list of node names
@@ -147,7 +147,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 raise Exception("Unsupported edge_type", edge_type)
 
         # interpolate to (0, 1) range
-        adj = np.interp(adj, (adj.min(), adj.max()), (0, 1))
+        if interpolate:
+            adj = np.interp(adj, (adj.min(), adj.max()), (0, 1))
 
         if (node_l is None or node_l == self.node_list):
             if edge_type=="d": self.reconstructed_adj = adj
@@ -234,12 +235,13 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         # Build tensorboard
         self.tensorboard = TensorBoard(log_dir="logs/triple_online_{}".format(time.strftime('%m-%d_%l-%M%p')),
-                                       histogram_freq=2,
+                                       histogram_freq=0,
                                        write_grads=True, write_graph=False, write_images=True,
                                        batch_size=self.batch_size,
-                                       update_freq="epoch", embeddings_freq=0,
-                                       embeddings_data=self.generator_train.__getitem__(0)[0],
-                                       # embeddings_layer_names=["embedding_output"],
+                                       update_freq="epoch", embeddings_freq=1,
+                                       embeddings_metadata="logs/metadata.tsv",
+                                       embeddings_data=self.generator_val.__getitem__(0)[0],
+                                       embeddings_layer_names=["embedding_output_normalized"],
                                        )
 
         # Compile & train
@@ -248,7 +250,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False,
+    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
                         multi_gpu=False, subsample=True, n_steps=500, validation_steps=None, edge_f=None,
                         is_weighted=False, no_python=False, rebuild_model=False, seed=0):
         self.generator_train = OnlineTripletGenerator(network=network, compression_func=self.compression_func,
@@ -274,10 +276,12 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
+        if histogram_freq > 0:
+            self.tensorboard.histogram_freq = histogram_freq
         try:
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val.__getitem__(
-                                                           0) if tensorboard else self.generator_val,
+                                                           0) if histogram_freq > 0 else self.generator_val,
                                                        validation_steps=validation_steps,
                                                        callbacks=[self.tensorboard] if tensorboard else None,
                                                        use_multiprocessing=True, workers=8)
