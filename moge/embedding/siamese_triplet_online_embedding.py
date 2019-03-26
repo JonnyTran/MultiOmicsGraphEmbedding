@@ -216,14 +216,20 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             print("labels_undirected", labels_undirected) if self.verbose else None
 
             # build create_lstm_network to use in each siamese 'leg'
-            self.lstm_network = self.create_lstm_network()
+            if multi_gpu:
+                self.lstm_network = multi_gpu_model(self.create_lstm_network(), gpus=4, cpu_merge=True,
+                                                    cpu_relocation=False)
+            # self.lstm_network = self.create_lstm_network()
+            print("lstm_network", self.lstm_network)
 
             # encode each of the inputs into a list of embedding vectors with the conv_lstm_network
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
+        with tf.device(device):
             output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
-                                       trainable=False)([embeddings, labels_directed, labels_undirected])
+                                       undirected_weight=self.directed_proba)(
+                [embeddings, labels_directed, labels_undirected])
 
             print("output", output) if self.verbose else None
 
@@ -234,11 +240,11 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
         # Build tensorboard
-        self.tensorboard = TensorBoard(log_dir="logs/triple_online_{}".format(time.strftime('%m-%d_%l-%M%p')),
+        self.tensorboard = TensorBoard(log_dir="logs/{}_{}".format(type(self).__name__, time.strftime('%m-%d_%l-%M%p')),
                                        histogram_freq=0,
                                        write_grads=True, write_graph=False, write_images=True,
                                        batch_size=self.batch_size,
-                                       update_freq="epoch", embeddings_freq=1,
+                                       update_freq="epoch", embeddings_freq=0,
                                        embeddings_metadata="logs/metadata.tsv",
                                        embeddings_data=self.generator_val.__getitem__(0)[0],
                                        embeddings_layer_names=["embedding_output_normalized"],
@@ -278,6 +284,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         if histogram_freq > 0:
             self.tensorboard.histogram_freq = histogram_freq
+
         try:
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val.__getitem__(
@@ -316,14 +323,13 @@ class OnlineTripletLoss(Layer):
         #                         [embeddings.get_shape()[0], int(self._d / 2)])
         # embeddings_t = tf.slice(embeddings, [-1, int(self._d / 2)],
         #                         [embeddings.get_shape()[0], int(self._d / 2)])
-        embeddings_s = embeddings[:, 0:int(self._d / 2)]
-        embeddings_t = embeddings[:, int(self._d / 2):self._d]
+        embeddings_s = embeddings[:, 0: int(self._d / 2)]
+        embeddings_t = embeddings[:, int(self._d / 2): self._d]
 
         directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels_directed, self.directed_margin)
         undirected_loss = self.undirected_weight * batch_hard_triplet_loss(embeddings, embeddings,
                                                                            labels_undirected, self.undirected_margin)
         return tf.add(directed_loss, undirected_loss)
-        # return undirected_loss
 
 
 def _pairwise_distances(embeddings_A, embeddings_B, squared=False):

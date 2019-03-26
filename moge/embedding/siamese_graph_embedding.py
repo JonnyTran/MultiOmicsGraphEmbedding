@@ -6,7 +6,7 @@ import tensorflow as tf
 from keras import backend as K
 from keras.callbacks import TensorBoard
 from keras.layers import Conv2D, Dense, Dropout, Bidirectional, CuDNNLSTM, Embedding
-from keras.layers import Dot, MaxPooling1D, Convolution1D, BatchNormalization
+from keras.layers import Dot, MaxPooling1D, Convolution1D, BatchNormalization, Concatenate
 from keras.layers import Input, Lambda
 from keras.models import Model
 from keras.models import load_model
@@ -81,6 +81,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         super().__init__(d)
 
         self._d = d
+        assert self._d % 2 == 0, "Embedding dimension (d) must be an even integer"
         self.batch_size = batch_size
         self.margin = margin
         self.lr = lr
@@ -150,15 +151,22 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         print("brnn", x) if self.verbose else None
         x = Dropout(0.2)(x)
 
-        x = Dense(self.dense1_unit_size, activation='relu', name="lstm_dense_1")(x)  # (batch_number, 1024)
-        x = Dropout(0.2)(x)
-        if self.dense2_unit_size is not None and self.dense2_unit_size != 0:
-            x = Dense(self.dense2_unit_size, activation='relu', name="lstm_dense_2")(x)  # (batch_number, 925)
+        if self.dense1_unit_size is not None and self.dense2_unit_size != 0:
+            x = Dense(self.dense1_unit_size, activation='relu', name="dense_1")(x)  # (batch_number, 925)
             x = Dropout(0.2)(x)
-        x = Dense(self._d, activation='linear', name="embedding_output")(x)  # Embedding space (batch_number, 128)
 
+        source = Dense(int(self._d / 2), activation='linear', name="dense_source")(x)  # (batch_number, 1024)
         if self.embedding_normalization:
-            x = BatchNormalization(center=True, scale=True, name="embedding_output_normalized")(x)
+            source = BatchNormalization(center=True, scale=True, name="source_normalized")(source)
+        print("source", source) if self.verbose else None
+
+        target = Dense(int(self._d / 2), activation='linear', name="dense_target")(x)  # (batch_number, 1024)
+        if self.embedding_normalization:
+            target = BatchNormalization(center=True, scale=True, name="target_normalized")(target)
+        print("target", target) if self.verbose else None
+
+        x = Concatenate(axis=-1, name="embedding_output")(
+            [source, target])  # Embedding space (batch_number, embedding_dim)
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
 
@@ -349,9 +357,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                         ' '.join([str(x) for x in embs[i]])))
         fout.close()
 
-    def get_embedding(self, variable_length=False, recompute=False, batch_size=1, node_list=None, minlen=None):
+    def get_embedding(self, variable_length=False, recompute=False, node_list=None, minlen=None):
         if (not hasattr(self, "_X") or recompute):
-            self.process_embeddings(variable_length, batch_size, minlen=minlen)
+            self.process_embeddings(variable_length, batch_size=self.batch_size, minlen=minlen)
 
         if node_list is not None:
             idx = [self.node_list.index(node) for node in node_list if node in self.node_list]

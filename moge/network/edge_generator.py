@@ -64,9 +64,12 @@ class DataGenerator(keras.utils.Sequence):
         self.on_epoch_end()
         self.process_sequence_tokenizer()
 
+
     def process_sequence_tokenizer(self):
         self.tokenizer = Tokenizer(char_level=True, lower=False)
         self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
+        self.genes_info["Transcript length"] = self.genes_info["Transcript sequence"].apply(
+            lambda x: len(x) if type(x) == str else None)
         print("word index:", self.tokenizer.word_index) if self.verbose else None
 
     def reload_directed_edges_data(self, edge_types=["d"], databases=None):
@@ -118,6 +121,9 @@ class DataGenerator(keras.utils.Sequence):
 
         if self.shuffle == True:
             np.random.shuffle(self.indexes)
+
+    def sample_sequences(self, sequences):
+        return sequences.apply(lambda x: random.choice(x) if type(x) is list else x)
 
     def split_index(self, index):
         'Choose the corresponding edge type data depending on the index number'
@@ -262,7 +268,7 @@ class DataGenerator(keras.utils.Sequence):
         :param variable_length: returns a list of sequences with different timestep length
         :param minlen: pad all sequences with length lower than this minlen
         """
-        if variable_length == False:
+        if not variable_length:
             padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
@@ -272,9 +278,6 @@ class DataGenerator(keras.utils.Sequence):
                 node_list]
 
         return padded_encoded_sequences
-
-    def sample_sequences(self, sequences):
-        return sequences.apply(lambda x: random.choice(x) if type(x) is list else x)
 
     def encode_texts(self, texts, maxlen=None, minlen=None):
         """
@@ -287,13 +290,19 @@ class DataGenerator(keras.utils.Sequence):
         # integer encode
         encoded = self.tokenizer.texts_to_sequences(texts)
 
+        batch_maxlen = max([len(x) for x in encoded])
+        print("batch_maxlen", batch_maxlen)
+        if batch_maxlen < self.maxlen:
+            maxlen = batch_maxlen
+
         if minlen and len(texts) == 1 and len(texts[0]) < minlen:
             maxlen = minlen
 
         # pad encoded sequences
         encoded = pad_sequences(encoded, maxlen=maxlen, padding=self.padding,
                                 truncating=np.random.choice(
-                                    ["post", "pre"]) if self.truncating == "random" else self.truncating)
+                                    ["post", "pre"]) if self.truncating == "random" else self.truncating,
+                                dtype="int8")
 
         if self.sequence_to_matrix:
             encoded_expanded = np.expand_dims(encoded, axis=-1)
@@ -349,6 +358,13 @@ class SampledDataGenerator(DataGenerator):
         self.node_degrees_list = [self.node_degrees[node] for node in node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list)
         print("# of nodes to sample from (non-zero degree):", np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
+
+    def get_nonzero_nodelist(self):
+        """
+        Returns a list of nodes that have an associated edge
+        :return:
+        """
+        return [self.node_list[id] for id in self.node_sampling_freq.nonzero()[0]]
 
     def process_negative_sampling_edges(self):
         # Negative Directed Edges (sampled)
