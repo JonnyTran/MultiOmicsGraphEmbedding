@@ -12,12 +12,14 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                  compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
                  verbose=False, conv1_kernel_size=12, conv1_batch_norm=False, max1_pool_size=6, conv2_kernel_size=6,
                  conv2_batch_norm=True, max2_pool_size=3,
-                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512, embedding_normalization=False,
+                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512, source_target_dense_layers=True,
+                 embedding_normalization=False,
                  **kwargs):
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
                          conv2_kernel_size, conv2_batch_norm,
-                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, embedding_normalization,
+                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, source_target_dense_layers,
+                         embedding_normalization,
                          **kwargs)
 
     def identity_loss(self, y_true, y_pred):
@@ -168,15 +170,19 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
     def __init__(self, d=128, margin=0.2, batch_size=256, lr=0.001, epochs=10, directed_proba=0.5,
                  compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
                  verbose=False, conv1_kernel_size=12, conv1_batch_norm=False, max1_pool_size=6, conv2_kernel_size=6,
-                 conv2_batch_norm=True,
-                 max2_pool_size=3, lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512,
+                 conv2_batch_norm=True, max2_pool_size=3, lstm_unit_size=320, dense1_unit_size=1024,
+                 dense2_unit_size=512,
+                 directed_distance="euclidean", undirected_distance="euclidean", source_target_dense_layers=True,
                  embedding_normalization=False, **kwargs):
         self.directed_margin = margin
         self.undirected_margin = margin / 2
+        self.directed_distance = directed_distance
+        self.undirected_distance = undirected_distance
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
                          conv2_kernel_size, conv2_batch_norm,
-                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, embedding_normalization,
+                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, source_target_dense_layers,
+                         embedding_normalization,
                          **kwargs)
 
     def custom_loss(self, loss):
@@ -184,16 +190,6 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             return K.identity(loss)
 
         return loss
-
-    def online_triplet_loss(self, input):
-        embeddings, labels_directed, labels_undirected = input
-
-        embeddings_s = embeddings[:, 0:int(self._d / 2)]
-        embeddings_t = embeddings[:, int(self._d / 2):self._d]
-
-        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels_directed, self.directed_margin)
-        undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels_undirected, self.undirected_margin)
-        return tf.add(directed_loss, undirected_loss)
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
@@ -229,7 +225,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         with tf.device("/gpu:2" if not multi_gpu else device):
             output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
-                                       undirected_weight=self.directed_proba)(
+                                       undirected_weight=self.directed_proba,
+                                       directed_distance=self.directed_distance,
+                                       undirected_distance=self.undirected_distance)(
                 [embeddings, labels_directed, labels_undirected])
 
             print("output", output) if self.verbose else None
@@ -300,14 +298,16 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
 
 class OnlineTripletLoss(Layer):
-    def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, distance="euclidean",
+    def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, directed_distance="euclidean",
+                 undirected_distance="euclidean",
                  **kwargs):
         super(OnlineTripletLoss, self).__init__(**kwargs)
         self.output_dim = ()
         self.directed_margin = directed_margin
         self.undirected_margin = undirected_margin
         self.undirected_weight = undirected_weight
-        self.distance = distance
+        self.directed_distance = directed_distance
+        self.undirected_distance = undirected_distance
 
     def build(self, input_shape):
         assert isinstance(input_shape, list)
@@ -332,12 +332,15 @@ class OnlineTripletLoss(Layer):
         directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t,
                                                 labels=labels_directed,
                                                 margin=self.directed_margin,
-                                                distance=self.distance)
-        undirected_loss = self.undirected_weight * batch_hard_triplet_loss(embeddings, embeddings,
-                                                                           labels=labels_undirected,
-                                                                           margin=self.undirected_margin,
-                                                                           distance=self.distance)
-        return tf.add(directed_loss, undirected_loss)
+                                                distance=self.directed_distance)
+        if self.undirected_weight > 0:
+            undirected_loss = self.undirected_weight * batch_hard_triplet_loss(embeddings, embeddings,
+                                                                               labels=labels_undirected,
+                                                                               margin=self.undirected_margin,
+                                                                               distance=self.undirected_distance)
+            return tf.add(directed_loss, undirected_loss)
+        else:
+            return directed_loss
 
 
 def _pairwise_distances(embeddings_A, embeddings_B, squared=False):

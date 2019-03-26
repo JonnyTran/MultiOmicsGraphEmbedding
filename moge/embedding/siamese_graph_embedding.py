@@ -76,7 +76,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                  conv1_kernel_size=12, conv1_batch_norm=False, max1_pool_size=6, conv2_kernel_size=6,
                  conv2_batch_norm=True,
                  max2_pool_size=3, lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512,
-                 embedding_normalization=False,
+                 source_target_dense_layers=True, embedding_normalization=False,
                  **kwargs):
         super().__init__(d)
 
@@ -103,6 +103,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.lstm_unit_size = lstm_unit_size
         self.dense1_unit_size = dense1_unit_size
         self.dense2_unit_size = dense2_unit_size
+        self.source_target_dense_layers = source_target_dense_layers
         self.embedding_normalization = embedding_normalization
 
         hyper_params = {
@@ -151,22 +152,28 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         print("brnn", x) if self.verbose else None
         x = Dropout(0.2)(x)
 
-        if self.dense1_unit_size is not None and self.dense2_unit_size != 0:
+        if self.dense1_unit_size is not None and self.dense1_unit_size != 0:
             x = Dense(self.dense1_unit_size, activation='relu', name="dense_1")(x)  # (batch_number, 925)
             x = Dropout(0.2)(x)
 
-        source = Dense(int(self._d / 2), activation='linear', name="dense_source")(x)  # (batch_number, 1024)
-        if self.embedding_normalization:
-            source = BatchNormalization(center=True, scale=True, name="source_normalized")(source)
-        print("source", source) if self.verbose else None
+        if self.source_target_dense_layers:
+            source = Dense(int(self._d / 2), activation='linear', name="dense_source")(x)  # (batch_number, 1024)
+            if self.embedding_normalization:
+                source = BatchNormalization(center=True, scale=True, name="source_normalized")(source)
+            print("source", source) if self.verbose else None
 
-        target = Dense(int(self._d / 2), activation='linear', name="dense_target")(x)  # (batch_number, 1024)
-        if self.embedding_normalization:
-            target = BatchNormalization(center=True, scale=True, name="target_normalized")(target)
-        print("target", target) if self.verbose else None
+            target = Dense(int(self._d / 2), activation='linear', name="dense_target")(x)  # (batch_number, 1024)
+            if self.embedding_normalization:
+                target = BatchNormalization(center=True, scale=True, name="target_normalized")(target)
+            print("target", target) if self.verbose else None
 
-        x = Concatenate(axis=-1, name="embedding_output")(
-            [source, target])  # Embedding space (batch_number, embedding_dim)
+            x = Concatenate(axis=-1, name="embedding_output")(
+                [source, target])  # Embedding space (batch_number, embedding_dim)
+        else:
+            x = Dense(self._d, activation='linear', name="embedding_output")(x)  # (batch_number, 1024)
+            if self.embedding_normalization:
+                x = BatchNormalization(center=True, scale=True, name="target_normalized")(x)
+
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
 
