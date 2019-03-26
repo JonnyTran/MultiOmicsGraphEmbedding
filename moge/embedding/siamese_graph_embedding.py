@@ -367,7 +367,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         else:
             return self._X
 
-    def process_embeddings(self, variable_length, batch_size=256, minlen=None):
+    def process_embeddings(self, variable_length, batch_size=256, minlen=100):
         nodelist = self.generator_train.node_list
 
         seqs = self.generator_train.get_sequence_data(nodelist, variable_length=variable_length, minlen=minlen)

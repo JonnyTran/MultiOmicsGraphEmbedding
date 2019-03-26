@@ -137,6 +137,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
                                          Y=embs[:, int(self._d / 2):self._d],
                                          metric="euclidean", n_jobs=-2)
+                # adj = np.matmul(embs[:, 0:int(self._d / 2)], embs[:, int(self._d / 2):self._d].T)
                 adj = -adj
 
             elif edge_type == 'u':
@@ -200,33 +201,33 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             allow_soft_placement = True
         else:
             device = "/gpu:0"
-            allow_soft_placement = False
+            allow_soft_placement = True
 
         K.clear_session()
         tf.reset_default_graph()
-        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
+        config = tf.ConfigProto(allow_soft_placement=allow_soft_placement,
+                                log_device_placement=True)
+        config.gpu_options.allow_growth = True
+        self.sess = tf.Session(config=config)
 
-        with tf.device(device):
+        with tf.device("/gpu:1" if not multi_gpu else device):
             input_seqs = Input(batch_shape=(self.batch_size, None), dtype=tf.int8, name="input_seqs")
-            labels_directed = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True,
+            labels_directed = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True, dtype=tf.float32,
                                     name="labels_directed")
-            labels_undirected = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True,
+            labels_undirected = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True, dtype=tf.float32,
                                       name="labels_undirected")
             print("labels_directed", labels_directed) if self.verbose else None
             print("labels_undirected", labels_undirected) if self.verbose else None
 
             # build create_lstm_network to use in each siamese 'leg'
-            if multi_gpu:
-                self.lstm_network = multi_gpu_model(self.create_lstm_network(), gpus=4, cpu_merge=True,
-                                                    cpu_relocation=False)
-            # self.lstm_network = self.create_lstm_network()
-            print("lstm_network", self.lstm_network)
+            self.lstm_network = self.create_lstm_network()
+            print("lstm_network", self.lstm_network) if self.verbose else None
 
             # encode each of the inputs into a list of embedding vectors with the conv_lstm_network
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-        with tf.device(device):
+        with tf.device("/gpu:2" if not multi_gpu else device):
             output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
                                        undirected_weight=self.directed_proba)(
                 [embeddings, labels_directed, labels_undirected])
@@ -299,12 +300,14 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
 
 class OnlineTripletLoss(Layer):
-    def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, **kwargs):
+    def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, distance="euclidean",
+                 **kwargs):
         super(OnlineTripletLoss, self).__init__(**kwargs)
         self.output_dim = ()
         self.directed_margin = directed_margin
         self.undirected_margin = undirected_margin
         self.undirected_weight = undirected_weight
+        self.distance = distance
 
     def build(self, input_shape):
         assert isinstance(input_shape, list)
@@ -326,9 +329,14 @@ class OnlineTripletLoss(Layer):
         embeddings_s = embeddings[:, 0: int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2): self._d]
 
-        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels_directed, self.directed_margin)
+        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t,
+                                                labels=labels_directed,
+                                                margin=self.directed_margin,
+                                                distance=self.distance)
         undirected_loss = self.undirected_weight * batch_hard_triplet_loss(embeddings, embeddings,
-                                                                           labels_undirected, self.undirected_margin)
+                                                                           labels=labels_undirected,
+                                                                           margin=self.undirected_margin,
+                                                                           distance=self.distance)
         return tf.add(directed_loss, undirected_loss)
 
 
@@ -372,6 +380,12 @@ def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
     return distances
 
 
+def _pairwise_dot_sigmoid_distances(embeddings_A, embeddings_B):
+    dot_product = tf.matmul(embeddings_A, tf.transpose(embeddings_B))
+    sigmoids = tf.sigmoid(dot_product)
+    return sigmoids
+
+
 def _get_anchor_positive_triplet_mask(labels):
     """Return a 2D mask where mask[a, p] is True iff a and p have a positive edge weight > 0.5.
     Args:
@@ -385,7 +399,6 @@ def _get_anchor_positive_triplet_mask(labels):
                                                        labels.dense_shape),
                                        default_value=False)
     return positive_mask
-
 
 def _get_anchor_negative_triplet_mask(labels):
     """Return a 2D mask where mask[a, n] is True iff a and n have a negative edge weight (e.g. < 0.5).
@@ -402,7 +415,7 @@ def _get_anchor_negative_triplet_mask(labels):
     return negative_mask
 
 
-def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=False):
+def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=False, distance="euclidean"):
     """Build the triplet loss over a batch of embeddings.
     For each anchor, we get the hardest positive and hardest negative to form a triplet.
     Args:
@@ -413,9 +426,13 @@ def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=
                  If false, output is the pairwise euclidean distance matrix.
     Returns:
         triplet_loss: scalar tensor containing the triplet loss
+        :param distance:
     """
     # Get the pairwise distance matrix
-    pairwise_dist = _pairwise_distances(embeddings_A, embeddings_B, squared=squared)
+    if distance == "euclidean":
+        pairwise_dist = _pairwise_distances(embeddings_A, embeddings_B, squared=squared)
+    elif distance == "dot_sigmoid":
+        pairwise_dist = _pairwise_dot_sigmoid_distances(embeddings_A, embeddings_B)
 
     # For each anchor, get the hardest positive
     # First, we need to get a mask for every valid positive (they should have same label)

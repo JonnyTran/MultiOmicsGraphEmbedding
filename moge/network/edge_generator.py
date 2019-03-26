@@ -291,7 +291,6 @@ class DataGenerator(keras.utils.Sequence):
         encoded = self.tokenizer.texts_to_sequences(texts)
 
         batch_maxlen = max([len(x) for x in encoded])
-        print("batch_maxlen", batch_maxlen)
         if batch_maxlen < self.maxlen:
             maxlen = batch_maxlen
 
