@@ -76,6 +76,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                  conv1_kernel_size=12, conv1_batch_norm=False, max1_pool_size=6, conv2_kernel_size=6,
                  conv2_batch_norm=True,
                  max2_pool_size=3, lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512,
+                 directed_distance="euclidean", undirected_distance="euclidean",
                  source_target_dense_layers=True, embedding_normalization=False,
                  **kwargs):
         super().__init__(d)
@@ -103,6 +104,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.lstm_unit_size = lstm_unit_size
         self.dense1_unit_size = dense1_unit_size
         self.dense2_unit_size = dense2_unit_size
+        self.directed_distance = directed_distance
+        self.undirected_distance = undirected_distance
         self.source_target_dense_layers = source_target_dense_layers
         self.embedding_normalization = embedding_normalization
 

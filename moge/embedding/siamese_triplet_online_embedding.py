@@ -12,13 +12,15 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                  compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
                  verbose=False, conv1_kernel_size=12, conv1_batch_norm=False, max1_pool_size=6, conv2_kernel_size=6,
                  conv2_batch_norm=True, max2_pool_size=3,
-                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512, source_target_dense_layers=True,
+                 lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512,
+                 directed_distance="euclidean", undirected_distance="euclidean", source_target_dense_layers=True,
                  embedding_normalization=False,
                  **kwargs):
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
                          conv2_kernel_size, conv2_batch_norm,
-                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, source_target_dense_layers,
+                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size,
+                         directed_distance, undirected_distance, source_target_dense_layers,
                          embedding_normalization,
                          **kwargs)
 
@@ -175,14 +177,13 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                  directed_distance="euclidean", undirected_distance="euclidean", source_target_dense_layers=True,
                  embedding_normalization=False, **kwargs):
         self.directed_margin = margin
-        self.undirected_margin = margin / 2
-        self.directed_distance = directed_distance
-        self.undirected_distance = undirected_distance
+        self.undirected_margin = margin
+
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
                          conv2_kernel_size, conv2_batch_norm,
-                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size, source_target_dense_layers,
-                         embedding_normalization,
+                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size,
+                         directed_distance, undirected_distance, source_target_dense_layers, embedding_normalization,
                          **kwargs)
 
     def custom_loss(self, loss):
