@@ -181,8 +181,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
-                         conv2_kernel_size, conv2_batch_norm,
-                         max2_pool_size, lstm_unit_size, dense1_unit_size, dense2_unit_size,
+                         conv2_kernel_size, conv2_batch_norm, max2_pool_size, lstm_unit_size, dense1_unit_size,
+                         dense2_unit_size,
                          directed_distance, undirected_distance, source_target_dense_layers, embedding_normalization,
                          **kwargs)
 
