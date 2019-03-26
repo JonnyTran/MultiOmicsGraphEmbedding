@@ -153,16 +153,16 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         x = Dropout(0.2)(x)
 
         if self.dense1_unit_size is not None and self.dense1_unit_size != 0:
-            x = Dense(self.dense1_unit_size, activation='relu', name="dense_1")(x)  # (batch_number, 925)
+            x = Dense(self.dense1_unit_size, activation='relu', name="dense_1")(x)
             x = Dropout(0.2)(x)
 
         if self.source_target_dense_layers:
-            source = Dense(int(self._d / 2), activation='linear', name="dense_source")(x)  # (batch_number, 1024)
+            source = Dense(int(self._d / 2), activation='linear', name="dense_source")(x)
             if self.embedding_normalization:
                 source = BatchNormalization(center=True, scale=True, name="source_normalized")(source)
             print("source", source) if self.verbose else None
 
-            target = Dense(int(self._d / 2), activation='linear', name="dense_target")(x)  # (batch_number, 1024)
+            target = Dense(int(self._d / 2), activation='linear', name="dense_target")(x)
             if self.embedding_normalization:
                 target = BatchNormalization(center=True, scale=True, name="target_normalized")(target)
             print("target", target) if self.verbose else None
@@ -170,9 +170,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             x = Concatenate(axis=-1, name="embedding_output")(
                 [source, target])  # Embedding space (batch_number, embedding_dim)
         else:
-            x = Dense(self._d, activation='linear', name="embedding_output")(x)  # (batch_number, 1024)
+            x = Dense(self._d, activation='linear', name="embedding_output")(x)
             if self.embedding_normalization:
-                x = BatchNormalization(center=True, scale=True, name="target_normalized")(x)
+                x = BatchNormalization(center=True, scale=True, name="embedding_output_normalized")(x)
 
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
