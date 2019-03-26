@@ -140,12 +140,12 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                          Y=embs[:, int(self._d / 2):self._d],
                                          metric="euclidean", n_jobs=-2)
                 # adj = np.matmul(embs[:, 0:int(self._d / 2)], embs[:, int(self._d / 2):self._d].T)
-                adj = -adj
+                # adj = -adj
 
             elif edge_type == 'u':
                 adj = pairwise_distances(X=embs,
                                          metric="euclidean", n_jobs=-2)
-                adj = -adj
+                # adj = -adj
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
