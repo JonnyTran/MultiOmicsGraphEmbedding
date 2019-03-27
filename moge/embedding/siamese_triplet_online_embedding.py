@@ -138,16 +138,35 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             assert len(self.node_list) == embs.shape[0]
 
             if edge_type == 'd':
-                adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
-                                         Y=embs[:, int(self._d / 2):self._d],
-                                         metric="euclidean", n_jobs=-2)
-                # adj = np.matmul(embs[:, 0:int(self._d / 2)], embs[:, int(self._d / 2):self._d].T)
-                # adj = -adj
+
+                # adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
+                #                          Y=embs[:, int(self._d / 2):self._d],
+                #                          metric="euclidean", n_jobs=-2)
+                adj = np.matmul(embs[:, 0:int(self._d / 2)], embs[:, int(self._d / 2):self._d].T)
+                # adj = adj.T
+
+                # Get node-specific adaptive threshold
+                # network_adj = self.generator_train.network.get_adjacency_matrix(edge_types="d",
+                #                                                                 node_list=self.node_list)
+                # distance_threshold = np.zeros((len(self.node_list),))
+                #
+                # for nonzero_node_id in np.unique(network_adj.nonzero()[0]):
+                #     _, nonzero_node_cols = network_adj[nonzero_node_id].nonzero()
+                #     positive_distances = adj[nonzero_node_id, nonzero_node_cols]
+                #     distance_threshold[nonzero_node_id] = max(positive_distances)
+                # self.distance_threshold = distance_threshold
+                #
+                # predicted_adj = np.zeros(adj.shape)
+                # for node_id in range(predicted_adj.shape[0]):
+                #     predicted_adj[node_id,:] = (adj[node_id, :] < self.distance_threshold).astype(float)
+                #
+                # adj = predicted_adj
 
             elif edge_type == 'u':
-                adj = pairwise_distances(X=embs,
-                                         metric="euclidean", n_jobs=-2)
-                # adj = -adj
+                # adj = pairwise_distances(X=embs,
+                #                          metric="euclidean", n_jobs=-2)
+                # adj = np.exp(-2.0*adj)
+                adj = np.matmul(embs, embs.T)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
@@ -164,7 +183,6 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             return adj[idx, :][:, idx]
         else:
             raise Exception("A node in node_l is not in self.node_list.")
-
 
 
 class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
@@ -207,7 +225,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         config.gpu_options.allow_growth = True
         self.sess = tf.Session(config=config)
 
-        with tf.device("/gpu:1" if not multi_gpu else device):
+        with tf.device(device):
             input_seqs = Input(batch_shape=(self.batch_size, None), dtype=tf.int8, name="input_seqs")
             labels_directed = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True, dtype=tf.float32,
                                     name="labels_directed")
@@ -224,7 +242,6 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-        with tf.device("/gpu:2" if not multi_gpu else device):
             output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
                                        undirected_weight=self.directed_proba,
                                        directed_distance=self.directed_distance,
@@ -273,7 +290,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         if network_val is not None:
             self.generator_val = OnlineTripletGenerator(network=network_val,
                                                         maxlen=self.max_length, padding='post', truncating="post",
-                                                        negative_sampling_ratio=self.negative_sampling_ratio,
+                                                        negative_sampling_ratio=10.0,
                                                         batch_size=self.batch_size, shuffle=True, seed=seed,
                                                         verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
@@ -314,6 +331,7 @@ class OnlineTripletLoss(Layer):
         assert isinstance(input_shape, list)
         embeddings_shape, labels_directed_shape, labels_undirected_shape = input_shape
         self._d = int(embeddings_shape[-1])
+
         super(OnlineTripletLoss, self).build(input_shape)
 
     def compute_output_shape(self, input_shape):
@@ -323,10 +341,6 @@ class OnlineTripletLoss(Layer):
         assert isinstance(input, list), "{}".format("(embeddings, labels_directed, labels_undirected) expected")
         embeddings, labels_directed, labels_undirected = input
 
-        # embeddings_s = tf.slice(embeddings, [-1, 0],
-        #                         [embeddings.get_shape()[0], int(self._d / 2)])
-        # embeddings_t = tf.slice(embeddings, [-1, int(self._d / 2)],
-        #                         [embeddings.get_shape()[0], int(self._d / 2)])
         embeddings_s = embeddings[:, 0: int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2): self._d]
 
