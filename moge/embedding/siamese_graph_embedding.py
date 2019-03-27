@@ -313,9 +313,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         except KeyboardInterrupt:
             print("Stop training")
         finally:
-            self.save_alpha_layers()
+            self.save_network_weights()
 
-    def save_alpha_layers(self):
+    def save_network_weights(self):
         if hasattr(self, "alpha_network"):
             self.alpha_directed = self.alpha_network.get_layer(name="alpha_directed").get_weights()
             self.alpha_undirected = self.alpha_network.get_layer(name="alpha_undirected").get_weights()
@@ -397,7 +397,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.build_keras_model(multi_gpu=False)
         self.lstm_network.load_weights(siamese_weights, by_name=True)
         self.alpha_network.load_weights(alpha_weights, by_name=True)
-        self.save_alpha_layers()
+        self.save_network_weights()
         print(self.siamese_net.summary())
 
     def load_model(self, lstm_model, generator):

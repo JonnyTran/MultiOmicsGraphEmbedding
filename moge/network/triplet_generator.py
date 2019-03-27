@@ -133,12 +133,13 @@ class OnlineTripletGenerator(SampledDataGenerator):
         for idx, node in enumerate(sampled_nodes):
             _, pos_nodes = pos_adj[idx].nonzero()
             node_neg_sample_count = min(int(len(pos_nodes) * self.negative_sampling_ratio),
-                                        pos_adj.shape[1] - len(pos_nodes))
+                                        int(pos_adj.shape[1] * 0.2))
             if node_neg_sample_count > 0:
                 node_degrees = [degree if (id not in pos_nodes) else 0 for id, degree in
                                 enumerate(node_degrees_list)]  # Prevent accidental candidate sampling
                 sample_neg_indices = np.random.choice(range(len(sampled_nodes)), node_neg_sample_count, replace=False,
-                                                      p=self.compute_node_sampling_freq(node_degrees))
+                                                      p=self.compute_node_sampling_freq(node_degrees,
+                                                                                        compression_func=self.compression_func))
                 sampled_adj[idx, sample_neg_indices] = EPSILON
 
         return sampled_adj

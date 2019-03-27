@@ -122,7 +122,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         except KeyboardInterrupt:
             print("Stop training")
         finally:
-            self.save_alpha_layers()
+            self.save_network_weights()
 
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d", interpolate=False):
         """
@@ -273,7 +273,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         if network_val is not None:
             self.generator_val = OnlineTripletGenerator(network=network_val,
                                                         maxlen=self.max_length, padding='post', truncating="post",
-                                                        negative_sampling_ratio=40.0,
+                                                        negative_sampling_ratio=self.negative_sampling_ratio,
                                                         batch_size=self.batch_size, shuffle=True, seed=seed,
                                                         verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
@@ -295,7 +295,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         except KeyboardInterrupt:
             print("Stop training")
         finally:
-            self.save_alpha_layers()
+            self.save_network_weights()
 
 
 class OnlineTripletLoss(Layer):

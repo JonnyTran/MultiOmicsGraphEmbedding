@@ -355,7 +355,8 @@ class SampledDataGenerator(DataGenerator):
 
 
         self.node_degrees_list = [self.node_degrees[node] for node in node_list]
-        self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list)
+        self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
+                                                                  compression_func=self.compression_func)
         print("# of nodes to sample from (non-zero degree):", np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
 
     def get_nonzero_nodelist(self):
@@ -373,13 +374,12 @@ class SampledDataGenerator(DataGenerator):
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio) # Used to calculate sampling ratio to sample negative directed edges
         print("Ens_count:", self.Ens_count) if self.verbose else None
 
-
-    def compute_node_sampling_freq(self, node_degrees):
-        if self.compression_func == "sqrt":
+    def compute_node_sampling_freq(self, node_degrees, compression_func):
+        if compression_func == "sqrt":
             compression = np.sqrt
-        elif self.compression_func == "sqrt3":
+        elif compression_func == "sqrt3":
             compression = lambda x: x ** (1 / 3)
-        elif self.compression_func == "log":
+        elif compression_func == "log":
             compression = lambda x: np.log(1 + x)
         else:
             compression = lambda x: x

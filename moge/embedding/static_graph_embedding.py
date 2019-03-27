@@ -1,7 +1,6 @@
 from abc import ABCMeta
 
 import numpy as np
-
 from MulticoreTSNE import MulticoreTSNE as TSNE
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -9,7 +8,6 @@ from sklearn.metrics import pairwise_distances
 
 from moge.evaluation.link_prediction import largest_indices
 from moge.evaluation.utils import get_scalefree_fit_score
-from moge.visualization.plot_data import matrix_heatmap
 
 
 class StaticGraphEmbedding:
@@ -310,10 +308,10 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         assert y_pred.shape[0] == X.shape[0]
         return y_pred
 
-    def process_tsne_node_pos(self, perplexity=80):
+    def process_tsne_node_pos(self):
         embs = self.get_embedding()
         embs_pca = PCA(n_components=2).fit_transform(embs)
-        self.node_pos = TSNE(init=embs_pca, perplexity=perplexity, n_jobs=8).fit_transform(embs)
+        self.node_pos = TSNE(init=embs_pca, n_jobs=8).fit_transform(embs)
 
     def get_tsne_node_pos(self):
         if hasattr(self, "node_pos"):
