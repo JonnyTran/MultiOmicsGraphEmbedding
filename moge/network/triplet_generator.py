@@ -135,7 +135,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
             node_neg_sample_count = min(int(len(pos_nodes) * self.negative_sampling_ratio),
                                         int(pos_adj.shape[1] * 0.2))
             if node_neg_sample_count > 0:
-                node_degrees = [degree if (id not in pos_nodes) else 0 for id, degree in
+                node_degrees = [degree if (id not in pos_nodes and id != idx) else 0 for id, degree in
                                 enumerate(node_degrees_list)]  # Prevent accidental candidate sampling
                 sample_neg_indices = np.random.choice(range(len(sampled_nodes)), node_neg_sample_count, replace=False,
                                                       p=self.compute_node_sampling_freq(node_degrees,
