@@ -105,14 +105,6 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
-        # self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d_%l-%M%p')), histogram_freq=0,
-        #                                write_grads=True, write_graph=False, write_images=True,
-        #                                 batch_size=self.batch_size,
-        #                                # update_freq=100000, embeddings_freq=1,
-        #                                # embeddings_data=self.generator_val.__getitem__(0)[0],
-        #                                # embeddings_layer_names=["embedding_output"],
-        #                                )
-
         try:
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val.__getitem__(0) if validation_make_data else self.generator_val,
@@ -195,7 +187,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                  directed_distance="euclidean", undirected_distance="euclidean", source_target_dense_layers=True,
                  embedding_normalization=False, **kwargs):
         self.directed_margin = margin
-        self.undirected_margin = margin
+        self.undirected_margin = margin / 2
 
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
@@ -257,15 +249,16 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
         # Build tensorboard
-        self.tensorboard = TensorBoard(log_dir="logs/{}_{}".format(type(self).__name__, time.strftime('%m-%d_%l-%M%p')),
-                                       histogram_freq=0,
-                                       write_grads=True, write_graph=False, write_images=True,
-                                       batch_size=self.batch_size,
-                                       update_freq="epoch", embeddings_freq=0,
-                                       embeddings_metadata="logs/metadata.tsv",
-                                       embeddings_data=self.generator_val.__getitem__(0)[0],
-                                       embeddings_layer_names=["embedding_output_normalized"],
-                                       )
+        self.tensorboard = TensorBoard(
+            log_dir="logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p')),
+            histogram_freq=0,
+            write_grads=True, write_graph=False, write_images=True,
+            batch_size=self.batch_size,
+            # update_freq="epoch", embeddings_freq=0,
+            # embeddings_metadata="logs/metadata.tsv",
+            # embeddings_data=self.generator_val.__getitem__(0)[0],
+            # embeddings_layer_names=["embedding_output_normalized"],
+            )
 
         # Compile & train
         self.siamese_net.compile(loss=self.identity_loss,
@@ -301,11 +294,12 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         if histogram_freq > 0:
             self.tensorboard.histogram_freq = histogram_freq
+            self.generator_val = self.generator_val.__getitem__(0) if type(
+                self.generator_val) == OnlineTripletGenerator else self.generator_val
 
         try:
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
-                                                       validation_data=self.generator_val.__getitem__(
-                                                           0) if histogram_freq > 0 else self.generator_val,
+                                                       validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
                                                        callbacks=[self.tensorboard] if tensorboard else None,
                                                        use_multiprocessing=True, workers=8)
@@ -369,7 +363,7 @@ def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
     """
     # Get the dot product between all embeddings
     # shape (batch_size, batch_size)
-    dot_product = tf.matmul(embeddings_A, tf.transpose(embeddings_B))
+    dot_product = tf.matmul(embeddings_A, embeddings_B, adjoint_b=True)
 
     # Get squared L2 norm for each embedding. We can just take the diagonal of `dot_product`.
     # This also provides more numerical stability (the diagonal of the result will be exactly 0).
@@ -399,9 +393,17 @@ def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
 
 
 def _pairwise_dot_sigmoid_distances(embeddings_A, embeddings_B):
-    dot_product = tf.matmul(embeddings_A, tf.transpose(embeddings_B))
+    dot_product = tf.matmul(embeddings_A, embeddings_B, adjoint_b=True)
     sigmoids = tf.sigmoid(dot_product)
     return sigmoids
+
+
+def _pairwise_cosine_distance(embeddings_A, embeddings_B):
+    normalize_a = tf.nn.l2_normalize(embeddings_A, axis=-1)
+    normalize_b = tf.nn.l2_normalize(embeddings_B, axis=-1)
+    cos_distance = 1 - tf.matmul(normalize_a, normalize_b, adjoint_b=True)
+    return cos_distance
+
 
 
 def _get_anchor_positive_triplet_mask(labels):
@@ -451,6 +453,8 @@ def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=
         pairwise_dist = _pairwise_distances(embeddings_A, embeddings_B, squared=squared)
     elif distance == "dot_sigmoid":
         pairwise_dist = _pairwise_dot_sigmoid_distances(embeddings_A, embeddings_B)
+    elif distance == "cosine":
+        pairwise_dist = _pairwise_cosine_distance(embeddings_A, embeddings_B)
 
     # For each anchor, get the hardest positive
     # First, we need to get a mask for every valid positive (they should have same label)
