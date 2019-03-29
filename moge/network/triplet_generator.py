@@ -166,6 +166,20 @@ class OnlineTripletGenerator(SampledDataGenerator):
         return adj
 
 
+class OnlineSoftmaxGenerator(OnlineTripletGenerator):
+    def __init__(self, network: HeterogeneousNetwork, batch_size=1, directed_proba=0.5, negative_sampling_ratio=3,
+                 n_steps=500, compression_func="log", maxlen=1400, padding='post', truncating='post',
+                 sequence_to_matrix=False, shuffle=True, seed=0, verbose=True):
+        super().__init__(network, batch_size, directed_proba, negative_sampling_ratio, n_steps, compression_func,
+                         maxlen, padding, truncating, sequence_to_matrix, shuffle, seed, verbose)
 
+    def __data_generation(self, sampled_nodes):
+        X = {}
+        X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
+        sampled_directed_adj = self.sample_directed_negative_edges(
+            self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes), sampled_nodes)
+        X["labels_directed"] = sampled_directed_adj
+        X["labels_undirected"] = self.network.get_adjacency_matrix(edge_types=["u", "u_n"], node_list=sampled_nodes)
 
-
+        y = np.zeros(X["input_seqs"].shape[0])  # Dummy vector
+        return X, y
