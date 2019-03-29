@@ -64,8 +64,6 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             print(encoded_k) if self.verbose else None
 
             output = Lambda(self.triplet_loss, name="lambda_triplet_loss_output")([encoded_i, encoded_j, encoded_k, is_directed])
-            # self.alpha_network = self.create_alpha_network()
-            # output = self.alpha_network([encoded_i, encoded_j, is_directed])
 
             self.siamese_net = Model(inputs=[input_seq_i, input_seq_j, input_seq_k, is_directed], outputs=output)
 
@@ -77,8 +75,6 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         # Compile & train
         self.siamese_net.compile(loss=self.identity_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
                                  optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=0.1),
-                                 # metrics=[accuracy_d, precision_d, recall_d, auc_roc_d], # constrastive_loss
-                                 # metrics=["accuracy", precision, recall], # cross_entropy
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
@@ -130,52 +126,64 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             assert len(self.node_list) == embs.shape[0]
 
             if edge_type == 'd':
+                embeddings_X = embs[:, 0:int(self._d / 2)]
+                embeddings_Y = embs[:, int(self._d / 2):self._d]
 
-                # adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
-                #                          Y=embs[:, int(self._d / 2):self._d],
-                #                          metric="euclidean", n_jobs=-2)
-                adj = np.matmul(embs[:, 0:int(self._d / 2)], embs[:, int(self._d / 2):self._d].T)
-                adj = sigmoid(adj)
-                # adj = adj.T
+                if self.directed_distance == "euclidean":
+                    adj = pairwise_distances(X=embeddings_X,
+                                             Y=embeddings_Y,
+                                             metric="euclidean", n_jobs=-2)
+                    # Get node-specific adaptive threshold
+                    adj = self.transform_adj_adaptive_threshold(adj)
+                elif self.directed_distance == "dot_sigmoid":
+                    adj = np.matmul(embeddings_X, embeddings_Y.T)
+                    adj = sigmoid(adj)
 
-                # Get node-specific adaptive threshold
-                # network_adj = self.generator_train.network.get_adjacency_matrix(edge_types="d",
-                #                                                                 node_list=self.node_list)
-                # distance_threshold = np.zeros((len(self.node_list),))
-                #
-                # for nonzero_node_id in np.unique(network_adj.nonzero()[0]):
-                #     _, nonzero_node_cols = network_adj[nonzero_node_id].nonzero()
-                #     positive_distances = adj[nonzero_node_id, nonzero_node_cols]
-                #     distance_threshold[nonzero_node_id] = max(positive_distances)
-                # self.distance_threshold = distance_threshold
-                #
-                # predicted_adj = np.zeros(adj.shape)
-                # for node_id in range(predicted_adj.shape[0]):
-                #     predicted_adj[node_id,:] = (adj[node_id, :] < self.distance_threshold).astype(float)
-                #
-                # adj = predicted_adj
-
+                adj = adj.T  # Transpose
             elif edge_type == 'u':
-                # adj = pairwise_distances(X=embs,
-                #                          metric="euclidean", n_jobs=-2)
-                # adj = np.exp(-2.0*adj)
-                adj = np.matmul(embs, embs.T)
-                adj = sigmoid(adj)
+                embeddings_X = embs
+                embeddings_Y = embs
+                if self.undirected_distance == "euclidean":
+                    adj = pairwise_distances(X=embeddings_X,
+                                             metric="euclidean", n_jobs=-2)
+                    adj = np.exp(-2.0 * adj)
+                elif self.undirected_distance == "dot_sigmoid":
+                    adj = np.matmul(embeddings_X, embeddings_Y.T)
+                    adj = sigmoid(adj)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
         # interpolate to (0, 1) range
         if interpolate:
             adj = np.interp(adj, (adj.min(), adj.max()), (0, 1))
-
         if (node_l is None or node_l == self.node_list):
-            if edge_type=="d": self.reconstructed_adj = adj
+            if edge_type == "d": self.reconstructed_adj = adj  # Cache reconstructed_adj to memory for faster recall
             return adj
-
         elif set(node_l) < set(self.node_list):
             return self._select_adj_indices(adj, node_l, node_l_b)
         else:
             raise Exception("A node in node_l is not in self.node_list.")
+
+    def transform_adj_adaptive_threshold(self, adj_pred):
+        network_adj = self.generator_train.network.get_adjacency_matrix(edge_types="d",
+                                                                        node_list=self.node_list)
+        self.distance_threshold = self.get_adaptive_threshold(adj_pred, network_adj)
+
+        predicted_adj = np.zeros(adj_pred.shape)
+        for node_id in range(predicted_adj.shape[0]):
+            predicted_adj[node_id, :] = (adj_pred[node_id, :] < self.distance_threshold).astype(float)
+        adj_pred = predicted_adj
+        return adj_pred
+
+    def get_adaptive_threshold(self, adj_pred, adj_true):
+        distance_threshold = np.zeros((len(self.node_list),))
+        for nonzero_node_id in np.unique(adj_true.nonzero()[0]):
+            _, nonzero_node_cols = adj_true[nonzero_node_id].nonzero()
+            positive_distances = adj_pred[nonzero_node_id, nonzero_node_cols]
+            distance_threshold[nonzero_node_id] = max(positive_distances)
+        median_threshold = np.median(distance_threshold[distance_threshold > 0])
+        distance_threshold[distance_threshold == 0] = median_threshold
+        return distance_threshold
 
 
 class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):

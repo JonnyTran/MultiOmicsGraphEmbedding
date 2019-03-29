@@ -72,16 +72,6 @@ class DataGenerator(keras.utils.Sequence):
             lambda x: len(x) if type(x) == str else None)
         print("word index:", self.tokenizer.word_index) if self.verbose else None
 
-    def reload_directed_edges_data(self, edge_types=["d"], databases=None):
-        self.adj_directed = self.network.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
-                                                              databases=databases)
-        self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
-        self.Ed_count = len(self.Ed_rows)
-
-        self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
-        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:", self.En_count) if self.verbose else None
-        self.on_epoch_end()
-
     def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)
         self.adj_directed = self.network.get_adjacency_matrix(edge_types=["d"], node_list=self.node_list)
@@ -111,6 +101,17 @@ class DataGenerator(keras.utils.Sequence):
         sample_indices = np.random.choice(self.Ens_rows_all.shape[0], self.Ens_count, replace=False)
         self.Ens_rows = self.Ens_rows_all[sample_indices]
         self.Ens_cols = self.Ens_cols_all[sample_indices]
+
+    def reload_directed_edges_data(self, edge_types=["d"], databases=None):
+        self.adj_directed = self.network.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
+                                                              databases=databases)
+        self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
+        self.Ed_count = len(self.Ed_rows)
+
+        self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
+        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:",
+              self.En_count) if self.verbose else None
+        self.on_epoch_end()
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
