@@ -186,8 +186,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         print(self.get_method_name(), "imported", self._X.shape)
 
-
-    def get_reconstructed_adj(self, edge_type=None, node_l=None, ):
+    def get_reconstructed_adj(self, edge_type=None, node_l=None, node_l_b=None):
         '''Compute the adjacency matrix from the learned embedding
 
         Returns:
@@ -230,31 +229,58 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             self.reconstructed_adj = reconstructed_adj
             return reconstructed_adj
         elif set(node_l) < set(self.node_list):
-            idx = [self.node_list.index(node) for node in node_l]
-            return reconstructed_adj[idx, :][:, idx]
+            return self._select_adj_indices(reconstructed_adj, node_l, node_l_b)
         else:
             raise Exception("A node in node_l is not in self.node_list.")
+
+    def _select_adj_indices(self, adj, node_list_A, node_list_B=None):
+        if node_list_B is None:
+            idx = [self.node_list.index(node) for node in node_list_A]
+            return adj[idx, :][:, idx]
+        else:
+            idx_A = [self.node_list.index(node) for node in node_list_A]
+            idx_B = [self.node_list.index(node) for node in node_list_B]
+            return adj[idx_A, :][:, idx_B]
+
 
     def softmax(self, X):
         exps = np.exp(X)
         return exps/np.sum(exps, axis=0)
 
-    def get_top_k_predicted_edges(self, edge_type, top_k, node_list=None, training_network=None):
+    def get_top_k_predicted_edges(self, edge_type, top_k, node_list=None, node_list_B=None, training_network=None,
+                                  databases=None):
         nodes = self.node_list
-        if node_list is not None:
+        if node_list is not None and node_list_B is not None:
+            nodes = [n for n in nodes if n in node_list or n in node_list_B]
+            nodes_A = [n for n in self.node_list if n in node_list]
+            nodes_B = [n for n in self.node_list if n in node_list_B]
+        elif node_list is not None:
             nodes = [n for n in nodes if n in node_list]
 
-        estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)
+        if node_list_B is not None:
+            estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes_A,
+                                                       node_l_b=nodes_B)  # (node_list_A, node_list_B)
+        else:
+            estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)  # (nodes, nodes)
         np.fill_diagonal(estimated_adj, 0)
 
         if training_network is not None:
-            training_adj = training_network.get_adjacency_matrix(edge_types=[edge_type], node_list=nodes)
-            assert estimated_adj.shape == training_adj.shape
+            training_adj = training_network.get_adjacency_matrix(edge_types=[edge_type], node_list=nodes,
+                                                                 databases=databases)
+            if node_list_B is not None:
+                idx_A = [nodes.index(node) for node in nodes_A]
+                idx_B = [nodes.index(node) for node in nodes_B]
+                training_adj = training_adj[idx_A, :][:, idx_B]
+            assert estimated_adj.shape == training_adj.shape, "estimated_adj {} != training_adj {}".format(
+                estimated_adj.shape, training_adj.shape)
             rows, cols = training_adj.nonzero()
             estimated_adj[rows, cols] = 0
 
         top_k_indices = largest_indices(estimated_adj, top_k, smallest=False)
-        top_k_pred_edges = [(nodes[x[0]], nodes[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
+        if node_list_B is not None:
+            top_k_pred_edges = [(nodes_A[x[0]], nodes_B[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
+        else:
+            top_k_pred_edges = [(nodes[x[0]], nodes[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
 
         return top_k_pred_edges
 
@@ -283,7 +309,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
     def predict(self, X):
         """
         Bulk predict whether an edge exists between a pair of nodes, provided as a collection in X.
-        :param X: [n_pairs, 2], where each element is the string name of a node
+        :param X: [n_pairs, 2], where each index along axis 0 is a tuple containing a pair of nodes.
         :return y_pred: [n_pairs]
         """
         estimated_adj = self.get_reconstructed_adj()

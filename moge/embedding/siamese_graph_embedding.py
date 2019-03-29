@@ -320,7 +320,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             self.alpha_directed = self.alpha_network.get_layer(name="alpha_directed").get_weights()
             self.alpha_undirected = self.alpha_network.get_layer(name="alpha_undirected").get_weights()
 
-    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, edge_type="d", var_len=False):
+    def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, node_l_b=None, edge_type="d", var_len=False):
         """
         :param X:
         :param node_l: list of node names
@@ -352,8 +352,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
             return adj
         elif set(node_l) < set(self.node_list):
-            idx = [self.node_list.index(node) for node in node_l]
-            return adj[idx, :][:, idx]
+            return self._select_adj_indices(adj, node_l, node_l_b)
         else:
             raise Exception("A node in node_l is not in self.node_list.")
 

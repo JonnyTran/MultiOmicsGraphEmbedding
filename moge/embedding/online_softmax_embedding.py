@@ -4,7 +4,7 @@ from keras.optimizers import Adam
 from moge.embedding.siamese_graph_embedding import *
 from moge.embedding.siamese_triplet_online_embedding import SiameseOnlineTripletGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
-from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTripletGenerator
+from moge.network.triplet_generator import OnlineTripletGenerator
 
 
 class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
@@ -141,13 +141,11 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
 
 
 class OnlineSoftmaxLoss(Layer):
-    def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, directed_distance="euclidean",
-                 undirected_distance="euclidean",
+    def __init__(self, node_list, undirected_weight=1.0, directed_distance="euclidean", undirected_distance="euclidean",
                  **kwargs):
         super(OnlineSoftmaxLoss, self).__init__(**kwargs)
-        self.output_dim = ()
-        self.directed_margin = directed_margin
-        self.undirected_margin = undirected_margin
+        self.node_list = node_list
+        self.num_nodes = len(self.node_list)
         self.undirected_weight = undirected_weight
         self.directed_distance = directed_distance
         self.undirected_distance = undirected_distance
@@ -156,6 +154,15 @@ class OnlineSoftmaxLoss(Layer):
         assert isinstance(input_shape, list)
         embeddings_shape, labels_directed_shape, labels_undirected_shape = input_shape
         self._d = int(embeddings_shape[-1])
+        self.node_embeddings = self.add_weight(name='all_embeddings',
+                                               shape=(self.num_nodes, self._d),
+                                               initializer='zeros',
+                                               trainable=False)
+        self.node_bias = self.add_weight(name='node_bias',
+                                         shape=(len(self.node_list),),
+                                         initializer='zeros',
+                                         trainable=True)
+
         super(OnlineSoftmaxLoss, self).build(input_shape)
 
     def compute_output_shape(self, input_shape):
@@ -165,25 +172,13 @@ class OnlineSoftmaxLoss(Layer):
         assert isinstance(input, list), "{}".format("(embeddings, labels_directed, labels_undirected) expected")
         embeddings, labels_directed, labels_undirected = input
 
-        # embeddings_s = tf.slice(embeddings, [-1, 0],
-        #                         [embeddings.get_shape()[0], int(self._d / 2)])
-        # embeddings_t = tf.slice(embeddings, [-1, int(self._d / 2)],
-        #                         [embeddings.get_shape()[0], int(self._d / 2)])
         embeddings_s = embeddings[:, 0: int(self._d / 2)]
-        embeddings_t = embeddings[:, int(self._d / 2): self._d]
+        node_embeddings_t = self.node_embeddings[:, int(self._d / 2): self._d]
 
-        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t,
-                                                labels=labels_directed,
-                                                margin=self.directed_margin,
-                                                distance=self.directed_distance)
-        if self.undirected_weight > 0:
-            undirected_loss = self.undirected_weight * batch_hard_triplet_loss(embeddings, embeddings,
-                                                                               labels=labels_undirected,
-                                                                               margin=self.undirected_margin,
-                                                                               distance=self.undirected_distance)
-            return tf.add(directed_loss, undirected_loss)
-        else:
-            return directed_loss
+        p1_proximities = _pairwise_dot_sigmoid_distances(embeddings_s, node_embeddings_t)
+        print("p1_proximities", p1_proximities.shape)
+
+
 
 
 def _pairwise_distances(embeddings_A, embeddings_B, squared=False):

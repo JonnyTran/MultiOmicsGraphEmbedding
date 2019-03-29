@@ -1,10 +1,6 @@
-import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.utils.fixes import signature
-from sklearn.metrics import average_precision_score ,precision_recall_curve
-from moge.evaluation.metrics import link_prediction_score
-from moge.evaluation.utils import mask_test_edges, split_train_test_edges
-from moge.network.heterogeneous_network import HeterogeneousNetwork
+import numpy as np
+from sklearn.metrics import average_precision_score, precision_recall_curve
 
 
 def evaluate_pr_curve_link_pred_by_database(methods, data_generator,
@@ -46,14 +42,26 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, f
         fig.savefig(fig_save_path, bbox_inches='tight')
 
 
-def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, edge_type="d", top_k=100):
-    nodes = embedding.node_list
-    nodes = [node for node in nodes if node in node_list]
+def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, node_list_B=None, edge_type="d",
+                             top_k=100, databases=None):
+    if node_list_B is not None:
+        nodes = [n for n in embedding.node_list if n in node_list or n in node_list_B]
+        nodes_A = [n for n in embedding.node_list if n in node_list]
+        nodes_B = [n for n in embedding.node_list if n in node_list_B]
+    else:
+        nodes = [node for node in embedding.node_list if node in node_list]
 
-    edges_pred = embedding.get_top_k_predicted_edges(edge_type=edge_type, top_k=top_k,
-                                                     node_list=nodes,
-                                                     training_network=network_train)
-    edges_true = network_test.get_edgelist(edge_types=[edge_type], node_list=nodes, inclusive=True)
+    if node_list_B is not None:
+        edges_pred = embedding.get_top_k_predicted_edges(edge_type=edge_type, top_k=top_k,
+                                                         node_list=nodes_A, node_list_B=nodes_B,
+                                                         training_network=network_train, databases=databases)
+    else:
+        edges_pred = embedding.get_top_k_predicted_edges(edge_type=edge_type, top_k=top_k,
+                                                         node_list=nodes,
+                                                         training_network=network_train, databases=databases)
+    edges_true = network_test.get_edgelist(edge_types=[edge_type], node_list=nodes, databases=databases, inclusive=True)
+
+    assert len(edges_true) > 0, "no edges in edges_true"
 
     results = {}
     results["precision"] = precision(edges_true, edges_pred)
