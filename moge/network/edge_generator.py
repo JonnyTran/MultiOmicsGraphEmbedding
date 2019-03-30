@@ -131,7 +131,7 @@ class DataGenerator(keras.utils.Sequence):
 
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:",
-              self.En_count) if self.verbose else None
+              self.En_count, ", Ens_count", self.Ens_count) if self.verbose else None
         self.on_epoch_end()
 
     def on_epoch_end(self):

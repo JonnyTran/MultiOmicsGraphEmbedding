@@ -1,4 +1,4 @@
-
+import os
 import time
 
 import numpy as np
@@ -268,7 +268,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, validation_make_data=False, multi_gpu=False,
-                        subsample=True, n_steps=500, validation_steps=None,
+                        subsample=True, n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
         if subsample:
             self.generator_train = SampledDataGenerator(network=network, compression_func=self.compression_func, n_steps=n_steps,
@@ -296,24 +296,33 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
-        self.tensorboard = TensorBoard(log_dir="logs/{}".format(time.strftime('%m-%d%l-%M%p')), histogram_freq=1,
-                                       write_grads=True, write_graph=False, write_images=True,
-                                       batch_size=self.batch_size,
-                                       # update_freq=100000, embeddings_freq=1,
-                                       # embeddings_data=self.generator_val.__getitem__(0)[0],
-                                       # embeddings_layer_names=["embedding_output"],
-                                       )
-
+        if histogram_freq > 0:
+            self.tensorboard.histogram_freq = histogram_freq
+            self.generator_val = self.generator_val.__getitem__(0) if type(
+                self.generator_val) == DataGenerator else self.generator_val
         try:
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
-                                                       validation_data=self.generator_val.__getitem__(0) if validation_make_data else self.generator_val,
+                                                       validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
-                                                       # callbacks=[self.tensorboard],
+                                                       callbacks=[self.tensorboard] if tensorboard else None,
                                                        use_multiprocessing=True, workers=8)
         except KeyboardInterrupt:
             print("Stop training")
         finally:
             self.save_network_weights()
+
+    def build_tensorboard(self):
+        self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p'))
+        self.tensorboard = TensorBoard(
+            log_dir=self.log_dir,
+            histogram_freq=0,
+            write_grads=True, write_graph=False, write_images=True,
+            batch_size=self.batch_size,
+            # update_freq="epoch", embeddings_freq=0,
+            # embeddings_metadata="logs/metadata.tsv",
+            # embeddings_data=self.generator_val.__getitem__(0)[0],
+            # embeddings_layer_names=["embedding_output_normalized"],
+        )
 
     def save_network_weights(self):
         if hasattr(self, "alpha_network"):
@@ -356,15 +365,20 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         else:
             raise Exception("A node in node_l is not in self.node_list.")
 
-    def save_embeddings(self, filepath, variable_length=True, recompute=True, minlen=None):
+    def save_embeddings(self, filename, logdir=True, variable_length=True, recompute=True, minlen=None):
         embs = self.get_embedding(variable_length=variable_length, recompute=recompute, minlen=minlen)
         assert len(self.node_list) == embs.shape[0]
-        fout = open(filepath, 'w')
+        if logdir and hasattr(self, "log_dir"):
+            file_path = os.path.join(self.log_dir, filename)
+        else:
+            file_path = filename
+        fout = open(file_path, 'w')
         fout.write("{} {}\n".format(len(self.node_list), self._d))
         for i in range(len(self.node_list)):
             fout.write("{} {}\n".format(self.node_list[i],
                                         ' '.join([str(x) for x in embs[i]])))
         fout.close()
+        print("Saved at", file_path)
 
     def get_embedding(self, variable_length=False, recompute=False, node_list=None, minlen=None):
         if (not hasattr(self, "_X") or recompute):
@@ -398,6 +412,28 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.alpha_network.load_weights(alpha_weights, by_name=True)
         self.save_network_weights()
         print(self.siamese_net.summary())
+
+    def save_model(self, filename, model="lstm", logdir=True):
+        if logdir and hasattr(self, "log_dir"):
+            file_path = os.path.join(self.log_dir, filename)
+            params_path = file_path = os.path.join(self.log_dir, "params.txt")
+        else:
+            file_path = filename
+
+        if model == "lstm":
+            self.lstm_network.save(file_path)
+            self.write_params(params_path)
+            print("Saved lstm_network model at", file_path)
+        elif model == "siamese":
+            self.siamese_net.save_weights(file_path)
+            print("Saved siamese model weights at", file_path)
+
+        self.write_params(params_path)
+
+    def write_params(self, file_path):
+        fout = open(file_path, 'w')
+        fout.write("{}\n".format(self.get_params()))
+        fout.close()
 
     def load_model(self, lstm_model, generator):
         self.generator_train = generator

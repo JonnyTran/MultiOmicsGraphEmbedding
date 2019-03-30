@@ -40,7 +40,7 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, f
     plt.ylabel('Precision')
     plt.ylim([0.0, 1.00])
     plt.xlim([0.0, 1.0])
-    plt.legend(loc="lower right")
+    plt.legend(loc="best")
     plt.title(title)
     plt.show()
     if fig_save_path is not None:

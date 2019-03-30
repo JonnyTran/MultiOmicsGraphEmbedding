@@ -135,6 +135,13 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                              metric="euclidean", n_jobs=-2)
                     # Get node-specific adaptive threshold
                     adj = self.transform_adj_adaptive_threshold(adj)
+                    print("Euclidean with adaptive threshold")
+
+                elif self.directed_distance == "cosine":
+                    adj = pairwise_distances(X=embeddings_X,
+                                             Y=embeddings_Y,
+                                             metric="cosine", n_jobs=-2)
+
                 elif self.directed_distance == "dot_sigmoid":
                     adj = np.matmul(embeddings_X, embeddings_Y.T)
                     adj = sigmoid(adj)
@@ -147,6 +154,12 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                     adj = pairwise_distances(X=embeddings_X,
                                              metric="euclidean", n_jobs=-2)
                     adj = np.exp(-2.0 * adj)
+                    print("Euclidean with exp(-2.0 * x)")
+
+                elif self.undirected_distance == "cosine":
+                    adj = pairwise_distances(X=embeddings_X,
+                                             metric="cosine", n_jobs=-2)
+
                 elif self.undirected_distance == "dot_sigmoid":
                     adj = np.matmul(embeddings_X, embeddings_Y.T)
                     adj = sigmoid(adj)
@@ -196,7 +209,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                  directed_distance="euclidean", undirected_distance="euclidean", source_target_dense_layers=True,
                  embedding_normalization=False, **kwargs):
         self.directed_margin = margin
-        self.undirected_margin = margin / 2
+        self.undirected_margin = margin * 2
 
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
@@ -258,8 +271,18 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
         # Build tensorboard
+        self.build_tensorboard()
+
+        # Compile & train
+        self.siamese_net.compile(loss=self.identity_loss,
+                                 optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999),
+                                 )
+        print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
+
+    def build_tensorboard(self):
+        self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p'))
         self.tensorboard = TensorBoard(
-            log_dir="logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p')),
+            log_dir=self.log_dir,
             histogram_freq=0,
             write_grads=True, write_graph=False, write_images=True,
             batch_size=self.batch_size,
@@ -267,13 +290,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             # embeddings_metadata="logs/metadata.tsv",
             # embeddings_data=self.generator_val.__getitem__(0)[0],
             # embeddings_layer_names=["embedding_output_normalized"],
-            )
-
-        # Compile & train
-        self.siamese_net.compile(loss=self.identity_loss,
-                                 optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999),
-                                 )
-        print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
+        )
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
                         multi_gpu=False, subsample=True, n_steps=500, validation_steps=None, edge_f=None,
