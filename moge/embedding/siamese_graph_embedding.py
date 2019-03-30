@@ -16,7 +16,7 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
-from moge.evaluation.metrics import accuracy_d, precision_d, recall_d
+from moge.evaluation.metrics import accuracy_d, precision_d, recall_d, precision, recall
 from moge.network.edge_generator import DataGenerator, SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
@@ -71,7 +71,7 @@ def l1_diff_alpha(u, v, weights):
 
 
 class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
-    def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5,
+    def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5, weighted=False,
                  compression_func="sqrt", negative_sampling_ratio=2.0,
                  max_length=1400, truncating="post", seed=0, verbose=False,
                  conv1_kernel_size=12, conv1_batch_norm=False, max1_pool_size=6, conv2_kernel_size=6,
@@ -90,6 +90,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.epochs = epochs
         self.compression_func = compression_func
         self.directed_proba = directed_proba
+        self.weighted = weighted
         self.negative_sampling_ratio = negative_sampling_ratio
         self.max_length = max_length
         self.truncating = truncating
@@ -258,28 +259,30 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if multi_gpu:
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
-
+        self.build_tensorboard()
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
                                  optimizer=RMSprop(lr=self.lr),
-                                 metrics=[accuracy_d, precision_d, recall_d],
-                                 # metrics=["accuracy", precision, recall],
+                                 metrics=[accuracy_d, precision_d, recall_d] if not hasattr(self,
+                                                                                            "alpha_network") else [
+                                     "accuracy", precision, recall],
+                                 # metrics=,
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, validation_make_data=False, multi_gpu=False,
+    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
                         subsample=True, n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
         if subsample:
-            self.generator_train = SampledDataGenerator(network=network, compression_func=self.compression_func, n_steps=n_steps,
+            self.generator_train = SampledDataGenerator(network=network, weighted=self.weighted,
+                                                        compression_func=self.compression_func, n_steps=n_steps,
                                                         maxlen=self.max_length, padding='post', truncating=self.truncating,
                                                         negative_sampling_ratio=self.negative_sampling_ratio,
                                                         directed_proba=self.directed_proba,
                                                         batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_train") else self.generator_train
         else:
-            self.generator_train = DataGenerator(network=network,
+            self.generator_train = DataGenerator(network=network, weighted=self.weighted,
                                                  maxlen=self.max_length, padding='post', truncating=self.truncating,
                                                  negative_sampling_ratio=self.negative_sampling_ratio,
                                                  batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
@@ -287,7 +290,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.node_list = self.generator_train.node_list
 
         if network_val is not None:
-            self.generator_val = DataGenerator(network=network_val,
+            self.generator_val = DataGenerator(network=network_val, weighted=self.weighted,
                                                maxlen=self.max_length, padding='post', truncating="post",
                                                negative_sampling_ratio=1.0,
                                                batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
