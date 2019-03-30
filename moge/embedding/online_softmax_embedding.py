@@ -154,9 +154,9 @@ class OnlineSoftmaxLoss(Layer):
         assert isinstance(input_shape, list)
         embeddings_shape, labels_directed_shape, labels_undirected_shape = input_shape
         self._d = int(embeddings_shape[-1])
-        self.node_embeddings = self.add_weight(name='all_embeddings',
+        self.node_embeddings = self.add_weight(name='node_embeddings',
                                                shape=(self.num_nodes, self._d),
-                                               initializer='zeros',
+                                               initializer='uniform',
                                                trainable=False)
         self.node_bias = self.add_weight(name='node_bias',
                                          shape=(len(self.node_list),),
@@ -173,10 +173,14 @@ class OnlineSoftmaxLoss(Layer):
         embeddings, labels_directed, labels_undirected = input
 
         embeddings_s = embeddings[:, 0: int(self._d / 2)]
+        node_embeddings_s = self.node_embeddings[:, 0: int(self._d / 2)]
         node_embeddings_t = self.node_embeddings[:, int(self._d / 2): self._d]
 
         p1_proximities = _pairwise_dot_sigmoid_distances(embeddings_s, node_embeddings_t)
+
+        p2_proximities = _pairwise_dot_sigmoid_distances(embeddings, self.node_embeddings)
         print("p1_proximities", p1_proximities.shape)
+        print("p2_proximities", p2_proximities.shape)
 
 
 

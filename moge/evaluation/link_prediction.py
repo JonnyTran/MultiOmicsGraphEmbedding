@@ -18,7 +18,7 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator,
         evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
 
 
-def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=300, fig_save_path=None, data_generator=None):
+def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, fig_save_path=None, data_generator=None):
     fig = plt.figure(figsize=(4, 4), dpi=dpi)
     ax = fig.add_subplot(111)
 

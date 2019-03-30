@@ -134,19 +134,23 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                              Y=embeddings_Y,
                                              metric="euclidean", n_jobs=-2)
                     # Get node-specific adaptive threshold
-                    adj = self.transform_adj_adaptive_threshold(adj)
-                    print("Euclidean with adaptive threshold")
+                    # adj = self.transform_adj_adaptive_threshold(adj)
+                    # print("Euclidean with adaptive threshold")
+                    adj = np.exp(-2.0 * adj)
+
+                    print("Euclidean with exp(-2.0 * x)")
 
                 elif self.directed_distance == "cosine":
                     adj = pairwise_distances(X=embeddings_X,
                                              Y=embeddings_Y,
                                              metric="cosine", n_jobs=-2)
+                    adj = -adj
 
                 elif self.directed_distance == "dot_sigmoid":
                     adj = np.matmul(embeddings_X, embeddings_Y.T)
                     adj = sigmoid(adj)
-
                 adj = adj.T  # Transpose
+
             elif edge_type == 'u':
                 embeddings_X = embs
                 embeddings_Y = embs
@@ -159,6 +163,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 elif self.undirected_distance == "cosine":
                     adj = pairwise_distances(X=embeddings_X,
                                              metric="cosine", n_jobs=-2)
+                    adj = -adj  # Switch to similarity
 
                 elif self.undirected_distance == "dot_sigmoid":
                     adj = np.matmul(embeddings_X, embeddings_Y.T)
@@ -209,7 +214,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                  directed_distance="euclidean", undirected_distance="euclidean", source_target_dense_layers=True,
                  embedding_normalization=False, **kwargs):
         self.directed_margin = margin
-        self.undirected_margin = margin * 2
+        self.undirected_margin = margin
 
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, compression_func, negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
@@ -250,7 +255,6 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             # build create_lstm_network to use in each siamese 'leg'
             self.lstm_network = self.create_lstm_network()
-            print("lstm_network", self.lstm_network) if self.verbose else None
 
             # encode each of the inputs into a list of embedding vectors with the conv_lstm_network
             embeddings = self.lstm_network(input_seqs)

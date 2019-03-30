@@ -16,6 +16,7 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
+from moge.evaluation.metrics import accuracy_d, precision_d, recall_d
 from moge.network.edge_generator import DataGenerator, SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
@@ -261,7 +262,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
                                  optimizer=RMSprop(lr=self.lr),
-                                 # metrics=[accuracy_d, precision_d, recall_d],
+                                 metrics=[accuracy_d, precision_d, recall_d],
                                  # metrics=["accuracy", precision, recall],
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
@@ -416,7 +417,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
     def save_model(self, filename, model="lstm", logdir=True):
         if logdir and hasattr(self, "log_dir"):
             file_path = os.path.join(self.log_dir, filename)
-            params_path = file_path = os.path.join(self.log_dir, "params.txt")
+            params_path = os.path.join(self.log_dir, "params.txt")
         else:
             file_path = filename
 
