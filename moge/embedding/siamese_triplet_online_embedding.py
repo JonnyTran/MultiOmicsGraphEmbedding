@@ -157,21 +157,19 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = adj.T  # Transpose
 
             elif edge_type == 'u':
-                embeddings_X = embs
-                embeddings_Y = embs
                 if self.undirected_distance == "euclidean":
-                    adj = pairwise_distances(X=embeddings_X,
+                    adj = pairwise_distances(X=embs,
                                              metric="euclidean", n_jobs=-2)
                     adj = np.exp(-2.0 * adj)
                     print("Euclidean with exp(-2.0 * x)")
 
                 elif self.undirected_distance == "cosine":
-                    adj = pairwise_distances(X=embeddings_X,
+                    adj = pairwise_distances(X=embs,
                                              metric="cosine", n_jobs=-2)
                     adj = -adj  # Switch to similarity
 
                 elif self.undirected_distance == "dot_sigmoid":
-                    adj = np.matmul(embeddings_X, embeddings_Y.T)
+                    adj = np.matmul(embs, embs.T)
                     adj = sigmoid(adj)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
@@ -219,7 +217,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                  embedding_normalization=False, **kwargs):
         self.directed_margin = margin
         self.undirected_margin = margin
-
+        print("directed_margin", self.directed_margin, ", undirected_margin", self.undirected_margin)
+        assert directed_proba <= 1.0 and directed_proba >= 0, "directed_proba must be in [0, 1.0] range"
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, weighted, compression_func,
                          negative_sampling_ratio,
                          max_length, truncating, seed, verbose, conv1_kernel_size, conv1_batch_norm, max1_pool_size,
@@ -266,7 +265,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             print("embeddings", embeddings) if self.verbose else None
 
             output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
-                                       undirected_weight=self.directed_proba,
+                                       directed_weight=self.directed_proba,
                                        directed_distance=self.directed_distance,
                                        undirected_distance=self.undirected_distance)(
                 [embeddings, labels_directed, labels_undirected])
@@ -346,14 +345,14 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
 
 class OnlineTripletLoss(Layer):
-    def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, directed_distance="euclidean",
+    def __init__(self, directed_margin=0.2, undirected_margin=0.1, directed_weight=1.0, directed_distance="euclidean",
                  undirected_distance="euclidean",
                  **kwargs):
         super(OnlineTripletLoss, self).__init__(**kwargs)
         self.output_dim = ()
         self.directed_margin = directed_margin
         self.undirected_margin = undirected_margin
-        self.undirected_weight = undirected_weight
+        self.directed_weight = directed_weight
         self.directed_distance = directed_distance
         self.undirected_distance = undirected_distance
 
@@ -378,12 +377,12 @@ class OnlineTripletLoss(Layer):
                                                 labels=labels_directed,
                                                 margin=self.directed_margin,
                                                 distance=self.directed_distance)
-        if self.undirected_weight > 0:
-            undirected_loss = self.undirected_weight * batch_hard_triplet_loss(embeddings, embeddings,
-                                                                               labels=labels_undirected,
-                                                                               margin=self.undirected_margin,
-                                                                               distance=self.undirected_distance)
-            return tf.add(directed_loss, undirected_loss)
+        if self.directed_weight < 1.0:
+            undirected_loss = batch_hard_triplet_loss(embeddings, embeddings,
+                                                      labels=labels_undirected,
+                                                      margin=self.undirected_margin,
+                                                      distance=self.undirected_distance)
+            return tf.add(self.directed_weight * directed_loss, (1 - self.directed_weight) * undirected_loss)
         else:
             return directed_loss
 

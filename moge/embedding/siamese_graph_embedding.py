@@ -347,16 +347,26 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             assert len(self.node_list) == embs.shape[0]
 
             if edge_type == 'd':
-                adj = pairwise_distances(X=embs[:, 0:int(self._d / 2)],
-                                         Y=embs[:, int(self._d / 2):self._d],
-                                         metric="euclidean", n_jobs=-2)
-                # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
-                adj = np.exp(-2 * adj)
+                embeddings_X = embs[:, 0:int(self._d / 2)]
+                embeddings_Y = embs[:, int(self._d / 2):self._d]
+                if self.directed_distance == "euclidean":
+                    adj = pairwise_distances(X=embeddings_X,
+                                             Y=embeddings_Y,
+                                             metric="euclidean", n_jobs=-2)
+                    adj = np.exp(-2 * adj)
+                if self.directed_distance == "l1_alpha":
+                    adj = pairwise_distances(X=embeddings_X,
+                                             Y=embeddings_Y,
+                                             metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
+
             elif edge_type == 'u':
-                adj = pairwise_distances(X=embs,
-                                         metric="euclidean", n_jobs=-2)
-                # metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
-                adj = np.exp(-2 * adj)
+                if self.undirected_distance == "euclidean":
+                    adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=-2)
+                    adj = np.exp(-2 * adj)
+
+                if self.undirected_distance == "l1_alpha":
+                    adj = pairwise_distances(X=embs,
+                                             metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
             else:
                 raise Exception("Unsupported edge_type", edge_type)
 
