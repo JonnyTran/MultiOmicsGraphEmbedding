@@ -264,11 +264,11 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-            output = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
-                                       directed_weight=self.directed_proba,
-                                       directed_distance=self.directed_distance,
-                                       undirected_distance=self.undirected_distance)(
-                [embeddings, labels_directed, labels_undirected])
+            self.triplet_loss = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
+                                                  directed_weight=self.directed_proba,
+                                                  directed_distance=self.directed_distance,
+                                                  undirected_distance=self.undirected_distance)
+            output = self.triplet_loss([embeddings, labels_directed, labels_undirected])
 
             print("output", output) if self.verbose else None
 
@@ -372,7 +372,10 @@ class OnlineTripletLoss(Layer):
 
         embeddings_s = embeddings[:, 0: int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2): self._d]
-
+        print("labels_directed", labels_directed)
+        print("labels_undirected", labels_undirected)
+        self.labels_directed = labels_directed
+        self.labels_undirected = labels_undirected
         directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t,
                                                 labels=labels_directed,
                                                 margin=self.directed_margin,

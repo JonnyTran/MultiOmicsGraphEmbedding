@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 from moge.network.edge_generator import SampledDataGenerator, DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE, \
     UNDIRECTED_NEG_EDGE_TYPE, IS_DIRECTED, IS_UNDIRECTED
@@ -8,7 +9,7 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork, EPSILON
 def sparse_matrix_to_sparse_tensor(X):
     coo = X.tocoo()
     indices = np.mat([coo.row, coo.col]).transpose()
-    return indices, coo.data.astype(np.float), coo.shape
+    return tf.SparseTensor(indices, coo.data, coo.shape)
 
 class SampledTripletDataGenerator(SampledDataGenerator):
     def __init__(self, network: HeterogeneousNetwork, weighted=True,
