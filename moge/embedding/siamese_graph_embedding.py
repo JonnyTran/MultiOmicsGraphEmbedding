@@ -346,38 +346,42 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             embs = self.get_embedding(variable_length=var_len)
             assert len(self.node_list) == embs.shape[0]
 
-            if edge_type == 'd':
-                embeddings_X = embs[:, 0:int(self._d / 2)]
-                embeddings_Y = embs[:, int(self._d / 2):self._d]
-                if self.directed_distance == "euclidean":
-                    adj = pairwise_distances(X=embeddings_X,
-                                             Y=embeddings_Y,
-                                             metric="euclidean", n_jobs=-2)
-                    adj = np.exp(-2 * adj)
-                if self.directed_distance == "l1_alpha":
-                    adj = pairwise_distances(X=embeddings_X,
-                                             Y=embeddings_Y,
-                                             metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
-
-            elif edge_type == 'u':
-                if self.undirected_distance == "euclidean":
-                    adj = pairwise_distances(X=embs, metric="euclidean", n_jobs=-2)
-                    adj = np.exp(-2 * adj)
-
-                if self.undirected_distance == "l1_alpha":
-                    adj = pairwise_distances(X=embs,
-                                             metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
-            else:
-                raise Exception("Unsupported edge_type", edge_type)
+            adj = self._pairwise_similarity(embs, edge_type)
 
         if (node_l is None or node_l == self.node_list):
-            if edge_type=="d": self.reconstructed_adj = adj
+            if edge_type == "d": self.reconstructed_adj = adj
 
             return adj
         elif set(node_l) < set(self.node_list):
             return self._select_adj_indices(adj, node_l, node_l_b)
         else:
             raise Exception("A node in node_l is not in self.node_list.")
+
+    def _pairwise_similarity(self, embeddings, edge_type="d"):
+        if edge_type == 'd':
+            embeddings_X = embeddings[:, 0:int(self._d / 2)]
+            embeddings_Y = embeddings[:, int(self._d / 2):self._d]
+            if self.directed_distance == "euclidean":
+                adj = pairwise_distances(X=embeddings_X,
+                                         Y=embeddings_Y,
+                                         metric="euclidean", n_jobs=-2)
+                adj = np.exp(-2 * adj)
+            if self.directed_distance == "l1_alpha":
+                adj = pairwise_distances(X=embeddings_X,
+                                         Y=embeddings_Y,
+                                         metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
+
+        elif edge_type == 'u':
+            if self.undirected_distance == "euclidean":
+                adj = pairwise_distances(X=embeddings, metric="euclidean", n_jobs=-2)
+                adj = np.exp(-2 * adj)
+
+            if self.undirected_distance == "l1_alpha":
+                adj = pairwise_distances(X=embeddings,
+                                         metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
+        else:
+            raise Exception("Unsupported edge_type", edge_type)
+        return adj
 
     def save_embeddings(self, filename, logdir=True, variable_length=True, recompute=True, minlen=None):
         embs = self.get_embedding(variable_length=variable_length, recompute=recompute, minlen=minlen)

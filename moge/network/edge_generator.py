@@ -24,7 +24,7 @@ class DataGenerator(keras.utils.Sequence):
     def __init__(self, network: HeterogeneousNetwork, weighted=False,
                  batch_size=1, negative_sampling_ratio=3,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
-                 shuffle=True, seed=0, verbose=True):
+                 shuffle=True, seed=0, verbose=True, training_adj=None):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
         each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
@@ -55,6 +55,7 @@ class DataGenerator(keras.utils.Sequence):
         self.seed = seed
         self.sequence_to_matrix = sequence_to_matrix
         self.verbose = verbose
+        self.training_adj = training_adj
         np.random.seed(seed)
 
         self.genes_info = network.genes_info
@@ -93,7 +94,10 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_negative_sampling_edges(self):
         # All Negative Directed Edges (non-positive edges)
-        adj_positive = self.adj_directed + self.adj_undirected
+        if self.training_adj is not None:
+            adj_positive = self.adj_directed + self.adj_undirected + self.training_adj
+        else:
+            adj_positive = self.adj_directed + self.adj_undirected
         self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ens_count:", self.Ens_count) if self.verbose else None

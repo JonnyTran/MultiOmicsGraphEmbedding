@@ -210,6 +210,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
                                                    Y=self._X[:, int(self._d / 2):self._d],
                                                    metric="euclidean", n_jobs=-2)
             reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
+            reconstructed_adj = reconstructed_adj.T
 
         elif self._method_name == "HOPE":
             reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
@@ -222,8 +223,6 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         else:
             raise Exception("Method" + self.get_method_name() + "not supported")
-
-
 
         if node_l is None or node_l == self.node_list:
             self.reconstructed_adj = reconstructed_adj

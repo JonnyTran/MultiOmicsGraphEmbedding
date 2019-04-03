@@ -130,51 +130,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             embs = self.get_embedding()
             assert len(self.node_list) == embs.shape[0]
 
-            if edge_type == 'd':
-                embeddings_X = embs[:, 0:int(self._d / 2)]
-                embeddings_Y = embs[:, int(self._d / 2):self._d]
+            adj = self._pairwise_similarity(embs, edge_type)
 
-                if self.directed_distance == "euclidean":
-                    adj = pairwise_distances(X=embeddings_X,
-                                             Y=embeddings_Y,
-                                             metric="euclidean", n_jobs=-2)
-                    # Get node-specific adaptive threshold
-                    # adj = self.transform_adj_adaptive_threshold(adj)
-                    # print("Euclidean with adaptive threshold")
-                    adj = np.exp(-2.0 * adj)
-
-                    print("Euclidean with exp(-2.0 * x)")
-
-                elif self.directed_distance == "cosine":
-                    adj = pairwise_distances(X=embeddings_X,
-                                             Y=embeddings_Y,
-                                             metric="cosine", n_jobs=-2)
-                    adj = -adj
-
-                elif self.directed_distance == "dot_sigmoid":
-                    adj = np.matmul(embeddings_X, embeddings_Y.T)
-                    adj = sigmoid(adj)
-                adj = adj.T  # Transpose
-
-            elif edge_type == 'u':
-                if self.undirected_distance == "euclidean":
-                    adj = pairwise_distances(X=embs,
-                                             metric="euclidean", n_jobs=-2)
-                    adj = np.exp(-2.0 * adj)
-                    print("Euclidean with exp(-2.0 * x)")
-
-                elif self.undirected_distance == "cosine":
-                    adj = pairwise_distances(X=embs,
-                                             metric="cosine", n_jobs=-2)
-                    adj = -adj  # Switch to similarity
-
-                elif self.undirected_distance == "dot_sigmoid":
-                    adj = np.matmul(embs, embs.T)
-                    adj = sigmoid(adj)
-            else:
-                raise Exception("Unsupported edge_type", edge_type)
-
-        # interpolate to (0, 1) range
         if interpolate:
             adj = np.interp(adj, (adj.min(), adj.max()), (0, 1))
         if (node_l is None or node_l == self.node_list):
@@ -184,6 +141,54 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             return self._select_adj_indices(adj, node_l, node_l_b)
         else:
             raise Exception("A node in node_l is not in self.node_list.")
+
+    def _pairwise_similarity(self, embeddings, edge_type="d"):
+        if edge_type == 'd':
+            embeddings_X = embeddings[:, 0:int(self._d / 2)]
+            embeddings_Y = embeddings[:, int(self._d / 2):self._d]
+
+            if self.directed_distance == "euclidean":
+                adj = pairwise_distances(X=embeddings_X,
+                                         Y=embeddings_Y,
+                                         metric="euclidean", n_jobs=-2)
+                # Get node-specific adaptive threshold
+                # adj = self.transform_adj_adaptive_threshold(adj)
+                # print("Euclidean with adaptive threshold")
+                adj = np.exp(-2.0 * adj)
+                adj = adj.T  # Transpose
+                print("Euclidean with exp(-2.0 * x) and tranposed")
+
+            elif self.directed_distance == "cosine":
+                adj = pairwise_distances(X=embeddings_X,
+                                         Y=embeddings_Y,
+                                         metric="cosine", n_jobs=-2)
+                adj = -adj
+                adj = adj.T  # Transpose
+                print("Cosine distance and tranposed")
+
+            elif self.directed_distance == "dot_sigmoid":
+                adj = np.matmul(embeddings_X, embeddings_Y.T)
+                adj = sigmoid(adj)
+                print("Dot product & sigmoid")
+
+        elif edge_type == 'u':
+            if self.undirected_distance == "euclidean":
+                adj = pairwise_distances(X=embeddings,
+                                         metric="euclidean", n_jobs=-2)
+                adj = np.exp(-2.0 * adj)
+                print("Euclidean with exp(-2.0 * x)")
+
+            elif self.undirected_distance == "cosine":
+                adj = pairwise_distances(X=embeddings,
+                                         metric="cosine", n_jobs=-2)
+                adj = -adj  # Switch to similarity
+
+            elif self.undirected_distance == "dot_sigmoid":
+                adj = np.matmul(embeddings, embeddings.T)
+                adj = sigmoid(adj)
+        else:
+            raise Exception("Unsupported edge_type", edge_type)
+        return adj
 
     def transform_adj_adaptive_threshold(self, adj_pred):
         network_adj = self.generator_train.network.get_adjacency_matrix(edge_types="d",
@@ -345,7 +350,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
 
 class OnlineTripletLoss(Layer):
-    def __init__(self, directed_margin=0.2, undirected_margin=0.1, directed_weight=1.0, directed_distance="euclidean",
+    def __init__(self, directed_margin=0.2, undirected_margin=0.1, directed_weight=0.5, directed_distance="euclidean",
                  undirected_distance="euclidean",
                  **kwargs):
         super(OnlineTripletLoss, self).__init__(**kwargs)
@@ -372,14 +377,12 @@ class OnlineTripletLoss(Layer):
 
         embeddings_s = embeddings[:, 0: int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2): self._d]
-        print("labels_directed", labels_directed)
-        print("labels_undirected", labels_undirected)
-        self.labels_directed = labels_directed
-        self.labels_undirected = labels_undirected
+
         directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t,
                                                 labels=labels_directed,
                                                 margin=self.directed_margin,
                                                 distance=self.directed_distance)
+
         if self.directed_weight < 1.0:
             undirected_loss = batch_hard_triplet_loss(embeddings, embeddings,
                                                       labels=labels_undirected,
@@ -499,7 +502,7 @@ def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=
     mask_anchor_positive = _get_anchor_positive_triplet_mask(labels)
     mask_anchor_positive = tf.to_float(mask_anchor_positive)
 
-    # We put to 0 any element where (a, p) is not valid (valid if a != p and label(a) == label(p))
+    # We put to 0 any element where (a, p) is not a connection
     anchor_positive_dist = tf.multiply(mask_anchor_positive, pairwise_dist)
 
     # shape (batch_size, 1)

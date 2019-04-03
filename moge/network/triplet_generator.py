@@ -147,33 +147,34 @@ class OnlineTripletGenerator(SampledDataGenerator):
 
         return sampled_adj
 
-    @DeprecationWarning
-    def sample_random_negative_edges(self, adj):
+    def sample_random_negative_edges(self, pos_adj, sampled_nodes):
         """
         This samples a number of negative edges in proportion to the number of positive edges in the adjacency matrix,
         by sampling uniformly random edges.
 
-        :param adj: a sparse csr_matrix of shape [batch_size, batch_size] representing a sampled adjacency matrix containing only positive interactions
+        :param pos_adj: a sparse csr_matrix of shape [batch_size, batch_size] representing a sampled adjacency matrix containing only positive interactions
         :return: a sparse matrix containing both positive interactions and sampled negative interactions
         """
-        pos_rows, pos_cols = adj.nonzero()
+        pos_rows, pos_cols = pos_adj.nonzero()
         Ed_count = len(pos_rows)
-        sample_neg_count = min(int(Ed_count * self.negative_sampling_ratio), np.power(adj.shape[0], 2) * 0.25)
+        sample_neg_count = min(int(Ed_count * self.negative_sampling_ratio), np.power(pos_adj.shape[0], 2) * 0.25)
 
         # TODO implement random edge sampling based on the unigram distribution
-        neg_rows, neg_cols = np.where(adj.todense() == 0)
+        neg_rows, neg_cols = np.where(pos_adj.todense() == 0)
         sample_indices = np.random.choice(neg_rows.shape[0], sample_neg_count, replace=False)
-        adj = adj.tolil()
-        adj[neg_rows[sample_indices], neg_cols[sample_indices]] = EPSILON
+        pos_adj = pos_adj.tolil()
+        pos_adj[neg_rows[sample_indices], neg_cols[sample_indices]] = EPSILON
 
-        return adj
+        return pos_adj
 
 
 class OnlineSoftmaxGenerator(OnlineTripletGenerator):
-    def __init__(self, network: HeterogeneousNetwork, batch_size=1, directed_proba=0.5, negative_sampling_ratio=3,
+    def __init__(self, network: HeterogeneousNetwork, weighted=True, batch_size=1, directed_proba=0.5,
+                 negative_sampling_ratio=3,
                  n_steps=500, compression_func="log", maxlen=1400, padding='post', truncating='post',
                  sequence_to_matrix=False, shuffle=True, seed=0, verbose=True):
-        super().__init__(network, batch_size, directed_proba, negative_sampling_ratio, n_steps, compression_func,
+        super().__init__(network, weighted, batch_size, directed_proba, negative_sampling_ratio, n_steps,
+                         compression_func,
                          maxlen, padding, truncating, sequence_to_matrix, shuffle, seed, verbose)
 
     def __data_generation(self, sampled_nodes):
