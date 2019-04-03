@@ -4,7 +4,7 @@ import time
 import numpy as np
 import tensorflow as tf
 from keras import backend as K
-from keras.callbacks import TensorBoard
+from keras.callbacks import TensorBoard, EarlyStopping
 from keras.layers import Conv2D, Dense, Dropout, Bidirectional, CuDNNLSTM, Embedding
 from keras.layers import Dot, MaxPooling1D, Convolution1D, BatchNormalization, Concatenate
 from keras.layers import Input, Lambda
@@ -16,7 +16,7 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
-from moge.evaluation.metrics import accuracy_d, precision_d, recall_d, precision, recall
+from moge.evaluation.metrics import precision_d, recall_d, precision, recall
 from moge.network.edge_generator import DataGenerator, SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
@@ -142,16 +142,16 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
         x = MaxPooling1D(pool_size=self.max1_pool_size, padding="same")(x)
         print("max pooling_1", x) if self.verbose else None
-        x = Dropout(0.2)(x)
+        x = Dropout(0.2, noise_shape=(None, 1, 192))(x)
 
         if self.conv2_kernel_size is not None and self.conv2_kernel_size != 0:
-            x = Convolution1D(filters=192, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
+            x = Convolution1D(filters=320, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
             print("conv1d_2", x) if self.verbose else None
             if self.conv2_batch_norm:
                 x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
             x = MaxPooling1D(pool_size=self.max2_pool_size, padding="same")(x)
             print("max pooling_2", x) if self.verbose else None
-            x = Dropout(0.2)(x)
+            x = Dropout(0.2, noise_shape=(None, 1, 320))(x)
 
         x = Bidirectional(CuDNNLSTM(self.lstm_unit_size, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None
@@ -263,7 +263,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
                                  optimizer=RMSprop(lr=self.lr),
-                                 metrics=[accuracy_d, precision_d, recall_d] if not hasattr(self,
+                                 metrics=[precision_d, recall_d] if not hasattr(self,
                                                                                             "alpha_network") else [
                                      "accuracy", precision, recall],
                                  # metrics=,
@@ -272,6 +272,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
                         subsample=True, n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
+                        early_stopping=False,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
         if subsample:
             self.generator_train = SampledDataGenerator(network=network, weighted=self.weighted,
@@ -308,7 +309,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
-                                                       callbacks=[self.tensorboard] if tensorboard else None,
+                                                       callbacks=self.get_callbacks(early_stopping, tensorboard),
                                                        use_multiprocessing=True, workers=8)
         except KeyboardInterrupt:
             print("Stop training")
@@ -327,6 +328,17 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             # embeddings_data=self.generator_val.__getitem__(0)[0],
             # embeddings_layer_names=["embedding_output_normalized"],
         )
+
+    def get_callbacks(self, early_stopping=False, tensorboard=True):
+        callbacks = []
+        if tensorboard:
+            callbacks.append(self.tensorboard)
+        if early_stopping is not False:
+            if not hasattr(self, "early_stopping"):
+                self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=1, verbose=0, mode='auto',
+                                                    baseline=None, restore_best_weights=False)
+            callbacks.append(self.early_stopping)
+        return callbacks
 
     def save_network_weights(self):
         if hasattr(self, "alpha_network"):

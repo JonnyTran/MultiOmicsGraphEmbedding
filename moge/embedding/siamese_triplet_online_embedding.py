@@ -81,6 +81,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
                         subsample=True, n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
+                        early_stopping=False,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
 
         self.generator_train = SampledTripletDataGenerator(network=network, weighted=self.weighted,
@@ -110,7 +111,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
-                                                       callbacks=[self.tensorboard] if tensorboard else None,
+                                                       callbacks=self.get_callbacks(early_stopping, tensorboard),
                                                        use_multiprocessing=True, workers=8)
         except KeyboardInterrupt:
             print("Stop training")
@@ -151,12 +152,14 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="euclidean", n_jobs=-2)
-                # Get node-specific adaptive threshold
-                # adj = self.transform_adj_adaptive_threshold(adj)
-                # print("Euclidean with adaptive threshold")
-                adj = np.exp(-2.0 * adj)
                 adj = adj.T  # Transpose
-                print("Euclidean with exp(-2.0 * x) and tranposed")
+
+                # Get node-specific adaptive threshold
+                adj = self.transform_adj_adaptive_threshold(adj)
+                # print("Euclidean with adaptive threshold")
+                # adj = np.exp(-2.0 * adj)
+                # adj = -adj
+                print("Euclidean (adaptive threshold) and tranposed")
 
             elif self.directed_distance == "cosine":
                 adj = pairwise_distances(X=embeddings_X,
@@ -221,7 +224,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                  directed_distance="euclidean", undirected_distance="euclidean", source_target_dense_layers=True,
                  embedding_normalization=False, **kwargs):
         self.directed_margin = margin
-        self.undirected_margin = margin
+        self.undirected_margin = margin / 2
         print("directed_margin", self.directed_margin, ", undirected_margin", self.undirected_margin)
         assert directed_proba <= 1.0 and directed_proba >= 0, "directed_proba must be in [0, 1.0] range"
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, weighted, compression_func,
@@ -306,8 +309,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         )
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
-                        multi_gpu=False, subsample=True, n_steps=500, validation_steps=None, edge_f=None,
-                        is_weighted=False, no_python=False, rebuild_model=False, seed=0):
+                        early_stopping=False, multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
+                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
         self.generator_train = OnlineTripletGenerator(network=network, weighted=self.weighted,
                                                       compression_func=self.compression_func,
                                                       n_steps=n_steps,
@@ -337,11 +340,12 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.generator_val = self.generator_val.__getitem__(0) if type(
                 self.generator_val) == OnlineTripletGenerator else self.generator_val
 
+
         try:
             self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
-                                                       callbacks=[self.tensorboard] if tensorboard else None,
+                                                       callbacks=self.get_callbacks(early_stopping, tensorboard),
                                                        use_multiprocessing=True, workers=8)
         except KeyboardInterrupt:
             print("Stop training")
@@ -375,10 +379,10 @@ class OnlineTripletLoss(Layer):
         assert isinstance(input, list), "{}".format("(embeddings, labels_directed, labels_undirected) expected")
         embeddings, labels_directed, labels_undirected = input
 
-        embeddings_s = embeddings[:, 0: int(self._d / 2)]
-        embeddings_t = embeddings[:, int(self._d / 2): self._d]
+        # embeddings_s = embeddings[:, 0: int(self._d / 2)]
+        # embeddings_t = embeddings[:, int(self._d / 2): self._d]
 
-        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t,
+        directed_loss = batch_hard_triplet_loss(embeddings, embeddings,
                                                 labels=labels_directed,
                                                 margin=self.directed_margin,
                                                 distance=self.directed_distance)

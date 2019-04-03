@@ -142,6 +142,17 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         '''
         pass
 
+    def save_embeddings(self, file_path):
+        embs = self.get_embedding()
+        assert len(self.node_list) == embs.shape[0]
+        fout = open(file_path, 'w')
+        fout.write("{} {}\n".format(len(self.node_list), self._d))
+        for i in range(len(self.node_list)):
+            fout.write("{} {}\n".format(self.node_list[i],
+                                        ' '.join([str(x) for x in embs[i]])))
+        fout.close()
+        print("Saved at", file_path)
+
     def import_embedding(self, file, node_list):
         self.imported = True
         with open(file, "r") as fin:
@@ -199,10 +210,10 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             reconstructed_adj = np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
 
         elif self._method_name == "node2vec":
-            reconstructed_adj = self.softmax(np.dot(self._X, self._X.T))
+            reconstructed_adj = self.softmax(np.matmul(self._X, self._X.T))
 
         elif self._method_name == "BioVec":
-            reconstructed_adj = self.softmax(np.dot(self._X, self._X.T)) # TODO Double check paper
+            reconstructed_adj = self.softmax(np.matmul(self._X, self._X.T))  # TODO Double check paper
             # reconstructed_adj = reconstructed_adj.T  # Transpose matrix since there's a bug
 
         elif self._method_name == "rna2rna":

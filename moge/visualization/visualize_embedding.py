@@ -1,5 +1,3 @@
-import random
-
 import matplotlib.cm as cm
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
@@ -34,7 +32,7 @@ def visualize_embedding(embedding, network, edgelist=None, top_k=5000, test_node
     if node_label is not None:
         genes_info = network.genes_info
         node_labels = genes_info.loc[nodelist][node_label].str.split("|", expand=True)[0].astype(str)
-        sorted_node_labels = sorted(node_labels.unique(), reverse=random.choice([True, False]))
+        sorted_node_labels = sorted(node_labels.unique(), reverse=True)
         colors = np.linspace(0, 1, len(sorted_node_labels))
         node_colormap = {f: colors[sorted_node_labels.index(f)] for f in node_labels.unique()}
         node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
