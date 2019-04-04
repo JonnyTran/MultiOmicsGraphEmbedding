@@ -6,12 +6,12 @@ import numpy as np
 from sklearn.manifold import TSNE
 
 
-def visualize_embedding(embedding, network, edgelist=None, top_k=5000, test_nodes=None,
+def visualize_embedding(embedding, network, edgelist=None, top_k=0, test_nodes=None,
                         node_label="locus_type", cmap="gist_ncar", **kwargs):
     nodelist = embedding.node_list
     node_pos = embedding.get_tsne_node_pos()
 
-    if edgelist is None:
+    if edgelist is None and top_k > 0:
         edgelist = embedding.get_top_k_predicted_edges(edge_type="d", top_k=top_k,
                                                        node_list=nodelist, training_network=network)
         if len(edgelist[0]) > 2: # Has weight component
@@ -103,7 +103,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         plt.axis('off')
 
     if file_name:
-        plt.savefig('%s_vis.pdf' % (file_name), dpi=300, format='pdf', bbox_inches='tight')
+        plt.savefig('%s_vis.pdf' % (file_name), dpi=150, format='pdf', bbox_inches='tight')
         plt.figure()
 
 

@@ -84,23 +84,18 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                         early_stopping=False,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
 
-        self.generator_train = SampledTripletDataGenerator(network=network, weighted=self.weighted,
-                                                           compression_func=self.compression_func, n_steps=n_steps,
-                                                           maxlen=self.max_length, padding='post', truncating=self.truncating,
-                                                           negative_sampling_ratio=self.negative_sampling_ratio,
-                                                           directed_proba=self.directed_proba,
-                                                           batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
-            if not hasattr(self, "generator_train") else self.generator_train
-        self.node_list = self.generator_train.node_list
+        generator_train = self.get_training_data_generator(network, n_steps, seed)
 
         if network_val is not None:
             self.generator_val = SampledTripletDataGenerator(network=network_val, weighted=self.weighted,
                                                              maxlen=self.max_length, padding='post', truncating="post",
+                                                             tokenizer=generator_train.tokenizer,
                                                              negative_sampling_ratio=1.0,
                                                              batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
+        assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
 
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
         if histogram_freq > 0:
@@ -108,7 +103,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             self.generator_val = self.generator_val.__getitem__(0) if type(
                 self.generator_val) == OnlineTripletGenerator else self.generator_val
         try:
-            self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
+            self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
                                                        callbacks=self.get_callbacks(early_stopping, tensorboard),
@@ -117,6 +112,21 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             print("Stop training")
         finally:
             self.save_network_weights()
+
+    def get_training_data_generator(self, network, n_steps=250, seed=0):
+        if not hasattr(self, "generator_train"):
+            self.generator_train = SampledTripletDataGenerator(network=network, weighted=self.weighted,
+                                                               compression_func=self.compression_func, n_steps=n_steps,
+                                                               maxlen=self.max_length, padding='post',
+                                                               truncating=self.truncating,
+                                                               negative_sampling_ratio=self.negative_sampling_ratio,
+                                                               directed_proba=self.directed_proba,
+                                                               batch_size=self.batch_size, shuffle=True, seed=seed,
+                                                               verbose=self.verbose)
+        else:
+            return self.generator_train
+        self.node_list = self.generator_train.node_list
+        return self.generator_train
 
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, node_l_b=None, edge_type="d", interpolate=False):
         """
@@ -295,22 +305,42 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-    def build_tensorboard(self):
-        self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p'))
-        self.tensorboard = TensorBoard(
-            log_dir=self.log_dir,
-            histogram_freq=0,
-            write_grads=True, write_graph=False, write_images=True,
-            batch_size=self.batch_size,
-            # update_freq="epoch", embeddings_freq=0,
-            # embeddings_metadata="logs/metadata.tsv",
-            # embeddings_data=self.generator_val.__getitem__(0)[0],
-            # embeddings_layer_names=["embedding_output_normalized"],
-        )
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
                         early_stopping=False, multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
+        generator_train = self.get_training_data_generator(network, n_steps, seed)
+
+        if network_val is not None:
+            self.generator_val = OnlineTripletGenerator(network=network_val, weighted=self.weighted,
+                                                        maxlen=self.max_length, padding='post', truncating="post",
+                                                        tokenizer=generator_train.tokenizer,
+                                                        negative_sampling_ratio=10.0, n_steps=int(n_steps / 5),
+                                                        batch_size=self.batch_size, shuffle=True, seed=seed,
+                                                        verbose=self.verbose) \
+                if not hasattr(self, "generator_val") else self.generator_val
+        else:
+            self.generator_val = None
+        assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
+
+        if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
+
+        if histogram_freq > 0:
+            self.tensorboard.histogram_freq = histogram_freq
+            self.generator_val = self.generator_val.__getitem__(0) if type(
+                self.generator_val) == OnlineTripletGenerator else self.generator_val
+        try:
+            self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs,
+                                                       validation_data=self.generator_val,
+                                                       validation_steps=validation_steps,
+                                                       callbacks=self.get_callbacks(early_stopping, tensorboard),
+                                                       use_multiprocessing=True, workers=8)
+        except KeyboardInterrupt:
+            print("Stop training")
+        finally:
+            self.save_network_weights()
+
+    def get_training_data_generator(self, network, n_steps=250, seed=0):
         self.generator_train = OnlineTripletGenerator(network=network, weighted=self.weighted,
                                                       compression_func=self.compression_func,
                                                       n_steps=n_steps,
@@ -322,35 +352,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                                       verbose=self.verbose) \
             if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
-
-        if network_val is not None:
-            self.generator_val = OnlineTripletGenerator(network=network_val, weighted=self.weighted,
-                                                        maxlen=self.max_length, padding='post', truncating="post",
-                                                        negative_sampling_ratio=10.0,
-                                                        batch_size=self.batch_size, shuffle=True, seed=seed,
-                                                        verbose=self.verbose) \
-                if not hasattr(self, "generator_val") else self.generator_val
-        else:
-            self.generator_val = None
-
-        if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
-
-        if histogram_freq > 0:
-            self.tensorboard.histogram_freq = histogram_freq
-            self.generator_val = self.generator_val.__getitem__(0) if type(
-                self.generator_val) == OnlineTripletGenerator else self.generator_val
-
-
-        try:
-            self.hist = self.siamese_net.fit_generator(self.generator_train, epochs=self.epochs,
-                                                       validation_data=self.generator_val,
-                                                       validation_steps=validation_steps,
-                                                       callbacks=self.get_callbacks(early_stopping, tensorboard),
-                                                       use_multiprocessing=True, workers=8)
-        except KeyboardInterrupt:
-            print("Stop training")
-        finally:
-            self.save_network_weights()
+        return self.generator_train
 
 
 class OnlineTripletLoss(Layer):
@@ -379,10 +381,10 @@ class OnlineTripletLoss(Layer):
         assert isinstance(input, list), "{}".format("(embeddings, labels_directed, labels_undirected) expected")
         embeddings, labels_directed, labels_undirected = input
 
-        # embeddings_s = embeddings[:, 0: int(self._d / 2)]
-        # embeddings_t = embeddings[:, int(self._d / 2): self._d]
+        embeddings_s = embeddings[:, : int(self._d / 2)]
+        embeddings_t = embeddings[:, int(self._d / 2):]
 
-        directed_loss = batch_hard_triplet_loss(embeddings, embeddings,
+        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t,
                                                 labels=labels_directed,
                                                 margin=self.directed_margin,
                                                 distance=self.directed_distance)

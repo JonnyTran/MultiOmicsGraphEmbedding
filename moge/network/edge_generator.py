@@ -23,7 +23,7 @@ class DataGenerator(keras.utils.Sequence):
 
     def __init__(self, network: HeterogeneousNetwork, weighted=False,
                  batch_size=1, negative_sampling_ratio=3,
-                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
+                 maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
                  shuffle=True, seed=0, verbose=True, training_adj=None):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
@@ -64,15 +64,17 @@ class DataGenerator(keras.utils.Sequence):
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
         self.on_epoch_end()
-        self.process_sequence_tokenizer()
+        self.process_sequence_tokenizer(tokenizer)
 
-
-    def process_sequence_tokenizer(self):
-        self.tokenizer = Tokenizer(char_level=True, lower=False)
-        self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
-        self.genes_info["Transcript length"] = self.genes_info["Transcript sequence"].apply(
-            lambda x: len(x) if type(x) == str else None)
-        print("word index:", self.tokenizer.word_index) if self.verbose else None
+    def process_sequence_tokenizer(self, tokenizer):
+        if tokenizer is None:
+            self.tokenizer = Tokenizer(char_level=True, lower=False)
+            self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
+            self.genes_info["Transcript length"] = self.genes_info["Transcript sequence"].apply(
+                lambda x: len(x) if type(x) == str else None)
+            print("word index:", self.tokenizer.word_index) if self.verbose else None
+        else:
+            self.tokenizer = tokenizer
 
     def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)
@@ -373,15 +375,14 @@ class DataGenerator(keras.utils.Sequence):
 class SampledDataGenerator(DataGenerator):
     def __init__(self, network: HeterogeneousNetwork, weighted=False,
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
-                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
+                 maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
                  shuffle=True, seed=0, verbose=True):
         self.compression_func = compression_func
         self.n_steps = n_steps
         self.directed_proba = directed_proba
-        print("Using SampledDataGenerator") if verbose else None
         super().__init__(network, weighted,
                          batch_size, negative_sampling_ratio,
-                         maxlen, padding, truncating, sequence_to_matrix,
+                         maxlen, padding, truncating, tokenizer, sequence_to_matrix,
                          shuffle, seed, verbose)
         self.process_sampling_table(network)
 

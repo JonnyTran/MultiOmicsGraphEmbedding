@@ -22,8 +22,8 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, f
     fig = plt.figure(figsize=(4, 4), dpi=dpi)
     ax = fig.add_subplot(111)
 
-    color_dict = {"LINE":"b", "HOPE":"b", "SDNE":"y", "node2vec":"g", "rna2rna":"r", "siamese":"r"}
-    ls_dict = {"LINE":":", "HOPE":"-", "SDNE":"--", "node2vec":"--", "rna2rna":"-", "siamese":":"}
+    color_dict = {"LINE": "b", "HOPE": "c", "SDNE": "y", "node2vec": "g", "rna2rna": "r", "siamese": "r"}
+    ls_dict = {"LINE": ":", "HOPE": "-.", "SDNE": "--", "node2vec": "--", "rna2rna": "-", "siamese": ":"}
 
     for method in methods.keys():
         # if method is "siamese" and method == list(methods.keys())[-1]:
