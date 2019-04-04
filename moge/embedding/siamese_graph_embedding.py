@@ -134,8 +134,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         print("Embedding", x) if self.verbose else None
 
         x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm_lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
-        x = Conv2D(filters=192, kernel_size=(self.conv1_kernel_size, 1), activation='relu', data_format="channels_last", name="lstm_conv_1")(
-            x)  # (batch_number, sequence_length-5, 1, 192)
+        x = Conv2D(filters=320, kernel_size=(self.conv1_kernel_size, 1), activation='relu',
+                   data_format="channels_last", name="lstm_conv_1")(x)  # (batch_number, sequence_length-5, 1, 192)
         x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
 
@@ -143,20 +143,20 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
         x = MaxPooling1D(pool_size=self.max1_pool_size, padding="same")(x)
         print("max pooling_1", x) if self.verbose else None
-        x = Dropout(0.2, noise_shape=(None, 1, 192))(x)
+        x = Dropout(0.2, noise_shape=(None, 1, 320))(x)
 
         if self.conv2_kernel_size is not None and self.conv2_kernel_size != 0:
-            x = Convolution1D(filters=320, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
+            x = Convolution1D(filters=192, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
             print("conv1d_2", x) if self.verbose else None
             if self.conv2_batch_norm:
                 x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
             x = MaxPooling1D(pool_size=self.max2_pool_size, padding="same")(x)
             print("max pooling_2", x) if self.verbose else None
-            x = Dropout(0.2, noise_shape=(None, 1, 320))(x)
+            x = Dropout(0.2, noise_shape=(None, 1, 192))(x)
 
         x = Bidirectional(CuDNNLSTM(self.lstm_unit_size, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None
-        x = Dropout(0.2)(x)
+        x = Dropout(0.5)(x)
 
         if self.dense1_unit_size is not None and self.dense1_unit_size != 0:
             x = Dense(self.dense1_unit_size, activation='relu', name="dense_1")(x)
@@ -223,8 +223,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         dot_undirected = Dot(axes=1, normalize=False)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
 
-
-    def build_keras_model(self, multi_gpu):
+    def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
             device = "/cpu:0"
             allow_soft_placement = True
@@ -264,8 +263,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
                                  optimizer=RMSprop(lr=self.lr),
-                                 metrics=[precision_d, recall_d] if not hasattr(self,
-                                                                                            "alpha_network") else [
+                                 metrics=[precision_d, recall_d] if not hasattr(self, "alpha_network") else [
                                      "accuracy", precision, recall],
                                  # metrics=,
                                  )
@@ -280,7 +278,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if network_val is not None:
             self.generator_val = DataGenerator(network=network_val, weighted=self.weighted,
                                                maxlen=self.max_length, padding='post', truncating="post",
-                                               tokenizer=generator_train.tokenizer, negative_sampling_ratio=1.0,
+                                               tokenizer=generator_train.tokenizer,
+                                               negative_sampling_ratio=self.negative_sampling_ratio * 2,
                                                batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:

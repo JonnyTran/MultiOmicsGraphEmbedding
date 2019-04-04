@@ -1,3 +1,4 @@
+from keras.backend.tensorflow_backend import set_session
 from keras.layers import Layer
 from keras.optimizers import Adam
 
@@ -45,7 +46,9 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         K.clear_session()
         tf.reset_default_graph()
-        self.sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=allow_soft_placement))
+        config = tf.ConfigProto(allow_soft_placement=allow_soft_placement, log_device_placement=True)
+        self.sess = tf.Session(config=config)
+        set_session(self.sess)
 
         with tf.device(device):
             input_seq_i = Input(batch_shape=(self.batch_size, None), name="input_seq_i")
@@ -162,22 +165,21 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="euclidean", n_jobs=-2)
-                adj = adj.T  # Transpose
 
                 # Get node-specific adaptive threshold
                 adj = self.transform_adj_adaptive_threshold(adj)
+                adj = adj.T  # Transpose
                 # print("Euclidean with adaptive threshold")
                 # adj = np.exp(-2.0 * adj)
                 # adj = -adj
-                print("Euclidean (adaptive threshold) and tranposed")
+                print("Euclidean dist")
 
             elif self.directed_distance == "cosine":
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="cosine", n_jobs=-2)
-                adj = -adj
                 adj = adj.T  # Transpose
-                print("Cosine distance and tranposed")
+                print("Cosine similarity")
 
             elif self.directed_distance == "dot_sigmoid":
                 adj = np.matmul(embeddings_X, embeddings_Y.T)
@@ -194,7 +196,6 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             elif self.undirected_distance == "cosine":
                 adj = pairwise_distances(X=embeddings,
                                          metric="cosine", n_jobs=-2)
-                adj = -adj  # Switch to similarity
 
             elif self.undirected_distance == "dot_sigmoid":
                 adj = np.matmul(embeddings, embeddings.T)
@@ -257,14 +258,13 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             allow_soft_placement = True
         else:
             device = "/gpu:0"
-            allow_soft_placement = True
+            allow_soft_placement = False
 
         K.clear_session()
         tf.reset_default_graph()
-        config = tf.ConfigProto(allow_soft_placement=allow_soft_placement,
-                                log_device_placement=True)
-        config.gpu_options.allow_growth = True
-        self.sess = tf.Session(config=config)
+        # config = tf.ConfigProto(allow_soft_placement=allow_soft_placement)
+        # self.sess = tf.Session(config=config)
+        # set_session(self.sess)
 
         with tf.device(device):
             input_seqs = Input(batch_shape=(self.batch_size, None), dtype=tf.int8, name="input_seqs")
@@ -292,18 +292,18 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=output)
 
-        # Multi-gpu parallelization
-        if multi_gpu:
-            self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
+            # Multi-gpu parallelization
+            if multi_gpu:
+                self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
-        # Build tensorboard
-        self.build_tensorboard()
+            # Build tensorboard
+            self.build_tensorboard()
 
-        # Compile & train
-        self.siamese_net.compile(loss=self.identity_loss,
-                                 optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999),
-                                 )
-        print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
+            # Compile & train
+            self.siamese_net.compile(loss=self.identity_loss,
+                                     optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999),
+                                     )
+            print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
@@ -315,7 +315,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.generator_val = OnlineTripletGenerator(network=network_val, weighted=self.weighted,
                                                         maxlen=self.max_length, padding='post', truncating="post",
                                                         tokenizer=generator_train.tokenizer,
-                                                        negative_sampling_ratio=10.0, n_steps=int(n_steps / 5),
+                                                        negative_sampling_ratio=5.0, n_steps=int(n_steps / 5),
                                                         batch_size=self.batch_size, shuffle=True, seed=seed,
                                                         verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
@@ -384,16 +384,16 @@ class OnlineTripletLoss(Layer):
         embeddings_s = embeddings[:, : int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2):]
 
-        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t,
-                                                labels=labels_directed,
-                                                margin=self.directed_margin,
-                                                distance=self.directed_distance)
-
+        directed_loss = frobenius_norm_loss(embeddings_s, embeddings_t,
+                                            labels=labels_directed,
+                                            # margin=self.directed_margin,
+                                            distance=self.directed_distance)
+        print("labels_directed", labels_directed)
         if self.directed_weight < 1.0:
-            undirected_loss = batch_hard_triplet_loss(embeddings, embeddings,
-                                                      labels=labels_undirected,
-                                                      margin=self.undirected_margin,
-                                                      distance=self.undirected_distance)
+            undirected_loss = frobenius_norm_loss(embeddings, embeddings,
+                                                  labels=labels_undirected,
+                                                  # margin=self.undirected_margin,
+                                                  distance=self.undirected_distance)
             return tf.add(self.directed_weight * directed_loss, (1 - self.directed_weight) * undirected_loss)
         else:
             return directed_loss
@@ -410,7 +410,7 @@ def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
     """
     # Get the dot product between all embeddings
     # shape (batch_size, batch_size)
-    dot_product = tf.matmul(embeddings_A, embeddings_B, adjoint_b=True)
+    dot_product = tf.matmul(embeddings_A, embeddings_B, transpose_b=True)
 
     # Get squared L2 norm for each embedding. We can just take the diagonal of `dot_product`.
     # This also provides more numerical stability (the diagonal of the result will be exactly 0).
@@ -439,17 +439,17 @@ def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
     return distances
 
 
-def _pairwise_dot_sigmoid_distances(embeddings_A, embeddings_B):
-    dot_product = tf.matmul(embeddings_A, embeddings_B, adjoint_b=True)
+def _pairwise_dot_sigmoid_similarity(embeddings_A, embeddings_B):
+    dot_product = tf.matmul(embeddings_A, embeddings_B, transpose_b=True)
     sigmoids = tf.sigmoid(dot_product)
     return sigmoids
 
 
-def _pairwise_cosine_distance(embeddings_A, embeddings_B):
+def _pairwise_cosine_similarity(embeddings_A, embeddings_B):
     normalize_a = tf.nn.l2_normalize(embeddings_A, axis=-1)
     normalize_b = tf.nn.l2_normalize(embeddings_B, axis=-1)
-    cos_distance = 1 - tf.matmul(normalize_a, normalize_b, adjoint_b=True)
-    return cos_distance
+    cosine_similarities = tf.matmul(normalize_a, normalize_b, transpose_b=True)
+    return cosine_similarities
 
 
 
@@ -481,7 +481,6 @@ def _get_anchor_negative_triplet_mask(labels):
                                        default_value=False)
     return negative_mask
 
-
 def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=False, distance="euclidean"):
     """Build the triplet loss over a batch of embeddings.
     For each anchor, we get the hardest positive and hardest negative to form a triplet.
@@ -499,9 +498,9 @@ def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=
     if distance == "euclidean":
         pairwise_dist = _pairwise_distances(embeddings_A, embeddings_B, squared=squared)
     elif distance == "dot_sigmoid":
-        pairwise_dist = _pairwise_dot_sigmoid_distances(embeddings_A, embeddings_B)
+        pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings_A, embeddings_B)
     elif distance == "cosine":
-        pairwise_dist = _pairwise_cosine_distance(embeddings_A, embeddings_B)
+        pairwise_dist = 1 - _pairwise_cosine_similarity(embeddings_A, embeddings_B)
 
     # For each anchor, get the hardest positive
     # First, we need to get a mask for every valid positive (they should have same label)
@@ -535,3 +534,28 @@ def batch_hard_triplet_loss(embeddings_B, embeddings_A, labels, margin, squared=
     triplet_loss = tf.reduce_mean(triplet_loss)
 
     return triplet_loss
+
+
+def frobenius_norm_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor, squared=False, distance="euclidean"):
+    """
+    Args:
+        labels: labels of the batch, of size (batch_size,)
+        embeddings: tensor of shape (batch_size, embed_dim)
+        margin: margin for triplet loss
+        squared: Boolean. If true, output is the pairwise squared euclidean distance matrix.
+                 If false, output is the pairwise euclidean distance matrix.
+    Returns:
+        triplet_loss: scalar tensor containing the triplet loss
+    """
+    # Get the pairwise distance matrix
+    if distance == "euclidean":
+        pairwise_similarity = tf.exp(-_pairwise_distances(embeddings_A, embeddings_B, squared=squared))
+    elif distance == "dot_sigmoid":
+        pairwise_similarity = _pairwise_dot_sigmoid_similarity(embeddings_A, embeddings_B)
+    elif distance == "cosine":
+        pairwise_similarity = _pairwise_cosine_similarity(embeddings_A, embeddings_B)
+
+    probabilities_strided = tf.gather_nd(pairwise_similarity, labels.indices)
+    frobenius_norm_loss = tf.norm(tf.subtract(probabilities_strided, labels.values), ord=2)
+
+    return frobenius_norm_loss
