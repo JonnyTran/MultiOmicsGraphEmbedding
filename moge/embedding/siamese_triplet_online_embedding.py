@@ -8,6 +8,7 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTripletGenerator
 
 
+
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
     def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5, weighted=True,
                  compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
@@ -276,9 +277,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         distances = K.maximum(distances, 0.0)
 
         if not squared:
-            mask = tf.to_float(tf.equal(distances, 0.0))
+            mask = K.cast(K.equal(distances, 0.0), dtype="float32")
             distances = distances + mask * 1e-16
-            distances = tf.sqrt(distances)
+            distances = K.sqrt(distances)
             # Correct the epsilon added: set the distances on the mask to be exactly 0.0
             distances = distances * (1.0 - mask)
         return distances
