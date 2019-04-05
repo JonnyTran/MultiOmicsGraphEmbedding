@@ -247,17 +247,17 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                          **kwargs)
 
     def custom_recall(self, inputs):
-        pairwise_distances, labels = inputs
-        y_pred = tf.gather_nd(pairwise_distances, labels.indices)
-        y_true = labels.values
+        pairwise_distances, labels_indices, labels_values = inputs
+        y_pred = tf.gather_nd(pairwise_distances, labels_indices)
+        y_true = labels_values
         def recall(_y_true, _y_pred):
             return recall_d(y_true, y_pred)
         return recall
 
     def custom_precision(self, inputs):
-        pairwise_distances, labels = inputs
-        y_pred = tf.gather_nd(pairwise_distances, labels.indices)
-        y_true = labels.values
+        pairwise_distances, labels_indices, labels_values = inputs
+        y_pred = tf.gather_nd(pairwise_distances, labels_indices)
+        y_true = labels_values
         def precision(_y_true, _y_pred):
             return precision_d(y_true, y_pred)
 
@@ -325,9 +325,6 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False))(embeddings)
             print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
-            print("labels_directed.indices", labels_directed.indices)
-            print("labels_directed.values", labels_directed.values)
-
             directed_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
                 [directed_pairwise_distances, labels_directed.indices, labels_directed.values])
             undirected_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
@@ -353,8 +350,11 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             # Compile & train
             self.siamese_net.compile(loss=self.identity_loss,
                                      optimizer=Adam(lr=self.lr),
-                                     metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
-                                              self.custom_precision([directed_pairwise_distances, labels_directed])]
+                                     metrics=[self.custom_recall([directed_pairwise_distances, labels_directed.indices,
+                                                                  labels_directed.values]),
+                                              self.custom_precision(
+                                                  [directed_pairwise_distances, labels_directed.indices,
+                                                   labels_directed.values])]
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
