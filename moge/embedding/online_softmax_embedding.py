@@ -26,7 +26,7 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
                          directed_distance, undirected_distance, source_target_dense_layers, embedding_normalization,
                          **kwargs)
 
-    def custom_loss(self, loss):
+    def custom_recall(self, loss):
         def loss(y_true, y_pred):
             return K.identity(loss)
 

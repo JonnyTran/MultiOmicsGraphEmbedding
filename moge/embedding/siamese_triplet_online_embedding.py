@@ -246,7 +246,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                          directed_distance, undirected_distance, source_target_dense_layers, embedding_normalization,
                          **kwargs)
 
-    def custom_loss(self, inputs):
+    def custom_recall(self, inputs):
         embeddings, labels = inputs
         embeddings_A = embeddings[:, :int(self._d / 2)]
         embeddings_B = embeddings[:, int(self._d / 2):]
@@ -261,10 +261,30 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         y_pred = tf.gather_nd(pairwise_distances, labels.indices)
         y_true = labels.values
 
-        def loss(_y_true, _y_pred):
+        def recall(_y_true, _y_pred):
             return recall_d(y_true, y_pred)
 
-        return loss
+        return recall
+
+    def custom_precision(self, inputs):
+        embeddings, labels = inputs
+        embeddings_A = embeddings[:, :int(self._d / 2)]
+        embeddings_B = embeddings[:, int(self._d / 2):]
+
+        if self.directed_distance == "euclidean":
+            pairwise_distances = _pairwise_distances(embeddings_A, embeddings_B, squared=True)
+        elif self.directed_distance == "dot_sigmoid":
+            pairwise_distances = 1 - _pairwise_dot_sigmoid_similarity(embeddings_A, embeddings_B)
+        elif self.directed_distance == "cosine":
+            pairwise_distances = 1 - _pairwise_cosine_similarity(embeddings_A, embeddings_B)
+
+        y_pred = tf.gather_nd(pairwise_distances, labels.indices)
+        y_true = labels.values
+
+        def precision(_y_true, _y_pred):
+            return precision_d(y_true, y_pred)
+
+        return precision
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
@@ -315,8 +335,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             # Compile & train
             self.siamese_net.compile(loss=self.identity_loss,
-                                     optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999),
-                                     metrics=[self.custom_loss([embeddings, labels_directed]), ]
+                                     optimizer=Adam(lr=self.lr),
+                                     metrics=[self.custom_recall([embeddings, labels_directed]),
+                                              self.custom_precision([embeddings, labels_directed])]
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
