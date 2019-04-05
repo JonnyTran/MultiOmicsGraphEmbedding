@@ -284,10 +284,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         return distances
 
     def batch_contrastive_loss(self, inputs):
-        pairwise_distance, labels = inputs
-        print("batch_contrastive_loss/labels", labels)
-        y_pred = K.gather(pairwise_distance, labels.indices)
-        y_true = labels.values
+        pairwise_distance, labels_indices, labels_values = inputs
+        y_pred = K.gather(pairwise_distance, labels_indices)
+        y_true = labels_values
         loss = contrastive_loss(y_pred, y_true)
         return loss
 
@@ -325,10 +324,13 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False))(embeddings)
             print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
+            print("labels_directed.indices", labels_directed.indices)
+            print("labels_directed.values", labels_directed.values)
+
             directed_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
-                [directed_pairwise_distances, labels_directed])
+                [directed_pairwise_distances, labels_directed.indices, labels_directed.values])
             undirected_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
-                [undirected_pairwise_distances, labels_undirected])
+                [undirected_pairwise_distances, labels_undirected.indices, labels_undirected.values])
             output = Lambda(lambda x: x[0] + self.directed_proba * x[1])([directed_loss, undirected_loss])
             # self.triplet_loss = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
             #                                       directed_weight=self.directed_proba,
