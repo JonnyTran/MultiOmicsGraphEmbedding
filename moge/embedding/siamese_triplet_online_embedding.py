@@ -350,11 +350,11 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             # Compile & train
             self.siamese_net.compile(loss=self.identity_loss,
                                      optimizer=Adam(lr=self.lr),
-                                     metrics=[self.custom_recall([directed_pairwise_distances, labels_directed.indices,
-                                                                  labels_directed.values]),
-                                              self.custom_precision(
-                                                  [directed_pairwise_distances, labels_directed.indices,
-                                                   labels_directed.values])]
+                                     # metrics=[self.custom_recall([directed_pairwise_distances, labels_directed.indices,
+                                     #                              labels_directed.values]),
+                                     #          self.custom_precision(
+                                     #              [directed_pairwise_distances, labels_directed.indices,
+                                     #               labels_directed.values])]
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
