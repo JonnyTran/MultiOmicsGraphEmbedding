@@ -323,6 +323,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True))(embeddings)
             undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False))(embeddings)
+            print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
             directed_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
                 [directed_pairwise_distances, labels_directed])
