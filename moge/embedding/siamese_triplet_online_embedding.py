@@ -247,44 +247,48 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                          **kwargs)
 
     def custom_recall(self, inputs):
-        embeddings, labels = inputs
-        embeddings_A = embeddings[:, :int(self._d / 2)]
-        embeddings_B = embeddings[:, int(self._d / 2):]
-
-        if self.directed_distance == "euclidean":
-            pairwise_distances = _pairwise_distances(embeddings_A, embeddings_B, squared=True)
-        elif self.directed_distance == "dot_sigmoid":
-            pairwise_distances = 1 - _pairwise_dot_sigmoid_similarity(embeddings_A, embeddings_B)
-        elif self.directed_distance == "cosine":
-            pairwise_distances = 1 - _pairwise_cosine_similarity(embeddings_A, embeddings_B)
-
+        pairwise_distances, labels = inputs
         y_pred = tf.gather_nd(pairwise_distances, labels.indices)
         y_true = labels.values
-
         def recall(_y_true, _y_pred):
             return recall_d(y_true, y_pred)
-
         return recall
 
     def custom_precision(self, inputs):
-        embeddings, labels = inputs
-        embeddings_A = embeddings[:, :int(self._d / 2)]
-        embeddings_B = embeddings[:, int(self._d / 2):]
-
-        if self.directed_distance == "euclidean":
-            pairwise_distances = _pairwise_distances(embeddings_A, embeddings_B, squared=True)
-        elif self.directed_distance == "dot_sigmoid":
-            pairwise_distances = 1 - _pairwise_dot_sigmoid_similarity(embeddings_A, embeddings_B)
-        elif self.directed_distance == "cosine":
-            pairwise_distances = 1 - _pairwise_cosine_similarity(embeddings_A, embeddings_B)
-
+        pairwise_distances, labels = inputs
         y_pred = tf.gather_nd(pairwise_distances, labels.indices)
         y_true = labels.values
-
         def precision(_y_true, _y_pred):
             return precision_d(y_true, y_pred)
 
         return precision
+
+    def pairwise_distances(self, embeddings, directed=True, squared=False):
+        if directed:
+            embeddings_s = embeddings[:, : int(self._d / 2)]
+            embeddings_t = embeddings[:, int(self._d / 2):]
+        else:
+            embeddings_s = embeddings
+            embeddings_t = embeddings
+        dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
+        square_norm = tf.diag_part(dot_product)
+        distances = K.expand_dims(square_norm, 1) - 2.0 * dot_product + K.expand_dims(square_norm, 0)
+        distances = K.maximum(distances, 0.0)
+
+        if not squared:
+            mask = tf.to_float(tf.equal(distances, 0.0))
+            distances = distances + mask * 1e-16
+            distances = tf.sqrt(distances)
+            # Correct the epsilon added: set the distances on the mask to be exactly 0.0
+            distances = distances * (1.0 - mask)
+        return distances
+
+    def batch_contrastive_loss(self, inputs):
+        pairwise_distance, labels = inputs
+        y_pred = K.gather(pairwise_distance, labels.indices)
+        y_true = labels.values
+        loss = contrastive_loss(y_pred, y_true)
+        return loss
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
@@ -316,11 +320,19 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-            self.triplet_loss = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
-                                                  directed_weight=self.directed_proba,
-                                                  directed_distance=self.directed_distance,
-                                                  undirected_distance=self.undirected_distance)
-            output = self.triplet_loss([embeddings, labels_directed, labels_undirected])
+            directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True))(embeddings)
+            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False))(embeddings)
+
+            directed_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
+                [directed_pairwise_distances, labels_directed])
+            undirected_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
+                [undirected_pairwise_distances, labels_undirected])
+            output = Lambda(lambda x: x[0] + self.directed_proba * x[1])([directed_loss, undirected_loss])
+            # self.triplet_loss = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
+            #                                       directed_weight=self.directed_proba,
+            #                                       directed_distance=self.directed_distance,
+            #                                       undirected_distance=self.undirected_distance)
+            # output = self.triplet_loss([embeddings, labels_directed, labels_undirected])
 
             print("output", output) if self.verbose else None
 
@@ -336,8 +348,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             # Compile & train
             self.siamese_net.compile(loss=self.identity_loss,
                                      optimizer=Adam(lr=self.lr),
-                                     metrics=[self.custom_recall([embeddings, labels_directed]),
-                                              self.custom_precision([embeddings, labels_directed])]
+                                     metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
+                                              self.custom_precision([directed_pairwise_distances, labels_directed])]
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
