@@ -14,7 +14,7 @@ def visualize_embedding(embedding, network, edgelist=None, top_k=0, test_nodes=N
     if edgelist is None and top_k > 0:
         edgelist = embedding.get_top_k_predicted_edges(edge_type="d", top_k=top_k,
                                                        node_list=nodelist, training_network=network)
-        if len(edgelist[0]) > 2: # Has weight component
+        if len(edgelist[0]) > 2:  # Has weigh(t component
             edge_weights = [w for u,v,w in edgelist]
             edgelist = [(u, v) for u,v,w in edgelist]
             kwargs["edge_color"] = edge_weights

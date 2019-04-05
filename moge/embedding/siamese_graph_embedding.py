@@ -138,11 +138,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                    data_format="channels_last", name="lstm_conv_1")(x)  # (batch_number, sequence_length-5, 1, 192)
         x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x) if self.verbose else None
-
         if self.conv1_batch_norm:
             x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
         x = MaxPooling1D(pool_size=self.max1_pool_size, padding="same")(x)
-        print("max pooling_1", x) if self.verbose else None
+
         x = Dropout(0.2, noise_shape=(None, 1, 320))(x)
 
         if self.conv2_kernel_size is not None and self.conv2_kernel_size != 0:
@@ -165,12 +164,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if self.source_target_dense_layers:
             source = Dense(int(self._d / 2), activation='linear', name="dense_source")(x)
             if self.embedding_normalization:
-                source = BatchNormalization(center=True, scale=True, name="source_normalized")(source)
+                source = Lambda(lambda x: K.l2_normalize(x, axis=-1))(source)
             print("source", source) if self.verbose else None
 
             target = Dense(int(self._d / 2), activation='linear', name="dense_target")(x)
             if self.embedding_normalization:
-                target = BatchNormalization(center=True, scale=True, name="target_normalized")(target)
+                target = Lambda(lambda x: K.l2_normalize(x, axis=-1))(target)
             print("target", target) if self.verbose else None
 
             x = Concatenate(axis=-1, name="embedding_output")(
@@ -178,7 +177,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         else:
             x = Dense(self._d, activation='linear', name="embedding_output")(x)
             if self.embedding_normalization:
-                x = BatchNormalization(center=True, scale=True, name="embedding_output_normalized")(x)
+                x = Lambda(lambda x: K.l2_normalize(x, axis=-1))(x)
 
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")

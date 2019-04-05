@@ -114,7 +114,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
     def __data_generation(self, sampled_nodes):
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
-        sampled_directed_adj = self.sample_directed_negative_edges(
+        sampled_directed_adj = self.sample_random_negative_edges(
             self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes), sampled_nodes)
         X["labels_directed"] = sampled_directed_adj
         X["labels_undirected"] = self.network.get_adjacency_matrix(edge_types=["u", "u_n"], node_list=sampled_nodes)
@@ -160,7 +160,6 @@ class OnlineTripletGenerator(SampledDataGenerator):
         Ed_count = len(pos_rows)
         sample_neg_count = min(int(Ed_count * self.negative_sampling_ratio), np.power(pos_adj.shape[0], 2) * 0.25)
 
-        # TODO implement random edge sampling based on the unigram distribution
         neg_rows, neg_cols = np.where(pos_adj.todense() == 0)
         sample_indices = np.random.choice(neg_rows.shape[0], sample_neg_count, replace=False)
         pos_adj = pos_adj.tolil()
