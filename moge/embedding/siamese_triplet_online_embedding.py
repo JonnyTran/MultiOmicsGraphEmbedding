@@ -285,6 +285,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
     def batch_contrastive_loss(self, inputs):
         pairwise_distance, labels = inputs
+        print("labels", labels)
         y_pred = K.gather(pairwise_distance, labels.indices)
         y_true = labels.values
         loss = contrastive_loss(y_pred, y_true)
