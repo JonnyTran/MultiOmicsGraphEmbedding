@@ -3,7 +3,7 @@ import numpy as np
 from scipy.sparse import coo_matrix
 
 
-def bar_chart(results: dict, measures, title=None, loc="lower right"):
+def bar_chart(results: dict, measures, title=None, bar_width=0.08, loc="best"):
     methods = list(results.keys())
     y_pos = np.arange(len(measures))
 
@@ -20,8 +20,9 @@ def bar_chart(results: dict, measures, title=None, loc="lower right"):
         fig, ax = plt.subplots()
         index = np.arange(n_groups)
 
-        color = ['b', 'g', 'c', 'r', 'm', 'y']
-        bar_width = 0.08
+        color_dict = {"LINE": "b", "HOPE": "c", "SDNE": "y", "node2vec": "g", "BioVec": "m", "rna2rna": "r",
+                      "siamese": "r",
+                      "Databases": "k"}
         opacity = 0.8
 
         for method in methods:
@@ -30,10 +31,9 @@ def bar_chart(results: dict, measures, title=None, loc="lower right"):
                 performances[method].append(results[method][measure])
 
         for idx, method in enumerate(methods):
-            print("performances[method]", method, performances[method])
             plt.bar(y_pos + idx * bar_width, performances[method], bar_width,
                     alpha=opacity,
-                    color=color[idx % len(color)],
+                    color=color_dict[method],
                     label=method.replace("test_", ""))
         # plt.xlabel('Methods')
         plt.ylabel('Scores')
