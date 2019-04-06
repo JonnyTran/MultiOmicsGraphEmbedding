@@ -69,8 +69,8 @@ class HeterogeneousNetwork():
             genes_info_list.append(gene_info)
 
         self.genes_info = pd.concat(genes_info_list, join="inner", copy=True)
-        self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[
-            0]  # TODO Selects only first family annotation if an RNA belongs to multiple
+        # self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[
+        #     0]  # TODO Selects only first family annotation if an RNA belongs to multiple
         print("Genes info columns:", self.genes_info.columns.tolist())
         self.genes_info = self.genes_info[~self.genes_info.index.duplicated()]
 

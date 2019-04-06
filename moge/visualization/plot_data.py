@@ -3,6 +3,48 @@ import numpy as np
 from scipy.sparse import coo_matrix
 
 
+def bar_chart(results: dict, measures, title=None, loc="lower right"):
+    methods = list(results.keys())
+    y_pos = np.arange(len(measures))
+
+    if type(measures) == str:
+        performances = [results[method] for method in methods]
+
+        plt.bar(y_pos, performances, align='center', alpha=0.5)
+        plt.xticks(y_pos, methods)
+        plt.ylabel(measures)
+
+    elif type(measures) == list:
+        n_groups = len(methods)
+        performances = {}
+        fig, ax = plt.subplots()
+        index = np.arange(n_groups)
+
+        color = ['b', 'g', 'c', 'r', 'm', 'y']
+        bar_width = 0.08
+        opacity = 0.8
+
+        for method in methods:
+            performances[method] = []
+            for measure in measures:
+                performances[method].append(results[method][measure])
+
+        for idx, method in enumerate(methods):
+            print("performances[method]", method, performances[method])
+            plt.bar(y_pos + idx * bar_width, performances[method], bar_width,
+                    alpha=opacity,
+                    color=color[idx % len(color)],
+                    label=method.replace("test_", ""))
+        # plt.xlabel('Methods')
+        plt.ylabel('Scores')
+        plt.xticks(y_pos + bar_width * (n_groups / 2), measures)
+        plt.legend(loc=loc)
+
+    plt.tight_layout()
+    plt.title(title)
+    plt.show()
+
+
 def matrix_heatmap(matrix, figsize=(12,12), cmap='gray', **kwargs):
     # Scatter plot of the graph adjacency matrix
 

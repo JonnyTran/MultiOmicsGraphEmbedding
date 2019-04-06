@@ -37,7 +37,7 @@ def evaluate_classification(embedding, network, cv=5, node_label="Family", multi
         clf = classifier
     else:
         if multilabel:
-            clf = KNeighborsClassifier(n_neighbors=10, weights="distance", algorithm="auto", metric="euclidean")
+            clf = KNeighborsClassifier(n_neighbors=3, weights="distance", algorithm="auto", metric="euclidean")
         else:
             clf = svm.LinearSVC(multi_class="ovr")
 

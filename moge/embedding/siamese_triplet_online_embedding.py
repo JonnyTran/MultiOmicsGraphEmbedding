@@ -8,7 +8,6 @@ from moge.network.heterogeneous_network import HeterogeneousNetwork
 from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTripletGenerator
 
 
-
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
     def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5, weighted=True,
                  compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
@@ -248,17 +247,17 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                          **kwargs)
 
     def custom_recall(self, inputs):
-        pairwise_distances, labels_indices, labels_values = inputs
-        y_pred = tf.gather_nd(pairwise_distances, labels_indices)
-        y_true = labels_values
+        pairwise_distances, labels = inputs
+        y_pred = tf.gather_nd(pairwise_distances, labels.indices)
+        y_true = labels.values
         def recall(_y_true, _y_pred):
             return recall_d(y_true, y_pred)
         return recall
 
     def custom_precision(self, inputs):
-        pairwise_distances, labels_indices, labels_values = inputs
-        y_pred = tf.gather_nd(pairwise_distances, labels_indices)
-        y_true = labels_values
+        pairwise_distances, labels = inputs
+        y_pred = tf.gather_nd(pairwise_distances, labels.indices)
+        y_true = labels.values
         def precision(_y_true, _y_pred):
             return precision_d(y_true, y_pred)
 
@@ -266,31 +265,42 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
     def pairwise_distances(self, embeddings, directed=True, squared=False):
         if directed:
-            embeddings_s = embeddings[:, : int(self._d / 2)]
-            embeddings_t = embeddings[:, int(self._d / 2):]
+            embeddings_s = embeddings[:, 0:int(self._d / 2)]
+            embeddings_t = embeddings[:, int(self._d / 2):self._d]
         else:
             embeddings_s = embeddings
             embeddings_t = embeddings
+
         dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
         square_norm = tf.diag_part(dot_product)
         distances = K.expand_dims(square_norm, 1) - 2.0 * dot_product + K.expand_dims(square_norm, 0)
         distances = K.maximum(distances, 0.0)
-
         if not squared:
-            mask = K.cast(K.equal(distances, 0.0), dtype="float32")
+            mask = tf.to_float(tf.equal(distances, 0.0))
             distances = distances + mask * 1e-16
-            distances = K.sqrt(distances)
+            distances = tf.sqrt(distances)
             # Correct the epsilon added: set the distances on the mask to be exactly 0.0
             distances = distances * (1.0 - mask)
         return distances
 
     def batch_contrastive_loss(self, inputs):
-        pairwise_distance, labels_indices, labels_values = inputs
-        print("batch_contrastive_loss/labels_indices", labels_indices)
-        y_pred = K.gather(pairwise_distance, K.cast(labels_indices, dtype="int64"))
-        y_true = labels_values
-        loss = contrastive_loss(y_pred, y_true)
-        return loss
+        print("batch_contrastive_loss/inputs", inputs)
+        pairwise_distance_directed, pairwise_distance_undirected, labels_directed, labels_undirected = inputs
+        y_pred_directed = tf.gather_nd(pairwise_distance_directed, labels_directed.indices)
+        y_true_directed = labels_directed.values
+
+        y_pred_undirected = tf.gather_nd(pairwise_distance_undirected, labels_undirected.indices)
+        y_true_undirected = labels_undirected.values
+        print("y_pred_directed", y_pred_directed)
+        print("y_true_directed", y_true_directed)
+        print("y_pred_undirected", y_pred_undirected)
+        print("y_true_undirected", y_true_undirected)
+
+        def _contrastive_loss(_y_true, _y_pred):
+            return contrastive_loss(y_true_directed, y_pred_directed) + contrastive_loss(y_true_undirected,
+                                                                                         y_pred_undirected)
+
+        return _contrastive_loss
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
@@ -307,10 +317,10 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         # set_session(self.sess)
 
         with tf.device(device):
-            input_seqs = Input(batch_shape=(self.batch_size, None), dtype=tf.int8, name="input_seqs")
-            labels_directed = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True, dtype=tf.float32,
+            input_seqs = Input(batch_shape=(None, None), dtype=tf.int8, name="input_seqs")
+            labels_directed = Input(batch_shape=(None, None), sparse=True, dtype=tf.float32,
                                     name="labels_directed")
-            labels_undirected = Input(batch_shape=(self.batch_size, self.batch_size), sparse=True, dtype=tf.float32,
+            labels_undirected = Input(batch_shape=(None, None), sparse=True, dtype=tf.float32,
                                       name="labels_undirected")
             print("labels_directed", labels_directed) if self.verbose else None
             print("labels_undirected", labels_undirected) if self.verbose else None
@@ -322,24 +332,21 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-            directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True))(embeddings)
-            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False))(embeddings)
+            directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True),
+                                                 name="directed_pairwise_distances")(embeddings)
+            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False),
+                                                   name="undirected_pairwise_distances")(embeddings)
             print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
-            directed_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
-                [directed_pairwise_distances, labels_directed.indices, labels_directed.values])
-            undirected_loss = Lambda(lambda x: self.batch_contrastive_loss(x))(
-                [undirected_pairwise_distances, labels_undirected.indices, labels_undirected.values])
-            output = Lambda(lambda x: x[0] + self.directed_proba * x[1])([directed_loss, undirected_loss])
             # self.triplet_loss = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
             #                                       directed_weight=self.directed_proba,
             #                                       directed_distance=self.directed_distance,
             #                                       undirected_distance=self.undirected_distance)
             # output = self.triplet_loss([embeddings, labels_directed, labels_undirected])
 
-            print("output", output) if self.verbose else None
+            # print("output", output) if self.verbose else None
 
-            self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=output)
+            self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=embeddings)
 
             # Multi-gpu parallelization
             if multi_gpu:
@@ -349,13 +356,14 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.build_tensorboard()
 
             # Compile & train
-            self.siamese_net.compile(loss=self.identity_loss,
+            self.siamese_net.compile(loss=self.batch_contrastive_loss([directed_pairwise_distances,
+                                                                       undirected_pairwise_distances,
+                                                                       labels_directed, labels_undirected]),
                                      optimizer=Adam(lr=self.lr),
-                                     # metrics=[self.custom_recall([directed_pairwise_distances, labels_directed.indices,
-                                     #                              labels_directed.values]),
-                                     #          self.custom_precision(
-                                     #              [directed_pairwise_distances, labels_directed.indices,
-                                     #               labels_directed.values])]
+                                     metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
+                                              self.custom_precision([directed_pairwise_distances, labels_directed])] if \
+                                         self.directed_distance == "euclidean" else None,
+
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
