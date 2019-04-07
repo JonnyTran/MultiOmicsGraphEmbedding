@@ -267,10 +267,15 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         if directed:
             embeddings_s = embeddings[:, 0:int(self._d / 2)]
             embeddings_t = embeddings[:, int(self._d / 2):self._d]
-        else:
-            embeddings_s = embeddings
-            embeddings_t = embeddings
 
+            return self._pairwise_euclidean(embeddings_s, embeddings_t, squared)
+        else:
+            embeddings_s = embeddings[:, 0:int(self._d / 2)]
+            embeddings_t = embeddings[:, int(self._d / 2):self._d]
+            return K.minimum(self._pairwise_euclidean(embeddings_s, embeddings_s, squared),
+                             self._pairwise_euclidean(embeddings_t, embeddings_t, squared))
+
+    def _pairwise_euclidean(self, embeddings_s, embeddings_t, squared):
         dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
         square_norm = tf.diag_part(dot_product)
         distances = K.expand_dims(square_norm, 1) - 2.0 * dot_product + K.expand_dims(square_norm, 0)
