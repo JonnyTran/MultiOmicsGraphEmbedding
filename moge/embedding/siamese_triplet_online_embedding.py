@@ -171,7 +171,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 # adj = self.transform_adj_adaptive_threshold(adj)
                 # print("Euclidean with adaptive threshold")
                 adj = np.exp(-2.0 * adj)
-                adj = adj.T  # Transpose
+                # adj = adj.T  # Transpose
                 # adj = -adj
                 print("Euclidean dist")
 
@@ -179,7 +179,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="cosine", n_jobs=-2)
-                adj = adj.T  # Transpose
+                # adj = adj.T  # Transpose
                 print("Cosine similarity")
 
             elif self.directed_distance == "dot_sigmoid":
