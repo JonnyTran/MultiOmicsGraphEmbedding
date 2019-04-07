@@ -222,7 +222,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         target_j = emb_j[:, int(self._d / 2):self._d]
 
         sum_directed = K.sum(K.square(source_i - target_j), axis=1, keepdims=True)
-        sum_undirected = K.sum(K.maximum(K.square(source_i - source_j), K.square(target_i - target_j)), axis=1,
+        sum_undirected = K.sum(K.minimum(K.square(source_i - source_j), K.square(target_i - target_j)), axis=1,
                                keepdims=True)
         sum_switch = K.switch(is_directed, sum_directed, sum_undirected)
         return K.sqrt(K.maximum(sum_switch, K.epsilon()))
