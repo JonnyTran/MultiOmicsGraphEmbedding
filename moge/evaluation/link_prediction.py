@@ -15,7 +15,10 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator,
                                                   node_list_B=data_generator.network.nodes[target])
         X, y_true = data_generator.make_dataset()
         y_true = y_true.astype(int)
-        evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
+        try:
+            evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
+        except:
+            continue
 
 
 def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, fig_save_path=None, data_generator=None):
