@@ -129,7 +129,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         """ Base network to be shared (eq. to feature extraction).
         """
         input = Input(batch_shape=(None, None))  # (batch_number, sequence_length)
-        x = Embedding(11, 4, input_length=None, mask_zero=True, trainable=True)(
+        x = Embedding(5, 4, input_length=None, mask_zero=True, trainable=True)(
             input)  # (batch_number, sequence_length, 5)
         # x = Masking()(input)
         print("Embedding", x) if self.verbose else None
