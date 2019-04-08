@@ -222,7 +222,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         target_j = emb_j[:, int(self._d / 2):self._d]
 
         sum_directed = K.sum(K.square(source_i - target_j), axis=1, keepdims=True)
-        sum_undirected = K.sum(K.minimum(K.square(source_i - source_j), K.square(target_i - target_j)), axis=1,
+        sum_undirected = K.sum(K.maximum(K.square(source_i - source_j), K.square(target_i - target_j)), axis=1,
                                keepdims=True)
         sum_switch = K.switch(is_directed, sum_directed, sum_undirected)
         return K.sqrt(K.maximum(sum_switch, K.epsilon()))
@@ -260,7 +260,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             encoded_j = self.lstm_network(input_seq_j)
             print(encoded_j) if self.verbose else None
 
-            output = Lambda(self.st_min_euclidean_distance, name="lambda_output")([encoded_i, encoded_j, is_directed])
+            output = Lambda(self.st_euclidean_distance, name="lambda_output")([encoded_i, encoded_j, is_directed])
             # self.alpha_network = self.create_alpha_network()
             # output = self.alpha_network([encoded_i, encoded_j, is_directed])
 
