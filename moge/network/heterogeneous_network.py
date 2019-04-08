@@ -151,7 +151,7 @@ class HeterogeneousNetwork():
             else:
                 edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_types]
 
-        if databases is not None:
+        if databases is not None and "d" in edge_types:
             edge_list = [(u, v, d) for u, v, d in edge_list if 'database' in d and d['database'] in databases]
 
         # Also add reverse edges for undirected edges
