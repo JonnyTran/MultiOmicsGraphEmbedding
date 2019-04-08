@@ -78,7 +78,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                  conv2_batch_norm=True,
                  max2_pool_size=3, lstm_unit_size=320, dense1_unit_size=1024, dense2_unit_size=512,
                  directed_distance="euclidean", undirected_distance="euclidean",
-                 source_target_dense_layers=True, embedding_normalization=False, subsample=True,
+                 source_target_dense_layers=True, embedding_normalization=False, subsample=False,
                  **kwargs):
         super().__init__(d)
 
@@ -129,7 +129,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         """ Base network to be shared (eq. to feature extraction).
         """
         input = Input(batch_shape=(None, None))  # (batch_number, sequence_length)
-        x = Embedding(5, 4, input_length=None, mask_zero=True, trainable=True)(input)  # (batch_number, sequence_length, 5)
+        x = Embedding(11, 4, input_length=None, mask_zero=True, trainable=True)(
+            input)  # (batch_number, sequence_length, 5)
         # x = Masking()(input)
         print("Embedding", x) if self.verbose else None
 
