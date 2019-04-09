@@ -3,14 +3,14 @@ import numpy as np
 from sklearn.metrics import average_precision_score, precision_recall_curve
 
 
-def evaluate_pr_curve_link_pred_by_database(methods, data_generator,
+def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=["d"],
                                             tests=[("LNC", "GE", "lncrna2target"),
                                                    ("MIR", "GE", "miRTarBase"),
                                                    ("GE", "GE", "BioGRID"),
                                                    ("LNC", "GE", "lncRInter")]):
     for source, target, database in tests:
         print(database)
-        data_generator.reload_directed_edges_data(edge_types=["d"], databases=[database, ],
+        data_generator.reload_directed_edges_data(edge_types=edge_types, databases=[database, ],
                                                   node_list=data_generator.network.nodes[source],
                                                   node_list_B=data_generator.network.nodes[target])
         X, y_true = data_generator.make_dataset()

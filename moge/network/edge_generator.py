@@ -128,18 +128,19 @@ class DataGenerator(keras.utils.Sequence):
         self.Ens_cols = self.Ens_cols_all[sample_indices]
 
     def reload_directed_edges_data(self, edge_types=["d"], databases=None, node_list=None, node_list_B=None):
-        self.adj_directed = self.network.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
-                                                              databases=databases)
-        self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
-        self.Ed_count = len(self.Ed_rows)
+        if "d" in edge_types:
+            self.adj_directed = self.network.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
+                                                                  databases=databases)
+            self.Ed_rows, self.Ed_cols = self.adj_directed.nonzero()  # getting the list of non-zero edges from the Sparse Numpy matrix
+            self.Ed_count = len(self.Ed_rows)
 
-        if node_list is not None and node_list_B is not None:
-            self.process_negative_sampling_edges_filtered(node_list, node_list_B)
+            if node_list is not None and node_list_B is not None:
+                self.process_negative_sampling_edges_filtered(node_list, node_list_B)
 
-        self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
-        print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:",
-              self.En_count, ", Ens_count", self.Ens_count) if self.verbose else None
-        self.on_epoch_end()
+            self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
+            print("Ed_count:", self.Ed_count, ", Eu_count:", self.Eu_count, ", En_count:",
+                  self.En_count, ", Ens_count", self.Ens_count) if self.verbose else None
+            self.on_epoch_end()
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
