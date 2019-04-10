@@ -382,7 +382,6 @@ class SampledDataGenerator(DataGenerator):
         self.compression_func = compression_func
         self.n_steps = n_steps
         self.directed_proba = directed_proba
-        print("Some bug with generating random edges from SampledDataGenerator")
         super().__init__(network, weighted,
                          batch_size, negative_sampling_ratio,
                          maxlen, padding, truncating, tokenizer, sequence_to_matrix,

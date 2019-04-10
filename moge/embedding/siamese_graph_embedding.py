@@ -156,7 +156,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
         x = Bidirectional(CuDNNLSTM(self.lstm_unit_size, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None
-        x = Dropout(0.5)(x)
+        # x = Dropout(0.5)(x)
+        x = BatchNormalization(center=True, scale=True, name="brnn_lstm_batch_norm")(x)
 
         if self.dense1_unit_size is not None and self.dense1_unit_size != 0:
             x = Dense(self.dense1_unit_size, activation='relu', name="dense_1")(x)
@@ -360,7 +361,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             callbacks.append(self.tensorboard)
         if early_stopping is not False:
             if not hasattr(self, "early_stopping"):
-                self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=2, verbose=0, mode='auto',
+                self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=0, mode='auto',
                                                     baseline=None, restore_best_weights=False)
             callbacks.append(self.early_stopping)
         return callbacks

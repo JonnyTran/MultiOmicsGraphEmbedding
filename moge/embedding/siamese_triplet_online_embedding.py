@@ -4,7 +4,6 @@ from keras.optimizers import Adam
 
 from moge.embedding.siamese_graph_embedding import *
 from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding
-from moge.evaluation.metrics import recall, precision
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTripletGenerator
 
@@ -170,7 +169,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 # Get node-specific adaptive threshold
                 # adj = self.transform_adj_adaptive_threshold(adj)
                 # print("Euclidean with adaptive threshold")
-                adj = np.exp(-2.0 * adj)
+                # adj = np.exp(-2.0 * adj)
                 # adj = adj.T  # Transpose
                 # adj = -adj
                 print("Euclidean dist")
@@ -191,7 +190,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             if self.undirected_distance == "euclidean":
                 adj = pairwise_distances(X=embeddings,
                                          metric="euclidean", n_jobs=-2)
-                adj = np.exp(-2.0 * adj)
+                # adj = np.exp(-2.0 * adj)
                 print("Euclidean dist")
 
             elif self.undirected_distance == "cosine":
@@ -253,7 +252,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         y_true = labels.values
 
         def _recall(_y_true, _y_pred):
-            return recall(y_true, y_pred)
+            return recall_d(y_true, y_pred)
 
         return _recall
 
@@ -263,19 +262,16 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         y_true = labels.values
 
         def _precision(_y_true, _y_pred):
-            return precision(y_true, y_pred)
+            return precision_d(y_true, y_pred)
 
         return _precision
 
     def pairwise_distances(self, embeddings, directed=True, squared=True):
+        embeddings_s = embeddings[:, 0:int(self._d / 2)]
+        embeddings_t = embeddings[:, int(self._d / 2):self._d]
         if directed:
-            embeddings_s = embeddings[:, 0:int(self._d / 2)]
-            embeddings_t = embeddings[:, int(self._d / 2):self._d]
-
             return self._pairwise_euclidean(embeddings_s, embeddings_t, squared)
         else:
-            # embeddings_s = embeddings[:, 0:int(self._d / 2)]
-            # embeddings_t = embeddings[:, int(self._d / 2):self._d]
             return self._pairwise_euclidean(embeddings, embeddings, squared)
             # return K.minimum(self._pairwise_euclidean(embeddings_s, embeddings_s, squared),
             #                  self._pairwise_euclidean(embeddings_t, embeddings_t, squared))
@@ -294,18 +290,12 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         return distances
 
     def batch_contrastive_loss(self, inputs):
-        print("batch_contrastive_loss/inputs", inputs)
         pairwise_distance_directed, pairwise_distance_undirected, labels_directed, labels_undirected = inputs
         y_pred_directed = tf.gather_nd(pairwise_distance_directed, labels_directed.indices)
-        y_true_directed = labels_directed.values
+        y_true_directed = K.round(labels_directed.values)
 
         y_pred_undirected = tf.gather_nd(pairwise_distance_undirected, labels_undirected.indices)
-        y_true_undirected = labels_undirected.values
-        print("y_pred_directed", y_pred_directed)
-        print("y_true_directed", y_true_directed)
-        print("y_pred_undirected", y_pred_undirected)
-        print("y_true_undirected", y_true_undirected)
-
+        y_true_undirected = K.round(labels_undirected.values)
         def _contrastive_loss(_y_true, _y_pred):
             return contrastive_loss(y_true_directed, y_pred_directed) + contrastive_loss(y_true_undirected,
                                                                                          y_pred_undirected)
@@ -313,18 +303,12 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         return _contrastive_loss
 
     def batch_kl_divergence_loss(self, inputs):
-        print("batch_contrastive_loss/inputs", inputs)
         pairwise_similarity_directed, pairwise_similarity_undirected, labels_directed, labels_undirected = inputs
         y_pred_directed = tf.gather_nd(pairwise_similarity_directed, labels_directed.indices + 5)
-        y_true_directed = labels_directed.values
+        y_true_directed = K.round(labels_directed.values)
 
         y_pred_undirected = tf.gather_nd(pairwise_similarity_undirected, labels_undirected.indices + 5)
-        y_true_undirected = labels_undirected.values
-        print("y_pred_directed", y_pred_directed)
-        print("y_true_directed", y_true_directed)
-        print("y_pred_undirected", y_pred_undirected)
-        print("y_true_undirected", y_true_undirected)
-
+        y_true_undirected = K.round(labels_undirected.values)
         def _kl_loss(_y_true, _y_pred):
             return cross_entropy(y_true_directed, y_pred_directed) + \
                    cross_entropy(y_true_undirected, y_pred_undirected)
@@ -332,14 +316,12 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         return _kl_loss
 
     def pairwise_similarity(self, embeddings, directed=True):
+        embeddings_s = embeddings[:, 0:int(self._d / 2)]
+        embeddings_t = embeddings[:, int(self._d / 2):self._d]
         if directed:
-            embeddings_s = embeddings[:, 0:int(self._d / 2)]
-            embeddings_t = embeddings[:, int(self._d / 2):self._d]
 
             return self._pairwise_sigmoid(embeddings_s, embeddings_t)
         else:
-            # embeddings_s = embeddings[:, 0:int(self._d / 2)]
-            # embeddings_t = embeddings[:, int(self._d / 2):self._d]
             return self._pairwise_sigmoid(embeddings, embeddings)
 
     def _pairwise_sigmoid(self, embeddings_s, embeddings_t):
@@ -377,9 +359,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-            # directed_pairwise_distances = Lambda(lambda x: self.pairwise_similarity(x, directed=True),
+            # directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True),
             #                                      name="directed_pairwise_distances")(embeddings)
-            # undirected_pairwise_distances = Lambda(lambda x: self.pairwise_similarity(x, directed=False),
+            # undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False),
             #                                        name="undirected_pairwise_distances")(embeddings)
             # print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
@@ -388,7 +370,6 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                                   directed_distance=self.directed_distance,
                                                   undirected_distance=self.undirected_distance)
             output = self.triplet_loss([embeddings, labels_directed, labels_undirected])
-
             print("output", output) if self.verbose else None
 
             self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=output)
@@ -402,7 +383,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             # Compile & train
             self.siamese_net.compile(loss=self.identity_loss,
-                                     # loss=self.batch_kl_divergence_loss([directed_pairwise_distances,
+                                     # loss=self.batch_contrastive_loss([directed_pairwise_distances,
                                      #                                   undirected_pairwise_distances,
                                      #                                   labels_directed, labels_undirected]),
                                      optimizer=Adam(lr=self.lr),
@@ -492,14 +473,14 @@ class OnlineTripletLoss(Layer):
         embeddings_s = embeddings[:, : int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2):]
 
-        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels=labels_directed,
-                                                margin=self.directed_margin, squared=True,
-                                                distance=self.directed_distance)
+        directed_loss = frobenius_norm_loss(embeddings_s, embeddings_t, labels=labels_directed,
+                                            # margin=self.directed_margin, squared=True,
+                                            distance=self.directed_distance)
         print("labels_directed", labels_directed)
         if self.undirected_weight > 0.0:
-            undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels=labels_undirected,
-                                                      margin=self.undirected_margin, squared=True,
-                                                      distance=self.undirected_distance)
+            undirected_loss = frobenius_norm_loss(embeddings, embeddings, labels=labels_undirected,
+                                                  # margin=self.undirected_margin, squared=True,
+                                                  distance=self.undirected_distance)
             return tf.add(directed_loss, self.undirected_weight * undirected_loss)
         else:
             return directed_loss
@@ -543,23 +524,16 @@ def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
         distances = distances * (1.0 - mask)
 
     return distances
-
-
 def _pairwise_dot_sigmoid_similarity(embeddings_A, embeddings_B):
     dot_product = tf.matmul(embeddings_A, embeddings_B, transpose_b=True)
     sigmoids = tf.sigmoid(dot_product)
     return sigmoids
-
-
 def _pairwise_cosine_similarity(embeddings_A, embeddings_B):
     normalize_a = tf.nn.l2_normalize(embeddings_A, axis=-1)
     normalize_b = tf.nn.l2_normalize(embeddings_B, axis=-1)
     cosine_similarities = tf.matmul(normalize_a, normalize_b, transpose_b=True)
     return cosine_similarities
-
-
 # def _pairwise_alpha_similarity(embeddings_A, embeddings_B):
-
 
 def _get_anchor_positive_triplet_mask(labels):
     """Return a 2D mask where mask[a, p] is True iff a and p have a positive edge weight > 0.5.
@@ -574,7 +548,6 @@ def _get_anchor_positive_triplet_mask(labels):
                                                        labels.dense_shape),
                                        default_value=False)
     return positive_mask
-
 def _get_anchor_negative_triplet_mask(labels):
     """Return a 2D mask where mask[a, n] is True iff a and n have a negative edge weight (e.g. < 0.5).
     Args:
@@ -588,7 +561,6 @@ def _get_anchor_negative_triplet_mask(labels):
                                                        labels.dense_shape),
                                        default_value=False)
     return negative_mask
-
 
 def batch_hard_triplet_loss(embeddings_U, embeddings_V, labels, margin, squared=True, distance="euclidean"):
     """Build the triplet loss over a batch of embeddings.
@@ -646,7 +618,7 @@ def batch_hard_triplet_loss(embeddings_U, embeddings_V, labels, margin, squared=
     return triplet_loss
 
 
-def frobenius_norm_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor, squared=False, distance="euclidean"):
+def frobenius_norm_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor, squared=True, distance="euclidean"):
     """
     Args:
         labels: labels of the batch, of size (batch_size,)
@@ -665,19 +637,10 @@ def frobenius_norm_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor, squ
     elif distance == "cosine":
         pairwise_similarity = _pairwise_cosine_similarity(embeddings_A, embeddings_B)
 
-    probabilities_strided = tf.gather_nd(pairwise_similarity, labels.indices)
-    frobenius_norm_loss = tf.norm(tf.subtract(probabilities_strided, labels.values), ord=2)
+    y_pred = tf.gather_nd(pairwise_similarity, labels.indices)
+    frobenius_norm_loss = tf.norm(tf.subtract(y_pred, labels.values), ord=2)
 
     return frobenius_norm_loss
-
-
-def contrastive_loss(y_true, y_pred):
-    '''Contrastive loss from Hadsell-et-al.'06
-    http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-    '''
-    margin = 1.0
-    return K.mean(y_true * K.square(y_pred) +
-                  (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
 
 
 def batch_constrastive_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor, squared=True, distance="euclidean"):
@@ -689,7 +652,7 @@ def batch_constrastive_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor,
         pairwise_distances = 1 - _pairwise_cosine_similarity(embeddings_A, embeddings_B)
 
     y_pred = tf.gather_nd(pairwise_distances, labels.indices)
-    y_true = labels.values
+    y_true = K.round(labels.values)
     constrastive_loss = contrastive_loss(y_true, y_pred)
 
     return constrastive_loss
