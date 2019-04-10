@@ -3,6 +3,7 @@ from collections import Generator
 from collections import OrderedDict
 
 import keras
+import networkx as nx
 import numpy as np
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
@@ -392,7 +393,7 @@ class SampledDataGenerator(DataGenerator):
         node_list = network.node_list
         node_list = list(OrderedDict.fromkeys(node_list))
 
-        graph = network.G.subgraph(nodes=node_list)
+        graph = nx.compose(network.G.subgraph(nodes=node_list), network.G_u.subgraph(nodes=node_list))
 
         self.edge_dict = {}
         self.edge_counts_dict = {}

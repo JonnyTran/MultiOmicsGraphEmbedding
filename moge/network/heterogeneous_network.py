@@ -29,7 +29,7 @@ class HeterogeneousNetwork():
         self.modalities = modalities
         self.multi_omics_data = multi_omics_data
         self.G = nx.DiGraph()
-        self.affinities = {}
+        self.G_u = nx.Graph()
 
         self.preprocess_graph()
         if process_genes_info:
@@ -42,6 +42,7 @@ class HeterogeneousNetwork():
         self.node_list = []
         for modality in self.modalities:
             self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
+            self.G_u.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
             self.nodes[modality] = [node for node in self.nodes[modality]]
 
@@ -129,42 +130,55 @@ class HeterogeneousNetwork():
         if is_directed:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.DiGraph()).edges(data=True))
         else:
-            self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
+            self.G_u.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, edge_types=["u", "d"], node_list=None, databases=None):
+    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None):
         """
         Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
          :param node_list:.
 
-        :param edge_types: A list of edge types letter codes to ex
+        :param edge_types: A list of edge types letter codes in ["d", "u", "u_n"]
         :param node_list: A list of node names
         :return: A csr_matrix sparse adjacency matrix
         """
         if node_list is None:
             node_list = self.node_list
 
-        if edge_types is None:
-            edge_list = self.G.edges(nbunch=node_list, data=True)
-        else:
-            if type(edge_types) == list:
-                edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] in edge_types]
-            else:
-                edge_list = [(u, v, d) for u, v, d in self.G.edges(data=True) if d['type'] == edge_types]
+        if type(edge_types) == list:
+            if "d" in edge_types:
+                is_directed = True
+            elif "u" in edge_types or "u_n" in edge_types:
+                is_directed = False
+        elif type(edge_types) == str:
+            if "d" == edge_types:
+                is_directed = True
+            elif "u" == edge_types or "u_n" == edge_types:
+                is_directed = False
 
-        if databases is not None and "d" in edge_types:
-            edge_list = [(u, v, d) for u, v, d in edge_list if 'database' in d and d['database'] in databases]
+        if databases is not None and is_directed:
+            edge_list = [(u, v, d) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
+                         'database' in d and d['database'] in databases]
+            adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
+        elif is_directed:
+            adj = nx.adjacency_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
 
-        # Also add reverse edges for undirected edges
-        if 'u' in edge_types or "u_n" in edge_types:
-            edge_list.extend([(v, u, d) for u, v, d in edge_list if d['type'] in edge_types])
+        elif not is_directed and (("u" in edge_types and "u_n" in edge_types) or "u" in edge_types):
+            adj = nx.adjacency_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
+        elif not is_directed and ("u_n" == edge_types or "u_n" in edge_types):
+            edge_list = [(u, v, d) for u, v, d in self.G_u.edges(nbunch=node_list, data=True) if
+                         d['type'] in edge_types]
+            adj = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
 
-        adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
+
         # Eliminate self-edges
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         return adj.astype(float)
 
-    def get_edge(self, i, j):
-        return self.G.get_edge_data(i, j)
+    def get_edge(self, i, j, is_directed=True):
+        if is_directed:
+            return self.G.get_edge_data(i, j)
+        else:
+            return self.G_u.get_edge_data(i, j)
 
     def get_subgraph(self, modalities=["MIR", "LNC", "GE"]):
         if modalities==None:
@@ -176,14 +190,13 @@ class HeterogeneousNetwork():
 
         return self.G.subgraph(nodes) # returned subgraph is not mutable
 
-    def get_edgelist(self, edge_types, node_list, databases=None, inclusive=True):
+    def get_edgelist(self, node_list, databases=None, inclusive=True):
         if databases is not None:
-            edgelist = [(u, v, d) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
+            edgelist = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
                         'database' in d and d['database'] in databases]
         else:
             edgelist = self.G.edges(nbunch=node_list, data=True)
 
-        edgelist = [(u, v) for u, v, d in edgelist if d['type'] in edge_types]
         if inclusive:
             edgelist = [(u, v) for u, v in edgelist if (u in node_list and v in node_list)]
 
@@ -234,9 +247,9 @@ network if the similarity measures passes the threshold
             sample_indices = np.random.choice(a=range(len(sim_edgelist_ebunch)),
                                               size=min(max_positive_edges, len(sim_edgelist_ebunch)), replace=False)
             sim_edgelist_ebunch = [(u, v, d) for i, (u, v, d) in enumerate(sim_edgelist_ebunch) if i in sample_indices]
-            self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
+            self.G_u.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
         else:
-            self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
+            self.G_u.add_weighted_edges_from(sim_edgelist_ebunch, type="u", tag=tag)
 
         print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
 
@@ -250,10 +263,11 @@ network if the similarity measures passes the threshold
                                           size=min(max_negative_edges, dissimilarity_index_rows.shape[0]),
                                           replace=False)
         # adds 1e-8 to keeps from 0.0 edge weights, which doesn't get picked up in nx.adjacency_matrix()
-        dissim_edgelist_ebunch = [(node_list[x], node_list[y], annotation_affinities_df.iloc[x, y] + epsilon) for i, (x, y) in
+        dissim_edgelist_ebunch = [(node_list[x], node_list[y], min(annotation_affinities_df.iloc[x, y], epsilon)) for
+                                  i, (x, y) in
                                   enumerate(zip(dissimilarity_index_rows[sample_indices],
                                                 dissimilarity_index_cols[sample_indices])) if i < max_negative_edges]
-        self.G.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n", tag=tag)
+        self.G_u.add_weighted_edges_from(dissim_edgelist_ebunch, type="u_n", tag=tag)
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
         return annotation_affinities_df
@@ -265,7 +279,7 @@ network if the similarity measures passes the threshold
         edges_ebunch = sample_edges(nodes_A, nodes_B, n_edges=n_edges, edge_type="u_n")
 
         print("Number of negative sampled edges between", modalities, "added:", len(edges_ebunch))
-        self.G.add_edges_from(edges_ebunch)
+        self.G_u.add_edges_from(edges_ebunch)
 
     def add_sampled_negative_edges_from_correlation(self, modalities=[], correlation_threshold=0.2,
                                                     histological_subtypes=[],
@@ -301,19 +315,20 @@ network if the similarity measures passes the threshold
     def remove_extra_nodes(self):
         self.G = self.get_subgraph(self.modalities).copy()
 
-    def remove_edges_from(self, edgelist):
-        self.G.remove_edges_from(edgelist)
-
+    def remove_edges_from(self, edgelist, is_directed):
+        if is_directed:
+            self.G.remove_edges_from(edgelist)
+        else:
+            self.G_u.remove_edges_from(edgelist)
 
     def set_node_similarity_training_adjacency(self, adj):
-        self.adj_similarity_train = adj
+        self.adj_undirected_train = adj
 
     def set_regulatory_edges_training_adjacency(self, adj):
-        self.adj_regulatory_train = adj
+        self.adj_directed_train = adj
 
-    def get_non_zero_degree_nodes(self):
-        return [k for k, v in self.G.degree() if v > 0]
-
-
-
-
+    def get_non_zero_degree_nodes(self, is_directed):
+        if is_directed:
+            return [k for k, v in self.G.degree() if v > 0]
+        else:
+            return [k for k, v in self.G_u.degree() if v > 0]

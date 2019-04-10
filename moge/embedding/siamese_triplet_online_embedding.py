@@ -558,6 +558,8 @@ def _pairwise_cosine_similarity(embeddings_A, embeddings_B):
     return cosine_similarities
 
 
+# def _pairwise_alpha_similarity(embeddings_A, embeddings_B):
+
 
 def _get_anchor_positive_triplet_mask(labels):
     """Return a 2D mask where mask[a, p] is True iff a and p have a positive edge weight > 0.5.
