@@ -325,21 +325,25 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         estimated_adj = self.get_reconstructed_adj()
         node_set = set(self.node_list)
         node_set_in_X = set(node for pair in X for node in pair)
-        print("node_set_in_X", len(node_set_in_X), "node_set", len(node_set))
 
-        if node_set_in_X <= node_set:
-            X_u_inx = [self.node_list.index(u) for u, v in X]
-            X_v_inx = [self.node_list.index(v) for u, v in X]
-            y_pred = estimated_adj[X_u_inx, X_v_inx]
-        else:
-            y_pred = []
-            for tup in X:
-                u = tup[0]
-                v = tup[1]
-                if u in node_set and v in node_set:
-                    y_pred.append(estimated_adj[self.node_list.index(u), self.node_list.index(v)])
-                else:
-                    y_pred.append(0.0)
+        estimated_adj[0, 0] = 0.0
+        X_u_inx = [self.node_list.index(u) if (u in node_set and v in node_set) else 0 for u, v in X]
+        X_v_inx = [self.node_list.index(v) if (u in node_set and v in node_set) else 0 for u, v in X]
+        y_pred = estimated_adj[X_u_inx, X_v_inx]
+
+        # if node_set_in_X <= node_set:
+        #     X_u_inx = [self.node_list.index(u) for u, v in X]
+        #     X_v_inx = [self.node_list.index(v) for u, v in X]
+        #     y_pred = estimated_adj[X_u_inx, X_v_inx]
+        # else:
+        #     y_pred = []
+        #     for tup in X:
+        #         u = tup[0]
+        #         v = tup[1]
+        #         if u in node_set and v in node_set:
+        #             y_pred.append(estimated_adj[self.node_list.index(u), self.node_list.index(v)])
+        #         else:
+        #             y_pred.append(0.0)
 
         y_pred = np.array(y_pred, dtype=np.float).reshape((-1, 1))
         assert y_pred.shape[0] == X.shape[0]

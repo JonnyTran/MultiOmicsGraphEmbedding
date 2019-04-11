@@ -14,7 +14,7 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
                                                   node_list=data_generator.network.nodes[source],
                                                   node_list_B=data_generator.network.nodes[target])
         X, y_true = data_generator.make_dataset()
-        y_true = y_true.astype(int)
+        y_true = np.round(y_true)
         evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
 
 
@@ -26,7 +26,6 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, f
     ls_dict = {"LINE": ":", "HOPE": "-.", "SDNE": "--", "node2vec": "--", "rna2rna": "-", "siamese": ":"}
 
     for method in methods.keys():
-        print("method", method)
         if method == "BioVec": continue
         # if method is "siamese" and method == list(methods.keys())[-1]:
         #     y_prob_pred = methods[method].predict_generator(data_generator)

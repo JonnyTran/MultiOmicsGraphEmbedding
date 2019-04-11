@@ -107,18 +107,16 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_negative_sampling_edges_filtered(self, node_list_A, node_list_B):
         # All Negative Directed Edges (non-positive edges)
-        adj_positive = self.adj_directed + self.adj_undirected
+        if self.training_adj is not None:
+            adj_positive = self.adj_directed + self.adj_undirected + self.training_adj
+        else:
+            adj_positive = self.adj_directed + self.adj_undirected
         self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
 
         # Filter by nodes list
-        nodes_A = [n for n in self.node_list if n in node_list_A]
-        nodes_B = [n for n in self.node_list if n in node_list_B]
-        filter_indices = []
-        node_A_ind = {self.node_list.index(node) for node in nodes_A}
-        node_B_ind = {self.node_list.index(node) for node in nodes_B}
-        for i in range(len(self.Ens_rows_all)):
-            if self.Ens_rows_all[i] in node_A_ind and self.Ens_cols_all[i] in node_B_ind:
-                filter_indices.append(i)
+        node_A_ind = [self.node_list.index(node) for node in self.node_list if node in node_list_A]
+        node_B_ind = [self.node_list.index(node) for node in self.node_list if node in node_list_B]
+        filter_indices = np.where(np.isin(self.Ens_rows_all, node_A_ind) & np.isin(self.Ens_cols_all, node_B_ind))
 
         self.Ens_rows_all = self.Ens_rows_all[filter_indices]
         self.Ens_cols_all = self.Ens_cols_all[filter_indices]
@@ -298,21 +296,21 @@ class DataGenerator(keras.utils.Sequence):
         y_list = []
         for id, edge_type in edges_batch:
             if edge_type == DIRECTED_EDGE_TYPE:
-                X_list.append((self.node_list[self.Ed_rows[id]], self.node_list[self.Ed_cols[id]], IS_DIRECTED))
+                X_list.append((self.node_list[self.Ed_rows[id]], self.node_list[self.Ed_cols[id]]))
                 y_list.append(
-                    self.get_edge_weight(self.Ed_rows[id], self.Ed_cols[id], edge_type, positive=True, weighted=False))
+                    self.get_edge_weight(self.Ed_rows[id], self.Ed_cols[id], edge_type, positive=True, weighted=True))
 
             elif edge_type == UNDIRECTED_EDGE_TYPE:
-                X_list.append((self.node_list[self.Eu_rows[id]], self.node_list[self.Eu_cols[id]], IS_UNDIRECTED))
+                X_list.append((self.node_list[self.Eu_rows[id]], self.node_list[self.Eu_cols[id]]))
                 y_list.append(
-                    self.get_edge_weight(self.Eu_rows[id], self.Eu_cols[id], edge_type, positive=True, weighted=False))
+                    self.get_edge_weight(self.Eu_rows[id], self.Eu_cols[id], edge_type, positive=True, weighted=True))
 
             elif edge_type == UNDIRECTED_NEG_EDGE_TYPE:
-                X_list.append((self.node_list[self.En_rows[id]], self.node_list[self.En_cols[id]], IS_UNDIRECTED))
+                X_list.append((self.node_list[self.En_rows[id]], self.node_list[self.En_cols[id]]))
                 y_list.append(
-                    self.get_edge_weight(self.En_rows[id], self.En_cols[id], edge_type, positive=False, weighted=False))
+                    self.get_edge_weight(self.En_rows[id], self.En_cols[id], edge_type, positive=False, weighted=True))
             elif edge_type == DIRECTED_NEG_EDGE_TYPE:
-                X_list.append((self.node_list[self.Ens_rows[id]], self.node_list[self.Ens_cols[id]], IS_DIRECTED))
+                X_list.append((self.node_list[self.Ens_rows[id]], self.node_list[self.Ens_cols[id]]))
                 y_list.append(self.get_edge_weight(self.Ens_rows[id], self.Ens_cols[id], edge_type, positive=False,
                                                    weighted=False))
 

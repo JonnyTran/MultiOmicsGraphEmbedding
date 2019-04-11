@@ -167,8 +167,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                          metric="euclidean", n_jobs=-2)
 
                 # Get node-specific adaptive threshold
-                # adj = self.transform_adj_adaptive_threshold(adj, margin=self.margin)
-                adj = np.exp(-2.0 * adj)
+                adj = self.transform_adj_adaptive_threshold(adj, margin=0)
+                # adj = np.exp(-2.0 * adj)
                 # adj = adj.T  # Transpose
                 # adj = -adj
                 print("Euclidean dist")
