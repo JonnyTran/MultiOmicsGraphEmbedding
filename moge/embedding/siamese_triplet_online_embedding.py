@@ -168,8 +168,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
                 # Get node-specific adaptive threshold
                 # adj = self.transform_adj_adaptive_threshold(adj, margin=self.margin)
-                print("Euclidean with adaptive threshold")
-                np.exp(-2.0 * adj)
+                adj = np.exp(-2.0 * adj)
                 # adj = adj.T  # Transpose
                 # adj = -adj
                 print("Euclidean dist")
@@ -206,6 +205,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         return adj
 
     def transform_adj_adaptive_threshold(self, adj_pred, margin=0.2):
+        print("adaptive threshold")
         network_adj = self.generator_train.network.get_adjacency_matrix(edge_types="d",
                                                                         node_list=self.node_list)
         self.distance_threshold = self.get_adaptive_threshold(adj_pred, network_adj, margin)
@@ -471,13 +471,12 @@ class OnlineTripletLoss(Layer):
         assert isinstance(input, list), "(embeddings, labels_directed, labels_undirected) expected"
         embeddings, labels_directed, labels_undirected = input
 
-        embeddings_s = embeddings[:, : int(self._d / 2)]
-        embeddings_t = embeddings[:, int(self._d / 2):]
+        embeddings_s = embeddings[:, 0: int(self._d / 2)]
+        embeddings_t = embeddings[:, int(self._d / 2):self._d]
 
         directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels=labels_directed,
                                                 margin=self.directed_margin, squared=True,
                                                 distance=self.directed_distance)
-        print("labels_directed", labels_directed)
         if self.undirected_weight > 0.0:
             undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels=labels_undirected,
                                                       margin=self.undirected_margin, squared=True,

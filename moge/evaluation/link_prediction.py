@@ -26,6 +26,7 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, f
     ls_dict = {"LINE": ":", "HOPE": "-.", "SDNE": "--", "node2vec": "--", "rna2rna": "-", "siamese": ":"}
 
     for method in methods.keys():
+        print("method", method)
         if method == "BioVec": continue
         # if method is "siamese" and method == list(methods.keys())[-1]:
         #     y_prob_pred = methods[method].predict_generator(data_generator)
@@ -48,7 +49,7 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, f
         fig.savefig(fig_save_path, bbox_inches='tight')
 
 
-def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, node_list_B=None, edge_type=edge_type,
+def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, node_list_B=None, edge_type=None,
                              top_k=100, databases=None):
     if node_list_B is not None:
         nodes = [n for n in embedding.node_list if n in node_list or n in node_list_B]

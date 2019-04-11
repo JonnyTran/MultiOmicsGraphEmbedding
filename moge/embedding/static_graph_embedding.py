@@ -325,10 +325,11 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         estimated_adj = self.get_reconstructed_adj()
         node_set = set(self.node_list)
         node_set_in_X = set(node for pair in X for node in pair)
+        print("node_set_in_X", len(node_set_in_X), "node_set", len(node_set))
 
         if node_set_in_X <= node_set:
-            X_u_inx = [self.node_list.index(u) for u, v in X if u in node_set and v in node_set]
-            X_v_inx = [self.node_list.index(v) for u, v in X if u in node_set and v in node_set]
+            X_u_inx = [self.node_list.index(u) for u, v in X]
+            X_v_inx = [self.node_list.index(v) for u, v in X]
             y_pred = estimated_adj[X_u_inx, X_v_inx]
         else:
             y_pred = []
