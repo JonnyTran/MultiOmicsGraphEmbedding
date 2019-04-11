@@ -1,6 +1,6 @@
 from keras.backend.tensorflow_backend import set_session
 from keras.layers import Layer
-from keras.optimizers import Adam
+from keras.optimizers import Adam, Adagrad
 
 from moge.embedding.siamese_graph_embedding import *
 from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding
@@ -85,7 +85,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
                         subsample=True, n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
                         early_stopping=False,
-                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
+                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):
 
         generator_train = self.get_training_data_generator(network, n_steps, seed)
 
@@ -110,7 +110,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
                                                        callbacks=self.get_callbacks(early_stopping, tensorboard),
-                                                       use_multiprocessing=True, workers=8)
+                                                       use_multiprocessing=True, workers=8, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
         finally:
@@ -167,9 +167,9 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                          metric="euclidean", n_jobs=-2)
 
                 # Get node-specific adaptive threshold
-                # adj = self.transform_adj_adaptive_threshold(adj)
-                # print("Euclidean with adaptive threshold")
-                # adj = np.exp(-2.0 * adj)
+                # adj = self.transform_adj_adaptive_threshold(adj, margin=self.margin)
+                print("Euclidean with adaptive threshold")
+                np.exp(-2.0 * adj)
                 # adj = adj.T  # Transpose
                 # adj = -adj
                 print("Euclidean dist")
@@ -190,7 +190,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             if self.undirected_distance == "euclidean":
                 adj = pairwise_distances(X=embeddings,
                                          metric="euclidean", n_jobs=-2)
-                # adj = np.exp(-2.0 * adj)
+                adj = np.exp(-2.0 * adj)
+                # adj = self.transform_adj_adaptive_threshold(adj, margin=self.margin/2)
                 print("Euclidean dist")
 
             elif self.undirected_distance == "cosine":
@@ -204,10 +205,10 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             raise Exception("Unsupported edge_type", edge_type)
         return adj
 
-    def transform_adj_adaptive_threshold(self, adj_pred):
+    def transform_adj_adaptive_threshold(self, adj_pred, margin=0.2):
         network_adj = self.generator_train.network.get_adjacency_matrix(edge_types="d",
                                                                         node_list=self.node_list)
-        self.distance_threshold = self.get_adaptive_threshold(adj_pred, network_adj)
+        self.distance_threshold = self.get_adaptive_threshold(adj_pred, network_adj, margin)
 
         predicted_adj = np.zeros(adj_pred.shape)
         for node_id in range(predicted_adj.shape[0]):
@@ -215,13 +216,13 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         adj_pred = predicted_adj
         return adj_pred
 
-    def get_adaptive_threshold(self, adj_pred, adj_true):
+    def get_adaptive_threshold(self, adj_pred, adj_true, margin):
         distance_threshold = np.zeros((len(self.node_list),))
         for nonzero_node_id in np.unique(adj_true.nonzero()[0]):
             _, nonzero_node_cols = adj_true[nonzero_node_id].nonzero()
             positive_distances = adj_pred[nonzero_node_id, nonzero_node_cols]
             distance_threshold[nonzero_node_id] = np.min(positive_distances)
-        median_threshold = np.min(distance_threshold[distance_threshold > 0]) + self.margin /2
+        median_threshold = np.min(distance_threshold[distance_threshold > 0]) + margin / 2
         distance_threshold[distance_threshold == 0] = median_threshold
         return distance_threshold
 
@@ -386,7 +387,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                      # loss=self.batch_contrastive_loss([directed_pairwise_distances,
                                      #                                   undirected_pairwise_distances,
                                      #                                   labels_directed, labels_undirected]),
-                                     optimizer=Adam(lr=self.lr),
+                                     optimizer=Adagrad(),
                                      # metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
                                      #          self.custom_precision([directed_pairwise_distances, labels_directed])] if \
                                      #     self.directed_distance == "euclidean" else None,
@@ -397,7 +398,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
                         early_stopping=False, multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
-                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
+                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
 
         if network_val is not None:
@@ -423,7 +424,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
                                                        callbacks=self.get_callbacks(early_stopping, tensorboard),
-                                                       use_multiprocessing=True, workers=8)
+                                                       use_multiprocessing=True, workers=8, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
         finally:
@@ -473,14 +474,14 @@ class OnlineTripletLoss(Layer):
         embeddings_s = embeddings[:, : int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2):]
 
-        directed_loss = frobenius_norm_loss(embeddings_s, embeddings_t, labels=labels_directed,
-                                            # margin=self.directed_margin, squared=True,
-                                            distance=self.directed_distance)
+        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels=labels_directed,
+                                                margin=self.directed_margin, squared=True,
+                                                distance=self.directed_distance)
         print("labels_directed", labels_directed)
         if self.undirected_weight > 0.0:
-            undirected_loss = frobenius_norm_loss(embeddings, embeddings, labels=labels_undirected,
-                                                  # margin=self.undirected_margin, squared=True,
-                                                  distance=self.undirected_distance)
+            undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels=labels_undirected,
+                                                      margin=self.undirected_margin, squared=True,
+                                                      distance=self.undirected_distance)
             return tf.add(directed_loss, self.undirected_weight * undirected_loss)
         else:
             return directed_loss

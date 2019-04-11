@@ -6,15 +6,15 @@ import numpy as np
 from sklearn.manifold import TSNE
 
 
-def visualize_embedding(embedding, network, edgelist=None, top_k=0, test_nodes=None,
+def visualize_embedding(embedding, network, edgelist=[], top_k=0, test_nodes=None,
                         node_label="locus_type", cmap="gist_ncar", **kwargs):
     nodelist = embedding.node_list
     node_pos = embedding.get_tsne_node_pos()
 
-    if edgelist is None and top_k > 0:
+    if (edgelist is None or len(edgelist) == 0) and top_k > 0:
         edgelist = embedding.get_top_k_predicted_edges(edge_type="d", top_k=top_k,
                                                        node_list=nodelist, training_network=network)
-        if len(edgelist[0]) > 2:  # Has weigh(t component
+        if len(edgelist[0]) > 2:  # Has weight component
             edge_weights = [w for u,v,w in edgelist]
             edgelist = [(u, v) for u,v,w in edgelist]
             kwargs["edge_color"] = edge_weights
@@ -39,12 +39,12 @@ def visualize_embedding(embedding, network, edgelist=None, top_k=0, test_nodes=N
 
         plot_embedding2D(node_pos, node_list=embedding.node_list, node_colors=node_colors,
                          legend=True, node_labels=node_labels, node_colormap=node_colormap, legend_size=20,
-                         di_graph=network.G, cmap=cmap, nodelist=nodelist,
+                         di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
                          figsize=(20, 15), **kwargs)
     else:
         plot_embedding2D(node_pos, node_list=embedding.node_list,
-                         di_graph=network.G, cmap=cmap, nodelist=nodelist,
+                         di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
                          figsize=(20, 15), **kwargs)
 
