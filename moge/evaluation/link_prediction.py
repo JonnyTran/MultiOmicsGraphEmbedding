@@ -7,12 +7,14 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
                                             tests=[("LNC", "GE", "lncrna2target"),
                                                    ("MIR", "GE", "miRTarBase"),
                                                    ("GE", "GE", "BioGRID"),
-                                                   ("LNC", "GE", "lncRInter")]):
+                                                   ("LNC", "GE", "NPInter")]):
     for source, target, database in tests:
         print(database)
         data_generator.reload_directed_edges_data(edge_types=edge_types, databases=[database, ],
-                                                  node_list=data_generator.network.nodes[source],
-                                                  node_list_B=data_generator.network.nodes[target])
+                                                  node_list=data_generator.network.nodes[
+                                                      source] if source is not None else None,
+                                                  node_list_B=data_generator.network.nodes[
+                                                      target] if target is not None else None)
         X, y_true = data_generator.make_dataset()
         y_true = np.round(y_true)
         evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
@@ -39,8 +41,8 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, f
 
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.ylim([0.0, 1.00])
-    plt.xlim([0.0, 1.0])
+    plt.xlim([-0.01, 1.01])
+    plt.ylim([0.0, 1.01])
     plt.legend(loc="best")
     plt.title(title)
     plt.show()

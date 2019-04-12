@@ -324,7 +324,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         """
         estimated_adj = self.get_reconstructed_adj()
         node_set = set(self.node_list)
-        node_set_in_X = set(node for pair in X for node in pair)
+        # node_set_in_X = set(node for pair in X for node in pair)
 
         estimated_adj[0, 0] = 0.0
         X_u_inx = [self.node_list.index(u) if (u in node_set and v in node_set) else 0 for u, v in X]

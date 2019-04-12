@@ -223,7 +223,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         target_j = emb_j[:, int(self._d / 2):self._d]
 
         sum_directed = K.sum(K.square(source_i - target_j), axis=1, keepdims=True)
-        sum_undirected = K.sum(K.maximum(K.square(source_i - source_j), K.square(target_i - target_j)), axis=1,
+        sum_undirected = K.sum(K.minimum(K.square(source_i - source_j), K.square(target_i - target_j)), axis=1,
                                keepdims=True)
         sum_switch = K.switch(is_directed, sum_directed, sum_undirected)
         return K.sqrt(K.maximum(sum_switch, K.epsilon()))
@@ -284,7 +284,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
                         n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
                         early_stopping=False,
-                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0):
+                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
 
         if network_val is not None:
@@ -309,7 +309,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
                                                        callbacks=self.get_callbacks(early_stopping, tensorboard),
-                                                       use_multiprocessing=True, workers=8)
+                                                       use_multiprocessing=True, workers=8, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
         finally:
@@ -361,7 +361,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if early_stopping is not False:
             if not hasattr(self, "early_stopping"):
                 self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=0, mode='auto',
-                                                    baseline=None, restore_best_weights=False)
+                                                    baseline=None, restore_best_weights=True)
             callbacks.append(self.early_stopping)
         return callbacks
 
@@ -446,9 +446,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             return self._X
 
     def process_embeddings(self, variable_length, batch_size=256, minlen=100):
-        nodelist = self.generator_train.node_list
-
-        seqs = self.generator_train.get_sequence_data(nodelist, variable_length=variable_length, minlen=minlen)
+        seqs = self.generator_train.get_sequence_data(self.node_list, variable_length=variable_length, minlen=minlen)
 
         if variable_length:
             embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]

@@ -35,24 +35,33 @@ class HeterogeneousNetwork():
         if process_genes_info:
             self.process_genes_info()
 
+    def get_node_list(self):
+        node_list = list(OrderedDict.fromkeys(list(self.G.nodes) + list(self.G_u.nodes)))
+        return node_list
+
+    node_list = property(get_node_list)
+
     def preprocess_graph(self):
         self.nodes = {}
         self.node_to_modality = {}
 
-        self.node_list = []
+        bad_nodes = [node for node in self.get_node_list() if node is None or type(node) != str or node == ""]
+        self.G.remove_nodes_from(bad_nodes)
+        self.G_u.remove_nodes_from(bad_nodes)
+        nodelist = self.get_node_list()
+
         for modality in self.modalities:
             self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.G_u.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
-            self.nodes[modality] = [node for node in self.nodes[modality]]
+            self.nodes[modality] = [node for node in self.nodes[modality] if node in nodelist]
 
             for gene in self.multi_omics_data[modality].get_genes_list():
                 self.node_to_modality[gene] = modality
 
             print(modality, " nodes:", len(self.nodes[modality]))
-            self.node_list.extend(self.multi_omics_data[modality].get_genes_list())
 
-        print("Total nodes:", len(self.node_list))
+        print("Total nodes:", len(self.get_node_list()))
 
     def process_genes_info(self):
         genes_info_list = []
@@ -73,15 +82,8 @@ class HeterogeneousNetwork():
         # self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[
         #     0]  # TODO Selects only first family annotation if an RNA belongs to multiple
         print("Genes info columns:", self.genes_info.columns.tolist())
-        self.genes_info = self.genes_info[~self.genes_info.index.duplicated()]
+        self.genes_info = self.genes_info[~self.genes_info.index.duplicated(keep='first')]
 
-        self.node_seq_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
-        print("Number of nodes without seq removed:", len(self.node_list) - len(self.node_seq_list))
-
-        self.node_list = [node for node in self.node_list if node in self.node_seq_list]
-        print("Total nodes (filtered):", len(self.node_list))
-
-        self.node_list = list(OrderedDict.fromkeys(self.node_list))
 
 
     def add_directed_edges_from_edgelist(self, edgelist, modalities, database,

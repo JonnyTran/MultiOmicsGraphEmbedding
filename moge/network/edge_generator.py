@@ -25,7 +25,7 @@ class DataGenerator(keras.utils.Sequence):
     def __init__(self, network: HeterogeneousNetwork, weighted=False,
                  batch_size=1, negative_sampling_ratio=3,
                  maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
-                 shuffle=True, seed=0, verbose=True, training_adj=None):
+                 shuffle=True, seed=0, verbose=True, training_network=None):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
         each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
@@ -47,8 +47,6 @@ class DataGenerator(keras.utils.Sequence):
         self.weighted = weighted
         self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
-        self.node_list = network.node_list
-        self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
         self.shuffle = shuffle
         self.padding = padding
         self.maxlen = maxlen
@@ -56,11 +54,13 @@ class DataGenerator(keras.utils.Sequence):
         self.seed = seed
         self.sequence_to_matrix = sequence_to_matrix
         self.verbose = verbose
-        self.training_adj = training_adj
+        self.training_network = training_network
         np.random.seed(seed)
 
         self.genes_info = network.genes_info
         self.transcripts_to_sample = network.genes_info["Transcript sequence"].copy()
+        self.node_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
+        self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
 
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
@@ -97,8 +97,10 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_negative_sampling_edges(self):
         # All Negative Directed Edges (non-positive edges)
-        if self.training_adj is not None:
-            adj_positive = self.adj_directed + self.adj_undirected + self.training_adj
+        if self.training_network is not None:
+            adj_positive = self.adj_directed + self.adj_undirected + self.training_network.get_adjacency_matrix(
+                edge_types=["d"],
+                node_list=self.node_list)
         else:
             adj_positive = self.adj_directed + self.adj_undirected
         self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
@@ -107,8 +109,10 @@ class DataGenerator(keras.utils.Sequence):
 
     def process_negative_sampling_edges_filtered(self, node_list_A, node_list_B):
         # All Negative Directed Edges (non-positive edges)
-        if self.training_adj is not None:
-            adj_positive = self.adj_directed + self.adj_undirected + self.training_adj
+        if self.training_network is not None:
+            adj_positive = self.adj_directed + self.adj_undirected + self.training_network.get_adjacency_matrix(
+                edge_types=["d"],
+                node_list=self.node_list)
         else:
             adj_positive = self.adj_directed + self.adj_undirected
         self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
@@ -387,14 +391,11 @@ class SampledDataGenerator(DataGenerator):
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):
-        node_list = network.node_list
-        node_list = list(OrderedDict.fromkeys(node_list))
-
-        graph = nx.compose(network.G.subgraph(nodes=node_list), network.G_u.subgraph(nodes=node_list))
-
+        graph = nx.compose(network.G, network.G_u)
         self.edge_dict = {}
         self.edge_counts_dict = {}
-        self.node_degrees = {}
+        self.node_degrees = dict(zip(self.node_list, [0] * len(self.node_list)))
+
         for node in network.node_list:
             self.edge_dict[node] = {}
             self.edge_counts_dict[node] = {}
@@ -411,8 +412,7 @@ class SampledDataGenerator(DataGenerator):
             for edge_type in self.edge_dict[node].keys():
                 self.edge_counts_dict[node][edge_type] = len(self.edge_dict[node][edge_type])
 
-
-        self.node_degrees_list = [self.node_degrees[node] for node in node_list]
+        self.node_degrees_list = [self.node_degrees[node] for node in self.node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
                                                                   compression_func=self.compression_func)
         print("# of nodes to sample from (non-zero degree):", np.count_nonzero(self.node_sampling_freq)) if self.verbose else None

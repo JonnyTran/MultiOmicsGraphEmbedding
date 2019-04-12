@@ -1,3 +1,4 @@
+import networkx as nx
 import numpy as np
 import tensorflow as tf
 
@@ -104,6 +105,20 @@ class OnlineTripletGenerator(SampledDataGenerator):
     def process_training_edges_data(self):
         pass  # Not needed
 
+    def process_sampling_table(self, network):
+        graph = nx.compose(network.G, network.G_u)
+        self.node_degrees = dict(zip(self.node_list, [0] * len(self.node_list)))
+
+        for node in network.node_list:
+            edgelist_bunch = graph.edges(node, data=True)
+            self.node_degrees[node] = len(edgelist_bunch)
+
+        self.node_degrees_list = [self.node_degrees[node] for node in self.node_list]
+        self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
+                                                                  compression_func=self.compression_func)
+        print("# of nodes to sample from (non-zero degree):",
+              np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
+
     def __getitem__(self, item):
         sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
                                          p=self.node_sampling_freq)
@@ -133,7 +148,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
         """
         node_degrees_list = [self.node_degrees[node] for node in sampled_nodes]
 
-        sampled_adj = pos_adj.tolil().astype(float)
+        sampled_adj = pos_adj.tolil()
         for idx, node in enumerate(sampled_nodes):
             _, pos_nodes = pos_adj[idx].nonzero()
             node_neg_sample_count = min(int(len(pos_nodes) * self.negative_sampling_ratio),

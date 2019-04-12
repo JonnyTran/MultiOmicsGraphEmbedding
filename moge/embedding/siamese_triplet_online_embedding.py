@@ -167,8 +167,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                          metric="euclidean", n_jobs=-2)
 
                 # Get node-specific adaptive threshold
-                adj = self.transform_adj_adaptive_threshold(adj, margin=0)
-                # adj = np.exp(-2.0 * adj)
+                # adj = self.transform_adj_adaptive_threshold(adj, margin=0)
+                adj = np.exp(-2.0 * adj)
                 # adj = adj.T  # Transpose
                 # adj = -adj
                 print("Euclidean dist")
@@ -236,7 +236,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                  directed_distance="euclidean", undirected_distance="euclidean", source_target_dense_layers=True,
                  embedding_normalization=False, **kwargs):
         self.directed_margin = margin
-        self.undirected_margin = margin / 2
+        self.undirected_margin = margin
         print("directed_margin", self.directed_margin, ", undirected_margin", self.undirected_margin)
         assert directed_proba <= 1.0 and directed_proba >= 0, "directed_proba must be in [0, 1.0] range"
         super().__init__(d, margin, batch_size, lr, epochs, directed_proba, weighted, compression_func,
@@ -474,13 +474,28 @@ class OnlineTripletLoss(Layer):
         embeddings_s = embeddings[:, 0: int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2):self._d]
 
-        directed_loss = batch_hard_triplet_loss(embeddings_s, embeddings_t, labels=labels_directed,
-                                                margin=self.directed_margin, squared=True,
-                                                distance=self.directed_distance)
+        # Get the pairwise distance matrix
+        if self.directed_distance == "euclidean":
+            directed_pairwise_dist = _pairwise_distances(embeddings_s, embeddings_t, squared=True)
+        elif self.directed_distance == "dot_sigmoid":
+            directed_pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings_s, embeddings_t)
+        elif self.directed_distance == "cosine":
+            directed_pairwise_dist = 1 - _pairwise_cosine_similarity(embeddings_s, embeddings_t)
+
+        # Get the pairwise distance matrix
+        if self.undirected_distance == "euclidean":
+            undirected_pairwise_dist = tf.minimum(_pairwise_distances(embeddings_s, embeddings_s, squared=True),
+                                                  _pairwise_distances(embeddings_t, embeddings_t, squared=True))
+        elif self.undirected_distance == "dot_sigmoid":
+            undirected_pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings_s, embeddings_t)
+        elif self.undirected_distance == "cosine":
+            undirected_pairwise_dist = 1 - _pairwise_cosine_similarity(embeddings_s, embeddings_t)
+
+        directed_loss = batch_hard_triplet_loss(directed_pairwise_dist, labels=labels_directed,
+                                                margin=self.directed_margin)
         if self.undirected_weight > 0.0:
-            undirected_loss = batch_hard_triplet_loss(embeddings, embeddings, labels=labels_undirected,
-                                                      margin=self.undirected_margin, squared=True,
-                                                      distance=self.undirected_distance)
+            undirected_loss = batch_hard_triplet_loss(undirected_pairwise_dist, labels=labels_undirected,
+                                                      margin=self.undirected_margin)
             return tf.add(directed_loss, self.undirected_weight * undirected_loss)
         else:
             return directed_loss
@@ -562,7 +577,8 @@ def _get_anchor_negative_triplet_mask(labels):
                                        default_value=False)
     return negative_mask
 
-def batch_hard_triplet_loss(embeddings_U, embeddings_V, labels, margin, squared=True, distance="euclidean"):
+
+def batch_hard_triplet_loss(pairwise_dist, labels, margin):
     """Build the triplet loss over a batch of embeddings.
     For each anchor, we get the hardest positive and hardest negative to form a triplet.
     Args:
@@ -576,13 +592,6 @@ def batch_hard_triplet_loss(embeddings_U, embeddings_V, labels, margin, squared=
         :param directed:
         :param distance:
     """
-    # Get the pairwise distance matrix
-    if distance == "euclidean":
-        pairwise_dist = _pairwise_distances(embeddings_U, embeddings_V, squared=squared)
-    elif distance == "dot_sigmoid":
-        pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings_U, embeddings_V)
-    elif distance == "cosine":
-        pairwise_dist = 1 - _pairwise_cosine_similarity(embeddings_U, embeddings_V)
 
     # For each anchor, get the hardest positive
     # First, we need to get a mask for every valid positive (they should have same label)
