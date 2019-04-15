@@ -134,7 +134,7 @@ class HeterogeneousNetwork():
         else:
             self.G_u.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None):
+    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=False):
         """
         Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
          :param node_list:.
@@ -163,7 +163,8 @@ class HeterogeneousNetwork():
             adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         elif is_directed:
             adj = nx.adjacency_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
-
+            if sample_negative:
+                adj = self.sample_random_negative_edges(adj.astype(float), negative_sampling_ratio=1.0)
         elif not is_directed and (("u" in edge_types and "u_n" in edge_types) or "u" in edge_types):
             adj = nx.adjacency_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
         elif not is_directed and ("u_n" == edge_types or "u_n" in edge_types):
@@ -171,10 +172,21 @@ class HeterogeneousNetwork():
                          d['type'] in edge_types]
             adj = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
 
-
         # Eliminate self-edges
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         return adj.astype(float)
+
+    def sample_random_negative_edges(self, pos_adj, negative_sampling_ratio):
+        pos_rows, pos_cols = pos_adj.nonzero()
+        Ed_count = len(pos_rows)
+        sample_neg_count = int(Ed_count * negative_sampling_ratio)
+
+        neg_rows, neg_cols = np.where(pos_adj.todense() == 0)
+        sample_indices = np.random.choice(neg_rows.shape[0], sample_neg_count, replace=False)
+        pos_adj[neg_rows[sample_indices], neg_cols[sample_indices]] = EPSILON
+        assert pos_adj.count_nonzero() > Ed_count, "Did not add any sampled negative edges {}+{} > {}".format(
+            pos_adj.count_nonzero(), sample_neg_count, Ed_count)
+        return pos_adj
 
     def get_edge(self, i, j, is_directed=True):
         if is_directed:

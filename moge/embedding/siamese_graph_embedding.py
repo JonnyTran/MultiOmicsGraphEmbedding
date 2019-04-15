@@ -291,7 +291,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             self.generator_val = DataGenerator(network=network_val, weighted=self.weighted,
                                                maxlen=self.max_length, padding='post', truncating="post",
                                                tokenizer=generator_train.tokenizer,
-                                               negative_sampling_ratio=self.negative_sampling_ratio * 2,
+                                               negative_sampling_ratio=2.0,
                                                batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
@@ -402,7 +402,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="euclidean", n_jobs=-2)
-                adj = np.exp(-2 * adj)
+                # adj = np.exp(-2 * adj)
+                adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=True)
             if self.directed_distance == "l1_alpha":
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
@@ -411,14 +412,30 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         elif edge_type == 'u':
             if self.undirected_distance == "euclidean":
                 adj = pairwise_distances(X=embeddings, metric="euclidean", n_jobs=-2)
-                adj = np.exp(-2 * adj)
-
+                # adj = np.exp(-2 * adj)
+                adj = self.transform_adj_beta_exp(adj, edge_types=["u", "u_n"], sample_negative=False)
             if self.undirected_distance == "l1_alpha":
                 adj = pairwise_distances(X=embeddings,
                                          metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
         else:
             raise Exception("Unsupported edge_type", edge_type)
         return adj
+
+    def transform_adj_beta_exp(self, adj_dist, edge_types, sample_negative):
+        print("beta exp func")
+        adj_true = self.generator_train.network.get_adjacency_matrix(edge_types=edge_types,
+                                                                     node_list=self.node_list,
+                                                                     sample_negative=sample_negative)
+        rows, cols = adj_true.nonzero()
+        y_true = adj_true[rows, cols]
+        adj_dist = adj_dist - np.min(adj_dist)
+        dists_pred = adj_dist[rows, cols]
+        dists_pred = np.clip(dists_pred, 1e-8, 1e8)
+        beta = -np.divide(np.log(y_true), dists_pred)
+        beta_mean = beta.mean()
+        print("beta mean", beta_mean)
+        adj_pred = np.exp(-np.multiply(beta_mean, adj_dist))
+        return adj_pred
 
     def save_embeddings(self, filename, logdir=True, variable_length=True, recompute=True, minlen=None):
         embs = self.get_embedding(variable_length=variable_length, recompute=recompute, minlen=minlen)

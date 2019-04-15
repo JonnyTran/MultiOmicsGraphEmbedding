@@ -130,14 +130,16 @@ class OnlineTripletGenerator(SampledDataGenerator):
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         sampled_directed_adj = self.sample_directed_negative_edges(
-            self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes), sampled_nodes)
+            self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes),
+            sampled_nodes,
+            self.negative_sampling_ratio)
         X["labels_directed"] = sampled_directed_adj
         X["labels_undirected"] = self.network.get_adjacency_matrix(edge_types=["u", "u_n"], node_list=sampled_nodes)
 
         y = np.zeros(X["input_seqs"].shape[0]) # Dummy vector
         return X, y
 
-    def sample_directed_negative_edges(self, pos_adj, sampled_nodes):
+    def sample_directed_negative_edges(self, pos_adj, sampled_nodes, negative_sampling_ratio):
         """
         Samples a number of negative edges with context to the number of positive edges in the adjacency matrix.
         For each node, if n is the number of its positive connections, this function will sample n*k negative connections,
@@ -151,7 +153,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
         sampled_adj = pos_adj.tolil()
         for idx, node in enumerate(sampled_nodes):
             _, pos_nodes = pos_adj[idx].nonzero()
-            node_neg_sample_count = min(int(len(pos_nodes) * self.negative_sampling_ratio),
+            node_neg_sample_count = min(int(len(pos_nodes) * negative_sampling_ratio),
                                         int(pos_adj.shape[1] * 0.2))
             if node_neg_sample_count > 0:
                 node_degrees = [degree if (id not in pos_nodes and id != idx) else 0 for id, degree in
@@ -160,10 +162,12 @@ class OnlineTripletGenerator(SampledDataGenerator):
                                                       p=self.compute_node_sampling_freq(node_degrees,
                                                                                         compression_func=self.compression_func))
                 sampled_adj[idx, sample_neg_indices] = EPSILON
-
+        assert sampled_adj.count_nonzero() > pos_adj.count_nonzero(), "Did not add any sampled negative edges {} > {}".format(
+            sampled_adj.count_nonzero(),
+            pos_adj.count_nonzero())
         return sampled_adj
 
-    def sample_random_negative_edges(self, pos_adj, sampled_nodes):
+    def sample_random_negative_edges(self, pos_adj, sampled_nodes, negative_sampling_ratio):
         """
         This samples a number of negative edges in proportion to the number of positive edges in the adjacency matrix,
         by sampling uniformly random edges.
@@ -173,14 +177,15 @@ class OnlineTripletGenerator(SampledDataGenerator):
         """
         pos_rows, pos_cols = pos_adj.nonzero()
         Ed_count = len(pos_rows)
-        sample_neg_count = min(int(Ed_count * self.negative_sampling_ratio), np.power(pos_adj.shape[0], 2) * 0.25)
+        sample_neg_count = min(int(Ed_count * negative_sampling_ratio), np.power(pos_adj.shape[0], 2) * 0.50)
 
         neg_rows, neg_cols = np.where(pos_adj.todense() == 0)
         sample_indices = np.random.choice(neg_rows.shape[0], sample_neg_count, replace=False)
-        pos_adj = pos_adj.tolil()
-        pos_adj[neg_rows[sample_indices], neg_cols[sample_indices]] = EPSILON
-
-        return pos_adj
+        pos_neg_adj = pos_adj.tolil()
+        pos_neg_adj[neg_rows[sample_indices], neg_cols[sample_indices]] = EPSILON
+        assert pos_neg_adj.count_nonzero() > pos_adj.count_nonzero(), "Did not add any sampled negative edges {} > {}".format(
+            pos_neg_adj.count_nonzero(), pos_adj.count_nonzero())
+        return pos_neg_adj
 
 
 class OnlineSoftmaxGenerator(OnlineTripletGenerator):

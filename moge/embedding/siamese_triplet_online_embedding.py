@@ -168,7 +168,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
                 # Get node-specific adaptive threshold
                 # adj = self.transform_adj_adaptive_threshold(adj, margin=0)
-                adj = np.exp(-2.0 * adj)
+                adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=True)
+                # adj = np.exp(-2.0 * adj)
                 # adj = adj.T  # Transpose
                 # adj = -adj
                 print("Euclidean dist")
@@ -189,8 +190,9 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             if self.undirected_distance == "euclidean":
                 adj = pairwise_distances(X=embeddings,
                                          metric="euclidean", n_jobs=-2)
-                adj = np.exp(-2.0 * adj)
+                # adj = np.exp(-2.0 * adj)
                 # adj = self.transform_adj_adaptive_threshold(adj, margin=self.margin/2)
+                adj = self.transform_adj_beta_exp(adj, edge_types=["u", "u_n"], sample_negative=False)
                 print("Euclidean dist")
 
             elif self.undirected_distance == "cosine":
@@ -204,11 +206,11 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             raise Exception("Unsupported edge_type", edge_type)
         return adj
 
-    def transform_adj_adaptive_threshold(self, adj_pred, margin=0.2):
+    def transform_adj_adaptive_threshold(self, adj_pred, margin=0.2, edge_types="d"):
         print("adaptive threshold")
-        network_adj = self.generator_train.network.get_adjacency_matrix(edge_types="d",
-                                                                        node_list=self.node_list)
-        self.distance_threshold = self.get_adaptive_threshold(adj_pred, network_adj, margin)
+        adj_true = self.generator_train.network.get_adjacency_matrix(edge_types=edge_types,
+                                                                     node_list=self.node_list)
+        self.distance_threshold = self.get_adaptive_threshold(adj_pred, adj_true, margin)
 
         predicted_adj = np.zeros(adj_pred.shape)
         for node_id in range(predicted_adj.shape[0]):
@@ -405,7 +407,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.generator_val = OnlineTripletGenerator(network=network_val, weighted=self.weighted,
                                                         maxlen=self.max_length, padding='post', truncating="post",
                                                         tokenizer=generator_train.tokenizer,
-                                                        negative_sampling_ratio=5.0, n_steps=int(n_steps / 5),
+                                                        negative_sampling_ratio=2.0, n_steps=int(n_steps / 5),
                                                         batch_size=self.batch_size, shuffle=True, seed=seed,
                                                         verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
@@ -484,12 +486,12 @@ class OnlineTripletLoss(Layer):
 
         # Get the pairwise distance matrix
         if self.undirected_distance == "euclidean":
-            undirected_pairwise_dist = tf.minimum(_pairwise_distances(embeddings_s, embeddings_s, squared=True),
+            undirected_pairwise_dist = tf.minimum(_pairwise_distances(embeddings, embeddings, squared=True),
                                                   _pairwise_distances(embeddings_t, embeddings_t, squared=True))
         elif self.undirected_distance == "dot_sigmoid":
-            undirected_pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings_s, embeddings_t)
+            undirected_pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings, embeddings)
         elif self.undirected_distance == "cosine":
-            undirected_pairwise_dist = 1 - _pairwise_cosine_similarity(embeddings_s, embeddings_t)
+            undirected_pairwise_dist = 1 - _pairwise_cosine_similarity(embeddings, embeddings)
 
         directed_loss = batch_hard_triplet_loss(directed_pairwise_dist, labels=labels_directed,
                                                 margin=self.directed_margin)
