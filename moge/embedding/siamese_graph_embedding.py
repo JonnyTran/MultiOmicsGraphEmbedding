@@ -261,7 +261,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             encoded_j = self.lstm_network(input_seq_j)
             print(encoded_j) if self.verbose else None
 
-            output = Lambda(self.st_euclidean_distance, name="lambda_output")([encoded_i, encoded_j, is_directed])
+            output = Lambda(
+                self.st_euclidean_distance if self.undirected_distance == "euclidean" else self.st_min_euclidean_distance,
+                name="lambda_output")([encoded_i, encoded_j, is_directed])
             # self.alpha_network = self.create_alpha_network()
             # output = self.alpha_network([encoded_i, encoded_j, is_directed])
 
@@ -274,7 +276,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.build_tensorboard()
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
-                                 optimizer=RMSprop(lr=self.lr),
+                                 optimizer=RMSprop(lr=self.lr, decay=0.90),
                                  metrics=[precision_d, recall_d] if not hasattr(self, "alpha_network") else [
                                      "accuracy", precision, recall],
                                  # metrics=,
@@ -428,13 +430,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                                                      sample_negative=sample_negative)
         rows, cols = adj_true.nonzero()
         y_true = adj_true[rows, cols]
-        adj_dist = adj_dist - np.min(adj_dist)
-        dists_pred = adj_dist[rows, cols]
-        dists_pred = np.clip(dists_pred, 1e-8, 1e8)
+        adj_dist_squared = adj_dist - np.min(adj_dist)
+        adj_dist_squared = np.power(adj_dist_squared, 2)
+        dists_pred = np.clip(adj_dist_squared[rows, cols], 1e-8, 1e8)
         beta = -np.divide(np.log(y_true), dists_pred)
-        beta_mean = beta.mean()
+        # beta_mean = beta.mean()
+        beta_mean = np.mean(beta, axis=1)
         print("beta mean", beta_mean)
-        adj_pred = np.exp(-np.multiply(beta_mean, adj_dist))
+        adj_pred = np.exp(-np.multiply(beta_mean, adj_dist_squared))
         return adj_pred
 
     def save_embeddings(self, filename, logdir=True, variable_length=True, recompute=True, minlen=None):

@@ -1,6 +1,6 @@
 from keras.backend.tensorflow_backend import set_session
 from keras.layers import Layer
-from keras.optimizers import Adam, Adagrad
+from keras.optimizers import Adam, Adadelta
 
 from moge.embedding.siamese_graph_embedding import *
 from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding
@@ -389,7 +389,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                      # loss=self.batch_contrastive_loss([directed_pairwise_distances,
                                      #                                   undirected_pairwise_distances,
                                      #                                   labels_directed, labels_undirected]),
-                                     optimizer=Adagrad(),
+                                     optimizer=Adadelta(),
                                      # metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
                                      #          self.custom_precision([directed_pairwise_distances, labels_directed])] if \
                                      #     self.directed_distance == "euclidean" else None,
@@ -478,7 +478,7 @@ class OnlineTripletLoss(Layer):
 
         # Get the pairwise distance matrix
         if self.directed_distance == "euclidean":
-            directed_pairwise_dist = _pairwise_distances(embeddings_s, embeddings_t, squared=True)
+            directed_pairwise_dist = _pairwise_distances(embeddings_s, embeddings_t, squared=False)
         elif self.directed_distance == "dot_sigmoid":
             directed_pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings_s, embeddings_t)
         elif self.directed_distance == "cosine":
@@ -486,8 +486,8 @@ class OnlineTripletLoss(Layer):
 
         # Get the pairwise distance matrix
         if self.undirected_distance == "euclidean":
-            undirected_pairwise_dist = tf.minimum(_pairwise_distances(embeddings, embeddings, squared=True),
-                                                  _pairwise_distances(embeddings_t, embeddings_t, squared=True))
+            undirected_pairwise_dist = tf.minimum(_pairwise_distances(embeddings_s, embeddings_s, squared=False),
+                                                  _pairwise_distances(embeddings_t, embeddings_t, squared=False))
         elif self.undirected_distance == "dot_sigmoid":
             undirected_pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings, embeddings)
         elif self.undirected_distance == "cosine":
@@ -654,7 +654,7 @@ def frobenius_norm_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor, squ
     return frobenius_norm_loss
 
 
-def batch_constrastive_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor, squared=True, distance="euclidean"):
+def batch_constrastive_loss(embeddings_B, embeddings_A, labels: tf.SparseTensor, squared=False, distance="euclidean"):
     if distance == "euclidean":
         pairwise_distances = _pairwise_distances(embeddings_A, embeddings_B, squared=squared)
     elif distance == "dot_sigmoid":

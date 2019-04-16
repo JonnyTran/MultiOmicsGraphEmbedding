@@ -207,7 +207,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             reconstructed_adj = self.reconstructed_adj
 
         elif self._method_name == "LINE":
-            reconstructed_adj = np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
+            # reconstructed_adj = np.divide(1, 1 + np.exp(-np.matmul(self._X, self._X.T)))
+            reconstructed_adj = self.softmax(np.matmul(self._X, self._X.T))
 
         elif self._method_name == "node2vec":
             reconstructed_adj = self.softmax(np.matmul(self._X, self._X.T))

@@ -17,7 +17,7 @@ def bar_chart(results: dict, measures, title=None, bar_width=0.08, loc="best"):
     elif type(measures) == list:
         n_groups = len(methods)
         performances = {}
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(dpi=300)
         index = np.arange(n_groups)
 
         color_dict = {"LINE": "b", "HOPE": "c", "SDNE": "y", "node2vec": "g", "BioVec": "m", "rna2rna": "r",

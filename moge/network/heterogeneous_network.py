@@ -209,7 +209,7 @@ class HeterogeneousNetwork():
             edgelist = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
                         'database' in d and d['database'] in databases]
         else:
-            edgelist = self.G.edges(nbunch=node_list, data=True)
+            edgelist = self.G.edges(nbunch=node_list, data=False)
 
         if inclusive:
             edgelist = [(u, v) for u, v in edgelist if (u in node_list and v in node_list)]

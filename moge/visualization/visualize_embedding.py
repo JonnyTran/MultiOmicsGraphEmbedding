@@ -6,9 +6,10 @@ import numpy as np
 from sklearn.manifold import TSNE
 
 
-def visualize_embedding(embedding, network, edgelist=[], top_k=0, test_nodes=None,
+def visualize_embedding(embedding, network, nodelist=None, edgelist=[], top_k=0, test_nodes=None,
                         node_label="locus_type", cmap="gist_ncar", **kwargs):
-    nodelist = embedding.node_list
+    if nodelist is None:
+        nodelist = embedding.node_list
     node_pos = embedding.get_tsne_node_pos()
 
     if (edgelist is None or len(edgelist) == 0) and top_k > 0:
@@ -27,15 +28,10 @@ def visualize_embedding(embedding, network, edgelist=[], top_k=0, test_nodes=Non
         labels_dict = {node:node for node in test_nodes if node in nodelist}
         kwargs["labels"] = labels_dict
         kwargs["with_labels"] = True
-        kwargs["font_size"] = 2
+        kwargs["font_size"] = 6
 
     if node_label is not None:
-        genes_info = network.genes_info
-        node_labels = genes_info.loc[nodelist][node_label].str.split("|", expand=True)[0].astype(str)
-        sorted_node_labels = sorted(node_labels.unique(), reverse=True)
-        colors = np.linspace(0, 1, len(sorted_node_labels))
-        node_colormap = {f: colors[sorted_node_labels.index(f)] for f in node_labels.unique()}
-        node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
+        cmap, node_colormap, node_colors, node_labels = get_node_colormap(cmap, network, node_label, nodelist)
 
         plot_embedding2D(node_pos, node_list=embedding.node_list, node_colors=node_colors,
                          legend=True, node_labels=node_labels, node_colormap=node_colormap, legend_size=20,
@@ -47,6 +43,24 @@ def visualize_embedding(embedding, network, edgelist=[], top_k=0, test_nodes=Non
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
                          figsize=(20, 15), **kwargs)
+
+
+def get_node_colormap(cmap, network, node_label, nodelist):
+    genes_info = network.genes_info
+    if genes_info[node_label].dtype == "object":
+        node_labels = genes_info.loc[nodelist][node_label].str.split("|", expand=True)[0].astype(str)
+        sorted_node_labels = sorted(node_labels.unique(), reverse=True)
+        colors = np.linspace(0, 1, len(sorted_node_labels))
+        node_colormap = {f: colors[sorted_node_labels.index(f)] for f in node_labels.unique()}
+        node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
+
+    elif genes_info[node_label].dtype == "float":
+
+        node_labels = genes_info.loc[nodelist][node_label].values
+        cmap = "gray"
+        node_colormap = None
+        node_colors = [n / node_labels.max() for n in node_labels]
+    return cmap, node_colormap, node_colors, node_labels
 
 
 def plot_embedding2D(node_pos, node_list, di_graph=None,

@@ -165,6 +165,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
         assert sampled_adj.count_nonzero() > pos_adj.count_nonzero(), "Did not add any sampled negative edges {} > {}".format(
             sampled_adj.count_nonzero(),
             pos_adj.count_nonzero())
+
         return sampled_adj
 
     def sample_random_negative_edges(self, pos_adj, sampled_nodes, negative_sampling_ratio):
