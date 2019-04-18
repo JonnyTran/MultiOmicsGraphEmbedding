@@ -436,7 +436,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         dists_pred = np.clip(adj_dist_squared[rows, cols], 1e-8, 1e8)
         beta = -np.divide(np.log(y_true), dists_pred)
         # beta_mean = beta.mean()
-        beta_mean = np.mean(beta, axis=1)
+        beta_mean = np.median(beta, axis=1)
         print("beta mean", beta_mean)
         adj_pred = np.exp(-np.multiply(beta_mean, adj_dist_squared))
         return adj_pred

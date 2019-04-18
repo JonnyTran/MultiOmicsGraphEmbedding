@@ -88,8 +88,6 @@ class HeterogeneousNetwork():
         print("Genes info columns:", self.genes_info.columns.tolist())
         self.genes_info = self.genes_info[~self.genes_info.index.duplicated(keep='first')]
 
-
-
     def add_directed_edges_from_edgelist(self, edgelist, modalities, database,
                                          correlation_weights=False, threshold=None):
         if not (modalities is None):

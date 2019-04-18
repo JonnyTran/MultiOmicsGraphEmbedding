@@ -221,8 +221,10 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
                                                    Y=self._X[:, int(self._d / 2):self._d],
                                                    metric="euclidean", n_jobs=-2)
-            reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
-            reconstructed_adj = reconstructed_adj.T
+            reconstructed_adj = self.transform_adj_beta_exp(reconstructed_adj, network_train=self.network,
+                                                            edge_types="d", sample_negative=2.0)
+            # reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
+            # reconstructed_adj = reconstructed_adj.T
 
         elif self._method_name == "HOPE":
             reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
@@ -254,6 +256,21 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             idx_B = [self.node_list.index(node) for node in node_list_B]
             return adj[idx_A, :][:, idx_B]
 
+    def transform_adj_beta_exp(self, adj_dist, network_train, edge_types, sample_negative):
+        print("beta exp func")
+        adj_true = network_train.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
+                                                      sample_negative=sample_negative)
+        rows, cols = adj_true.nonzero()
+        y_true = adj_true[rows, cols]
+        adj_dist_squared = adj_dist - np.min(adj_dist)
+        adj_dist_squared = np.power(adj_dist_squared, 2)
+        dists_pred = np.clip(adj_dist_squared[rows, cols], 1e-8, 1e8)
+        beta = -np.divide(np.log(y_true), dists_pred)
+        # beta_mean = beta.mean()
+        beta_mean = np.median(beta, axis=1)
+        print("beta mean", beta_mean)
+        adj_pred = np.exp(-np.multiply(beta_mean, adj_dist_squared))
+        return adj_pred
 
     def softmax(self, X):
         exps = np.exp(X)
