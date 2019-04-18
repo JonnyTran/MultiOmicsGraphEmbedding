@@ -1,16 +1,23 @@
+import community  # python-louvain
 import matplotlib.cm as cm
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-from sklearn.manifold import TSNE
+from bokeh.models import ColumnDataSource
+from bokeh.models import HoverTool, LabelSet
+from bokeh.models import Toggle, CustomJS
+from bokeh.plotting import show, figure
+from scipy.sparse import csgraph
+from sklearn.decomposition import TruncatedSVD
 
 
-def visualize_embedding(embedding, network, nodelist=None, edgelist=[], top_k=0, test_nodes=None,
+def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos=None, top_k=0, test_nodes=None,
                         node_label="locus_type", cmap="gist_ncar", **kwargs):
     if nodelist is None:
         nodelist = embedding.node_list
-    node_pos = embedding.get_tsne_node_pos()
+    if node_pos is None:
+        node_pos = embedding.get_tsne_node_pos()
 
     if (edgelist is None or len(edgelist) == 0) and top_k > 0:
         edgelist = embedding.get_top_k_predicted_edges(edge_type="d", top_k=top_k,
@@ -47,7 +54,15 @@ def visualize_embedding(embedding, network, nodelist=None, edgelist=[], top_k=0,
 
 def get_node_colormap(cmap, network, node_label, nodelist):
     genes_info = network.genes_info
-    if genes_info[node_label].dtype == "object":
+    if type(node_label) == list:
+        node_labels = node_label
+        assert len(node_label) == len(nodelist)
+        sorted_node_labels = sorted(set(node_labels), reverse=True)
+        colors = np.linspace(0, 1, len(sorted_node_labels))
+        node_colormap = {f: colors[sorted_node_labels.index(f)] for f in set(node_labels)}
+        node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
+
+    elif genes_info[node_label].dtype == "object":
         node_labels = genes_info.loc[nodelist][node_label].str.split("|", expand=True)[0].astype(str)
         sorted_node_labels = sorted(node_labels.unique(), reverse=True)
         colors = np.linspace(0, 1, len(sorted_node_labels))
@@ -67,17 +82,12 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
                      legend=True, node_labels=None, node_colormap=None, legend_size=10,
                      node_colors=None, plot_nodes_only=True,
                      cmap="viridis", file_name=None, figsize=(17, 15), **kwargs):
-    node_num, embedding_dimension = node_pos.shape
-    assert node_num == len(node_list)
-    if(embedding_dimension > 2):
-        print("Embedding dimension greater than 2, use tSNE to reduce it to 2")
-        model = TSNE(n_components=2)
-        node_pos = model.fit_transform(node_pos)
 
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(1, 1, 1)
 
-    if legend and node_labels is not None and node_colormap is not None and node_colors is not None:
+    if legend and node_labels is not None and type(
+            node_labels) != list and node_colormap is not None and node_colors is not None:
         scalarMap = cm.ScalarMappable(norm=colors.Normalize(vmin=0.0, vmax=1.0, clip=False), cmap=cmap)
         top_node_labels = node_labels.value_counts()[:legend_size].index  # Get top k most popular legends labels
         for label in top_node_labels:
@@ -97,17 +107,27 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         plt.scatter(node_pos[:, 0], node_pos[:, 1], c=node_colors, cmap=cmap)
     else:
         # Plot using networkx with edge structure
-        pos = {}
-        for i, node in enumerate(node_list):
-            pos[node] = node_pos[i, :]
+        if type(node_pos) is not dict:
+            node_num, embedding_dimension = node_pos.shape
+            assert node_num == len(node_list), "node_pos {}".format(node_pos.shape)
+            if (embedding_dimension > 2):
+                print("Embedding dimension greater than 2, use tSNE to reduce it to 2")
+                laplacian = csgraph.laplacian(node_pos, normed=True)
+                node_pos = TruncatedSVD(n_components=2).fit_transform(laplacian)
+
+            pos = {}
+            for i, node in enumerate(node_list):
+                pos[node] = node_pos[i, :]
+        else:
+            pos = node_pos
 
         if plot_nodes_only:
-            nx.draw_networkx_nodes(di_graph, pos,
+            nx.draw_networkx_nodes(di_graph, pos=pos,
                                    node_color=node_colors, cmap=cmap, ax=ax,
                                    width=0.1,
                                    alpha=0.8, **kwargs)
         else:
-            nx.draw_networkx(di_graph, pos,
+            nx.draw_networkx(di_graph, pos=pos,
                              node_color=node_colors, cmap=cmap, ax=ax,
                              width=0.1, arrows=True,
                              alpha=0.8, **kwargs)
@@ -126,3 +146,84 @@ def get_node_color(node_labels):
 
     return colors
 
+
+def plot_bokeh_graph(network, ):
+    node_pos = nx.spring_layout(network, iterations=50)
+
+    nodes, nodes_coordinates = zip(*sorted(node_pos.items()))
+    nodes_xs, nodes_ys = list(zip(*nodes_coordinates))
+    nodes_source = ColumnDataSource(dict(x=nodes_xs, y=nodes_ys,
+                                         name=[n[4:] for n in nodes]))
+    hover = HoverTool(tooltips=[('name', '@name')], renderers=[])
+    plot = figure(plot_width=875, plot_height=700,
+                  tools=['tap', hover, 'box_zoom', 'reset', 'pan'])
+    r_circles = plot.circle('x', 'y', source=nodes_source, size=5,
+                            color='blue', level='overlay')
+    hover.renderers.append(r_circles)
+
+    plot.xgrid.grid_line_color = None
+    plot.ygrid.grid_line_color = None
+
+    lines_source = ColumnDataSource(get_edges_specs(network, node_pos))
+
+    r_lines = plot.multi_line('xs', 'ys', line_width=1.5,
+                              # alpha='alphas',
+                              color='black',
+                              source=lines_source)
+
+    centrality = \
+        nx.algorithms.centrality.betweenness_centrality(network)
+    # first element are nodes again
+    _, nodes_centrality = zip(*sorted(centrality.items()))
+    max_centrality = max(nodes_centrality)
+    nodes_source.add([7 + 10 * t / max_centrality
+                      for t in nodes_centrality],
+                     'centrality')
+
+    partition = community.best_partition(network)
+    p_, nodes_community = zip(*sorted(partition.items()))
+    nodes_source.add(nodes_community, 'community')
+    community_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#b3cde3',
+                        '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
+                        '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
+    nodes_source.add([community_colors[t % len(community_colors)]
+                      for t in nodes_community],
+                     'community_color')
+
+    r_circles.glyph.size = 'centrality'
+    r_circles.glyph.fill_color = 'community_color'
+
+    proc_labels = LabelSet(x='x', y='y', text="name",
+                           text_font_size="8pt", text_color="navy",
+                           source=nodes_source, text_align='center')
+
+    plot.add_layout(proc_labels)
+
+    code = '''\
+    if toggle.active
+        labels.visible = true
+        console.log 'enabling box'
+    else
+        labels.visible = false
+        console.log 'disabling box'
+    '''
+    callback = CustomJS.from_coffeescript(code=code, args={})
+    toggle = Toggle(label="Toggle miRNA label", button_type="success", callback=callback)
+    callback.args = {'toggle': toggle, 'labels': proc_labels}
+
+    show(plot)
+    show(toggle)
+
+
+def get_edges_specs(_network, _node_pos):
+    d = {'xs': [],
+         'ys': [],
+         # 'alphas': [],
+         'name': []}
+    calc_alpha = lambda h: 0.1 + 0.9 * h
+    for u, v, data in _network.edges(data=True):
+        d['xs'].append([_node_pos[u][0], _node_pos[v][0]])
+        d['ys'].append([_node_pos[u][1], _node_pos[v][1]])
+        # d['alphas'].append(calc_alpha(data['weight'])) if "weight" in data else None
+        d['name'].append(str(u) + '<=>' + str(v))
+    return d

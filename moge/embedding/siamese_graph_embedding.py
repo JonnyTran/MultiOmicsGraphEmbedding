@@ -285,7 +285,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
                         n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
-                        early_stopping=False,
+                        early_stopping=2,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
 
@@ -356,13 +356,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         # params = tf.summary.text("params", tf.convert_to_tensor(str(self.get_params())))
         # self.tensorboard.writer.add_summary(self.sess.run(params))
 
-    def get_callbacks(self, early_stopping=False, tensorboard=True):
+    def get_callbacks(self, early_stopping=2, tensorboard=True):
         callbacks = []
         if tensorboard:
             callbacks.append(self.tensorboard)
-        if early_stopping is not False:
+        if early_stopping:
             if not hasattr(self, "early_stopping"):
-                self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=0, mode='auto',
+                self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=early_stopping, verbose=0,
+                                                    mode='auto',
                                                     baseline=None, restore_best_weights=True)
             callbacks.append(self.early_stopping)
         return callbacks
@@ -405,7 +406,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                          Y=embeddings_Y,
                                          metric="euclidean", n_jobs=-2)
                 # adj = np.exp(-2 * adj)
-                adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=True)
+                adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
             if self.directed_distance == "l1_alpha":
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,

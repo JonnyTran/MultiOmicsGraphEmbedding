@@ -197,7 +197,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         print(self.get_method_name(), "imported", self._X.shape)
 
-    def get_reconstructed_adj(self, edge_type=None, node_l=None, node_l_b=None):
+    def get_reconstructed_adj(self, edge_type=None, node_l=None, interpolate=False, node_l_b=None):
         '''Compute the adjacency matrix from the learned embedding
 
         Returns:
@@ -226,15 +226,16 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         elif self._method_name == "HOPE":
             reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
-            if not ((reconstructed_adj >= 0).all() and (reconstructed_adj <= 1).all()):
-                reconstructed_adj = np.interp(reconstructed_adj, (reconstructed_adj.min(), reconstructed_adj.max()), (0, 1))
-
+            interpolate = True
         elif self._method_name == "SDNE":
             reconstructed_adj = pairwise_distances(X=self._X, Y=self._X, metric="euclidean", n_jobs=-2)
-            reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
+            reconstructed_adj = np.exp(-1.0 * reconstructed_adj)
 
         else:
             raise Exception("Method" + self.get_method_name() + "not supported")
+
+        if interpolate:
+            reconstructed_adj = np.interp(reconstructed_adj, (reconstructed_adj.min(), reconstructed_adj.max()), (0, 1))
 
         if node_l is None or node_l == self.node_list:
             self.reconstructed_adj = reconstructed_adj

@@ -134,7 +134,7 @@ class HeterogeneousNetwork():
         else:
             self.G_u.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=False):
+    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=0.0):
         """
         Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
          :param node_list:.
@@ -164,7 +164,7 @@ class HeterogeneousNetwork():
         elif is_directed:
             adj = nx.adjacency_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
             if sample_negative:
-                adj = self.sample_random_negative_edges(adj.astype(float), negative_sampling_ratio=1.0)
+                adj = self.sample_random_negative_edges(adj.astype(float), negative_sampling_ratio=sample_negative)
         elif not is_directed and (("u" in edge_types and "u_n" in edge_types) or "u" in edge_types):
             adj = nx.adjacency_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
         elif not is_directed and ("u_n" == edge_types or "u_n" in edge_types):
