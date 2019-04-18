@@ -45,7 +45,11 @@ class HeterogeneousNetwork():
         self.nodes = {}
         self.node_to_modality = {}
 
-        bad_nodes = [node for node in self.get_node_list() if node is None or type(node) != str or node == ""]
+        bad_nodes = [node for node in self.get_node_list() if node is None or \
+                     type(node) != str or \
+                     node == "" or \
+                     " " in node
+                     ]
         self.G.remove_nodes_from(bad_nodes)
         self.G_u.remove_nodes_from(bad_nodes)
         nodelist = self.get_node_list()
