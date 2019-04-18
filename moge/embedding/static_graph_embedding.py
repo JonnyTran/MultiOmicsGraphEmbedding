@@ -266,9 +266,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         adj_dist_squared = np.power(adj_dist_squared, 2)
         dists_pred = np.clip(adj_dist_squared[rows, cols], 1e-8, 1e8)
         beta = -np.divide(np.log(y_true), dists_pred)
-        # beta_mean = beta.mean()
         beta_mean = np.median(beta, axis=1)
-        print("beta mean", beta_mean)
+        print("beta mean", np.mean(beta, axis=1), "beta median", np.median(beta, axis=1))
         adj_pred = np.exp(-np.multiply(beta_mean, adj_dist_squared))
         return adj_pred
 

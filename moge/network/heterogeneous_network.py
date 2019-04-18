@@ -87,6 +87,7 @@ class HeterogeneousNetwork():
         #     0]  # TODO Selects only first family annotation if an RNA belongs to multiple
         print("Genes info columns:", self.genes_info.columns.tolist())
         self.genes_info = self.genes_info[~self.genes_info.index.duplicated(keep='first')]
+        self.genes_info["RNA Type"] = self.genes_info.index.map(self.node_to_modality)
 
     def add_directed_edges_from_edgelist(self, edgelist, modalities, database,
                                          correlation_weights=False, threshold=None):
