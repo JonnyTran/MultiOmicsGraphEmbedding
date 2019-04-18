@@ -222,7 +222,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
                                                    Y=self._X[:, int(self._d / 2):self._d],
                                                    metric="euclidean", n_jobs=-2)
             reconstructed_adj = self.transform_adj_beta_exp(reconstructed_adj, network_train=self.network,
-                                                            edge_types="d", sample_negative=2.0)
+                                                            edge_types="d", sample_negative=1.0)
             # reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
             reconstructed_adj = reconstructed_adj.T
 
