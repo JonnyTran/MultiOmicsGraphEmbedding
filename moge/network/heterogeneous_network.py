@@ -52,13 +52,13 @@ class HeterogeneousNetwork():
                      ]
         self.G.remove_nodes_from(bad_nodes)
         self.G_u.remove_nodes_from(bad_nodes)
-        nodelist = self.get_node_list()
+        # nodelist = self.get_node_list()
 
         for modality in self.modalities:
             self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.G_u.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
-            self.nodes[modality] = [node for node in self.nodes[modality] if node in nodelist]
+            # self.nodes[modality] = [node for node in self.nodes[modality] if node in nodelist]
 
             for gene in self.multi_omics_data[modality].get_genes_list():
                 self.node_to_modality[gene] = modality
