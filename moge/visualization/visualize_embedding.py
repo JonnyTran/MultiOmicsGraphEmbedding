@@ -229,7 +229,7 @@ def plot_bokeh_graph(network, node_pos=None, node_size="centrality", node_label=
 
 def node_centrality(network):
     centrality = \
-        nx.algorithms.centrality.betweenness_centrality_source(network)
+        nx.algorithms.centrality.degree_centrality(network)
     # first element are nodes again
     _, nodes_centrality = zip(*sorted(centrality.items()))
     max_centrality = max(nodes_centrality)
