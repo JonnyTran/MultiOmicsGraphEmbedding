@@ -211,8 +211,8 @@ def plot_bokeh_graph(network, ):
     toggle = Toggle(label="Toggle miRNA label", button_type="success", callback=callback)
     callback.args = {'toggle': toggle, 'labels': proc_labels}
 
-    show(plot)
-    show(toggle)
+    # show(plot)
+    # show(toggle)
 
 
 def get_edges_specs(_network, _node_pos):
