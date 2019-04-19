@@ -52,6 +52,74 @@ def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos
                          figsize=figsize, dpi=dpi, **kwargs)
 
 
+def plot_embedding2D(node_pos, node_list, di_graph=None,
+                     legend=True, node_labels=None, node_colormap=None, legend_size=10,
+                     node_colors=None, plot_nodes_only=True,
+                     cmap="viridis", file_name=None, figsize=(17, 15), dpi=150, **kwargs):
+    fig = plt.figure(figsize=figsize, dpi=dpi)
+    ax = fig.add_subplot(1, 1, 1)
+
+    if legend and node_labels is not None and type(
+            node_labels) != list and node_colormap is not None and node_colors is not None:
+        scalarMap = cm.ScalarMappable(norm=colors.Normalize(vmin=0.0, vmax=1.0, clip=False), cmap=cmap)
+        top_node_labels = node_labels.value_counts()[:legend_size].index  # Get top k most popular legends labels
+        for label in top_node_labels:
+            ax.plot([0], [0],
+                    color=scalarMap.to_rgba(node_colormap[label], norm=False),
+                    label=label, linewidth=4) if label in node_colormap.keys() else None
+
+    if "node_size" not in kwargs: kwargs["node_size"] = 25
+    if "with_labels" not in kwargs or "labels" not in kwargs: kwargs["with_labels"] = False
+    if "font_size" not in kwargs: kwargs["font_size"] = 5
+
+    if "node_size" in kwargs and kwargs["node_size"] == "centrality":
+        kwargs["node_size"] = node_centrality(network=di_graph.subgraph(node_list).to_undirected())
+
+    if di_graph is None:
+        # Plot using plt scatter
+        plt.scatter(node_pos[:, 0], node_pos[:, 1], c=node_colors, cmap=cmap)
+    else:
+        # Plot using networkx with edge structure
+        if type(node_pos) is not dict:
+            node_num, embedding_dimension = node_pos.shape
+            assert node_num == len(node_list), "node_pos {}".format(node_pos.shape)
+            if (embedding_dimension > 2):
+                print("Embedding dimension greater than 2, use tSNE to reduce it to 2")
+                laplacian = csgraph.laplacian(node_pos, normed=True)
+                node_pos = TruncatedSVD(n_components=2).fit_transform(laplacian)
+
+            pos = {}
+            for i, node in enumerate(node_list):
+                pos[node] = node_pos[i, :]
+        else:
+            pos = node_pos
+
+        if kwargs["with_label"] and type(kwargs["labels"]) == str:
+            for i in range(len(pos)):
+                x, y = pos[i]
+                plt.text(x, y + 0.1, s=node_list[i], bbox=dict(facecolor='red', alpha=0.5),
+                         horizontalalignment='center')
+
+        if plot_nodes_only:
+            nx.draw_networkx_nodes(di_graph, pos=pos,
+                                   node_color=node_colors, cmap=cmap, ax=ax,
+                                   width=0.1,
+                                   alpha=0.8, **kwargs)
+        else:
+            nx.draw_networkx(di_graph, pos=pos,
+                             node_color=node_colors, cmap=cmap, ax=ax,
+                             width=0.1, arrows=True,
+                             alpha=0.8, **kwargs)
+
+        if legend:
+            plt.legend(loc='best')
+        plt.axis('off')
+
+    if file_name:
+        plt.savefig('%s_vis.pdf' % (file_name), dpi=150, format='pdf', bbox_inches='tight')
+        plt.figure()
+
+
 def get_node_colormap(cmap, network, node_label, nodelist):
     genes_info = network.genes_info
     if type(node_label) == list:
@@ -76,78 +144,6 @@ def get_node_colormap(cmap, network, node_label, nodelist):
         node_colormap = None
         node_colors = [n / node_labels.max() for n in node_labels]
     return cmap, node_colormap, node_colors, node_labels
-
-
-def plot_embedding2D(node_pos, node_list, di_graph=None,
-                     legend=True, node_labels=None, node_colormap=None, legend_size=10,
-                     node_colors=None, plot_nodes_only=True,
-                     cmap="viridis", file_name=None, figsize=(17, 15), dpi=150, **kwargs):
-    fig = plt.figure(figsize=figsize, dpi=dpi)
-    ax = fig.add_subplot(1, 1, 1)
-
-    if legend and node_labels is not None and type(
-            node_labels) != list and node_colormap is not None and node_colors is not None:
-        scalarMap = cm.ScalarMappable(norm=colors.Normalize(vmin=0.0, vmax=1.0, clip=False), cmap=cmap)
-        top_node_labels = node_labels.value_counts()[:legend_size].index  # Get top k most popular legends labels
-        for label in top_node_labels:
-            ax.plot([0], [0],
-                    color=scalarMap.to_rgba(node_colormap[label], norm=False),
-                    label=label, linewidth=4) if label in node_colormap.keys() else None
-
-    if "node_size" not in kwargs:
-        kwargs["node_size"] = 25
-    if "with_labels" not in kwargs or "labels" not in kwargs:
-        kwargs["with_labels"] = False
-    if "font_size" not in kwargs:
-        kwargs["font_size"] = 5
-
-    if "node_size" in kwargs and kwargs["node_size"] == "centrality":
-        kwargs["node_size"] = node_centrality(network=di_graph.subgraph(node_list))
-
-
-    if di_graph is None:
-        # Plot using plt scatter
-        plt.scatter(node_pos[:, 0], node_pos[:, 1], c=node_colors, cmap=cmap)
-    else:
-        # Plot using networkx with edge structure
-        if type(node_pos) is not dict:
-            node_num, embedding_dimension = node_pos.shape
-            assert node_num == len(node_list), "node_pos {}".format(node_pos.shape)
-            if (embedding_dimension > 2):
-                print("Embedding dimension greater than 2, use tSNE to reduce it to 2")
-                laplacian = csgraph.laplacian(node_pos, normed=True)
-                node_pos = TruncatedSVD(n_components=2).fit_transform(laplacian)
-
-            pos = {}
-            for i, node in enumerate(node_list):
-                pos[node] = node_pos[i, :]
-        else:
-            pos = node_pos
-
-        if kwargs["with_label"]:
-            for i in range(len(pos)):
-                x, y = pos[i]
-                plt.text(x, y + 0.1, s=node_list[i], bbox=dict(facecolor='red', alpha=0.5),
-                         horizontalalignment='center')
-
-        if plot_nodes_only:
-            nx.draw_networkx_nodes(di_graph, pos=pos,
-                                   node_color=node_colors, cmap=cmap, ax=ax,
-                                   width=0.1,
-                                   alpha=0.8, **kwargs)
-        else:
-            nx.draw_networkx(di_graph, pos=pos,
-                             node_color=node_colors, cmap=cmap, ax=ax,
-                             width=0.1, arrows=True,
-                             alpha=0.8, **kwargs)
-
-        if legend:
-            plt.legend(loc='best')
-        plt.axis('off')
-
-    if file_name:
-        plt.savefig('%s_vis.pdf' % (file_name), dpi=150, format='pdf', bbox_inches='tight')
-        plt.figure()
 
 
 def get_node_color(node_labels, n=256, index=False):
