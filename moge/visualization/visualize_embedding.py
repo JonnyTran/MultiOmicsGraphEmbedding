@@ -148,23 +148,25 @@ def get_node_color(node_labels, n=256, index=False):
         return [hash(s) % n for s in node_labels]
 
 
-def plot_bokeh_graph(network, node_centrality=True, node_label=None):
-    node_pos = nx.spring_layout(network, iterations=100)
+def plot_bokeh_graph(network, node_pos=None, node_centrality=True, node_label=None):
+    if node_pos == None:
+        node_pos = nx.spring_layout(network, iterations=100)
 
     nodes, nodes_coordinates = zip(*sorted(node_pos.items()))
     nodes_xs, nodes_ys = list(zip(*nodes_coordinates))
-    nodes_source = ColumnDataSource(dict(x=nodes_xs, y=nodes_ys,
-                                         name=nodes))
     hover = HoverTool(tooltips=[('name', '@name')], renderers=[])
     plot = figure(plot_width=875, plot_height=700,
                   tools=['tap', hover, 'box_zoom', 'reset', 'pan'])
+    plot.xgrid.grid_line_color = None
+    plot.ygrid.grid_line_color = None
+
+    # node circles
+    nodes_source = ColumnDataSource(dict(x=nodes_xs, y=nodes_ys, name=nodes))
     r_circles = plot.circle('x', 'y', source=nodes_source, size=5,
                             color='blue', level='overlay')
     hover.renderers.append(r_circles)
 
-    plot.xgrid.grid_line_color = None
-    plot.ygrid.grid_line_color = None
-
+    # edge lines
     lines_source = ColumnDataSource(get_edges_specs(network, node_pos))
     r_lines = plot.multi_line('xs', 'ys', line_width=1.0,
                               alpha='alphas',
@@ -172,6 +174,7 @@ def plot_bokeh_graph(network, node_centrality=True, node_label=None):
                               source=lines_source)
     hover.renderers.append(r_lines)
 
+    # Color and resize nodes
     colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#b3cde3',
               '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
               '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
@@ -232,5 +235,5 @@ def get_edges_specs(_network, _node_pos):
         d['xs'].append([_node_pos[u][0], _node_pos[v][0]])
         d['ys'].append([_node_pos[u][1], _node_pos[v][1]])
         d['alphas'].append(calc_alpha(data['weight']) if "weight" in data else 0.5)
-        d['name'].append(str(u) + '->' + str(v))
+        d['name'].append(str(u) + ' - ' + str(v))
     return d
