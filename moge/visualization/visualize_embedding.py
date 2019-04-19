@@ -233,7 +233,7 @@ def node_centrality(network):
     # first element are nodes again
     _, nodes_centrality = zip(*sorted(centrality.items()))
     max_centrality = max(nodes_centrality)
-    nodes_centrality = [25 + 100 * t / max_centrality for t in nodes_centrality]
+    nodes_centrality = [40 + 100 * t / max_centrality for t in nodes_centrality]
     return nodes_centrality
 
 def get_edges_specs(_network, _node_pos):
