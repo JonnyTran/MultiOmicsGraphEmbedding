@@ -44,7 +44,7 @@ def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos
                          legend=True, node_labels=node_labels, node_colormap=node_colormap, legend_size=20,
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         figsize=figsize, dpi=dpi ** kwargs)
+                         figsize=figsize, dpi=dpi, **kwargs)
     else:
         plot_embedding2D(node_pos, node_list=embedding.node_list,
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
