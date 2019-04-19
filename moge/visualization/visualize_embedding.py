@@ -141,13 +141,14 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         plt.figure()
 
 
-def get_node_color(node_labels):
-    colors = [float(hash(s) % 256) / 256 for s in node_labels]
+def get_node_color(node_labels, n=256, index=False):
+    if not index:
+        return [float(hash(s) % n) / n for s in node_labels]
+    else:
+        return [hash(s) % n for s in node_labels]
 
-    return colors
 
-
-def plot_bokeh_graph(network, label_centrality=True, label_community=False):
+def plot_bokeh_graph(network, node_centrality=True, node_label=None):
     node_pos = nx.spring_layout(network, iterations=50)
 
     nodes, nodes_coordinates = zip(*sorted(node_pos.items()))
@@ -170,8 +171,11 @@ def plot_bokeh_graph(network, label_centrality=True, label_community=False):
                               # alpha='alphas',
                               color='black',
                               source=lines_source)
+    colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#b3cde3',
+              '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
+              '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
 
-    if label_centrality:
+    if node_centrality:
         centrality = \
             nx.algorithms.centrality.betweenness_centrality(network)
         # first element are nodes again
@@ -182,17 +186,18 @@ def plot_bokeh_graph(network, label_centrality=True, label_community=False):
                          'centrality')
         r_circles.glyph.size = 'centrality'
 
-    if label_community:
+    if node_label == "community":
         partition = community.best_partition(network)
         p_, nodes_community = zip(*sorted(partition.items()))
         nodes_source.add(nodes_community, 'community')
-        community_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#b3cde3',
-                            '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
-                            '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
-        nodes_source.add([community_colors[t % len(community_colors)]
-                          for t in nodes_community],
-                         'community_color')
-        r_circles.glyph.fill_color = 'community_color'
+        nodes_source.add([colors[t % len(colors)] for t in nodes_community], 'node_color')
+        r_circles.glyph.fill_color = 'node_color'
+
+    elif type(node_label) == list:
+        nodes_source.add(node_label, 'node_label')
+        node_colors = get_node_color(node_label, n=len(colors), index=True)
+        nodes_source.add([colors[t] for t in node_colors], 'node_color')
+        r_circles.glyph.fill_color = 'node_color'
 
     proc_labels = LabelSet(x='x', y='y', text="name",
                            text_font_size="8pt", text_color="navy",
@@ -219,12 +224,12 @@ def plot_bokeh_graph(network, label_centrality=True, label_community=False):
 def get_edges_specs(_network, _node_pos):
     d = {'xs': [],
          'ys': [],
-         # 'alphas': [],
+         'alphas': [],
          'name': []}
     calc_alpha = lambda h: 0.1 + 0.9 * h
     for u, v, data in _network.edges(data=True):
         d['xs'].append([_node_pos[u][0], _node_pos[v][0]])
         d['ys'].append([_node_pos[u][1], _node_pos[v][1]])
-        # d['alphas'].append(calc_alpha(data['weight'])) if "weight" in data else None
-        d['name'].append(str(u) + '<=>' + str(v))
+        d['alphas'].append(calc_alpha(data['weight'])) if "weight" in data else 0.7
+        d['name'].append(str(u) + '->' + str(v))
     return d
