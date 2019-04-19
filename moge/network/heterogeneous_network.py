@@ -62,9 +62,7 @@ class HeterogeneousNetwork():
 
             for gene in self.multi_omics_data[modality].get_genes_list():
                 self.node_to_modality[gene] = modality
-
             print(modality, " nodes:", len(self.nodes[modality]))
-
         print("Total nodes:", len(self.get_node_list()))
 
     def process_genes_info(self):
@@ -87,7 +85,9 @@ class HeterogeneousNetwork():
         #     0]  # TODO Selects only first family annotation if an RNA belongs to multiple
         print("Genes info columns:", self.genes_info.columns.tolist())
         self.genes_info = self.genes_info[~self.genes_info.index.duplicated(keep='first')]
-        self.genes_info["RNA Type"] = self.genes_info.index.map(self.node_to_modality)
+        rna_type_rename = lambda x: {"MIR": "miRNA", "LNC": "lncRNA", "GE": "mRNA"}[x]
+        self.genes_info["RNA Type"] = self.genes_info.index.map(
+            {k: rna_type_rename(v) for k, v in self.node_to_modality.items()})
 
     def add_directed_edges_from_edgelist(self, edgelist, modalities, database,
                                          correlation_weights=False, threshold=None):
