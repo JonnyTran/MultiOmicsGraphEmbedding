@@ -13,7 +13,7 @@ from sklearn.decomposition import TruncatedSVD
 
 
 def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos=None, top_k=0, test_nodes=None,
-                        node_label="locus_type", cmap="gist_ncar", **kwargs):
+                        node_label="locus_type", cmap="gist_ncar", figsize=(20, 15), **kwargs):
     if nodelist is None:
         nodelist = embedding.node_list
     if node_pos is None:
@@ -44,12 +44,12 @@ def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos
                          legend=True, node_labels=node_labels, node_colormap=node_colormap, legend_size=20,
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         figsize=(20, 15), **kwargs)
+                         figsize=figsize, **kwargs)
     else:
         plot_embedding2D(node_pos, node_list=embedding.node_list,
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         figsize=(20, 15), **kwargs)
+                         figsize=figsize, **kwargs)
 
 
 def get_node_colormap(cmap, network, node_label, nodelist):
