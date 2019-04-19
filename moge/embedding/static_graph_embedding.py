@@ -8,7 +8,7 @@ from sklearn.metrics import pairwise_distances
 
 from moge.evaluation.link_prediction import largest_indices
 from moge.evaluation.utils import get_scalefree_fit_score
-
+from sklearn.neighbors import radius_neighbors_graph
 
 class StaticGraphEmbedding:
     __metaclass__ = ABCMeta
@@ -221,10 +221,13 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
                                                    Y=self._X[:, int(self._d / 2):self._d],
                                                    metric="euclidean", n_jobs=-2)
-            reconstructed_adj = self.transform_adj_beta_exp(reconstructed_adj, network_train=self.network,
-                                                            edge_types="d", sample_negative=1.0)
-            # reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
             reconstructed_adj = reconstructed_adj.T
+            self.transform_adj_adaptive_threshold(reconstructed_adj, self.network)
+            reconstructed_adj = radius_neighbors_graph(reconstructed_adj, radius=0.5, n_jobs=-2)
+            # reconstructed_adj = self.transform_adj_beta_exp(reconstructed_adj, network_train=self.network,
+            #                                                 edge_types="d", sample_negative=1.0)
+            # reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
+
 
         elif self._method_name == "HOPE":
             reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
@@ -255,6 +258,27 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             idx_A = [self.node_list.index(node) for node in node_list_A]
             idx_B = [self.node_list.index(node) for node in node_list_B]
             return adj[idx_A, :][:, idx_B]
+
+    def transform_adj_adaptive_threshold(self, adj_pred, network_train, margin=0.2, edge_types="d"):
+        print("adaptive threshold")
+        adj_true = network_train.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list)
+        self.distance_threshold = self.get_adaptive_threshold(adj_pred, adj_true, margin)
+        print("distance_threshold", self.distance_threshold)
+        # predicted_adj = np.zeros(adj_pred.shape)
+        # for node_id in range(predicted_adj.shape[0]):
+        #     predicted_adj[node_id, :] = (adj_pred[node_id, :] < self.distance_threshold).astype(float)
+        # adj_pred = predicted_adj
+        # return adj_pred
+
+    def get_adaptive_threshold(self, adj_pred, adj_true, margin):
+        distance_threshold = np.zeros((len(self.node_list),))
+        for nonzero_node_id in np.unique(adj_true.nonzero()[0]):
+            _, nonzero_node_cols = adj_true[nonzero_node_id].nonzero()
+            positive_distances = adj_pred[nonzero_node_id, nonzero_node_cols]
+            distance_threshold[nonzero_node_id] = np.median(positive_distances)
+        median_threshold = np.median(distance_threshold[distance_threshold > 0]) + margin / 2
+        distance_threshold[distance_threshold == 0] = median_threshold
+        return distance_threshold
 
     def transform_adj_beta_exp(self, adj_dist, network_train, edge_types, sample_negative):
         print("beta exp func")

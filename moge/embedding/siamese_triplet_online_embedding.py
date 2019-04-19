@@ -6,7 +6,7 @@ from moge.embedding.siamese_graph_embedding import *
 from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTripletGenerator
-
+from sklearn.neighbors import radius_neighbors_graph
 
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
     def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5, weighted=True,
@@ -211,7 +211,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         adj_true = self.generator_train.network.get_adjacency_matrix(edge_types=edge_types,
                                                                      node_list=self.node_list)
         self.distance_threshold = self.get_adaptive_threshold(adj_pred, adj_true, margin)
-
+        print("distance_threshold", self.distance_threshold)
         predicted_adj = np.zeros(adj_pred.shape)
         for node_id in range(predicted_adj.shape[0]):
             predicted_adj[node_id, :] = (adj_pred[node_id, :] < self.distance_threshold).astype(float)
