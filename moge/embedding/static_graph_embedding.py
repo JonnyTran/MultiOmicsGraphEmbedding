@@ -277,7 +277,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             _, nonzero_node_cols = adj_true[nonzero_node_id].nonzero()
             positive_distances = adj_pred[nonzero_node_id, nonzero_node_cols]
             distance_threshold[nonzero_node_id] = np.median(positive_distances)
-        median_threshold = np.minimum(distance_threshold[distance_threshold > 0])
+        median_threshold = np.min(distance_threshold[distance_threshold > 0])
         distance_threshold[distance_threshold == 0] = median_threshold
         return distance_threshold + margin
 
