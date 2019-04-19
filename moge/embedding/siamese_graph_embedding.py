@@ -385,12 +385,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         else:
             embs = self.get_embedding(variable_length=var_len)
             assert len(self.node_list) == embs.shape[0]
-
             adj = self._pairwise_similarity(embs, edge_type)
 
         if (node_l is None or node_l == self.node_list):
             if edge_type == "d": self.reconstructed_adj = adj
-
             return adj
         elif set(node_l) < set(self.node_list):
             return self._select_adj_indices(adj, node_l, node_l_b)
@@ -405,8 +403,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="euclidean", n_jobs=-2)
-                # adj = np.exp(-2 * adj)
-                adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
+                adj = np.exp(-2 * adj)
+                # adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
             if self.directed_distance == "l1_alpha":
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
