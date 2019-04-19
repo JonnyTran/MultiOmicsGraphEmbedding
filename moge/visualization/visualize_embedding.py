@@ -153,7 +153,7 @@ def plot_bokeh_graph(network, label_centrality=True, label_community=False):
     nodes, nodes_coordinates = zip(*sorted(node_pos.items()))
     nodes_xs, nodes_ys = list(zip(*nodes_coordinates))
     nodes_source = ColumnDataSource(dict(x=nodes_xs, y=nodes_ys,
-                                         name=[n[4:] for n in nodes]))
+                                         name=nodes))
     hover = HoverTool(tooltips=[('name', '@name')], renderers=[])
     plot = figure(plot_width=875, plot_height=700,
                   tools=['tap', hover, 'box_zoom', 'reset', 'pan'])
