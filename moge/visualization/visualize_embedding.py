@@ -147,7 +147,7 @@ def get_node_color(node_labels):
     return colors
 
 
-def plot_bokeh_graph(network, ):
+def plot_bokeh_graph(network, label_centrality=True, label_community=False):
     node_pos = nx.spring_layout(network, iterations=50)
 
     nodes, nodes_coordinates = zip(*sorted(node_pos.items()))
@@ -171,27 +171,28 @@ def plot_bokeh_graph(network, ):
                               color='black',
                               source=lines_source)
 
-    centrality = \
-        nx.algorithms.centrality.betweenness_centrality(network)
-    # first element are nodes again
-    _, nodes_centrality = zip(*sorted(centrality.items()))
-    max_centrality = max(nodes_centrality)
-    nodes_source.add([7 + 10 * t / max_centrality
-                      for t in nodes_centrality],
-                     'centrality')
+    if label_centrality:
+        centrality = \
+            nx.algorithms.centrality.betweenness_centrality(network)
+        # first element are nodes again
+        _, nodes_centrality = zip(*sorted(centrality.items()))
+        max_centrality = max(nodes_centrality)
+        nodes_source.add([7 + 10 * t / max_centrality
+                          for t in nodes_centrality],
+                         'centrality')
+        r_circles.glyph.size = 'centrality'
 
-    partition = community.best_partition(network)
-    p_, nodes_community = zip(*sorted(partition.items()))
-    nodes_source.add(nodes_community, 'community')
-    community_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#b3cde3',
-                        '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
-                        '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
-    nodes_source.add([community_colors[t % len(community_colors)]
-                      for t in nodes_community],
-                     'community_color')
-
-    r_circles.glyph.size = 'centrality'
-    r_circles.glyph.fill_color = 'community_color'
+    if label_community:
+        partition = community.best_partition(network)
+        p_, nodes_community = zip(*sorted(partition.items()))
+        nodes_source.add(nodes_community, 'community')
+        community_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#b3cde3',
+                            '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
+                            '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
+        nodes_source.add([community_colors[t % len(community_colors)]
+                          for t in nodes_community],
+                         'community_color')
+        r_circles.glyph.fill_color = 'community_color'
 
     proc_labels = LabelSet(x='x', y='y', text="name",
                            text_font_size="8pt", text_color="navy",
@@ -211,8 +212,8 @@ def plot_bokeh_graph(network, ):
     toggle = Toggle(label="Toggle miRNA label", button_type="success", callback=callback)
     callback.args = {'toggle': toggle, 'labels': proc_labels}
 
-    # show(plot)
-    # show(toggle)
+    show(plot)
+    show(toggle)
 
 
 def get_edges_specs(_network, _node_pos):
