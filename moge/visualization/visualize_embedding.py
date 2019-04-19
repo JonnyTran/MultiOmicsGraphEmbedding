@@ -166,8 +166,7 @@ def plot_bokeh_graph(network, node_centrality=True, node_label=None):
     plot.ygrid.grid_line_color = None
 
     lines_source = ColumnDataSource(get_edges_specs(network, node_pos))
-
-    r_lines = plot.multi_line('xs', 'ys', line_width=1.5,
+    r_lines = plot.multi_line('xs', 'ys', line_width=1.0,
                               alpha='alphas',
                               color='black',
                               source=lines_source)
@@ -230,6 +229,6 @@ def get_edges_specs(_network, _node_pos):
     for u, v, data in _network.edges(data=True):
         d['xs'].append([_node_pos[u][0], _node_pos[v][0]])
         d['ys'].append([_node_pos[u][1], _node_pos[v][1]])
-        d['alphas'].append(calc_alpha(data['weight'])) if "weight" in data else 0.7
+        d['alphas'].append(calc_alpha(data['weight'])) if "weight" in data else 0.8
         d['name'].append(str(u) + '<->' + str(v))
     return d
