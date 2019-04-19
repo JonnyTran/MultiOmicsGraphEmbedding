@@ -72,7 +72,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
     if "with_labels" not in kwargs or "labels" not in kwargs: kwargs["with_labels"] = False
     if "font_size" not in kwargs: kwargs["font_size"] = 5
     if "node_size" in kwargs and kwargs["node_size"] == "centrality":
-        kwargs["node_size"] = node_centrality(network=di_graph.to_undirected())
+        kwargs["node_size"] = node_centrality(network=di_graph)
 
     if di_graph is None:
         # Plot using plt scatter
