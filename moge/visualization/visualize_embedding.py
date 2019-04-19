@@ -102,7 +102,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         kwargs["font_size"] = 5
 
     if "node_size" in kwargs and kwargs["node_size"] == "centrality":
-        kwargs["node_size"] = node_centrality(network=di_graph)
+        kwargs["node_size"] = node_centrality(network=di_graph.subgraph(node_list))
         print("kwargs[node_size]", len(kwargs["node_size"]), kwargs["node_size"][:5])
 
     if di_graph is None:
