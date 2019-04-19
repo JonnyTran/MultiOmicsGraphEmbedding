@@ -170,6 +170,8 @@ def plot_bokeh_graph(network, node_centrality=True, node_label=None):
                               alpha='alphas',
                               color='black',
                               source=lines_source)
+    hover.renderers.append(r_lines)
+
     colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#b3cde3',
               '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
               '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
@@ -230,5 +232,5 @@ def get_edges_specs(_network, _node_pos):
         d['xs'].append([_node_pos[u][0], _node_pos[v][0]])
         d['ys'].append([_node_pos[u][1], _node_pos[v][1]])
         d['alphas'].append(calc_alpha(data['weight']) if "weight" in data else 0.5)
-        d['name'].append(str(u) + '<->' + str(v))
+        d['name'].append(str(u) + '->' + str(v))
     return d
