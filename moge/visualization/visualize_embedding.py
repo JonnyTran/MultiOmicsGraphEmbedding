@@ -149,7 +149,7 @@ def get_node_color(node_labels, n=256, index=False):
 
 
 def plot_bokeh_graph(network, node_centrality=True, node_label=None):
-    node_pos = nx.spring_layout(network, iterations=50)
+    node_pos = nx.spring_layout(network, iterations=100)
 
     nodes, nodes_coordinates = zip(*sorted(node_pos.items()))
     nodes_xs, nodes_ys = list(zip(*nodes_coordinates))
