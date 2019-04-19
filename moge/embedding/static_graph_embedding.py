@@ -222,8 +222,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
                                                    Y=self._X[:, int(self._d / 2):self._d],
                                                    metric="euclidean", n_jobs=-2)
             reconstructed_adj = reconstructed_adj.T
-            self.transform_adj_adaptive_threshold(reconstructed_adj, self.network)
-            reconstructed_adj = radius_neighbors_graph(reconstructed_adj, radius=0.5, n_jobs=-2)
+            threshold = self.transform_adj_adaptive_threshold(reconstructed_adj, self.network)
+            reconstructed_adj = np.where(reconstructed_adj < threshold, 1, 0)
             # reconstructed_adj = self.transform_adj_beta_exp(reconstructed_adj, network_train=self.network,
             #                                                 edge_types="d", sample_negative=1.0)
             # reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
@@ -262,8 +262,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
     def transform_adj_adaptive_threshold(self, adj_pred, network_train, margin=0.2, edge_types="d"):
         print("adaptive threshold")
         adj_true = network_train.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list)
-        self.distance_threshold = self.get_adaptive_threshold(adj_pred, adj_true, margin)
-        print("distance_threshold", self.distance_threshold)
+        self.distance_threshold_nodes = self.get_adaptive_threshold(adj_pred, adj_true, margin)
+        print("distance_threshold", self.distance_threshold_nodes)
+        return self.distance_threshold_nodes
         # predicted_adj = np.zeros(adj_pred.shape)
         # for node_id in range(predicted_adj.shape[0]):
         #     predicted_adj[node_id, :] = (adj_pred[node_id, :] < self.distance_threshold).astype(float)
@@ -276,9 +277,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             _, nonzero_node_cols = adj_true[nonzero_node_id].nonzero()
             positive_distances = adj_pred[nonzero_node_id, nonzero_node_cols]
             distance_threshold[nonzero_node_id] = np.median(positive_distances)
-        median_threshold = np.median(distance_threshold[distance_threshold > 0]) + margin / 2
+        median_threshold = np.median(distance_threshold[distance_threshold > 0])
         distance_threshold[distance_threshold == 0] = median_threshold
-        return distance_threshold
+        return distance_threshold + margin
 
     def transform_adj_beta_exp(self, adj_dist, network_train, edge_types, sample_negative):
         print("beta exp func")
