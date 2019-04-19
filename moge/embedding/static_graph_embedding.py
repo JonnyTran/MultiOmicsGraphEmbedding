@@ -222,8 +222,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
                                                    Y=self._X[:, int(self._d / 2):self._d],
                                                    metric="euclidean", n_jobs=-2)
             reconstructed_adj = reconstructed_adj.T
-            threshold = self.transform_adj_adaptive_threshold(reconstructed_adj, self.network)
-            reconstructed_adj = np.where(reconstructed_adj < threshold, 1, 0)
+            reconstructed_adj = self.transform_adj_adaptive_threshold(reconstructed_adj, self.network)
             # reconstructed_adj = self.transform_adj_beta_exp(reconstructed_adj, network_train=self.network,
             #                                                 edge_types="d", sample_negative=1.0)
             # reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
@@ -264,12 +263,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         adj_true = network_train.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list)
         self.distance_threshold_nodes = self.get_adaptive_threshold(adj_pred, adj_true, margin)
         print("distance_threshold", self.distance_threshold_nodes)
-        return self.distance_threshold_nodes
-        # predicted_adj = np.zeros(adj_pred.shape)
-        # for node_id in range(predicted_adj.shape[0]):
-        #     predicted_adj[node_id, :] = (adj_pred[node_id, :] < self.distance_threshold).astype(float)
-        # adj_pred = predicted_adj
-        # return adj_pred
+        adj_pred = np.where(adj_pred < self.distance_threshold_nodes, 1, 0)
+        return adj_pred
 
     def get_adaptive_threshold(self, adj_pred, adj_true, margin):
         distance_threshold = np.zeros((len(self.node_list),))
