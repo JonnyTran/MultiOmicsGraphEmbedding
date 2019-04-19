@@ -95,9 +95,9 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
             pos = node_pos
 
         if kwargs["with_labels"]:
-            for i in node_list:
-                x, y = pos[i]
-                plt.text(x, y + 0.1, s=node_list, bbox=dict(facecolor='red', alpha=0.5),
+            for node in di_graph.nodes():
+                x, y = pos[node]
+                plt.text(x, y + 0.1, s=node, bbox=dict(facecolor='red', alpha=0.5),
                          horizontalalignment='center')
 
         if plot_nodes_only:
