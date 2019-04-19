@@ -234,6 +234,6 @@ def get_edges_specs(_network, _node_pos):
     for u, v, data in _network.edges(data=True):
         d['xs'].append([_node_pos[u][0], _node_pos[v][0]])
         d['ys'].append([_node_pos[u][1], _node_pos[v][1]])
-        d['alphas'].append(calc_alpha(data['weight']) if "weight" in data else 0.5)
+        d['alphas'].append(calc_alpha(data['weight']) if "weight" in data else 0.3)
         d['name'].append(str(u) + ' - ' + str(v))
     return d
