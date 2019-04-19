@@ -102,6 +102,10 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
     if "font_size" not in kwargs:
         kwargs["font_size"] = 5
 
+    if "node_size" in kwargs and kwargs["node_size"] == "centrality":
+        kwargs["node_size"] = node_centrality(network=di_graph)
+        print("kwargs[node_size]", len(kwargs["node_size"]), kwargs["node_size"][:5])
+
     if di_graph is None:
         # Plot using plt scatter
         plt.scatter(node_pos[:, 0], node_pos[:, 1], c=node_colors, cmap=cmap)
@@ -148,7 +152,7 @@ def get_node_color(node_labels, n=256, index=False):
         return [hash(s) % n for s in node_labels]
 
 
-def plot_bokeh_graph(network, node_pos=None, node_centrality=True, node_label=None):
+def plot_bokeh_graph(network, node_pos=None, node_size="centrality", node_label=None):
     if node_pos == None:
         node_pos = nx.spring_layout(network, iterations=100)
 
@@ -179,11 +183,8 @@ def plot_bokeh_graph(network, node_pos=None, node_centrality=True, node_label=No
               '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
               '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
 
-    if node_centrality:
-        centrality = \
-            nx.algorithms.centrality.betweenness_centrality(network)
-        # first element are nodes again
-        _, nodes_centrality = zip(*sorted(centrality.items()))
+    if node_size == "centrality":
+        nodes_centrality = node_centrality(network)
         max_centrality = max(nodes_centrality)
         nodes_source.add([7 + 10 * t / max_centrality
                           for t in nodes_centrality],
@@ -224,6 +225,13 @@ def plot_bokeh_graph(network, node_pos=None, node_centrality=True, node_label=No
     show(plot)
     show(toggle)
 
+
+def node_centrality(network):
+    centrality = \
+        nx.algorithms.centrality.betweenness_centrality(network)
+    # first element are nodes again
+    _, nodes_centrality = zip(*sorted(centrality.items()))
+    return nodes_centrality
 
 def get_edges_specs(_network, _node_pos):
     d = {'xs': [],
