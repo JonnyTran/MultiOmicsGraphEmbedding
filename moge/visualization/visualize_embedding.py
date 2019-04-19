@@ -103,7 +103,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
 
     if "node_size" in kwargs and kwargs["node_size"] == "centrality":
         kwargs["node_size"] = node_centrality(network=di_graph.subgraph(node_list))
-        print("kwargs[node_size]", len(kwargs["node_size"]), kwargs["node_size"][:5])
+
 
     if di_graph is None:
         # Plot using plt scatter
@@ -123,6 +123,12 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
                 pos[node] = node_pos[i, :]
         else:
             pos = node_pos
+
+        if "with_label" in kwargs:
+            for i in range(len(pos)):
+                x, y = pos[i]
+                plt.text(x, y + 0.1, s=node_list[i], bbox=dict(facecolor='red', alpha=0.5),
+                         horizontalalignment='center')
 
         if plot_nodes_only:
             nx.draw_networkx_nodes(di_graph, pos=pos,
