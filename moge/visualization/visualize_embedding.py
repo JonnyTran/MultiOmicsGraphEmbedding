@@ -13,7 +13,7 @@ from sklearn.decomposition import TruncatedSVD
 
 
 def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos=None, top_k=0, test_nodes=None,
-                        node_label="locus_type", cmap="gist_ncar", figsize=(20, 15), **kwargs):
+                        node_label="locus_type", cmap="gist_ncar", figsize=(20, 15), dpi=150, **kwargs):
     if nodelist is None:
         nodelist = embedding.node_list
     if node_pos is None:
@@ -44,12 +44,12 @@ def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos
                          legend=True, node_labels=node_labels, node_colormap=node_colormap, legend_size=20,
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         figsize=figsize, **kwargs)
+                         figsize=figsize, dpi=dpi ** kwargs)
     else:
         plot_embedding2D(node_pos, node_list=embedding.node_list,
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         figsize=figsize, **kwargs)
+                         figsize=figsize, dpi=dpi, **kwargs)
 
 
 def get_node_colormap(cmap, network, node_label, nodelist):
@@ -81,9 +81,8 @@ def get_node_colormap(cmap, network, node_label, nodelist):
 def plot_embedding2D(node_pos, node_list, di_graph=None,
                      legend=True, node_labels=None, node_colormap=None, legend_size=10,
                      node_colors=None, plot_nodes_only=True,
-                     cmap="viridis", file_name=None, figsize=(17, 15), **kwargs):
-
-    fig = plt.figure(figsize=figsize)
+                     cmap="viridis", file_name=None, figsize=(17, 15), dpi=150, **kwargs):
+    fig = plt.figure(figsize=figsize, dpi=dpi)
     ax = fig.add_subplot(1, 1, 1)
 
     if legend and node_labels is not None and type(
@@ -232,7 +231,7 @@ def node_centrality(network):
     # first element are nodes again
     _, nodes_centrality = zip(*sorted(centrality.items()))
     max_centrality = max(nodes_centrality)
-    nodes_centrality = [25 + 25 * t / max_centrality for t in nodes_centrality]
+    nodes_centrality = [25 + 100 * t / max_centrality for t in nodes_centrality]
     return nodes_centrality
 
 def get_edges_specs(_network, _node_pos):
