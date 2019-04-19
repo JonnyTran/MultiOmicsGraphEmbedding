@@ -259,7 +259,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             idx_B = [self.node_list.index(node) for node in node_list_B]
             return adj[idx_A, :][:, idx_B]
 
-    def transform_adj_adaptive_threshold(self, adj_pred, network_train, margin=0.0, edge_types="d"):
+    def transform_adj_adaptive_threshold(self, adj_pred, network_train, margin=0.01, edge_types="d"):
         print("adaptive threshold")
         adj_true = network_train.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list)
         self.distance_threshold_nodes = self.get_adaptive_threshold(adj_pred, adj_true, margin)
@@ -276,7 +276,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         for nonzero_node_id in np.unique(adj_true.nonzero()[0]):
             _, nonzero_node_cols = adj_true[nonzero_node_id].nonzero()
             positive_distances = adj_pred[nonzero_node_id, nonzero_node_cols]
-            distance_threshold[nonzero_node_id] = np.median(positive_distances)
+            distance_threshold[nonzero_node_id] = np.min(positive_distances)
         median_threshold = np.min(distance_threshold[distance_threshold > 0])
         distance_threshold[distance_threshold == 0] = median_threshold
         return distance_threshold + margin
