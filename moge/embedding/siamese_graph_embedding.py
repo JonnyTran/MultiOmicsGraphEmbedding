@@ -276,7 +276,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.build_tensorboard()
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
-                                 optimizer=RMSprop(lr=self.lr, decay=0.90),
+                                 optimizer=RMSprop(lr=self.lr),
                                  metrics=[precision_d, recall_d] if not hasattr(self, "alpha_network") else [
                                      "accuracy", precision, recall],
                                  # metrics=,
@@ -385,12 +385,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         else:
             embs = self.get_embedding(variable_length=var_len)
             assert len(self.node_list) == embs.shape[0]
-
             adj = self._pairwise_similarity(embs, edge_type)
 
         if (node_l is None or node_l == self.node_list):
             if edge_type == "d": self.reconstructed_adj = adj
-
             return adj
         elif set(node_l) < set(self.node_list):
             return self._select_adj_indices(adj, node_l, node_l_b)
@@ -405,8 +403,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="euclidean", n_jobs=-2)
-                # adj = np.exp(-2 * adj)
-                adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
+                adj = np.exp(-2 * adj)
+                # adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
             if self.directed_distance == "l1_alpha":
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
@@ -435,12 +433,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         adj_dist_squared = np.power(adj_dist_squared, 2)
         dists_pred = np.clip(adj_dist_squared[rows, cols], 1e-8, 1e8)
         beta = -np.divide(np.log(y_true), dists_pred)
-        beta = beta[beta > 0.0]
         print("mean", np.mean(beta, axis=1),
               "median", np.median(beta, axis=1),
               "min", np.min(beta, axis=1),
               "max", np.max(beta, axis=1))
-
         beta_mean = np.median(beta, axis=1)
         print("beta_mean", beta_mean)
         adj_pred = np.exp(-np.multiply(beta_mean, adj_dist_squared))
