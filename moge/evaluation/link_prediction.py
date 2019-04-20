@@ -106,8 +106,11 @@ def select_random_link_predictions(top_k, estimated_adj, excluding_edges, seed=0
 
 def largest_indices(array, k, smallest=False):
     """Returns the k largest indices from a numpy array using partition O(n + k lg k) """
+    print("array", array.shape)
     flat = array.flatten()
+    print("k", k.shape)
     indices = np.argpartition(flat, -k)[-k:]
+    print("indices", indices.shape)
     if smallest:
         indices = indices[np.argsort(flat[indices])]
     else:

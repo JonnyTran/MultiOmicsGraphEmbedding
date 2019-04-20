@@ -226,8 +226,6 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             # reconstructed_adj = self.transform_adj_beta_exp(reconstructed_adj, network_train=self.network,
             #                                                 edge_types="d", sample_negative=1.0)
             # reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
-
-
         elif self._method_name == "HOPE":
             reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
             interpolate = True
