@@ -16,6 +16,7 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
                                                   node_list_B=data_generator.network.nodes[
                                                       target] if target is not None else None)
         X, y_true = data_generator.make_dataset()
+        if len(X) == 0: continue
         y_true = np.round(y_true)
         evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
 
@@ -106,11 +107,8 @@ def select_random_link_predictions(top_k, estimated_adj, excluding_edges, seed=0
 
 def largest_indices(array, k, smallest=False):
     """Returns the k largest indices from a numpy array using partition O(n + k lg k) """
-    print("array", array.shape)
-    flat = array.flatten()
-    print("k", k.shape)
+    flat = np.ravel(array)
     indices = np.argpartition(flat, -k)[-k:]
-    print("indices", indices.shape)
     if smallest:
         indices = indices[np.argsort(flat[indices])]
     else:
