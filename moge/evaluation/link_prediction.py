@@ -10,13 +10,17 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
                                                    ("LNC", "GE", "NPInter")]):
     for source, target, database in tests:
         print(database)
-        data_generator.reload_directed_edges_data(edge_types=edge_types, databases=[database, ],
-                                                  node_list=data_generator.network.nodes[
+        total_edges = data_generator.reload_directed_edges_data(edge_types=edge_types, databases=[database, ],
+                                                                node_list=data_generator.network.nodes[
                                                       source] if source is not None else None,
-                                                  node_list_B=data_generator.network.nodes[
+                                                                node_list_B=data_generator.network.nodes[
                                                       target] if target is not None else None)
+        if total_edges > 0:
+            data_generator.on_epoch_end()
+        else:
+            continue
+
         X, y_true = data_generator.make_dataset()
-        if len(X) == 0: continue
         y_true = np.round(y_true)
         evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
 
