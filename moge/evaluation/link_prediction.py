@@ -4,11 +4,11 @@ from sklearn.metrics import average_precision_score, precision_recall_curve
 
 
 def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=["d"],
-                                            tests=[("LNC", "GE", "lncrna2target"),
-                                                   ("MIR", "GE", "miRTarBase"),
-                                                   ("GE", "GE", "BioGRID"),
-                                                   ("LNC", "GE", "NPInter")]):
-    for source, target, database in tests:
+                                            tests=[("LNC", "GE", "lncrna2target", "LncRNA2Target"),
+                                                   ("MIR", "GE", "miRTarBase", "miRTarBase"),
+                                                   ("GE", "GE", "BioGRID", "BioGRID"),
+                                                   ("LNC", "GE", "NPInter", "NPInter")]):
+    for source, target, database, title in tests:
         print(database)
         data_generator.reload_directed_edges_data(edge_types=edge_types, databases=[database, ],
                                                   node_list=data_generator.network.nodes[
@@ -17,7 +17,7 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
                                                       target] if target is not None else None)
         X, y_true = data_generator.make_dataset()
         y_true = np.round(y_true)
-        evaluate_pr_curve_link_pred(methods, X, y_true, title=database + " PR curve", data_generator=data_generator)
+        evaluate_pr_curve_link_pred(methods, X, y_true, title=title, data_generator=data_generator)
 
 
 def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, fig_save_path=None, data_generator=None):

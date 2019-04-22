@@ -178,7 +178,6 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="cosine", n_jobs=-2)
-                # adj = adj.T  # Transpose
                 print("Cosine similarity")
 
             elif self.directed_distance == "dot_sigmoid":
@@ -191,8 +190,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = pairwise_distances(X=embeddings,
                                          metric="euclidean", n_jobs=-2)
                 # adj = np.exp(-2.0 * adj)
-                # adj = self.transform_adj_adaptive_threshold(adj, margin=self.margin/2)
                 adj = self.transform_adj_beta_exp(adj, edge_types=["u", "u_n"], sample_negative=False)
+                # adj = self.transform_adj_adaptive_threshold(adj, margin=self.margin/2)
                 print("Euclidean dist")
 
             elif self.undirected_distance == "cosine":
