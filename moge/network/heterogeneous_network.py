@@ -52,6 +52,8 @@ class HeterogeneousNetwork():
                      ]
         self.G.remove_nodes_from(bad_nodes)
         self.G_u.remove_nodes_from(bad_nodes)
+        self.G.remove_edges_from(self.G.selfloop_edges(data=True))
+
         # nodelist = self.get_node_list()
 
         for modality in self.modalities:
