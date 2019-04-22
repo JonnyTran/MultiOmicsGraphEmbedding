@@ -448,8 +448,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
 class OnlineTripletLoss(Layer):
     def __init__(self, directed_margin=0.2, undirected_margin=0.1, undirected_weight=1.0, directed_distance="euclidean",
-                 undirected_distance="euclidean",
-                 **kwargs):
+                 undirected_distance="euclidean", **kwargs):
         super(OnlineTripletLoss, self).__init__(**kwargs)
         self.output_dim = ()
         self.directed_margin = directed_margin
@@ -457,6 +456,11 @@ class OnlineTripletLoss(Layer):
         self.undirected_weight = undirected_weight
         self.directed_distance = directed_distance
         self.undirected_distance = undirected_distance
+
+        hyper_params = {}
+        hyper_params.update(kwargs)
+        for key in hyper_params.keys():
+            self.__setattr__('_%s' % key, hyper_params[key])
 
     def build(self, input_shape):
         assert isinstance(input_shape, list)
@@ -477,7 +481,7 @@ class OnlineTripletLoss(Layer):
 
         # Get the pairwise distance matrix
         if self.directed_distance == "euclidean":
-            directed_pairwise_dist = _pairwise_distances(embeddings_s, embeddings_t, squared=False)
+            directed_pairwise_dist = _pairwise_distances(embeddings_s, embeddings_t, squared=True)
         elif self.directed_distance == "dot_sigmoid":
             directed_pairwise_dist = 1 - _pairwise_dot_sigmoid_similarity(embeddings_s, embeddings_t)
         elif self.directed_distance == "cosine":
@@ -485,6 +489,8 @@ class OnlineTripletLoss(Layer):
 
         # Get the pairwise distance matrix
         if self.undirected_distance == "euclidean":
+            undirected_pairwise_dist = _pairwise_distances(embeddings, embeddings, squared=True)
+        elif self.undirected_distance == "euclidean_min":
             undirected_pairwise_dist = tf.minimum(_pairwise_distances(embeddings_s, embeddings_s, squared=False),
                                                   _pairwise_distances(embeddings_t, embeddings_t, squared=False))
         elif self.undirected_distance == "dot_sigmoid":
