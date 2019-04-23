@@ -87,23 +87,24 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
     def batch_contrastive_loss(self, inputs):
         pairwise_distance_directed, pairwise_distance_undirected, labels_directed, labels_undirected = inputs
         y_pred_directed = tf.gather_nd(pairwise_distance_directed, labels_directed.indices)
-        y_true_directed = K.round(labels_directed.values)
+        y_true_directed = labels_directed.values
 
         y_pred_undirected = tf.gather_nd(pairwise_distance_undirected, labels_undirected.indices)
-        y_true_undirected = K.round(labels_undirected.values)
+        y_true_undirected = labels_undirected.values
         def _contrastive_loss(_y_true, _y_pred):
-            return contrastive_loss(y_true_directed, y_pred_directed) + contrastive_loss(y_true_undirected,
-                                                                                         y_pred_undirected)
+            return contrastive_loss(y_true_directed, y_pred_directed) + self.directed_proba * contrastive_loss(
+                y_true_undirected,
+                y_pred_undirected)
 
         return _contrastive_loss
 
     def batch_kl_divergence_loss(self, inputs):
         pairwise_similarity_directed, pairwise_similarity_undirected, labels_directed, labels_undirected = inputs
-        y_pred_directed = tf.gather_nd(pairwise_similarity_directed, labels_directed.indices + 5)
-        y_true_directed = K.round(labels_directed.values)
+        y_pred_directed = tf.gather_nd(pairwise_similarity_directed, labels_directed.indices)
+        y_true_directed = labels_directed.values
 
-        y_pred_undirected = tf.gather_nd(pairwise_similarity_undirected, labels_undirected.indices + 5)
-        y_true_undirected = K.round(labels_undirected.values)
+        y_pred_undirected = tf.gather_nd(pairwise_similarity_undirected, labels_undirected.indices)
+        y_true_undirected = labels_undirected.values
         def _kl_loss(_y_true, _y_pred):
             return cross_entropy(y_true_directed, y_pred_directed) + \
                    cross_entropy(y_true_undirected, y_pred_undirected)
@@ -173,9 +174,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             # Compile & train
             self.siamese_net.compile(  # loss=self.identity_loss,
-                loss=self.batch_hard_triplet_loss([directed_pairwise_distances,
-                                                   undirected_pairwise_distances,
-                                                   labels_directed, labels_undirected]),
+                loss=self.batch_contrastive_loss([directed_pairwise_distances,
+                                                  undirected_pairwise_distances,
+                                                  labels_directed, labels_undirected]),
                 optimizer=Adadelta(),
                 metrics=[self.custom_precision([directed_pairwise_distances, labels_directed]),
                          self.custom_recall([directed_pairwise_distances, labels_directed])],
