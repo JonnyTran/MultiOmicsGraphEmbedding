@@ -175,7 +175,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             x = Concatenate(axis=-1, name="embedding_output")(
                 [source, target])  # Embedding space (batch_number, embedding_dim)
         else:
-            x = Dense(self._d, activation='linear', name="embedding_output")(x)
+            x = Dense(self._d, activation='linear', name="embedding_output", kernel_initializer="uniform",
+                      bias_initializer="uniform")(x)
             if self.embedding_normalization:
                 x = Lambda(lambda x: K.l2_normalize(x, axis=-1))(x)
 
