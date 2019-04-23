@@ -177,8 +177,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                                    undirected_pairwise_distances,
                                                    labels_directed, labels_undirected]),
                 optimizer=Adadelta(),
-                metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
-                         self.custom_precision([directed_pairwise_distances, labels_directed])],
+                metrics=[self.custom_precision([directed_pairwise_distances, labels_directed]),
+                         self.custom_recall([directed_pairwise_distances, labels_directed])],
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
