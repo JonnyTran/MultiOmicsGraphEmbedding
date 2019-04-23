@@ -142,8 +142,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if self.conv1_batch_norm:
             x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
         x = MaxPooling1D(pool_size=self.max1_pool_size, padding="same")(x)
-
-        x = Dropout(0.2, noise_shape=(None, 1, 320))(x)
+        x = Dropout(0.2)(x)
 
         if self.conv2_kernel_size is not None and self.conv2_kernel_size != 0:
             x = Convolution1D(filters=192, kernel_size=self.conv2_kernel_size, activation='relu', name="lstm_conv_2")(x)
@@ -152,7 +151,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                 x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
             x = MaxPooling1D(pool_size=self.max2_pool_size, padding="same")(x)
             print("max pooling_2", x) if self.verbose else None
-            x = Dropout(0.2, noise_shape=(None, 1, 192))(x)
+            x = Dropout(0.2)(x)
 
         x = Bidirectional(CuDNNLSTM(self.lstm_unit_size, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x) if self.verbose else None

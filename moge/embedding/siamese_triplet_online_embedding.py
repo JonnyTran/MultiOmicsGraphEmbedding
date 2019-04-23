@@ -278,7 +278,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             # return K.minimum(self._pairwise_euclidean(embeddings_s, embeddings_s, squared),
             #                  self._pairwise_euclidean(embeddings_t, embeddings_t, squared))
 
-    def _pairwise_euclidean(self, embeddings_s, embeddings_t, squared):
+    def _pairwise_euclidean(self, embeddings_s, embeddings_t, squared=True):
         dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
         square_norm = tf.diag_part(dot_product)
         distances = K.expand_dims(square_norm, 1) - 2.0 * dot_product + K.expand_dims(square_norm, 0)
@@ -290,6 +290,14 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             # Correct the epsilon added: set the distances on the mask to be exactly 0.0
             distances = distances * (1.0 - mask)
         return distances
+
+    def batch_hard_online_loss(self, inputs):
+        pairwise_distance_directed, pairwise_distance_undirected, labels_directed, labels_undirected = inputs
+        directed_loss = batch_hard_triplet_loss(pairwise_distance_directed, labels_directed,
+                                                margin=self.directed_margin)
+        undirected_loss = self.directed_proba * batch_hard_triplet_loss(pairwise_distance_undirected, labels_undirected,
+                                                                        margin=self.undirected_margin)
+        return directed_loss + undirected_loss
 
     def batch_contrastive_loss(self, inputs):
         pairwise_distance_directed, pairwise_distance_undirected, labels_directed, labels_undirected = inputs
@@ -361,20 +369,20 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-            # directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True),
-            #                                      name="directed_pairwise_distances")(embeddings)
-            # undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False),
-            #                                        name="undirected_pairwise_distances")(embeddings)
-            # print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
+            directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True, squared=True),
+                                                 name="directed_pairwise_distances")(embeddings)
+            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False, squared=True),
+                                                   name="undirected_pairwise_distances")(embeddings)
+            print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
-            self.triplet_loss = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
-                                                  undirected_weight=self.directed_proba,
-                                                  directed_distance=self.directed_distance,
-                                                  undirected_distance=self.undirected_distance)
-            output = self.triplet_loss([embeddings, labels_directed, labels_undirected])
-            print("output", output) if self.verbose else None
+            # self.triplet_loss = OnlineTripletLoss(directed_margin=self.margin, undirected_margin=self.margin,
+            #                                       undirected_weight=self.directed_proba,
+            #                                       directed_distance=self.directed_distance,
+            #                                       undirected_distance=self.undirected_distance)
+            # output = self.triplet_loss([embeddings, labels_directed, labels_undirected])
+            # print("output", output) if self.verbose else None
 
-            self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=output)
+            self.siamese_net = Model(inputs=[input_seqs, labels_directed, labels_undirected], outputs=embeddings)
 
             # Multi-gpu parallelization
             if multi_gpu:
@@ -384,14 +392,14 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.build_tensorboard()
 
             # Compile & train
-            self.siamese_net.compile(loss=self.identity_loss,
-                                     # loss=self.batch_contrastive_loss([directed_pairwise_distances,
-                                     #                                   undirected_pairwise_distances,
-                                     #                                   labels_directed, labels_undirected]),
+            self.siamese_net.compile(  # loss=self.identity_loss,
+                loss=self.batch_hard_online_loss([directed_pairwise_distances,
+                                                  undirected_pairwise_distances,
+                                                  labels_directed, labels_undirected]),
                                      optimizer=Adadelta(),
-                                     # metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
-                                     #          self.custom_precision([directed_pairwise_distances, labels_directed])] if \
-                                     #     self.directed_distance == "euclidean" else None,
+                metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
+                         self.custom_precision([directed_pairwise_distances, labels_directed])] if \
+                    self.directed_distance == "euclidean" else None,
 
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
