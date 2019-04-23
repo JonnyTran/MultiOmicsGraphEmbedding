@@ -8,7 +8,7 @@ from sklearn.metrics import pairwise_distances
 
 from moge.evaluation.link_prediction import largest_indices
 from moge.evaluation.utils import get_scalefree_fit_score
-from sklearn.neighbors import radius_neighbors_graph
+
 
 class StaticGraphEmbedding:
     __metaclass__ = ABCMeta
@@ -242,7 +242,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         if node_l is None or node_l == self.node_list:
             self.reconstructed_adj = reconstructed_adj
             return reconstructed_adj
-        elif set(node_l) < set(self.node_list):
+        elif set(node_l) < set(self.node_list) or node_l_b is not None:
             return self._select_adj_indices(reconstructed_adj, node_l, node_l_b)
         else:
             raise Exception("A node in node_l is not in self.node_list.")
@@ -303,9 +303,12 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         elif node_list is not None:
             nodes = [n for n in nodes if n in node_list]
 
+        print("nodes_A", len(nodes_A))
+        print("nodes_B", len(nodes_B))
         if node_list_B is not None:
             estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes_A,
                                                        node_l_b=nodes_B)  # (node_list_A, node_list_B)
+            print("estimated_adj", estimated_adj.shape)
         else:
             estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)  # (nodes, nodes)
         np.fill_diagonal(estimated_adj, 0)
@@ -323,6 +326,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             estimated_adj[rows, cols] = 0
 
         top_k_indices = largest_indices(estimated_adj, top_k, smallest=False)
+        print("top_k_indices", top_k_indices)
+
         if node_list_B is not None:
             top_k_pred_edges = [(nodes_A[x[0]], nodes_B[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
         else:

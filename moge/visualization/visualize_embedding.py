@@ -68,6 +68,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
                     color=scalarMap.to_rgba(node_colormap[label], norm=False),
                     label=label, linewidth=4) if label in node_colormap.keys() else None
 
+    if "width" not in kwargs: kwargs["width"] = 0.1
     if "node_size" not in kwargs: kwargs["node_size"] = 25
     if "with_labels" not in kwargs or "labels" not in kwargs: kwargs["with_labels"] = False
     if "font_size" not in kwargs: kwargs["font_size"] = 5
@@ -103,12 +104,11 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         if plot_nodes_only:
             nx.draw_networkx_nodes(di_graph, pos=pos,
                                    node_color=node_colors, cmap=cmap, ax=ax,
-                                   width=0.1,
                                    alpha=0.8, **kwargs)
         else:
             nx.draw_networkx(di_graph, pos=pos,
                              node_color=node_colors, cmap=cmap, ax=ax,
-                             width=0.1, arrows=True,
+                             arrows=True,
                              alpha=0.8, **kwargs)
 
         if legend:

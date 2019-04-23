@@ -174,10 +174,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
             x = Concatenate(axis=-1, name="embedding_output")(
                 [source, target])  # Embedding space (batch_number, embedding_dim)
+            x = BatchNormalization(center=True, scale=True)(x)
         else:
             x = Dense(self._d, activation='linear', name="embedding_output")(x)
             if self.embedding_normalization:
                 x = Lambda(lambda x: K.l2_normalize(x, axis=-1))(x)
+            x = BatchNormalization(center=True, scale=True)(x)
 
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
@@ -389,7 +391,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if (node_l is None or node_l == self.node_list):
             if edge_type == "d": self.reconstructed_adj = adj
             return adj
-        elif set(node_l) < set(self.node_list):
+        elif set(node_l) < set(self.node_list) or node_l_b is not None:
             return self._select_adj_indices(adj, node_l, node_l_b)
         else:
             raise Exception("A node in node_l is not in self.node_list.")
