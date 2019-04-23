@@ -160,7 +160,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
                                 enumerate(node_degrees_list)]  # Prevent accidental candidate sampling
                 sample_neg_indices = np.random.choice(range(len(sampled_nodes)), node_neg_sample_count, replace=False,
                                                       p=self.compute_node_sampling_freq(node_degrees,
-                                                                                        compression_func=self.compression_func))
+                                                                                        compression_func="linear"))
                 sampled_adj[idx, sample_neg_indices] = EPSILON
         assert sampled_adj.count_nonzero() > pos_adj.count_nonzero(), "Did not add any sampled negative edges {} > {}".format(
             sampled_adj.count_nonzero(),

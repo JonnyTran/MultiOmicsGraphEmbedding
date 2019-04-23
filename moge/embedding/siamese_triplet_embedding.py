@@ -1,13 +1,14 @@
-import numpy
-import tensorflow
-from keras import backend, Input, Model
+import keras.backend as K
+import numpy as np
+import tensorflow as tf
+from keras import Input, Model
 from keras.backend import set_session
 from keras.layers import Lambda
 from keras.optimizers import Adam
 from keras.utils import multi_gpu_model
 from sklearn.metrics import pairwise_distances
 
-from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding, sigmoid
+from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding, sigmoid, softmax
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 from moge.network.triplet_generator import SampledTripletDataGenerator, OnlineTripletGenerator
 
@@ -192,6 +193,10 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 adj = np.matmul(embeddings_X, embeddings_Y.T)
                 adj = sigmoid(adj)
                 print("Dot product & sigmoid")
+            elif self.directed_distance == "dot_softmax":
+                adj = np.matmul(embeddings_X, embeddings_Y.T)
+                adj = softmax(adj)
+                print("Dot product & softmax")
 
         elif edge_type == 'u':
             if self.undirected_distance == "euclidean":
@@ -209,6 +214,9 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             elif self.undirected_distance == "dot_sigmoid":
                 adj = np.matmul(embeddings, embeddings.T)
                 adj = sigmoid(adj)
+            elif self.undirected_distance == "dot_softmax":
+                adj = np.matmul(embeddings, embeddings.T)
+                adj = softmax(adj)
         else:
             raise Exception("Unsupported edge_type", edge_type)
         return adj

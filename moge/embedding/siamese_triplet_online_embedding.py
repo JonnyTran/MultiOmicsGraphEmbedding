@@ -1,4 +1,5 @@
 from keras.layers import Layer
+from keras.losses import mean_squared_error
 from keras.optimizers import Adadelta
 
 from moge.embedding.siamese_graph_embedding import *
@@ -92,9 +93,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         y_pred_undirected = tf.gather_nd(pairwise_distance_undirected, labels_undirected.indices)
         y_true_undirected = labels_undirected.values
         def _contrastive_loss(_y_true, _y_pred):
-            return contrastive_loss(y_true_directed, y_pred_directed) + self.directed_proba * contrastive_loss(
-                y_true_undirected,
-                y_pred_undirected)
+            return contrastive_loss(y_true_directed, y_pred_directed) + \
+                   self.directed_proba * contrastive_loss(y_true_undirected, y_pred_undirected)
 
         return _contrastive_loss
 
@@ -106,8 +106,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         y_pred_undirected = tf.gather_nd(pairwise_similarity_undirected, labels_undirected.indices)
         y_true_undirected = labels_undirected.values
         def _kl_loss(_y_true, _y_pred):
-            return cross_entropy(y_true_directed, y_pred_directed) + \
-                   cross_entropy(y_true_undirected, y_pred_undirected)
+            return mean_squared_error(y_true_directed, y_pred_directed) + \
+                   self.directed_proba * mean_squared_error(y_true_undirected, y_pred_undirected)
 
         return _kl_loss
 
@@ -116,12 +116,10 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         embeddings_t = embeddings[:, int(self._d / 2):self._d]
         if directed:
             dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
-            sigmoid = K.sigmoid(dot_product)
-            return sigmoid
+            return K.sigmoid(dot_product)
         else:
             dot_product = K.dot(embeddings, K.transpose(embeddings))
-            sigmoid = K.softmax(dot_product)
-            return sigmoid
+            return K.softmax(dot_product)
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:

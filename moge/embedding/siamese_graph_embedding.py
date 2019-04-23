@@ -174,10 +174,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
             x = Concatenate(axis=-1, name="embedding_output")(
                 [source, target])  # Embedding space (batch_number, embedding_dim)
+            x = BatchNormalization(center=True, scale=True)(x)
         else:
             x = Dense(self._d, activation='linear', name="embedding_output")(x)
             if self.embedding_normalization:
                 x = Lambda(lambda x: K.l2_normalize(x, axis=-1))(x)
+            x = BatchNormalization(center=True, scale=True)(x)
 
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
