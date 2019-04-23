@@ -33,7 +33,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         y_true = labels.values
 
         def _recall(_y_true, _y_pred):
-            return recall_d(y_true, y_pred)
+            return recall(y_true, y_pred)
 
         return _recall
 
@@ -43,7 +43,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         y_true = labels.values
 
         def _precision(_y_true, _y_pred):
-            return precision_d(y_true, y_pred)
+            return precision(y_true, y_pred)
 
         return _precision
 
