@@ -149,9 +149,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-            directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True, squared=True),
+            directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True, squared=False),
                                                  name="directed_pairwise_distances")(embeddings)
-            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False, squared=True),
+            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False, squared=False),
                                                    name="undirected_pairwise_distances")(embeddings)
             print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
