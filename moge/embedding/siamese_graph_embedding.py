@@ -310,7 +310,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
                                                        callbacks=self.get_callbacks(early_stopping, tensorboard),
-                                                       use_multiprocessing=True, workers=8, **kwargs)
+                                                       use_multiprocessing=True, workers=16, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
         finally:
