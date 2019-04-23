@@ -79,7 +79,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                                 margin=self.directed_margin)
         undirected_loss = self.directed_proba * batch_hard_triplet_loss(pairwise_distance_undirected, labels_undirected,
                                                                         margin=self.undirected_margin)
-        return directed_loss + undirected_loss
+        loss = directed_loss + undirected_loss
+        print("loss", loss)
+        return loss
 
     def batch_contrastive_loss(self, inputs):
         pairwise_distance_directed, pairwise_distance_undirected, labels_directed, labels_undirected = inputs
