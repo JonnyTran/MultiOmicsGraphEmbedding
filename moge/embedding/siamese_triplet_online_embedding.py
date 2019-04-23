@@ -274,9 +274,12 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         if directed:
             return self._pairwise_euclidean(embeddings_s, embeddings_t, squared)
         else:
-            return self._pairwise_euclidean(embeddings, embeddings, squared)
-            # return K.minimum(self._pairwise_euclidean(embeddings_s, embeddings_s, squared),
-            #                  self._pairwise_euclidean(embeddings_t, embeddings_t, squared))
+            if self.undirected_distance == "euclidean_min":
+                return K.minimum(self._pairwise_euclidean(embeddings_s, embeddings_s, squared),
+                                 self._pairwise_euclidean(embeddings_t, embeddings_t, squared))
+            elif self.undirected_distance == "euclidean":
+                return self._pairwise_euclidean(embeddings, embeddings, squared)
+
 
     def _pairwise_euclidean(self, embeddings_s, embeddings_t, squared=True):
         dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
@@ -291,7 +294,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             distances = distances * (1.0 - mask)
         return distances
 
-    def batch_hard_online_loss(self, inputs):
+    def batch_hard_triplet_loss(self, inputs):
         pairwise_distance_directed, pairwise_distance_undirected, labels_directed, labels_undirected = inputs
         directed_loss = batch_hard_triplet_loss(pairwise_distance_directed, labels_directed,
                                                 margin=self.directed_margin)
@@ -393,14 +396,13 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             # Compile & train
             self.siamese_net.compile(  # loss=self.identity_loss,
-                loss=self.batch_hard_online_loss([directed_pairwise_distances,
-                                                  undirected_pairwise_distances,
-                                                  labels_directed, labels_undirected]),
-                                     optimizer=Adadelta(),
+                loss=self.batch_hard_triplet_loss([directed_pairwise_distances,
+                                                   undirected_pairwise_distances,
+                                                   labels_directed, labels_undirected]),
+                optimizer=Adadelta(),
                 metrics=[self.custom_recall([directed_pairwise_distances, labels_directed]),
                          self.custom_precision([directed_pairwise_distances, labels_directed])] if \
                     self.directed_distance == "euclidean" else None,
-
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
