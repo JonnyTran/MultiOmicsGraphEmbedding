@@ -115,15 +115,13 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         embeddings_s = embeddings[:, 0:int(self._d / 2)]
         embeddings_t = embeddings[:, int(self._d / 2):self._d]
         if directed:
-
-            return self._pairwise_metric(embeddings_s, embeddings_t)
+            dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
+            sigmoid = K.sigmoid(dot_product)
+            return sigmoid
         else:
-            return self._pairwise_metric(embeddings, embeddings)
-
-    def _pairwise_metric(self, embeddings_s, embeddings_t):
-        dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
-        sigmoid = K.softmax(dot_product)
-        return sigmoid
+            dot_product = K.dot(embeddings, K.transpose(embeddings))
+            sigmoid = K.softmax(dot_product)
+            return sigmoid
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
