@@ -385,12 +385,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             assert len(self.node_list) == embs.shape[0]
             adj = self._pairwise_similarity(embs, edge_type)
 
-        if (node_l is None or node_l == self.node_list):
+        if (node_l is None or node_l == self.node_list) and node_l_b is None:
             if edge_type == "d": self.reconstructed_adj = adj
             return adj
         elif set(node_l) < set(self.node_list) or node_l_b is not None:
             return self._select_adj_indices(adj, node_l, node_l_b)
-        else:
+        elif not (set(node_l) < set(self.node_list)):
             raise Exception("A node in node_l is not in self.node_list.")
 
     def _pairwise_similarity(self, embeddings, edge_type="d"):

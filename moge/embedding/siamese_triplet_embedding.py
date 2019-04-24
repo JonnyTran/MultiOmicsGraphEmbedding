@@ -157,12 +157,12 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         if interpolate:
             adj = np.interp(adj, (adj.min(), adj.max()), (0, 1))
-        if (node_l is None or node_l == self.node_list):
+        if (node_l is None or node_l == self.node_list) and node_l_b is None:
             if edge_type == "d": self.reconstructed_adj = adj  # Cache reconstructed_adj to memory for faster recall
             return adj
-        elif set(node_l) < set(self.node_list):
+        elif set(node_l) < set(self.node_list) or node_l_b is not None:
             return self._select_adj_indices(adj, node_l, node_l_b)
-        else:
+        elif not (set(node_l) < set(self.node_list)):
             raise Exception("A node in node_l is not in self.node_list.")
 
     def _pairwise_similarity(self, embeddings, edge_type="d"):
@@ -177,8 +177,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
                 # Get node-specific adaptive threshold
                 # adj = self.transform_adj_adaptive_threshold(adj, margin=0)
-                # adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
-                adj = np.exp(-2.0 * adj)
+                adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
+                # adj = np.exp(-2.0 * adj)
                 # adj = adj.T  # Transpose
                 # adj = -adj
                 print("Euclidean dist")
