@@ -303,12 +303,12 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         elif node_list is not None:
             nodes = [n for n in nodes if n in node_list]
 
-        print("nodes_A", len(nodes_A))
-        print("nodes_B", len(nodes_B))
+        # print("nodes_A", len(nodes_A))
+        # print("nodes_B", len(nodes_B))
         if node_list_B is not None:
             estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes_A,
                                                        node_l_b=nodes_B)  # (node_list_A, node_list_B)
-            print("estimated_adj", estimated_adj.shape)
+            # print("estimated_adj", estimated_adj.shape)
         else:
             estimated_adj = self.get_reconstructed_adj(edge_type=edge_type, node_l=nodes)  # (nodes, nodes)
         np.fill_diagonal(estimated_adj, 0)
@@ -326,7 +326,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             estimated_adj[rows, cols] = 0
 
         top_k_indices = largest_indices(estimated_adj, top_k, smallest=False)
-        print("top_k_indices", top_k_indices)
+        # print("top_k_indices", top_k_indices)
 
         if node_list_B is not None:
             top_k_pred_edges = [(nodes_A[x[0]], nodes_B[x[1]], estimated_adj[x[0], x[1]]) for x in zip(*top_k_indices)]
