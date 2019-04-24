@@ -21,11 +21,10 @@ from moge.network.edge_generator import DataGenerator, SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
-def contrastive_loss(y_true, y_pred):
+def contrastive_loss(y_true, y_pred, margin=1.0):
     '''Contrastive loss from Hadsell-et-al.'06
     http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
     '''
-    margin = 1.0
     return K.mean(y_true * K.square(y_pred) +
                   (1 - y_true) * K.square(K.maximum(margin - y_pred, 0)))
 
@@ -174,12 +173,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
             x = Concatenate(axis=-1, name="embedding_output")(
                 [source, target])  # Embedding space (batch_number, embedding_dim)
-            x = BatchNormalization(center=True, scale=True)(x)
         else:
             x = Dense(self._d, activation='linear', name="embedding_output")(x)
             if self.embedding_normalization:
                 x = Lambda(lambda x: K.l2_normalize(x, axis=-1))(x)
-            x = BatchNormalization(center=True, scale=True)(x)
 
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
