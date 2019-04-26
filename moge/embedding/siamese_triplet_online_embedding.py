@@ -92,9 +92,14 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         y_pred_undirected = tf.gather_nd(pairwise_distance_undirected, labels_undirected.indices)
         y_true_undirected = labels_undirected.values
+
+        undirected_loss = self.directed_proba * contrastive_loss(y_true_undirected, y_pred_undirected,
+                                                                 self.undirected_margin)
+        undirected_loss = K.switch(tf.is_nan(undirected_loss), 0.0, undirected_loss)
+
         def _contrastive_loss(_y_true, _y_pred):
             return contrastive_loss(y_true_directed, y_pred_directed, self.directed_margin) + \
-                   self.directed_proba * contrastive_loss(y_true_undirected, y_pred_undirected, self.undirected_margin)
+                   undirected_loss
 
         return _contrastive_loss
 
