@@ -80,7 +80,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                                 margin=self.directed_margin)
         undirected_loss = self.directed_proba * batch_hard_triplet_loss(pairwise_distance_undirected, labels_undirected,
                                                                         margin=self.undirected_margin)
-
+        undirected_loss = K.switch(tf.is_nan(undirected_loss), 0.0, undirected_loss)
         def loss(_y_true, _y_pred):
             return directed_loss + undirected_loss
         return loss
@@ -110,9 +110,11 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         y_pred_undirected = tf.gather_nd(pairwise_similarity_undirected, labels_undirected.indices)
         y_true_undirected = labels_undirected.values
+
+        undirected_loss = self.directed_proba * mean_squared_error(y_true_undirected, y_pred_undirected)
+        undirected_loss = K.switch(tf.is_nan(undirected_loss), 0.0, undirected_loss)
         def _kl_loss(_y_true, _y_pred):
-            return mean_squared_error(y_true_directed, y_pred_directed) + \
-                   self.directed_proba * mean_squared_error(y_true_undirected, y_pred_undirected)
+            return mean_squared_error(y_true_directed, y_pred_directed) + undirected_loss
 
         return _kl_loss
 
@@ -291,6 +293,7 @@ class OnlineTripletLoss(Layer):
         if self.undirected_weight > 0.0:
             undirected_loss = batch_hard_triplet_loss(undirected_pairwise_dist, labels=labels_undirected,
                                                       margin=self.undirected_margin)
+            undirected_loss = K.switch(tf.is_nan(undirected_loss), 0.0, undirected_loss)
             return tf.add(directed_loss, self.undirected_weight * undirected_loss)
         else:
             return directed_loss
