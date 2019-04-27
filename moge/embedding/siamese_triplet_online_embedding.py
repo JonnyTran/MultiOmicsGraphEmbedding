@@ -1,5 +1,5 @@
 from keras.layers import Layer
-from keras.losses import mean_squared_error
+from keras.losses import mean_squared_error, binary_crossentropy
 from keras.optimizers import Adadelta
 
 from moge.embedding.siamese_graph_embedding import *
@@ -93,8 +93,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         y_pred_undirected = tf.gather_nd(pairwise_distance_undirected, labels_undirected.indices)
         y_true_undirected = labels_undirected.values
 
-        undirected_loss = self.directed_proba * contrastive_loss(y_true_undirected, y_pred_undirected,
-                                                                 self.undirected_margin)
+        undirected_loss = self.directed_proba * binary_crossentropy(y_true_undirected, y_pred_undirected)
         undirected_loss = K.switch(tf.is_nan(undirected_loss), 0.0, undirected_loss)
 
         def _contrastive_loss(_y_true, _y_pred):
@@ -125,8 +124,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
             return K.sigmoid(dot_product)
         else:
-            dot_product = K.dot(embeddings, K.transpose(embeddings))
-            return K.softmax(dot_product)
+            return _pairwise_cosine_similarity(embeddings, embeddings)
+            # dot_product = K.dot(embeddings, K.transpose(embeddings))
+            # return K.softmax(dot_product)
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
@@ -155,7 +155,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True, squared=False),
                                                  name="directed_pairwise_distances")(embeddings)
-            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False, squared=False),
+            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_similarity(x, directed=False),
                                                    name="undirected_pairwise_distances")(embeddings)
             print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
@@ -337,10 +337,14 @@ def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
         distances = distances * (1.0 - mask)
 
     return distances
+
+
 def _pairwise_dot_sigmoid_similarity(embeddings_A, embeddings_B):
     dot_product = tf.matmul(embeddings_A, embeddings_B, transpose_b=True)
     sigmoids = tf.sigmoid(dot_product)
     return sigmoids
+
+
 def _pairwise_cosine_similarity(embeddings_A, embeddings_B):
     normalize_a = tf.nn.l2_normalize(embeddings_A, axis=-1)
     normalize_b = tf.nn.l2_normalize(embeddings_B, axis=-1)

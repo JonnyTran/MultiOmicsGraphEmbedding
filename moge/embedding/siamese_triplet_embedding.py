@@ -179,8 +179,6 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 # adj = self.transform_adj_adaptive_threshold(adj, margin=0)
                 adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
                 # adj = np.exp(-2.0 * adj)
-                # adj = adj.T  # Transpose
-                # adj = -adj
                 print("Euclidean dist")
 
             elif self.directed_distance == "cosine":
