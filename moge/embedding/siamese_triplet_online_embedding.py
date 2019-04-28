@@ -126,7 +126,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             return K.sigmoid(dot_product)
         else:
             dot_product = K.dot(embeddings, K.transpose(embeddings))
-            return K.softmax(dot_product)
+            return K.sigmoid(dot_product)
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
@@ -153,9 +153,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
-            directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True, square=False),
+            directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True, squared=False),
                                                  name="directed_pairwise_distances")(embeddings)
-            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False, square=False),
+            undirected_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=False, squared=False),
                                                    name="undirected_pairwise_distances")(embeddings)
             print("directed_pairwise_distances", directed_pairwise_distances) if self.verbose else None
 
@@ -177,9 +177,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             # Compile & train
             self.siamese_net.compile(  # loss=self.identity_loss,
-                loss=self.batch_hard_triplet_loss([directed_pairwise_distances,
-                                                   undirected_pairwise_distances,
-                                                   labels_directed, labels_undirected]),
+                loss=self.batch_contrastive_loss([directed_pairwise_distances,
+                                                  undirected_pairwise_distances,
+                                                  labels_directed, labels_undirected]),
                 optimizer=Adadelta(),
                 metrics=[self.custom_precision([directed_pairwise_distances, labels_directed]),
                          self.custom_recall([directed_pairwise_distances, labels_directed])],
