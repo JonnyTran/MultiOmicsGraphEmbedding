@@ -125,9 +125,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
             return K.sigmoid(dot_product)
         else:
-            return _pairwise_cosine_similarity(embeddings, embeddings)
-            # dot_product = K.dot(embeddings, K.transpose(embeddings))
-            # return K.sigmoid(dot_product)
+            dot_product = K.dot(embeddings, K.transpose(embeddings))
+            return K.softmax(dot_product)
 
     def build_keras_model(self, multi_gpu=False):
         if multi_gpu:
