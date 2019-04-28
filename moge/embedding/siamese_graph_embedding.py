@@ -178,7 +178,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             if self.embedding_normalization:
                 x = Lambda(lambda x: K.l2_normalize(x, axis=-1))(x)
 
-        x = BatchNormalization(center=True, scale=False)(x)
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
 
