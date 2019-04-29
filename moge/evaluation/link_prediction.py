@@ -10,7 +10,9 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
                                                    ("LNC", "GE", "NPInter", "NPInter")]):
     for source, target, database, title in tests:
         print(database)
-        total_edges = data_generator.reload_directed_edges_data(edge_types=edge_types, databases=[database, ],
+        total_edges = data_generator.reload_directed_edges_data(edge_types=edge_types,
+                                                                databases=database if type(database) == list else [
+                                                                    database, ],
                                                                 node_list=data_generator.network.nodes[
                                                       source] if source is not None else None,
                                                                 node_list_B=data_generator.network.nodes[
