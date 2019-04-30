@@ -349,15 +349,13 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             histogram_freq=histogram_freq,
             write_grads=False, write_graph=False, write_images=False,
             batch_size=self.batch_size,
-            update_freq="epoch" if embeddings else 0,
+            update_freq="epoch" if embeddings else None,
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
             embeddings_data=x_test if embeddings else None,
             embeddings_layer_names=["embeddings_vis"] if embeddings else None,
         )
         # Add params text to tensorboard
-        # params = tf.summary.text("params", tf.convert_to_tensor(str(self.get_params())))
-        # self.tensorboard.writer.add_summary(self.sess.run(params))
 
     def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=1, embeddings=False):
         callbacks = []
