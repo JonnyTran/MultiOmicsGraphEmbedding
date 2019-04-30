@@ -126,7 +126,13 @@ class OnlineTripletGenerator(SampledDataGenerator):
 
         return X, y
 
-    def __data_generation(self, sampled_nodes):
+    def load_data(self):
+        sampled_nodes = self.get_nonzero_nodelist()
+        X, y = self.__data_generation(sampled_nodes)
+
+        return X, y
+
+    def __data_generation(self, sampled_nodes, return_node_name=False):
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         sampled_directed_adj = self.sample_random_negative_edges(
@@ -136,7 +142,9 @@ class OnlineTripletGenerator(SampledDataGenerator):
         X["labels_directed"] = sampled_directed_adj
         X["labels_undirected"] = self.network.get_adjacency_matrix(edge_types=["u", "u_n"], node_list=sampled_nodes)
 
-        y = np.zeros(X["input_seqs"].shape[0]) # Dummy vector
+        y = np.asarray([self.node_list.index(node) for node in sampled_nodes], dtype=np.int)
+        if return_node_name: y = np.asarray(sampled_nodes, dtype="O")
+
         return X, y
 
     def sample_directed_negative_edges(self, pos_adj, sampled_nodes, negative_sampling_ratio):

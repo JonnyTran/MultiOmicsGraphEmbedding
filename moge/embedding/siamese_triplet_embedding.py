@@ -115,6 +115,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             self.generator_val = self.generator_val.__getitem__(0) if type(
                 self.generator_val) == OnlineTripletGenerator else self.generator_val
         try:
+            print(self.log_dir)
             self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,

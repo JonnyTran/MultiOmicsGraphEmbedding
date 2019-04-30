@@ -1,5 +1,5 @@
 from keras.layers import Layer
-from keras.losses import mean_squared_error, binary_crossentropy
+from keras.losses import binary_crossentropy
 from keras.optimizers import Adadelta
 
 from moge.embedding.siamese_graph_embedding import *
@@ -189,14 +189,15 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
                         early_stopping=False, multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
-                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):
+                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, embeddings=False,
+                        **kwargs):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
 
         if network_val is not None:
             self.generator_val = OnlineTripletGenerator(network=network_val, weighted=self.weighted,
                                                         maxlen=self.max_length, padding='post', truncating="post",
                                                         tokenizer=generator_train.tokenizer,
-                                                        negative_sampling_ratio=2.0, n_steps=int(n_steps / 5),
+                                                        negative_sampling_ratio=1.0,
                                                         batch_size=self.batch_size, shuffle=True, seed=seed,
                                                         verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
@@ -205,14 +206,14 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
 
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
-
+        if embeddings:
+            self.build_tensorboard(embeddings=embeddings)
         if histogram_freq > 0:
             self.tensorboard.histogram_freq = histogram_freq
-            self.generator_val = self.generator_val.__getitem__(0) if type(
-                self.generator_val) == OnlineTripletGenerator else self.generator_val
         try:
-            self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs,
-                                                       validation_data=self.generator_val,
+            print(self.log_dir)
+            self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs, shuffle=False,
+                                                       validation_data=self.generator_val.load_data(),
                                                        validation_steps=validation_steps,
                                                        callbacks=self.get_callbacks(early_stopping, tensorboard),
                                                        use_multiprocessing=True, workers=8, **kwargs)

@@ -162,13 +162,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
         if self.source_target_dense_layers:
             source = Dense(int(self._d / 2), activation='linear', name="dense_source")(x)
-            if self.embedding_normalization:
-                source = Lambda(lambda x: K.l2_normalize(x, axis=-1))(source)
-            print("source", source) if self.verbose else None
-
             target = Dense(int(self._d / 2), activation='linear', name="dense_target")(x)
             if self.embedding_normalization:
+                source = Lambda(lambda x: K.l2_normalize(x, axis=-1))(source)
                 target = Lambda(lambda x: K.l2_normalize(x, axis=-1))(target)
+            print("source", source) if self.verbose else None
             print("target", target) if self.verbose else None
 
             x = Concatenate(axis=-1, name="embedding_output")(
@@ -176,7 +174,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         else:
             x = Dense(self._d, activation='linear', name="embedding_output")(x)
             if self.embedding_normalization:
-                x = Lambda(lambda x: K.l2_normalize(x, axis=-1))(x)
+                x = Lambda(lambda x: K.l2_normalize(x, axis=-1), name="embedding_output_normalized")(x)
 
         print("embedding", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
@@ -305,6 +303,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             self.generator_val = self.generator_val.__getitem__(0) if type(
                 self.generator_val) == DataGenerator else self.generator_val
         try:
+            print(self.log_dir)
             self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
@@ -337,33 +336,45 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.word_index = self.generator_train.tokenizer.word_index
         return self.generator_train
 
-    def build_tensorboard(self):
-        self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p'))
+    def build_tensorboard(self, embeddings=True):
+        if not hasattr(self, "log_dir"):
+            self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p'))
+
+        if embeddings:
+            x_test, y_test = self.generator_val.load_data()
+            if not os.path.exists(self.log_dir):
+                os.makedirs(self.log_dir)
+            with open(os.path.join(self.log_dir, "metadata.tsv"), 'w') as f:
+                np.savetxt(f, y_test, fmt="%s")
+
         self.tensorboard = TensorBoard(
             log_dir=self.log_dir,
             histogram_freq=0,
             write_grads=True, write_graph=False, write_images=True,
             batch_size=self.batch_size,
-            # update_freq="epoch", embeddings_freq=0,
-            # embeddings_metadata="logs/metadata.tsv",
-            # embeddings_data=self.generator_val.__getitem__(0)[0],
-            # embeddings_layer_names=["embedding_output_normalized"],
+            # update_freq="epoch" if embeddings else None,
+            embeddings_freq=1 if embeddings else 0,
+            embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
+            embeddings_data=x_test if embeddings else None,
+            embeddings_layer_names=["embedding_output"] if embeddings else None,
         )
 
         # Add params text to tensorboard
         # params = tf.summary.text("params", tf.convert_to_tensor(str(self.get_params())))
         # self.tensorboard.writer.add_summary(self.sess.run(params))
 
-    def get_callbacks(self, early_stopping=2, tensorboard=True):
+    def get_callbacks(self, early_stopping=0, tensorboard=True):
         callbacks = []
         if tensorboard:
             callbacks.append(self.tensorboard)
-        if early_stopping:
+        if early_stopping > 0:
             if not hasattr(self, "early_stopping"):
                 self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=early_stopping, verbose=0,
                                                     mode='auto',
-                                                    baseline=None, restore_best_weights=True)
+                                                    baseline=None, restore_best_weights=False)
             callbacks.append(self.early_stopping)
+        else:
+            callbacks = None
         return callbacks
 
     def save_network_weights(self):
