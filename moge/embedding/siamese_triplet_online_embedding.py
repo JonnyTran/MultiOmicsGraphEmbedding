@@ -54,10 +54,10 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         if directed:
             return self._pairwise_euclidean(embeddings_s, embeddings_t, squared)
         else:
-            if self.undirected_distance == "euclidean_min":
+            if "euclidean_min" in self.undirected_distance:
                 return K.minimum(self._pairwise_euclidean(embeddings_s, embeddings_s, squared),
                                  self._pairwise_euclidean(embeddings_t, embeddings_t, squared))
-            elif self.undirected_distance == "euclidean":
+            elif "euclidean" in self.undirected_distance:
                 return self._pairwise_euclidean(embeddings, embeddings, squared)
 
 

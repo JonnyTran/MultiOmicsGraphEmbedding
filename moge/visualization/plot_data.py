@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.sparse import coo_matrix
-
+from scipy.sparse import issparse
 
 def bar_chart(results: dict, measures, title=None, bar_width=0.08, loc="best"):
     methods = list(results.keys())
@@ -50,6 +50,9 @@ def matrix_heatmap(matrix, figsize=(12,12), cmap='gray', **kwargs):
 
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111)
+
+    if issparse(matrix):
+        matrix = matrix.todense()
 
     if np.isnan(matrix).any():
         matrix = np.nan_to_num(matrix)

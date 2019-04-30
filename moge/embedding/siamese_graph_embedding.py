@@ -14,6 +14,7 @@ from keras.optimizers import RMSprop
 from keras.utils import multi_gpu_model
 from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
+from sklearn.neighbors import radius_neighbors_graph
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.metrics import precision_d, recall_d, precision, recall
@@ -346,15 +347,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.tensorboard = TensorBoard(
             log_dir=self.log_dir,
             histogram_freq=histogram_freq,
-            write_grads=True, write_graph=False, write_images=False,
+            write_grads=False, write_graph=False, write_images=False,
             batch_size=self.batch_size,
-            update_freq=1000,
+            update_freq="epoch" if embeddings else 0,
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
             embeddings_data=x_test if embeddings else None,
             embeddings_layer_names=["embedding_output"] if embeddings else None,
         )
-
         # Add params text to tensorboard
         # params = tf.summary.text("params", tf.convert_to_tensor(str(self.get_params())))
         # self.tensorboard.writer.add_summary(self.sess.run(params))
@@ -407,23 +407,32 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if edge_type == 'd':
             embeddings_X = embeddings[:, 0:int(self._d / 2)]
             embeddings_Y = embeddings[:, int(self._d / 2):self._d]
-            if self.directed_distance == "euclidean":
+            if self.directed_distance == "euclidean_ball":
+                embeddings_stacked = np.vstack([embeddings_X, embeddings_Y])
+                adj = radius_neighbors_graph(embeddings_stacked, radius=self.margin, n_jobs=-2)
+                adj = adj[0:embeddings_X.shape[0], :][:, embeddings_X.shape[0]:]
+                print("radius_neighbors_graph")
+
+            elif self.directed_distance == "euclidean":
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="euclidean", n_jobs=-2)
                 # adj = np.exp(-2 * adj)
                 adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
-            if self.directed_distance == "l1_alpha":
+            elif self.directed_distance == "l1_alpha":
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_directed)
 
         elif edge_type == 'u':
-            if self.undirected_distance == "euclidean":
+            if self.undirected_distance == "euclidean_ball":
+                adj = radius_neighbors_graph(embeddings, radius=self.margin, n_jobs=-2)
+
+            elif self.undirected_distance == "euclidean":
                 adj = pairwise_distances(X=embeddings, metric="euclidean", n_jobs=-2)
-                # adj = np.exp(-2 * adj)
                 adj = self.transform_adj_beta_exp(adj, edge_types=["u", "u_n"], sample_negative=False)
-            if self.undirected_distance == "l1_alpha":
+
+            elif self.undirected_distance == "l1_alpha":
                 adj = pairwise_distances(X=embeddings,
                                          metric=l1_diff_alpha, n_jobs=-2, weights=self.alpha_undirected)
         else:
