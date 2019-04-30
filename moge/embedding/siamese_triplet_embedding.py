@@ -84,7 +84,6 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         if multi_gpu:
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
-        self.build_tensorboard()
         # Compile & train
         self.siamese_net.compile(loss=self.identity_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
                                  optimizer=Adam(lr=self.lr, beta_1=0.9, beta_2=0.999, epsilon=0.1),
