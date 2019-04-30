@@ -269,7 +269,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if multi_gpu:
             self.siamese_net = multi_gpu_model(self.siamese_net, gpus=4, cpu_merge=True, cpu_relocation=False)
 
-        self.build_tensorboard()
         # Compile & train
         self.siamese_net.compile(loss=contrastive_loss,  # binary_crossentropy, cross_entropy, contrastive_loss
                                  optimizer=RMSprop(lr=self.lr),
@@ -280,7 +279,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
-                        n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
+                        n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0, embeddings=False,
                         early_stopping=2,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
@@ -298,16 +297,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
-        if histogram_freq > 0:
-            self.tensorboard.histogram_freq = histogram_freq
-            self.generator_val = self.generator_val.__getitem__(0) if type(
-                self.generator_val) == DataGenerator else self.generator_val
         try:
-            print(self.log_dir)
             self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
-                                                       callbacks=self.get_callbacks(early_stopping, tensorboard),
+                                                       callbacks=self.get_callbacks(early_stopping, tensorboard,
+                                                                                    histogram_freq, embeddings),
                                                        use_multiprocessing=True, workers=16, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
@@ -336,12 +331,13 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.word_index = self.generator_train.tokenizer.word_index
         return self.generator_train
 
-    def build_tensorboard(self, embeddings=True):
+    def build_tensorboard(self, histogram_freq=1, embeddings=True):
         if not hasattr(self, "log_dir"):
             self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p'))
+            print("log_dir:", self.log_dir)
 
         if embeddings:
-            x_test, y_test = self.generator_val.load_data()
+            x_test, y_test = self.generator_val.load_data(return_node_name=True)
             if not os.path.exists(self.log_dir):
                 os.makedirs(self.log_dir)
             with open(os.path.join(self.log_dir, "metadata.tsv"), 'w') as f:
@@ -349,10 +345,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
         self.tensorboard = TensorBoard(
             log_dir=self.log_dir,
-            histogram_freq=0,
+            histogram_freq=histogram_freq,
             write_grads=True, write_graph=False, write_images=True,
             batch_size=self.batch_size,
-            # update_freq="epoch" if embeddings else None,
+            update_freq="batch",
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
             embeddings_data=x_test if embeddings else None,
@@ -363,9 +359,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         # params = tf.summary.text("params", tf.convert_to_tensor(str(self.get_params())))
         # self.tensorboard.writer.add_summary(self.sess.run(params))
 
-    def get_callbacks(self, early_stopping=0, tensorboard=True):
+    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=1, embeddings=False):
         callbacks = []
         if tensorboard:
+            if not hasattr(self, "tensorboard"):
+                self.build_tensorboard(histogram_freq=histogram_freq, embeddings=embeddings)
             callbacks.append(self.tensorboard)
         if early_stopping > 0:
             if not hasattr(self, "early_stopping"):

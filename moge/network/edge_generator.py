@@ -255,7 +255,7 @@ class DataGenerator(keras.utils.Sequence):
         elif edge_type == DIRECTED_NEG_EDGE_TYPE:
             return 0
 
-    def make_dataset(self, return_sequence_data=False, batch_size=None):
+    def load_data(self, return_sequence_data=False, batch_size=None):
         # Returns the y_true labels. Note: run this before running .`on_epoch_end`() since it may reindex the samples
         X = []
         y = []

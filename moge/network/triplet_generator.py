@@ -126,9 +126,9 @@ class OnlineTripletGenerator(SampledDataGenerator):
 
         return X, y
 
-    def load_data(self):
+    def load_data(self, return_node_name=False):
         sampled_nodes = self.get_nonzero_nodelist()
-        X, y = self.__data_generation(sampled_nodes)
+        X, y = self.__data_generation(sampled_nodes, return_node_name=return_node_name)
 
         return X, y
 

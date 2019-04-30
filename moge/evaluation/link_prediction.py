@@ -22,7 +22,7 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
         else:
             continue
 
-        X, y_true = data_generator.make_dataset()
+        X, y_true = data_generator.load_data()
         y_true = np.round(y_true)
         evaluate_pr_curve_link_pred(methods, X, y_true, title=title, data_generator=data_generator)
 
