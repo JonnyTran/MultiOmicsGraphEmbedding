@@ -353,7 +353,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
             embeddings_data=x_test if embeddings else None,
-            embeddings_layer_names=["lstm_network/embedding_output"] if embeddings else None,
+            embeddings_layer_names=["lstm_network/embedding_output/concat:0"] if embeddings else None,
         )
         # Add params text to tensorboard
         # params = tf.summary.text("params", tf.convert_to_tensor(str(self.get_params())))
