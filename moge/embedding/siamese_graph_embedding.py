@@ -365,14 +365,15 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             if not hasattr(self, "tensorboard"):
                 self.build_tensorboard(histogram_freq=histogram_freq, embeddings=embeddings)
             callbacks.append(self.tensorboard)
+
         if early_stopping > 0:
             if not hasattr(self, "early_stopping"):
                 self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=early_stopping, verbose=0,
                                                     mode='auto',
                                                     baseline=None, restore_best_weights=False)
             callbacks.append(self.early_stopping)
-        else:
-            callbacks = None
+
+        if len(callbacks) == 0: callbacks = None
         return callbacks
 
     def save_network_weights(self):
