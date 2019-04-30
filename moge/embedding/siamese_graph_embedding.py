@@ -346,9 +346,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.tensorboard = TensorBoard(
             log_dir=self.log_dir,
             histogram_freq=histogram_freq,
-            write_grads=True, write_graph=False, write_images=True,
+            write_grads=True, write_graph=False, write_images=False,
             batch_size=self.batch_size,
-            update_freq="batch",
+            update_freq=1000,
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
             embeddings_data=x_test if embeddings else None,
