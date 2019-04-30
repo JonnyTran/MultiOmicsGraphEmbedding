@@ -137,7 +137,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         K.clear_session()
         tf.reset_default_graph()
 
-        self.build_tensorboard(histogram_freq=1, embeddings=True)
+        self.build_tensorboard(histogram_freq=1, embeddings=False)
 
         with tf.device(device):
             input_seqs = Input(batch_shape=(None, None), dtype=tf.int8, name="input_seqs")
