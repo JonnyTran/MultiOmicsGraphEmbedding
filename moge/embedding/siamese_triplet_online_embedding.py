@@ -133,11 +133,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             device = "/cpu:0"
         else:
             device = "/gpu:0"
-
         K.clear_session()
         tf.reset_default_graph()
-
-        self.build_tensorboard(histogram_freq=1, embeddings=False)
 
         with tf.device(device):
             input_seqs = Input(batch_shape=(None, None), dtype=tf.int8, name="input_seqs")
@@ -153,6 +150,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
             # encode each of the inputs into a list of embedding vectors with the conv_lstm_network
             embeddings = self.lstm_network(input_seqs)
+            embeddings = Lambda(lambda x: x, name="embeddings_vis")(embeddings)
             print("embeddings", embeddings) if self.verbose else None
 
             directed_pairwise_distances = Lambda(lambda x: self.pairwise_distances(x, directed=True, squared=False),
