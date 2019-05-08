@@ -1,6 +1,9 @@
 from abc import ABCMeta
+from multiprocessing import cpu_count, Pool
 
+import gseapy as gp
 import numpy as np
+import pandas as pd
 from MulticoreTSNE import MulticoreTSNE as TSNE
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -400,8 +403,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
     def predict_cluster(self, n_clusters=8, node_list=None, n_jobs=-2, return_clusters=False):
         embs = self.get_embedding()
-        kmeans = KMeans(n_clusters, n_jobs=n_jobs)
-        y_pred = kmeans.fit_predict(embs)
+        self.kmeans = KMeans(n_clusters, n_jobs=n_jobs)
+        y_pred = self.kmeans.fit_predict(embs)
 
         if node_list is not None and set(node_list) <= set(self.node_list) and node_list != self.node_list:
             idx = [self.node_list.index(node) for node in node_list]
@@ -409,3 +412,30 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         return y_pred
 
+    def get_cluster_members(self, cluster):
+        return [self.node_list[node_index] for node_index in np.where(self.kmeans.labels_ == cluster)[0]]
+
+    def get_cluster_neighbors(self, node):
+        return self.get_cluster_members(self.kmeans.labels_[self.node_list.index(node)])
+
+    def get_top_enrichr_term(self, clusters):
+        data_split = np.array_split(clusters, cpu_count())
+        print(len(data_split))
+        pool = Pool(cpu_count())
+        data = pd.concat(pool.map(self._get_top_enrichr_term, data_split))
+        pool.close()
+        pool.join()
+        return data
+
+    def _get_top_enrichr_term(self, cluster, cutoff=0.05, top_k=1):
+        enr = gp.enrichr(gene_list=self.get_cluster_members(cluster),
+                         gene_sets=[
+                             #                                 'GO_Biological_Process_2018',
+                             #                                 'GO_Cellular_Component_2018',
+                             #                                 'GO_Molecular_Function_2018',
+                             "KEGG_2019_Human",
+                         ],
+                         cutoff=cutoff,  # test dataset, use lower value of range(0,1)
+                         no_plot=True, verbose=False,
+                         )
+        return enr.results.sort_values(by="Adjusted P-value").head(top_k)

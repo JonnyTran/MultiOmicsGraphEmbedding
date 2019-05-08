@@ -537,17 +537,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         return y_pred
 
     def get_edge_weight(self, i, j, edge_type='d'):
-        embs = self.get_embedding()
-        if not type(i) is int and type(j) is int:
-            i = self.node_list.index(i)
-            j = self.node_list.index(j)
+        if not type(i) == int or type(j) == int:
+            i_idx = self.node_list.index(i)
+            j_idx = self.node_list.index(j)
 
-        if edge_type == 'd':
-            return pairwise_distances(X=embs[i, 0:int(self._d / 2)],
-                                      Y=embs[j, int(self._d / 2):self._d],
-                                      metric=l1_diff_alpha, weights=self.alpha_directed)
-        else:
-            return pairwise_distances(X=embs[i], Y=embs[j], metric=l1_diff_alpha, weights=self.alpha_directed)
+        return self.get_reconstructed_adj(edge_type=edge_type)[i_idx, j_idx]
 
 
 if __name__ == '__main__':
