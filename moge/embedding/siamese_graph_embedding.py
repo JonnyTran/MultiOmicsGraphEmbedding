@@ -352,8 +352,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             update_freq="epoch",
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
-            embeddings_data=x_test if embeddings else None,
-            embeddings_layer_names=["embeddings_vis"] if embeddings else None,
+            embeddings_data=x_test.values() if embeddings else None,
+            embeddings_layer_names=["embedding_output"] if embeddings else None,
         )
         # Add params text to tensorboard
 
