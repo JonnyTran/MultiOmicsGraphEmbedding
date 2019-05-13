@@ -339,10 +339,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
         if embeddings:
             x_test, y_test = self.generator_val.load_data(return_node_name=True)
-            if not os.path.exists(self.log_dir):
-                os.makedirs(self.log_dir)
+            if not os.path.exists(self.log_dir): os.makedirs(self.log_dir)
             with open(os.path.join(self.log_dir, "metadata.tsv"), 'w') as f:
                 np.savetxt(f, y_test, fmt="%s")
+                f.close()
 
         self.tensorboard = TensorBoard(
             log_dir=self.log_dir,
@@ -352,7 +352,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             update_freq="epoch",
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
-            embeddings_data=list(x_test.values()) if embeddings else None,
+            embeddings_data=x_test if embeddings else None,
             embeddings_layer_names=["embedding_output"] if embeddings else None,
         )
         # Add params text to tensorboard
