@@ -332,7 +332,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.word_index = self.generator_train.tokenizer.word_index
         return self.generator_train
 
-    def build_tensorboard(self, histogram_freq=1, embeddings=True):
+    def build_tensorboard(self, histogram_freq=1, embeddings=False):
         if not hasattr(self, "log_dir"):
             self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p'))
             print("log_dir:", self.log_dir)
@@ -349,7 +349,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             histogram_freq=histogram_freq,
             write_grads=False, write_graph=False, write_images=False,
             batch_size=self.batch_size,
-            update_freq="epoch" if embeddings else None,
+            update_freq="epoch",
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
             embeddings_data=x_test if embeddings else None,

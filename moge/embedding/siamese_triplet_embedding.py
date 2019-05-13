@@ -107,19 +107,17 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
-        assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
 
+        assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
-        if histogram_freq > 0:
-            self.tensorboard.histogram_freq = histogram_freq
-            self.generator_val = self.generator_val.__getitem__(0) if type(
-                self.generator_val) == OnlineTripletGenerator else self.generator_val
+
         try:
             print(self.log_dir)
             self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs,
                                                        validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
-                                                       callbacks=self.get_callbacks(early_stopping, tensorboard),
+                                                       callbacks=self.get_callbacks(early_stopping, tensorboard,
+                                                                                    histogram_freq),
                                                        use_multiprocessing=True, workers=8, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")

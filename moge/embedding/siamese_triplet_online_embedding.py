@@ -200,12 +200,12 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
-        assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
 
+        assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
         try:
-            self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs, shuffle=False,
+            self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs, shuffle=True,
                                                        validation_data=self.generator_val.load_data(),
                                                        validation_steps=validation_steps,
                                                        callbacks=self.get_callbacks(early_stopping, tensorboard,
