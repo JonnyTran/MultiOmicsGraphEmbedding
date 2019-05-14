@@ -356,7 +356,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         )
         # Add params text to tensorboard
 
-    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=0, embeddings=True, write_grads=True):
+    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=0, embeddings=False, write_grads=False):
         callbacks = []
         if tensorboard:
             if not hasattr(self, "tensorboard"):
