@@ -332,7 +332,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.word_index = self.generator_train.tokenizer.word_index
         return self.generator_train
 
-    def build_tensorboard(self, histogram_freq=1, embeddings=False):
+    def build_tensorboard(self, histogram_freq=0, embeddings=False, write_grads=False):
         if not hasattr(self, "log_dir"):
             self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%l-%M%p'))
             print("log_dir:", self.log_dir)
@@ -347,7 +347,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.tensorboard = TensorBoard(
             log_dir=self.log_dir,
             histogram_freq=histogram_freq,
-            write_grads=False, write_graph=False, write_images=False,
+            write_grads=write_grads, write_graph=False, write_images=False,
             batch_size=self.batch_size,
             update_freq="epoch",
             embeddings_freq=1 if embeddings else 0,
@@ -357,11 +357,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         )
         # Add params text to tensorboard
 
-    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=1, embeddings=False):
+    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=1, embeddings=False, write_grads=False):
         callbacks = []
         if tensorboard:
             if not hasattr(self, "tensorboard"):
-                self.build_tensorboard(histogram_freq=histogram_freq, embeddings=embeddings)
+                self.build_tensorboard(histogram_freq=histogram_freq, embeddings=embeddings, write_grads=write_grads)
             callbacks.append(self.tensorboard)
 
         if early_stopping > 0:

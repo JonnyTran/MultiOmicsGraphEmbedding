@@ -182,9 +182,9 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
-                        embeddings=False,
-                        early_stopping=False, multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
+    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=True, histogram_freq=0,
+                        embeddings=False, early_stopping=False,
+                        multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0,
                         **kwargs):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
