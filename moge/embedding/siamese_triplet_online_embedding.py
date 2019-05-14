@@ -205,7 +205,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
 
         try:
             self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs, shuffle=False,
-                                                       validation_data=self.generator_val.load_data(),
+                                                       validation_data=self.generator_val,
                                                        validation_steps=validation_steps,
                                                        callbacks=self.get_callbacks(early_stopping, tensorboard,
                                                                                     histogram_freq, embeddings),
