@@ -275,7 +275,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                  optimizer=RMSprop(lr=self.lr),
                                  metrics=[precision_d, recall_d] if not hasattr(self, "alpha_network") else [
                                      "accuracy", precision, recall],
-                                 # metrics=,
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
@@ -332,7 +331,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         self.word_index = self.generator_train.tokenizer.word_index
         return self.generator_train
 
-    def build_tensorboard(self, histogram_freq=0, embeddings=False, write_grads=False):
+    def build_tensorboard(self, histogram_freq=0, embeddings=True, write_grads=False):
         if not hasattr(self, "log_dir"):
             self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%H:%M%p').strip(" "))
             print("log_dir:", self.log_dir)
@@ -357,7 +356,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         )
         # Add params text to tensorboard
 
-    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=1, embeddings=False, write_grads=False):
+    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=0, embeddings=True, write_grads=False):
         callbacks = []
         if tensorboard:
             if not hasattr(self, "tensorboard"):
