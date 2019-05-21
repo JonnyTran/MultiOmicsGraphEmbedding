@@ -280,7 +280,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
                         n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0, embeddings=False,
-                        early_stopping=2,
+                        early_stopping=0,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
 
@@ -351,7 +351,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             update_freq="epoch",
             embeddings_freq=1 if embeddings else 0,
             embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
-            embeddings_data=list(x_test.values()) if embeddings else None,
+            embeddings_data=x_test if embeddings else None,
             embeddings_layer_names=["embedding_output"] if embeddings else None,
         )
         # Add params text to tensorboard

@@ -370,21 +370,6 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         X_u_inx = [self.node_list.index(u) if (u in node_set and v in node_set) else 0 for u, v in X]
         X_v_inx = [self.node_list.index(v) if (u in node_set and v in node_set) else 0 for u, v in X]
         y_pred = estimated_adj[X_u_inx, X_v_inx]
-
-        # if node_set_in_X <= node_set:
-        #     X_u_inx = [self.node_list.index(u) for u, v in X]
-        #     X_v_inx = [self.node_list.index(v) for u, v in X]
-        #     y_pred = estimated_adj[X_u_inx, X_v_inx]
-        # else:
-        #     y_pred = []
-        #     for tup in X:
-        #         u = tup[0]
-        #         v = tup[1]
-        #         if u in node_set and v in node_set:
-        #             y_pred.append(estimated_adj[self.node_list.index(u), self.node_list.index(v)])
-        #         else:
-        #             y_pred.append(0.0)
-
         y_pred = np.array(y_pred, dtype=np.float).reshape((-1, 1))
         assert y_pred.shape[0] == X.shape[0]
         return y_pred
@@ -419,23 +404,25 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         return self.get_cluster_members(self.kmeans.labels_[self.node_list.index(node)])
 
     def get_top_enrichr_term(self, clusters):
-        data_split = np.array_split(clusters, cpu_count())
-        print(len(data_split))
+        gene_sets = [self.get_cluster_members(cluster_num) for cluster_num in clusters]
+        data_split = np.array_split(gene_sets, cpu_count())
         pool = Pool(cpu_count())
+        print(pool.map(self._get_top_enrichr_term, data_split))
         data = pd.concat(pool.map(self._get_top_enrichr_term, data_split))
         pool.close()
         pool.join()
         return data
 
-    def _get_top_enrichr_term(self, cluster, cutoff=0.05, top_k=1):
-        enr = gp.enrichr(gene_list=self.get_cluster_members(cluster),
+    def _get_top_enrichr_term(self, gene_set, cutoff=0.01, top_k=1):
+        enr = gp.enrichr(gene_list=gene_set,
                          gene_sets=[
-                             #                                 'GO_Biological_Process_2018',
-                             #                                 'GO_Cellular_Component_2018',
-                             #                                 'GO_Molecular_Function_2018',
-                             "KEGG_2019_Human",
+                             'GO_Biological_Process_2018',
+                             'GO_Cellular_Component_2018',
+                             'GO_Molecular_Function_2018',
+                             'KEGG_2019_Human',
                          ],
                          cutoff=cutoff,  # test dataset, use lower value of range(0,1)
                          no_plot=True, verbose=False,
                          )
-        return enr.results.sort_values(by="Adjusted P-value").head(top_k)
+        return enr.results.sort_values(by="Adjusted P-value").filter(
+            items=["Adjusted P-value", "Gene_set", "Term", "Genes", "Overlap"]).head(top_k)
