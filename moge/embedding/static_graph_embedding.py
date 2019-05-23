@@ -1,7 +1,6 @@
 from abc import ABCMeta
 from multiprocessing import cpu_count, Pool
 
-import gseapy as gp
 import numpy as np
 import pandas as pd
 from MulticoreTSNE import MulticoreTSNE as TSNE
@@ -10,6 +9,7 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import pairwise_distances
 
 from moge.evaluation.link_prediction import largest_indices
+from moge.evaluation.node_clustering import _get_top_enrichr_term, chunkIt
 from moge.evaluation.utils import get_scalefree_fit_score
 
 
@@ -386,7 +386,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             self.process_tsne_node_pos()
             return self.node_pos
 
-    def predict_cluster(self, n_clusters=8, node_list=None, n_jobs=-2, return_clusters=False):
+    def predict_cluster(self, n_clusters=8, node_list=None, n_jobs=-2):
         embs = self.get_embedding()
         self.kmeans = KMeans(n_clusters, n_jobs=n_jobs)
         y_pred = self.kmeans.fit_predict(embs)
@@ -403,26 +403,12 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
     def get_cluster_neighbors(self, node):
         return self.get_cluster_members(self.kmeans.labels_[self.node_list.index(node)])
 
-    def get_top_enrichr_term(self, clusters):
-        gene_sets = [self.get_cluster_members(cluster_num) for cluster_num in clusters]
-        data_split = np.array_split(gene_sets, cpu_count())
+    def get_top_enrichr_term(self):
+        gene_sets = [self.get_cluster_members(cluster_num) for cluster_num in range(self.kmeans.n_clusters)]
+        data_split = chunkIt(gene_sets, cpu_count())
+        print(len(data_split), len(data_split[0]))
         pool = Pool(cpu_count())
-        print(pool.map(self._get_top_enrichr_term, data_split))
-        data = pd.concat(pool.map(self._get_top_enrichr_term, data_split))
+        data = pd.concat(pool.map(_get_top_enrichr_term, data_split))
         pool.close()
         pool.join()
-        return data
-
-    def _get_top_enrichr_term(self, gene_set, cutoff=0.01, top_k=1):
-        enr = gp.enrichr(gene_list=gene_set,
-                         gene_sets=[
-                             'GO_Biological_Process_2018',
-                             'GO_Cellular_Component_2018',
-                             'GO_Molecular_Function_2018',
-                             'KEGG_2019_Human',
-                         ],
-                         cutoff=cutoff,  # test dataset, use lower value of range(0,1)
-                         no_plot=True, verbose=False,
-                         )
-        return enr.results.sort_values(by="Adjusted P-value").filter(
-            items=["Adjusted P-value", "Gene_set", "Term", "Genes", "Overlap"]).head(top_k)
+        return data.sort_values(by="Adjusted P-value")

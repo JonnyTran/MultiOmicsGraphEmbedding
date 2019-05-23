@@ -1,3 +1,5 @@
+import gseapy as gp
+import pandas as pd
 from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score
 
 
@@ -32,3 +34,34 @@ def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=
             results[metric] = normalized_mutual_info_score(y_true, y_pred, average_method="arithmetic")
 
     return results
+
+
+def _get_top_enrichr_term(gene_sets, cutoff=0.01, top_k=1):
+    results = []
+    for gene_set in gene_sets:
+        enr = gp.enrichr(gene_list=gene_set,
+                         gene_sets=[
+                             'GO_Biological_Process_2018',
+                             'GO_Cellular_Component_2018',
+                             'GO_Molecular_Function_2018',
+                             'KEGG_2019_Human',
+                         ],
+                         cutoff=cutoff,
+                         no_plot=True, verbose=False,
+                         )
+        if enr.results.shape[0] > 0:
+            results.append(enr.results.sort_values(by="Adjusted P-value").filter(
+                items=["Adjusted P-value", "Gene_set", "Term", "Genes", "Overlap"]).head(top_k))
+    return pd.concat(results)
+
+
+def chunkIt(seq, num):
+    avg = len(seq) / float(num)
+    out = []
+    last = 0.0
+
+    while last < len(seq):
+        out.append(seq[int(last):int(last + avg)])
+        last += avg
+
+    return out
