@@ -50,9 +50,11 @@ def _get_top_enrichr_term(gene_sets, cutoff=0.01, top_k=1):
                          no_plot=True, verbose=False,
                          )
         if enr.results.shape[0] > 0:
-            results.append(enr.results.sort_values(by="Adjusted P-value").filter(
-                items=["Adjusted P-value", "Gene_set", "Term", "Genes", "Overlap"]).head(top_k))
-    return pd.concat(results)
+            results.append(enr.results.sort_values(by="Adjusted P-value").head(top_k))
+    if len(results) > 0:
+        return pd.concat(results)
+    else:
+        return None
 
 
 def chunkIt(seq, num):
