@@ -403,6 +403,15 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
     def get_cluster_neighbors(self, node):
         return self.get_cluster_members(self.kmeans.labels_[self.node_list.index(node)])
 
+    def get_cluster_assignment(self, node_list=None):
+        y_pred = self.kmeans.labels_
+        assert y_pred.shape[0] == len(self.node_list)
+        if node_list is not None and set(node_list) <= set(self.node_list) and node_list != self.node_list:
+            idx = [self.node_list.index(node) for node in node_list]
+            y_pred = y_pred[idx]
+
+        return y_pred
+
     def get_top_enrichr_term(self):
         gene_sets = [self.get_cluster_members(cluster_num) for cluster_num in range(self.kmeans.n_clusters)]
         data_split = chunkIt(gene_sets, cpu_count())
