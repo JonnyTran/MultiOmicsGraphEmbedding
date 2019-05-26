@@ -410,7 +410,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             idx = [self.node_list.index(node) for node in node_list]
             y_pred = y_pred[idx]
 
-        return y_pred
+        return y_pred.tolist()
 
     def get_top_enrichr_term(self):
         gene_sets = [self.get_cluster_members(cluster_num) for cluster_num in range(self.kmeans.n_clusters)]
