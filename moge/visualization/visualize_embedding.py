@@ -13,7 +13,7 @@ from sklearn.decomposition import TruncatedSVD
 
 
 def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos=None, top_k=0, test_nodes=None,
-                        node_label="locus_type", cmap="gist_ncar", figsize=(20, 15), dpi=150, **kwargs):
+                        node_label="locus_type", cmap="gist_ncar", figsize=(20, 15), dpi=150, label_size=9, **kwargs):
     if nodelist is None:
         nodelist = embedding.node_list
     if node_pos is None:
@@ -44,18 +44,18 @@ def visualize_embedding(embedding, network, nodelist=None, edgelist=[], node_pos
                          legend=True, node_labels=node_labels, node_colormap=node_colormap, legend_size=20,
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         figsize=figsize, dpi=dpi, **kwargs)
+                         figsize=figsize, dpi=dpi, label_size=label_size, **kwargs)
     else:
         plot_embedding2D(node_pos, node_list=embedding.node_list,
                          di_graph=network.G.subgraph(nodelist), cmap=cmap, nodelist=nodelist,
                          plot_nodes_only=False, edgelist=edgelist,
-                         figsize=figsize, dpi=dpi, **kwargs)
+                         figsize=figsize, dpi=dpi, label_size=label_size, **kwargs)
 
 
 def plot_embedding2D(node_pos, node_list, di_graph=None,
                      legend=True, node_labels=None, node_colormap=None, legend_size=10,
                      node_colors=None, plot_nodes_only=True,
-                     cmap="viridis", file_name=None, figsize=(17, 15), dpi=150, **kwargs):
+                     cmap="viridis", file_name=None, figsize=(17, 15), dpi=150, label_size=9, **kwargs):
     fig = plt.figure(figsize=figsize, dpi=dpi)
     ax = fig.add_subplot(1, 1, 1)
 
@@ -97,7 +97,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
         if kwargs["with_labels"]:
             for node in di_graph.nodes():
                 x, y = pos[node]
-                plt.text(x, y + 0.02, s=node, fontsize=9,
+                plt.text(x, y + 0.02, s=node, fontsize=label_size,
                          # bbox=dict(facecolor='gray', alpha=0.2),
                          horizontalalignment='center')
 
