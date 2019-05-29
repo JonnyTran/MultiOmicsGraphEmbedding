@@ -36,17 +36,16 @@ def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=
     return results
 
 
-def _get_top_enrichr_term(gene_sets, cutoff=0.01, top_k=1):
+def _get_top_enrichr_term(gene_sets, libraries=['GO_Biological_Process_2018',
+                                                'GO_Cellular_Component_2018',
+                                                'GO_Molecular_Function_2018',
+                                                'KEGG_2019_Human', ],
+                          cutoff=0.01, top_k=1):
     results = []
     try:
         for gene_set in gene_sets:
             enr = gp.enrichr(gene_list=gene_set,
-                             gene_sets=[
-                                 # 'GO_Biological_Process_2018',
-                                 # 'GO_Cellular_Component_2018',
-                                 # 'GO_Molecular_Function_2018',
-                                 'KEGG_2019_Human',
-                             ],
+                             gene_sets=libraries,
                              cutoff=cutoff,
                              no_plot=True, verbose=False,
                              )
