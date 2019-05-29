@@ -414,15 +414,12 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
 
         return y_pred.tolist()
 
-    def get_top_enrichr_term(self, libraries=['GO_Biological_Process_2018',
-                                              'GO_Cellular_Component_2018',
-                                              'GO_Molecular_Function_2018',
-                                              'KEGG_2019_Human', ]):
+    def get_top_enrichr_term(self):
         gene_sets = [self.get_cluster_members(cluster_num) for cluster_num in range(self.kmeans.n_clusters)]
         data_split = chunkIt(gene_sets, cpu_count())
         print(len(data_split), len(data_split[0]))
         pool = Pool(cpu_count())
-        data = pd.concat(pool.map(_get_top_enrichr_term, data_split, libraries))
+        data = pd.concat(pool.map(_get_top_enrichr_term, data_split))
         pool.close()
         pool.join()
         return data.sort_values(by="Adjusted P-value")
