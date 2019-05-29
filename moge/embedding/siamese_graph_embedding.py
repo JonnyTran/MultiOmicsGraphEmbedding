@@ -333,7 +333,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def build_tensorboard(self, histogram_freq, embeddings, write_grads):
         if not hasattr(self, "log_dir"):
-            self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%H:%M%p').strip(" "))
+            self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%H-%M%p').strip(" "))
             print("log_dir:", self.log_dir)
 
         if embeddings:
