@@ -420,7 +420,8 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         print(len(data_split), len(data_split[0]))
         pool = Pool(cpu_count())
         results = pool.map(_get_top_enrichr_term, data_split)
-        data = pd.concat(results)
+        df = pd.concat(results)
+        df["Adjusted P-value"] = df["Adjusted P-value"].astype(float)
         pool.close()
         pool.join()
-        return data
+        return df.sort_values(by="Adjusted P-value")
