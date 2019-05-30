@@ -43,8 +43,9 @@ def _get_top_enrichr_term(gene_sets, libraries=[
                                                 'KEGG_2019_Human', ],
                           cutoff=0.01, top_k=1):
     results = []
-    try:
-        for gene_set in gene_sets:
+
+    for gene_set in gene_sets:
+        try:
             enr = gp.enrichr(gene_list=gene_set,
                              gene_sets=libraries,
                              cutoff=cutoff,
@@ -52,9 +53,9 @@ def _get_top_enrichr_term(gene_sets, libraries=[
                              )
             if enr.results.shape[0] > 0:
                 results.append(enr.results.sort_values(by="Adjusted P-value").head(top_k))
-    except Exception:
-        return None
-
+        except Exception:
+            pass
+    results = [row for row in results if row is not None]
     if len(results) > 0:
         return pd.concat(results)
     else:
