@@ -419,7 +419,11 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         data_split = chunkIt(gene_sets, cpu_count())
         print(len(data_split), len(data_split[0]))
         pool = Pool(cpu_count())
-        data = pd.concat(pool.map(_get_top_enrichr_term, data_split))
+        results = pool.map(_get_top_enrichr_term, data_split)
+        print("results", len(results))
+        results = [row for row in results if row is not None]
+        print("results", len(results))
+        data = pd.concat(results).sort_values(by="Adjusted P-value")
         pool.close()
         pool.join()
-        return data.sort_values(by="Adjusted P-value")
+        return data
