@@ -414,8 +414,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
                                          metric="euclidean", n_jobs=-2)
-                # adj = np.exp(-2 * adj)
-                adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
+                adj = np.exp(-2 * adj)
+                # adj = self.transform_adj_beta_exp(adj, edge_types="d", sample_negative=self.negative_sampling_ratio)
             elif self.directed_distance == "l1_alpha":
                 adj = pairwise_distances(X=embeddings_X,
                                          Y=embeddings_Y,
