@@ -24,8 +24,7 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
 
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
     # X_multiomics_corr_dists = pairwise_distances(X_multiomics_concat.T, metric="correlation", n_jobs=-1)
-    print("squareform")
-    X_multiomics_corr_dists = squareform_(scipy_pdist(X_multiomics_concat.T, metric="correlation"))
+    X_multiomics_corr_dists = scipy_pdist(X_multiomics_concat.T, metric="correlation")
 
     cols = X_multiomics_concat.columns
     X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr_dists, columns=cols, index=cols)
