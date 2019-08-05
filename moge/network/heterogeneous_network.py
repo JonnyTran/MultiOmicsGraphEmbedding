@@ -226,7 +226,8 @@ class HeterogeneousNetwork():
                                         nanmean=True,
                                         similarity_threshold=0.7, dissimilarity_threshold=0.1,
                                         negative_sampling_ratio=2.0, max_positive_edges=None,
-                                        compute_correlation=True, histological_subtypes=[], pathologic_stages=[],
+                                        compute_correlation=True, tissue_expression=False, histological_subtypes=[],
+                                        pathologic_stages=[],
                                         epsilon=EPSILON, tag="affinity"):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the
@@ -247,7 +248,8 @@ network if the similarity measures passes the threshold
                                                                     node_list=node_list, absolute_corr=True,
                                                                     histological_subtypes=histological_subtypes,
                                                                     pathologic_stages=pathologic_stages,
-                                                                    squareform=False)
+                                                                    squareform=False,
+                                                                    tissue_expression=tissue_expression)
         else:
             correlation_dist = None
 

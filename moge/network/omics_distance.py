@@ -10,9 +10,17 @@ from sklearn.metrics.pairwise import pairwise_distances
 
 def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modalities, node_list, absolute_corr=True,
                                          return_distance=True,
-                                         pathologic_stages=[], histological_subtypes=[], squareform=True):
+                                         pathologic_stages=[], histological_subtypes=[], squareform=True,
+                                         tissue_expression=False):
+    # Only works with TCGA expression data
     X_multiomics, y = multi_omics_data.load_data(modalities=modalities, pathologic_stages=pathologic_stages,
                                                  histological_subtypes=histological_subtypes)
+
+    if tissue_expression is not False:
+        X_multiomics[modalities[0]] = pd.DataFrame(columns=X_multiomics[modalities[0]].columns,
+                                                   index=X_multiomics[modalities[0]].index)
+        X_multiomics[modalities[0]].fillna(tissue_expression)
+
 
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
     X_multiomics_corr_dists = pairwise_distances(X_multiomics_concat.T, metric="correlation", n_jobs=-1)
