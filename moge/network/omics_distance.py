@@ -16,15 +16,15 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
     X_multiomics, y = multi_omics_data.load_data(modalities=modalities, pathologic_stages=pathologic_stages,
                                                  histological_subtypes=histological_subtypes)
 
+    # TODO temporary implementation of using tissue expressions instead of TCGA expression
     if tissue_expression is not False:
         X_multiomics[modalities[0]] = pd.DataFrame(columns=X_multiomics[modalities[0]].columns,
                                                    index=X_multiomics[modalities[0]].index)
         X_multiomics[modalities[0]].fillna(tissue_expression)
 
-
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
     # X_multiomics_corr_dists = pairwise_distances(X_multiomics_concat.T, metric="correlation", n_jobs=-1)
-    X_multiomics_corr_dists = scipy_pdist(X_multiomics_concat.T, metric="correlation")
+    X_multiomics_corr_dists = squareform_(scipy_pdist(X_multiomics_concat.T, metric="correlation"))
 
     cols = X_multiomics_concat.columns
     X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr_dists, columns=cols, index=cols)
