@@ -16,20 +16,30 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modal
     X_multiomics, y = multi_omics_data.load_data(modalities=modalities, pathologic_stages=pathologic_stages,
                                                  histological_subtypes=histological_subtypes)
 
+    # Remove duplicate index and columns
+    for modality in modalities:
+        X_multiomics[modality] = X_multiomics[modality].loc[
+            ~X_multiomics[modality].index.duplicated(keep='first'), ~X_multiomics[modality].columns.duplicated(
+                keep='first')]
+
     # TODO temporary implementation of using tissue expressions instead of TCGA expression
     if tissue_expression is not False:
-        X_multiomics[modalities[0]] = pd.DataFrame(columns=X_multiomics[modalities[0]].columns,
-                                                   index=X_multiomics[modalities[0]].index)
-        X_multiomics[modalities[0]].fillna(tissue_expression)
+        X_multiomics[modalities[0]] = pd.DataFrame(columns=tissue_expression.columns,
+                                                   index=X_multiomics[modalities[0]].columns)
+        X_multiomics[modalities[0]].fillna(tissue_expression, inplace=True)
+        X_multiomics[modalities[0]] = X_multiomics[modalities[0]].T
 
+    # Concatenate all modalities
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
-    # X_multiomics_corr_dists = pairwise_distances(X_multiomics_concat.T, metric="correlation", n_jobs=-1)
+
+    # Calculate the correlation DISTANCE between all genes/transcripts, keeping shape with null values
     X_multiomics_corr_dists = squareform_(scipy_pdist(X_multiomics_concat.T, metric="correlation"))
 
+    # Filter to only correlations between nodes in node_lists
     cols = X_multiomics_concat.columns
     X_multiomics_corr_df = pd.DataFrame(X_multiomics_corr_dists, columns=cols, index=cols)
-    X_multiomics_corr_df = X_multiomics_corr_df.loc[~X_multiomics_corr_df.index.duplicated(keep='first'),
-                                                    ~X_multiomics_corr_df.columns.duplicated(keep='first')]
+    X_multiomics_corr_df = X_multiomics_corr_df.loc[
+        ~X_multiomics_corr_df.index.duplicated(keep='first'), ~X_multiomics_corr_df.columns.duplicated(keep='first')]
     X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list)
     X_multiomics_corr_df = X_multiomics_corr_df.filter(items=node_list, axis=0)
 
@@ -85,7 +95,7 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
     Numeric variables: Manhattan distance normalized by the range of the variable (https://en.wikipedia.org/wiki/Taxicab_geometry)
     """
     individual_variable_dists = []
-
+    print(X.shape)
     if multiprocessing:
         pdist = lambda X, metric: squareform_(pairwise_distances(X=X, metric=metric, n_jobs=n_jobs), checks=False)
     else:

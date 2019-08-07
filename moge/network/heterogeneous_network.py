@@ -142,8 +142,6 @@ class HeterogeneousNetwork():
     def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=0.0):
         """
         Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
-         :param node_list:.
-
         :param edge_types: A list of edge types letter codes in ["d", "u", "u_n"]
         :param node_list: A list of node names
         :return: A csr_matrix sparse adjacency matrix
@@ -246,6 +244,7 @@ network if the similarity measures passes the threshold
         if compute_correlation:
             correlation_dist = compute_expression_correlation_dists(self.multi_omics_data, modalities=[modality],
                                                                     node_list=node_list, absolute_corr=True,
+                                                                    return_distance=True,
                                                                     histological_subtypes=histological_subtypes,
                                                                     pathologic_stages=pathologic_stages,
                                                                     squareform=False,
