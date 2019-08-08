@@ -95,7 +95,6 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
     Numeric variables: Manhattan distance normalized by the range of the variable (https://en.wikipedia.org/wiki/Taxicab_geometry)
     """
     individual_variable_dists = []
-    print(X.shape)
     if multiprocessing:
         pdist = lambda X, metric: squareform_(pairwise_distances(X=X, metric=metric, n_jobs=n_jobs), checks=False)
     else:

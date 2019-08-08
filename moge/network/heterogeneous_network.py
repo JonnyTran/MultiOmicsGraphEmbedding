@@ -197,7 +197,7 @@ class HeterogeneousNetwork():
         else:
             return self.G_u.get_edge_data(i, j)
 
-    def get_subgraph(self, modalities=["MIR", "LNC", "GE"]):
+    def get_subgraph(self, modalities=["MIR", "LNC", "GE"], edge_type="d"):
         if modalities==None:
             modalities = self.modalities
 
@@ -205,7 +205,10 @@ class HeterogeneousNetwork():
         for modality in modalities:
             nodes.extend(self.nodes[modality])
 
-        return self.G.subgraph(nodes) # returned subgraph is not mutable
+        if edge_type == "d":
+            return self.G.subgraph(nodes)  # returned subgraph is not mutable
+        elif edge_type == "u":
+            return self.G_u.subgraph(nodes)  # returned subgraph is not mutable
 
     def get_edgelist(self, node_list, databases=None, inclusive=True):
         if databases is not None:
