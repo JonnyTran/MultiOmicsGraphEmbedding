@@ -1,15 +1,10 @@
-import os
-
-import numpy as np
 import pandas as pd
-import networkx as nx
 
-from TCGAMultiOmics.multiomics import MultiOmicsData
-from moge.network.heterogeneous_network import HeterogeneousNetwork
-from sklearn.feature_extraction import DictVectorizer
+from openomics import MultiOmics
 
 
-def write_node_labels_to_file(file_path, multi_omics_data:MultiOmicsData, modalities=["GE", "MIR", "LNC"], label_cols=["Disease association"], sep="\t", remove_na=True, get_dummies=False):
+def write_node_labels_to_file(file_path, multi_omics_data: MultiOmics, modalities=["GE", "MIR", "LNC"],
+                              label_cols=["Disease association"], sep="\t", remove_na=True, get_dummies=False):
     with open(file_path, 'w') as file:
         genes_info_concat = []
 

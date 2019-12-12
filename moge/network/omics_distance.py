@@ -8,7 +8,7 @@ from scipy.spatial.distance import squareform as squareform_
 from sklearn.metrics.pairwise import pairwise_distances
 
 
-def compute_expression_correlation_dists(multi_omics_data: MultiOmicsData, modalities, node_list, absolute_corr=True,
+def compute_expression_correlation_dists(multi_omics_data: MultiOmics, modalities, node_list, absolute_corr=True,
                                          return_distance=True,
                                          pathologic_stages=[], histological_subtypes=[], squareform=True,
                                          tissue_expression=False):

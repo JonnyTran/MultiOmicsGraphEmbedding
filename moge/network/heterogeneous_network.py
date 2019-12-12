@@ -19,7 +19,7 @@ def get_rename_dict(dataframe, alias_col_name):
     return pd.Series(b["index"]).to_dict()
 
 class HeterogeneousNetwork():
-    def __init__(self, modalities:list, multi_omics_data:MultiOmicsData, process_genes_info=True):
+    def __init__(self, modalities: list, multi_omics_data: MultiOmics, process_genes_info=True):
         """
         This class manages a networkx graph consisting of heterogeneous gene nodes, and heterogeneous edge types.
 
@@ -71,7 +71,7 @@ class HeterogeneousNetwork():
         genes_info_list = []
 
         for modality in self.modalities:
-            gene_info = self.multi_omics_data[modality].get_genes_info()
+            gene_info = self.multi_omics_data[modality].get_annotations()
 
             if "Family" not in gene_info:
                 if modality == "GE":
@@ -241,7 +241,7 @@ network if the similarity measures passes the threshold
         :param histological_subtypes: the patients' cancer subtype group to calculate correlation from
         :param pathologic_stages: the patient's cancer stage group to calculate correlations from
         """
-        genes_info = self.multi_omics_data[modality].get_genes_info()
+        genes_info = self.multi_omics_data[modality].get_annotations()
 
         # Filter similarity adj by correlation
         if compute_correlation:
