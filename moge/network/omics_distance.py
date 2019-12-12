@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 from Bio import pairwise2
-from openTCGA.multiomics import MultiOmicsData
+from openomics import MultiOmics
 from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.spatial.distance import squareform as squareform_
 from sklearn.metrics.pairwise import pairwise_distances
