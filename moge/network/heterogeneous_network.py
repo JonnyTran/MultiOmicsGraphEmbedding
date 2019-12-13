@@ -52,7 +52,7 @@ class HeterogeneousNetwork():
                      ]
         self.G.remove_nodes_from(bad_nodes)
         self.G_u.remove_nodes_from(bad_nodes)
-        self.G.remove_edges_from(self.G.selfloop_edges(data=True))
+        # self.G.remove_edges_from(self.G.selfloop_edges(data=True))
 
         # nodelist = self.get_node_list()
 
@@ -72,14 +72,6 @@ class HeterogeneousNetwork():
 
         for modality in self.modalities:
             gene_info = self.multi_omics_data[modality].get_annotations()
-
-            if "Family" not in gene_info:
-                if modality == "GE":
-                    gene_info["Family"] = gene_info["gene_family"]
-                elif modality == "MIR":
-                    gene_info["Family"] = gene_info["miR family"]
-                elif modality == "LNC":
-                    gene_info["Family"] = gene_info["Rfams"]
             genes_info_list.append(gene_info)
 
         self.genes_info = pd.concat(genes_info_list, join="inner", copy=True)
@@ -87,9 +79,6 @@ class HeterogeneousNetwork():
         #     0]  # TODO Selects only first family annotation if an RNA belongs to multiple
         print("Genes info columns:", self.genes_info.columns.tolist())
         self.genes_info = self.genes_info[~self.genes_info.index.duplicated(keep='first')]
-        rna_type_rename = lambda x: {"MIR": "miRNA", "LNC": "lncRNA", "GE": "mRNA"}[x]
-        self.genes_info["RNA Type"] = self.genes_info.index.map(
-            {k: rna_type_rename(v) for k, v in self.node_to_modality.items()})
 
     def add_directed_edges_from_edgelist(self, edgelist, modalities, database,
                                          correlation_weights=False, threshold=None):

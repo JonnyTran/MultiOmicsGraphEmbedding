@@ -13,7 +13,7 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmics, modalitie
                                          pathologic_stages=[], histological_subtypes=[], squareform=True,
                                          tissue_expression=False):
     # Only works with TCGA expression data
-    X_multiomics, y = multi_omics_data.load_data(modalities=modalities, pathologic_stages=pathologic_stages,
+    X_multiomics, y = multi_omics_data.load_data(omics=modalities, pathologic_stages=pathologic_stages,
                                                  histological_subtypes=histological_subtypes)
 
     # Remove duplicate index and columns
