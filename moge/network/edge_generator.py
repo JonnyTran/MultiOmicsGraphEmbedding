@@ -9,8 +9,6 @@ from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from scipy.sparse import triu
 
-from moge.network.heterogeneous_network import HeterogeneousNetwork
-
 IS_DIRECTED = 1
 IS_UNDIRECTED = 0
 DIRECTED_EDGE = 'd'
@@ -21,7 +19,7 @@ UNDIRECTED_NEG_EDGE = 'u_n'
 
 class DataGenerator(keras.utils.Sequence):
 
-    def __init__(self, network: HeterogeneousNetwork, weighted=False,
+    def __init__(self, network, weighted=False,
                  batch_size=1, negative_sampling_ratio=3,
                  maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
                  shuffle=True, seed=0, verbose=True, training_network=None):
@@ -377,7 +375,7 @@ class DataGenerator(keras.utils.Sequence):
 
 
 class SampledDataGenerator(DataGenerator):
-    def __init__(self, network: HeterogeneousNetwork, weighted=False,
+    def __init__(self, network, weighted=False,
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
                  shuffle=True, seed=0, verbose=True):
@@ -560,26 +558,3 @@ class SampleEdgelistGenerator(Generator):
 
     def __len__(self):
         return len(self.edgelist)
-
-
-
-
-def main():
-    path = "/Users/jonny/Desktop/PycharmProjects/MultiOmicsGraphEmbedding/data/miRNA-mRNA_network.pickle"
-    import pickle
-
-    with open(path, "rb") as file:
-        network = pickle.load(file)
-        file.close()
-
-    network.node_to_modality = {}
-    for modality in network.modalities:
-        for gene in network.multi_omics_data[modality].get_genes_list():
-            network.node_to_modality[gene] = modality
-
-    generator = DataGenerator(network.node_list, network)
-    print(generator.__getitem__(1))
-
-
-if __name__ == "__main__":
-    main()

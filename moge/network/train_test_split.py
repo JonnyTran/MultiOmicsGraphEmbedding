@@ -3,7 +3,7 @@ import random
 import networkx as nx
 import numpy as np
 
-from moge.network.heterogeneous_network import HeterogeneousNetwork
+from moge.network.edge_generator import SampledDataGenerator
 
 
 class NetworkTrainTestSplit():
@@ -12,10 +12,11 @@ class NetworkTrainTestSplit():
         self.test_network = None
         self.val_network = None
 
-    def split_train_test_edges(self: HeterogeneousNetwork,
+    def split_train_test_edges(self,
                                node_list,
                                databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                                test_frac=.05, val_frac=.01, seed=0, verbose=True):
+        print("full_network", self.G.number_of_nodes(), self.G.number_of_edges())
         network_train = self.G.copy()
         test_edges, val_edges = mask_test_edges(self,
                                                 node_list=node_list,
@@ -37,7 +38,7 @@ class NetworkTrainTestSplit():
         print("test_network", self.test_network.G.number_of_nodes(), self.test_network.G.number_of_edges())
         print("val_network", self.val_network.G.number_of_nodes(), self.val_network.G.number_of_edges())
 
-    def split_train_test_nodes(self: HeterogeneousNetwork,
+    def split_train_test_nodes(self,
                                node_list,
                                test_frac=.05, val_frac=.01, seed=0, verbose=True):
         """
@@ -53,6 +54,7 @@ class NetworkTrainTestSplit():
         :param verbose:
         :return: network, val_edges_dict, test_edges_dict
         """
+        print("full_network", self.G.number_of_nodes(), self.G.number_of_edges())
         network_train, test_edges, val_edges, \
         test_nodes, val_nodes = mask_test_edges_by_nodes(self, node_list,
                                                          test_frac=test_frac, val_frac=val_frac, seed=seed,
@@ -69,12 +71,33 @@ class NetworkTrainTestSplit():
         self.val_network = self
         self.val_network.node_list = val_nodes
         self.val_network.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
+
         print("train_network", self.train_network.G.number_of_nodes(), self.train_network.G.number_of_edges())
         print("test_network", self.test_network.G.number_of_nodes(), self.test_network.G.number_of_edges())
         print("val_network", self.val_network.G.number_of_nodes(), self.val_network.G.number_of_edges())
 
+    def get_train_generator(self, weighted=False,
+                            batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500,
+                            compression_func="log",
+                            maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
+                            shuffle=True, seed=0, verbose=True):
+        return SampledDataGenerator(self.train_network, weighted,
+                                    batch_size, directed_proba, negative_sampling_ratio, n_steps, compression_func,
+                                    maxlen, padding, truncating, tokenizer, sequence_to_matrix,
+                                    shuffle, seed, verbose)
 
-def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list,
+    def get_test_generator(self, weighted=False,
+                           batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500,
+                           compression_func="log",
+                           maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
+                           shuffle=True, seed=0, verbose=True):
+        return SampledDataGenerator(self.test_network, weighted,
+                                    batch_size, directed_proba, negative_sampling_ratio, n_steps, compression_func,
+                                    maxlen, padding, truncating, tokenizer, sequence_to_matrix,
+                                    shuffle, seed, verbose)
+
+
+def mask_test_edges_by_nodes(network, node_list,
                              test_frac=.1, val_frac=.05,
                              seed=0, verbose=False):
     if verbose == True:
@@ -114,7 +137,7 @@ def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list,
     return g, test_edges, val_edges, test_nodes, val_nodes
 
 
-def mask_test_edges(network: HeterogeneousNetwork, node_list,
+def mask_test_edges(network, node_list,
                     databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                     test_frac=.10, val_frac=.05,
                     seed=0, verbose=False):
