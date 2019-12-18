@@ -5,6 +5,7 @@ import scipy.sparse as sp
 
 from moge.evaluation.utils import sample_edges
 from moge.network.omics_distance import *
+from moge.network.train_test_split import NetworkTrainTestSplit
 
 EPSILON = 1e-16
 
@@ -18,7 +19,8 @@ def get_rename_dict(dataframe, alias_col_name):
     b = b.reindex()
     return pd.Series(b["index"]).to_dict()
 
-class HeterogeneousNetwork():
+
+class HeterogeneousNetwork(NetworkTrainTestSplit):
     def __init__(self, modalities: list, multi_omics_data: MultiOmics, process_genes_info=True):
         """
         This class manages a networkx graph consisting of heterogeneous gene nodes, and heterogeneous edge types.
@@ -33,12 +35,13 @@ class HeterogeneousNetwork():
 
         self.preprocess_graph()
         if process_genes_info:
-            self.process_genes_info()
+            self.process_annotations()
+
+        super(HeterogeneousNetwork, self).__init__()
 
     def get_node_list(self):
         node_list = list(OrderedDict.fromkeys(list(self.G.nodes) + list(self.G_u.nodes)))
         return node_list
-
     node_list = property(get_node_list)
 
     def preprocess_graph(self):
@@ -52,22 +55,18 @@ class HeterogeneousNetwork():
                      ]
         self.G.remove_nodes_from(bad_nodes)
         self.G_u.remove_nodes_from(bad_nodes)
-        # self.G.remove_edges_from(self.G.selfloop_edges(data=True))
-
-        # nodelist = self.get_node_list()
 
         for modality in self.modalities:
             self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.G_u.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
             self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
-            # self.nodes[modality] = [node for node in self.nodes[modality] if node in nodelist]
 
             for gene in self.multi_omics_data[modality].get_genes_list():
                 self.node_to_modality[gene] = modality
             print(modality, " nodes:", len(self.nodes[modality]))
         print("Total nodes:", len(self.get_node_list()))
 
-    def process_genes_info(self):
+    def process_annotations(self):
         genes_info_list = []
 
         for modality in self.modalities:
@@ -80,8 +79,8 @@ class HeterogeneousNetwork():
         print("Genes info columns:", self.genes_info.columns.tolist())
         self.genes_info = self.genes_info[~self.genes_info.index.duplicated(keep='first')]
 
-    def add_directed_edges_from_edgelist(self, edgelist, modalities, database,
-                                         correlation_weights=False, threshold=None):
+    def add_directed_edges(self, edgelist, modalities, database,
+                           correlation_weights=False, threshold=None):
         if not (modalities is None):
             source_genes = set([edge[0] for edge in edgelist])
             target_genes = set([edge[1] for edge in edgelist])
@@ -120,7 +119,6 @@ class HeterogeneousNetwork():
             print(len(edgelist_weighted),
                   "weighted (directed interaction) edges added. Note: only added edges that are in the modalities:",
                   modalities)
-
 
     def import_edgelist_file(self, file, is_directed):
         if is_directed:
@@ -211,14 +209,13 @@ class HeterogeneousNetwork():
 
         return edgelist
 
-
-    def add_edges_from_nodes_similarity(self, modality, node_list, features=None, weights=None,
-                                        nanmean=True,
-                                        similarity_threshold=0.7, dissimilarity_threshold=0.1,
-                                        negative_sampling_ratio=2.0, max_positive_edges=None,
-                                        compute_correlation=True, tissue_expression=False, histological_subtypes=[],
-                                        pathologic_stages=[],
-                                        epsilon=EPSILON, tag="affinity"):
+    def add_undirected_edges_from_attibutes(self, modality, node_list, features=None, weights=None,
+                                            nanmean=True,
+                                            similarity_threshold=0.7, dissimilarity_threshold=0.1,
+                                            negative_sampling_ratio=2.0, max_positive_edges=None,
+                                            compute_correlation=True, tissue_expression=False, histological_subtypes=[],
+                                            pathologic_stages=[],
+                                            epsilon=EPSILON, tag="affinity"):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the
 network if the similarity measures passes the threshold
@@ -284,8 +281,7 @@ network if the similarity measures passes the threshold
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
         return annotation_affinities_df
 
-
-    def add_sampled_negative_edges(self, n_edges, modalities=[]):
+    def add_sampled_undirected_negative_edges(self, n_edges, modalities=[]):
         nodes_A = self.nodes[modalities[0]]
         nodes_B = self.nodes[modalities[1]]
         edges_ebunch = sample_edges(nodes_A, nodes_B, n_edges=n_edges, edge_type="u_n")
@@ -293,9 +289,9 @@ network if the similarity measures passes the threshold
         print("Number of negative sampled edges between", modalities, "added:", len(edges_ebunch))
         self.G_u.add_edges_from(edges_ebunch)
 
-    def add_sampled_negative_edges_from_correlation(self, modalities=[], correlation_threshold=0.2,
-                                                    histological_subtypes=[],
-                                                    pathologic_stages=[]):
+    def add_sampled_undirected_negative_edges_from_correlation(self, modalities=[], correlation_threshold=0.2,
+                                                               histological_subtypes=[],
+                                                               pathologic_stages=[]):
         """
         Sample edges with experssion values absolute-value correlations near zero, indicating no relationships
 
@@ -332,12 +328,6 @@ network if the similarity measures passes the threshold
             self.G.remove_edges_from(edgelist)
         else:
             self.G_u.remove_edges_from(edgelist)
-
-    def set_node_similarity_training_adjacency(self, adj):
-        self.adj_undirected_train = adj
-
-    def set_regulatory_edges_training_adjacency(self, adj):
-        self.adj_directed_train = adj
 
     def get_non_zero_degree_nodes(self, is_directed):
         if is_directed:

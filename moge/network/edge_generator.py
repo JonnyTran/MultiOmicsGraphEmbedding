@@ -11,13 +11,12 @@ from scipy.sparse import triu
 
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
-IS_UNDIRECTED = 0
 IS_DIRECTED = 1
-DIRECTED_NEG_EDGE_TYPE = 'd_n'
-UNDIRECTED_NEG_EDGE_TYPE = 'u_n'
-UNDIRECTED_EDGE_TYPE = 'u'
-DIRECTED_EDGE_TYPE = 'd'
-
+IS_UNDIRECTED = 0
+DIRECTED_EDGE = 'd'
+UNDIRECTED_EDGE = 'u'
+DIRECTED_NEG_EDGE = 'd_n'
+UNDIRECTED_NEG_EDGE = 'u_n'
 
 
 class DataGenerator(keras.utils.Sequence):
@@ -164,19 +163,19 @@ class DataGenerator(keras.utils.Sequence):
 
         # Index belonging to undirected edges
         if index < self.Ed_count:
-            return index, DIRECTED_EDGE_TYPE
+            return index, DIRECTED_EDGE
 
         # Index belonging to undirected edges
         elif self.Ed_count <= index and index < (self.Ed_count + self.Eu_count):
-            return index - self.Ed_count, UNDIRECTED_EDGE_TYPE
+            return index - self.Ed_count, UNDIRECTED_EDGE
 
         # index belonging to negative edges
         elif (self.Ed_count + self.Eu_count) <= index and index < (self.Ed_count + self.Eu_count + self.En_count):
-            return index - (self.Ed_count + self.Eu_count), UNDIRECTED_NEG_EDGE_TYPE
+            return index - (self.Ed_count + self.Eu_count), UNDIRECTED_NEG_EDGE
 
         # Index belonging to directed negative sampled edges
         elif (self.Ed_count + self.Eu_count + self.En_count) <= index:
-            return index - (self.Ed_count + self.Eu_count + self.En_count), DIRECTED_NEG_EDGE_TYPE
+            return index - (self.Ed_count + self.Eu_count + self.En_count), DIRECTED_NEG_EDGE
         else:
             raise Exception("Index out of range. Value:" + index)
 
@@ -200,24 +199,24 @@ class DataGenerator(keras.utils.Sequence):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
         for id, edge_type in edges_batch:
-            if edge_type == DIRECTED_EDGE_TYPE:
+            if edge_type == DIRECTED_EDGE:
                 X_list.append((self.Ed_rows[id], self.Ed_cols[id], IS_DIRECTED,
                                self.get_edge_weight(self.Ed_rows[id], self.Ed_cols[id],
                                                     edge_type=edge_type,
                                                     positive=True, weighted=self.weighted)))
 
-            elif edge_type == UNDIRECTED_EDGE_TYPE:
+            elif edge_type == UNDIRECTED_EDGE:
                 X_list.append((self.Eu_rows[id], self.Eu_cols[id], IS_UNDIRECTED,
                                self.get_edge_weight(self.Eu_rows[id], self.Eu_cols[id],
                                                     edge_type=edge_type,
                                                     positive=True, weighted=self.weighted)))
-            elif edge_type == UNDIRECTED_NEG_EDGE_TYPE:
+            elif edge_type == UNDIRECTED_NEG_EDGE:
                 X_list.append((self.En_rows[id], self.En_cols[id], IS_UNDIRECTED,
                                self.get_edge_weight(self.En_rows[id], self.En_cols[id],
                                                     edge_type=edge_type,
                                                     positive=False, weighted=self.weighted
                                                     )))
-            elif edge_type == DIRECTED_NEG_EDGE_TYPE:
+            elif edge_type == DIRECTED_NEG_EDGE:
                 X_list.append((self.Ens_rows[id], self.Ens_cols[id], IS_DIRECTED,
                                self.get_edge_weight(self.Ens_rows[id], self.Ens_cols[id],
                                                     edge_type=edge_type,
@@ -246,13 +245,13 @@ class DataGenerator(keras.utils.Sequence):
             else:
                 return 0
 
-        if edge_type == DIRECTED_EDGE_TYPE:
+        if edge_type == DIRECTED_EDGE:
             return self.adj_directed[i, j]
-        elif edge_type == UNDIRECTED_EDGE_TYPE:
+        elif edge_type == UNDIRECTED_EDGE:
             return self.adj_undirected[i, j]
-        elif edge_type == UNDIRECTED_NEG_EDGE_TYPE:
+        elif edge_type == UNDIRECTED_NEG_EDGE:
             return self.adj_negative[i, j]
-        elif edge_type == DIRECTED_NEG_EDGE_TYPE:
+        elif edge_type == DIRECTED_NEG_EDGE:
             return 0
 
     def load_data(self, return_sequence_data=False, batch_size=None):
@@ -300,21 +299,21 @@ class DataGenerator(keras.utils.Sequence):
         X_list = []
         y_list = []
         for id, edge_type in edges_batch:
-            if edge_type == DIRECTED_EDGE_TYPE:
+            if edge_type == DIRECTED_EDGE:
                 X_list.append((self.node_list[self.Ed_rows[id]], self.node_list[self.Ed_cols[id]]))
                 y_list.append(
                     self.get_edge_weight(self.Ed_rows[id], self.Ed_cols[id], edge_type, positive=True, weighted=True))
 
-            elif edge_type == UNDIRECTED_EDGE_TYPE:
+            elif edge_type == UNDIRECTED_EDGE:
                 X_list.append((self.node_list[self.Eu_rows[id]], self.node_list[self.Eu_cols[id]]))
                 y_list.append(
                     self.get_edge_weight(self.Eu_rows[id], self.Eu_cols[id], edge_type, positive=True, weighted=True))
 
-            elif edge_type == UNDIRECTED_NEG_EDGE_TYPE:
+            elif edge_type == UNDIRECTED_NEG_EDGE:
                 X_list.append((self.node_list[self.En_rows[id]], self.node_list[self.En_cols[id]]))
                 y_list.append(
                     self.get_edge_weight(self.En_rows[id], self.En_cols[id], edge_type, positive=False, weighted=True))
-            elif edge_type == DIRECTED_NEG_EDGE_TYPE:
+            elif edge_type == DIRECTED_NEG_EDGE:
                 X_list.append((self.node_list[self.Ens_rows[id]], self.node_list[self.Ens_cols[id]]))
                 y_list.append(self.get_edge_weight(self.Ens_rows[id], self.Ens_cols[id], edge_type, positive=False,
                                                    weighted=False))
@@ -462,28 +461,29 @@ class SampledDataGenerator(DataGenerator):
     def sample_edge_from_node(self, node):
         edge_type = self.sample_edge_type(self.edge_dict[node].keys())
 
-        if edge_type == DIRECTED_NEG_EDGE_TYPE:
+        if edge_type == DIRECTED_NEG_EDGE:
             return self.get_negative_sampled_edges(node)
         else:
             return next(self.edge_dict[node][edge_type])
 
     def sample_edge_type(self, edge_types):
-        if DIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_EDGE_TYPE in edge_types:
-            edge_type = np.random.choice([DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE], p=[self.directed_proba, 1-self.directed_proba])
-        elif DIRECTED_EDGE_TYPE in edge_types:
-            edge_type = DIRECTED_EDGE_TYPE
-        elif UNDIRECTED_EDGE_TYPE in edge_types:
-            edge_type = UNDIRECTED_EDGE_TYPE
-        elif UNDIRECTED_NEG_EDGE_TYPE in edge_types:
-            edge_type = UNDIRECTED_NEG_EDGE_TYPE
+        if DIRECTED_EDGE in edge_types and UNDIRECTED_EDGE in edge_types:
+            edge_type = np.random.choice([DIRECTED_EDGE, UNDIRECTED_EDGE],
+                                         p=[self.directed_proba, 1 - self.directed_proba])
+        elif DIRECTED_EDGE in edge_types:
+            edge_type = DIRECTED_EDGE
+        elif UNDIRECTED_EDGE in edge_types:
+            edge_type = UNDIRECTED_EDGE
+        elif UNDIRECTED_NEG_EDGE in edge_types:
+            edge_type = UNDIRECTED_NEG_EDGE
         else:
             raise Exception("No edge type selected in " + str(edge_types))
 
         if random.random() < (self.negative_sampling_ratio / (1 + self.negative_sampling_ratio)):
-            if edge_type == DIRECTED_EDGE_TYPE:
-                edge_type = DIRECTED_NEG_EDGE_TYPE
-            elif edge_type == UNDIRECTED_EDGE_TYPE and UNDIRECTED_NEG_EDGE_TYPE in edge_types:
-                edge_type = UNDIRECTED_NEG_EDGE_TYPE
+            if edge_type == DIRECTED_EDGE:
+                edge_type = DIRECTED_NEG_EDGE
+            elif edge_type == UNDIRECTED_EDGE and UNDIRECTED_NEG_EDGE in edge_types:
+                edge_type = UNDIRECTED_NEG_EDGE
 
         return edge_type
 
@@ -491,25 +491,25 @@ class SampledDataGenerator(DataGenerator):
         node_idx = self.node_list.index(node_u)
         _, col = self.adj_negative_sampled[node_idx].nonzero()
         node_v = self.node_list[np.random.choice(col)]
-        return (node_u, node_v, DIRECTED_NEG_EDGE_TYPE)
+        return (node_u, node_v, DIRECTED_NEG_EDGE)
 
     def __data_generation(self, sampled_edges):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
         for u,v,type in sampled_edges:
-            if type == DIRECTED_EDGE_TYPE:
+            if type == DIRECTED_EDGE:
                 X_list.append((u, v, IS_DIRECTED,
                                self.get_edge_weight(self.node_list.index(u), self.node_list.index(v),
                                                     type, True, weighted=self.weighted)))
-            elif type == UNDIRECTED_EDGE_TYPE:
+            elif type == UNDIRECTED_EDGE:
                 X_list.append((u, v, IS_UNDIRECTED,
                                self.get_edge_weight(self.node_list.index(u), self.node_list.index(v),
                                                     type, True, weighted=self.weighted)))
-            elif type == UNDIRECTED_NEG_EDGE_TYPE:
+            elif type == UNDIRECTED_NEG_EDGE:
                 X_list.append((u, v, IS_UNDIRECTED,
                                self.get_edge_weight(self.node_list.index(u), self.node_list.index(v),
                                                     type, False, weighted=self.weighted)))
-            elif type == DIRECTED_NEG_EDGE_TYPE:
+            elif type == DIRECTED_NEG_EDGE:
                 X_list.append((u, v, IS_DIRECTED,
                                self.get_edge_weight(self.node_list.index(u), self.node_list.index(v),
                                                     type, False, weighted=self.weighted)))

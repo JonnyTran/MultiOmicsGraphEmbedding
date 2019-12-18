@@ -2,8 +2,8 @@ import networkx as nx
 import numpy as np
 import tensorflow as tf
 
-from moge.network.edge_generator import SampledDataGenerator, DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE, \
-    UNDIRECTED_NEG_EDGE_TYPE, IS_DIRECTED, IS_UNDIRECTED
+from moge.network.edge_generator import SampledDataGenerator, DIRECTED_EDGE, UNDIRECTED_EDGE, \
+    UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
 from moge.network.heterogeneous_network import HeterogeneousNetwork, EPSILON
 
 
@@ -40,25 +40,29 @@ class SampledTripletDataGenerator(SampledDataGenerator):
 
     def sample_triplet_from_node(self, anchor_node):
         edge_type = self.sample_edge_type(self.edge_dict[anchor_node].keys())
-        if edge_type == DIRECTED_EDGE_TYPE:
-            pos_sample = next(self.edge_dict[anchor_node][edge_type]) # ((node_u, node_v, edge_type)
+        if edge_type == DIRECTED_EDGE:
+            pos_sample = next(self.edge_dict[anchor_node][edge_type])  # ((node_u, node_v, edge_type)
             neg_sample = self.get_negative_sampled_edges(anchor_node)
 
-        elif edge_type == UNDIRECTED_EDGE_TYPE:
+        elif edge_type == UNDIRECTED_EDGE:
             pos_sample = next(self.edge_dict[anchor_node][edge_type])
-            neg_sample = next(self.edge_dict[anchor_node][UNDIRECTED_NEG_EDGE_TYPE]) if UNDIRECTED_NEG_EDGE_TYPE in self.edge_dict[anchor_node].keys() else self.get_negative_sampled_edges(anchor_node)
+            neg_sample = next(self.edge_dict[anchor_node][UNDIRECTED_NEG_EDGE]) if UNDIRECTED_NEG_EDGE in \
+                                                                                   self.edge_dict[
+                                                                                       anchor_node].keys() else self.get_negative_sampled_edges(
+                anchor_node)
         else:
             return None
 
         return (anchor_node, pos_sample[1], neg_sample[1], edge_type)
 
     def sample_edge_type(self, edge_types):
-        if DIRECTED_EDGE_TYPE in edge_types and UNDIRECTED_EDGE_TYPE in edge_types:
-            edge_type = np.random.choice([DIRECTED_EDGE_TYPE, UNDIRECTED_EDGE_TYPE], p=[self.directed_proba, 1-self.directed_proba])
-        elif DIRECTED_EDGE_TYPE in edge_types:
-            edge_type = DIRECTED_EDGE_TYPE
-        elif UNDIRECTED_EDGE_TYPE in edge_types:
-            edge_type = UNDIRECTED_EDGE_TYPE
+        if DIRECTED_EDGE in edge_types and UNDIRECTED_EDGE in edge_types:
+            edge_type = np.random.choice([DIRECTED_EDGE, UNDIRECTED_EDGE],
+                                         p=[self.directed_proba, 1 - self.directed_proba])
+        elif DIRECTED_EDGE in edge_types:
+            edge_type = DIRECTED_EDGE
+        elif UNDIRECTED_EDGE in edge_types:
+            edge_type = UNDIRECTED_EDGE
         else:
             return None
 
@@ -69,9 +73,9 @@ class SampledTripletDataGenerator(SampledDataGenerator):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
         for u,v,w,type in sampled_edges:
-            if type == DIRECTED_EDGE_TYPE:
+            if type == DIRECTED_EDGE:
                 X_list.append((u, v, w, IS_DIRECTED))
-            elif type == UNDIRECTED_EDGE_TYPE:
+            elif type == UNDIRECTED_EDGE:
                 X_list.append((u, v, w, IS_UNDIRECTED))
             else:
                 raise Exception("Edge type is wrong:" + u + v + w + type)
