@@ -13,24 +13,32 @@ class NetworkTrainTestSplit():
         self.val_network = None
 
     def split_train_test_edges(self: HeterogeneousNetwork,
-                               node_list, edge_types=["u", "d", "u_n"],
+                               node_list,
                                databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                                test_frac=.05, val_frac=.01, seed=0, verbose=True):
-        network_train = self.G
-
+        network_train = self.G.copy()
         test_edges, val_edges = mask_test_edges(self,
                                                 node_list=node_list,
-                                                edge_types=edge_types,
                                                 databases=databases,
                                                 test_frac=test_frac, val_frac=val_frac, seed=seed, verbose=verbose)
         network_train.remove_edges_from(test_edges)
         network_train.remove_edges_from(val_edges)
-        print("Removed", len(test_edges), "test, and", len(val_edges), "val, type", edge_types, "edges")
 
-        return network_train, test_edges, val_edges
+        self.train_network = self
+        self.train_network.G = network_train
+
+        self.test_network = self
+        self.test_network.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
+
+        self.val_network = self
+        self.val_network.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
+
+        print("train_network", self.train_network.G.number_of_nodes(), self.train_network.G.number_of_edges())
+        print("test_network", self.test_network.G.number_of_nodes(), self.test_network.G.number_of_edges())
+        print("val_network", self.val_network.G.number_of_nodes(), self.val_network.G.number_of_edges())
 
     def split_train_test_nodes(self: HeterogeneousNetwork,
-                               node_list, edge_types=["u", "d", "u_n"],
+                               node_list,
                                test_frac=.05, val_frac=.01, seed=0, verbose=True):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
@@ -47,19 +55,26 @@ class NetworkTrainTestSplit():
         """
         network_train, test_edges, val_edges, \
         test_nodes, val_nodes = mask_test_edges_by_nodes(self, node_list,
-                                                         edge_types=edge_types,
                                                          test_frac=test_frac, val_frac=val_frac, seed=seed,
                                                          verbose=verbose)
 
-        self.G = network_train
-        self.node_list = [node for node in self.node_list if node in network_train.nodes()]
-        print("validation edges", len(val_edges))
-        print("test edges", len(test_edges))
+        self.train_network = self
+        self.train_network.node_list = [node for node in self.node_list if node in network_train.nodes()]
+        self.train_network.G = network_train
 
-        return self, test_edges, val_edges, test_nodes, val_nodes
+        self.test_network = self
+        self.test_network.node_list = test_nodes
+        self.test_network.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
+
+        self.val_network = self
+        self.val_network.node_list = val_nodes
+        self.val_network.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
+        print("train_network", self.train_network.G.number_of_nodes(), self.train_network.G.number_of_edges())
+        print("test_network", self.test_network.G.number_of_nodes(), self.test_network.G.number_of_edges())
+        print("val_network", self.val_network.G.number_of_nodes(), self.val_network.G.number_of_edges())
 
 
-def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list, edge_types=["u", "d"],
+def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list,
                              test_frac=.1, val_frac=.05,
                              seed=0, verbose=False):
     if verbose == True:
@@ -75,37 +90,22 @@ def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list, edge_type
     test_nodes_size = int(len(node_list) * test_frac)
     val_nodes_size = int(len(node_list) * val_frac)
 
+    # Sample nodes then create a set of edges induced by the sampled nodes
+    random.seed(seed)
     test_nodes = []
-    test_edges = []
-    test_edges_add_back = []  # Edges to retain in the training network (even if nodes are removed)
     for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         test_nodes.extend(random.sample(nodes, int(test_nodes_size * node_type_ratio)))
-
-    for u, v, d in g.edges(test_nodes, data=True):
-        if d["type"] in edge_types:
-            test_edges.append((u, v, d))
-        else:
-            test_edges_add_back.append((u, v, d))
+    test_edges = g.edges(test_nodes, data=True)
 
     val_nodes = []
-    val_edges = []
-    val_edges_add_back = []
     for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         val_nodes.extend(random.sample(nodes, int(val_nodes_size * node_type_ratio)))
-
-    for u, v, d in g.edges(val_nodes, data=True):
-        if d["type"] in edge_types:
-            val_edges.append((u, v, d))
-        else:
-            val_edges_add_back.append((u, v, d))
+    val_edges = g.edges(val_nodes, data=True)
 
     g.remove_nodes_from(test_nodes)
     g.remove_nodes_from(val_nodes)
-
-    g.add_edges_from(test_edges_add_back)
-    g.add_edges_from(val_edges_add_back)
 
     if verbose == True:
         print('removed', no_of_edges_before - g.number_of_edges(), "edges, and ",
@@ -114,7 +114,7 @@ def mask_test_edges_by_nodes(network: HeterogeneousNetwork, node_list, edge_type
     return g, test_edges, val_edges, test_nodes, val_nodes
 
 
-def mask_test_edges(network: HeterogeneousNetwork, node_list, edge_types=["u", "d"],
+def mask_test_edges(network: HeterogeneousNetwork, node_list,
                     databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                     test_frac=.10, val_frac=.05,
                     seed=0, verbose=False):
@@ -123,8 +123,7 @@ def mask_test_edges(network: HeterogeneousNetwork, node_list, edge_types=["u", "
 
     g = network.G
 
-    edges_to_remove = [(u, v, d) for u, v, d in g.edges(data=True) if
-                       d["type"] in edge_types and d["database"] in databases]
+    edges_to_remove = [(u, v, d) for u, v, d in g.edges(data=True) if d["database"] in databases]
     edges_to_remove = [(u, v, d) for u, v, d in edges_to_remove if (u in node_list) and (v in node_list)]
     print("edges_to_remove", len(edges_to_remove)) if verbose else None
 
