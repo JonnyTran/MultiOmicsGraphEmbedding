@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 import tensorflow as tf
 
-from moge.network.edge_generator import SampledDataGenerator, DIRECTED_EDGE, UNDIRECTED_EDGE, \
+from moge.generator.edge_generator import SampledDataGenerator, DIRECTED_EDGE, UNDIRECTED_EDGE, \
     UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
 from moge.network.heterogeneous_network import HeterogeneousNetwork, EPSILON
 
@@ -17,12 +17,16 @@ class SampledTripletDataGenerator(SampledDataGenerator):
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
                  shuffle=True, seed=0, verbose=True):
-        super().__init__(network=network, weighted=weighted,
-                         batch_size=batch_size, negative_sampling_ratio=negative_sampling_ratio, n_steps=n_steps,
-                         directed_proba=directed_proba, compression_func=compression_func,
-                         maxlen=maxlen, padding=padding, truncating=truncating, tokenizer=tokenizer,
-                         sequence_to_matrix=sequence_to_matrix,
-                         shuffle=shuffle, seed=seed, verbose=verbose)
+        super(SampledTripletDataGenerator, self).__init__(network=network, weighted=weighted,
+                                                          batch_size=batch_size,
+                                                          negative_sampling_ratio=negative_sampling_ratio,
+                                                          n_steps=n_steps,
+                                                          directed_proba=directed_proba,
+                                                          compression_func=compression_func,
+                                                          maxlen=maxlen, padding=padding, truncating=truncating,
+                                                          tokenizer=tokenizer,
+                                                          sequence_to_matrix=sequence_to_matrix,
+                                                          shuffle=shuffle, seed=seed, verbose=verbose)
 
     def __getitem__(self, item):
         sampled_edges = []
@@ -99,15 +103,11 @@ class OnlineTripletGenerator(SampledDataGenerator):
                  negative_sampling_ratio=20.0,
                  n_steps=500, compression_func="log", maxlen=2000, padding='post', truncating='post', tokenizer=None,
                  sequence_to_matrix=False, shuffle=True, seed=0, verbose=True):
-        super().__init__(network, weighted, batch_size, directed_proba, negative_sampling_ratio, n_steps,
-                         compression_func,
-                         maxlen, padding, truncating, tokenizer, sequence_to_matrix, shuffle, seed, verbose)
-
-    def process_negative_sampling_edges(self):
-        pass  # Not needed
-
-    def process_training_edges_data(self):
-        pass  # Not needed
+        super(OnlineTripletGenerator, self).__init__(network, weighted, batch_size, directed_proba,
+                                                     negative_sampling_ratio, n_steps,
+                                                     compression_func,
+                                                     maxlen, padding, truncating, tokenizer, sequence_to_matrix,
+                                                     shuffle, seed, verbose)
 
     def process_sampling_table(self, network):
         graph = nx.compose(network.G, network.G_u)

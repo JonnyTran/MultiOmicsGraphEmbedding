@@ -18,7 +18,8 @@ from sklearn.neighbors import radius_neighbors_graph
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.metrics import precision_d, recall_d, precision, recall
-from moge.network.edge_generator import DataGenerator, SampledDataGenerator
+from moge.generator.data_generator import DataGenerator
+from moge.generator.edge_generator import SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 

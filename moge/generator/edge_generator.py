@@ -1,13 +1,11 @@
 import random
 from collections import Generator
-from collections import OrderedDict
 
-import keras
 import networkx as nx
 import numpy as np
-from keras.preprocessing.sequence import pad_sequences
-from keras.preprocessing.text import Tokenizer
 from scipy.sparse import triu
+
+from moge.generator.data_generator import DataGenerator
 
 IS_DIRECTED = 1
 IS_UNDIRECTED = 0
@@ -17,62 +15,16 @@ DIRECTED_NEG_EDGE = 'd_n'
 UNDIRECTED_NEG_EDGE = 'u_n'
 
 
-class DataGenerator(keras.utils.Sequence):
+class EdgeGenerator(DataGenerator):
 
-    def __init__(self, network, weighted=False,
-                 batch_size=1, negative_sampling_ratio=3,
-                 maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
-                 shuffle=True, seed=0, verbose=True, training_network=None):
-        """
-        This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
-        each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
-        positive edges have an edge of 1.0, and negative have edge weight of 0.0. The features (x) of each sample is a
-        pair of nodes' RNA sequence input.
-
-        :param network: A HeterogeneousNetwork containing a MultiOmicsData
-        :param batch_size: Sample batch size at each iteration
-        :param dim: Dimensionality of the sample input
-        :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
-        :param maxlen: pad all RNA sequence strings to this length
-        :param padding: ['post', 'pre', None]
-        :param sequence_to_matrix: [True, False]
-        :param truncating: ['post', 'pre', 'random']. If 'random', then 'post' or 'pre' truncating is chosen randomly for each sequence at each iteration
-        :param shuffle:
-        :param seed:
-        """
-        self.batch_size = batch_size
-        self.weighted = weighted
-        self.negative_sampling_ratio = negative_sampling_ratio
-        self.network = network
-        self.shuffle = shuffle
-        self.padding = padding
-        self.maxlen = maxlen
-        self.truncating = truncating
-        self.seed = seed
-        self.sequence_to_matrix = sequence_to_matrix
-        self.verbose = verbose
-        self.training_network = training_network
-        np.random.seed(seed)
-
-        self.genes_info = network.genes_info
-        self.transcripts_to_sample = network.genes_info["Transcript sequence"].copy()
-        self.node_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
-        self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
-
+    def __init__(self, network, weighted=False, batch_size=1, negative_sampling_ratio=3, maxlen=1400, padding='post',
+                 truncating='post', tokenizer=None, sequence_to_matrix=False, shuffle=True, seed=0, verbose=True,
+                 training_network=None):
+        super(EdgeGenerator, self).__init__(network, weighted, batch_size, negative_sampling_ratio, maxlen, padding,
+                                            truncating, tokenizer,
+                                            sequence_to_matrix, shuffle, seed, verbose, training_network)
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
-        self.on_epoch_end()
-        self.process_sequence_tokenizer(tokenizer)
-
-    def process_sequence_tokenizer(self, tokenizer):
-        if tokenizer is None:
-            self.tokenizer = Tokenizer(char_level=True, lower=False)
-            self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
-            self.genes_info["Transcript length"] = self.genes_info["Transcript sequence"].apply(
-                lambda x: len(x) if type(x) == str else None)
-            print("word index:", self.tokenizer.word_index) if self.verbose else None
-        else:
-            self.tokenizer = tokenizer
 
     def process_training_edges_data(self):
         # Directed Edges (regulatory interaction)
@@ -104,29 +56,6 @@ class DataGenerator(keras.utils.Sequence):
         self.Ens_count = int(self.Ed_count * self.negative_sampling_ratio)
         print("Ens_count:", self.Ens_count) if self.verbose else None
 
-    def process_negative_sampling_edges_filtered(self, node_list_A, node_list_B):
-        # All Negative Directed Edges (non-positive edges)
-        if self.training_network is not None:
-            adj_positive = self.adj_directed + self.adj_undirected + self.training_network.get_adjacency_matrix(
-                edge_types=["d"],
-                node_list=self.node_list)
-        else:
-            adj_positive = self.adj_directed + self.adj_undirected
-        self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
-
-        # Filter by nodes list
-        node_A_ind = [self.node_list.index(node) for node in self.node_list if node in node_list_A]
-        node_B_ind = [self.node_list.index(node) for node in self.node_list if node in node_list_B]
-        filter_indices = np.where(np.isin(self.Ens_rows_all, node_A_ind) & np.isin(self.Ens_cols_all, node_B_ind))
-
-        self.Ens_rows_all = self.Ens_rows_all[filter_indices]
-        self.Ens_cols_all = self.Ens_cols_all[filter_indices]
-
-    def update_negative_samples(self):
-        sample_indices = np.random.choice(self.Ens_rows_all.shape[0], self.Ens_count, replace=False)
-        self.Ens_rows = self.Ens_rows_all[sample_indices]
-        self.Ens_cols = self.Ens_cols_all[sample_indices]
-
     def reload_directed_edges_data(self, edge_types=["d"], databases=None, node_list=None, node_list_B=None):
         if "d" in edge_types:
             self.adj_directed = self.network.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
@@ -143,20 +72,7 @@ class DataGenerator(keras.utils.Sequence):
 
         return self.Ed_count + self.Eu_count + self.En_count + self.Ens_count
 
-    def on_epoch_end(self):
-        'Updates indexes after each epoch and shuffle'
-        self.update_negative_samples()
-        self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
-
-        self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count + self.Ens_count)
-
-        if self.shuffle == True:
-            np.random.shuffle(self.indexes)
-
-    def sample_sequences(self, sequences):
-        return sequences.apply(lambda x: random.choice(x) if type(x) is list else x)
-
-    def split_index(self, index):
+    def _split_index(self, index):
         'Choose the corresponding edge type data depending on the index number'
 
         # Index belonging to undirected edges
@@ -177,21 +93,69 @@ class DataGenerator(keras.utils.Sequence):
         else:
             raise Exception("Index out of range. Value:" + index)
 
-    def __len__(self):
-        'Denotes the number of batches per epoch'
-        return int(np.floor((self.Ed_count + self.Eu_count + self.En_count + self.Ens_count) / self.batch_size))
+    def on_epoch_end(self):
+        self.update_negative_samples()
+        self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
 
-    def __getitem__(self, training_index):
+        self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count + self.Ens_count)
+
+        if self.shuffle == True:
+            np.random.shuffle(self.indexes)
+
+    def get_training_edges(self, training_index):
+        """
+        Generate training edges (for right now only works with directed edges)
+        :param training_index:
+        :return:
+        """
         # Generate indexes of the batch
         indices = self.indexes[training_index * self.batch_size: (training_index + 1) * self.batch_size]
 
         # Find list of IDs
-        edges_batch = [self.split_index(i) for i in indices]
+        edges_batch = [self._split_index(i) for i in indices]
 
-        # Generate data
-        X, y = self.__data_generation(edges_batch)
+        X_list = []
+        y_list = []
+        for id, edge_type in edges_batch:
+            if edge_type == DIRECTED_EDGE:
+                X_list.append((self.node_list[self.Ed_rows[id]], self.node_list[self.Ed_cols[id]]))
+                y_list.append(
+                    self.get_edge_weight(self.Ed_rows[id], self.Ed_cols[id], edge_type, positive=True, weighted=True))
 
-        return X, y
+            elif edge_type == UNDIRECTED_EDGE:
+                X_list.append((self.node_list[self.Eu_rows[id]], self.node_list[self.Eu_cols[id]]))
+                y_list.append(
+                    self.get_edge_weight(self.Eu_rows[id], self.Eu_cols[id], edge_type, positive=True, weighted=True))
+
+            elif edge_type == UNDIRECTED_NEG_EDGE:
+                X_list.append((self.node_list[self.En_rows[id]], self.node_list[self.En_cols[id]]))
+                y_list.append(
+                    self.get_edge_weight(self.En_rows[id], self.En_cols[id], edge_type, positive=False, weighted=True))
+            elif edge_type == DIRECTED_NEG_EDGE:
+                X_list.append((self.node_list[self.Ens_rows[id]], self.node_list[self.Ens_cols[id]]))
+                y_list.append(self.get_edge_weight(self.Ens_rows[id], self.Ens_cols[id], edge_type, positive=False,
+                                                   weighted=False))
+
+        # assert self.batch_size == len(X_list)
+        X_list = np.array(X_list, dtype="O")
+        y_list = np.array(y_list).reshape((-1, 1))
+        return X_list, y_list
+
+    def get_edge_weight(self, i, j, edge_type, positive, weighted):
+        if not weighted:
+            if positive:
+                return 1
+            else:
+                return 0
+
+        if edge_type == DIRECTED_EDGE:
+            return self.adj_directed[i, j]
+        elif edge_type == UNDIRECTED_EDGE:
+            return self.adj_undirected[i, j]
+        elif edge_type == UNDIRECTED_NEG_EDGE:
+            return self.adj_negative[i, j]
+        elif edge_type == DIRECTED_NEG_EDGE:
+            return 0
 
     def __data_generation(self, edges_batch):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
@@ -230,27 +194,11 @@ class DataGenerator(keras.utils.Sequence):
                                                   variable_length=False)
         X["input_seq_j"] = self.get_sequence_data([self.node_list[node_id] for node_id in X_list[:, 1].tolist()],
                                                   variable_length=False)
-        X["is_directed"] = np.expand_dims(X_list[:,2], axis=-1)
+        X["is_directed"] = np.expand_dims(X_list[:, 2], axis=-1)
 
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
 
         return X, y
-
-    def get_edge_weight(self, i, j, edge_type, positive, weighted):
-        if not weighted:
-            if positive:
-                return 1
-            else:
-                return 0
-
-        if edge_type == DIRECTED_EDGE:
-            return self.adj_directed[i, j]
-        elif edge_type == UNDIRECTED_EDGE:
-            return self.adj_undirected[i, j]
-        elif edge_type == UNDIRECTED_NEG_EDGE:
-            return self.adj_negative[i, j]
-        elif edge_type == DIRECTED_NEG_EDGE:
-            return 0
 
     def load_data(self, return_sequence_data=False, batch_size=None):
         # Returns the y_true labels. Note: run this before running .`on_epoch_end`() since it may reindex the samples
@@ -282,99 +230,45 @@ class DataGenerator(keras.utils.Sequence):
 
         return X, y
 
-    def get_training_edges(self, training_index):
-        """
-        Generate training edges (for right now only works with directed edges)
-        :param training_index:
-        :return:
-        """
+    def update_negative_samples(self):
+        sample_indices = np.random.choice(self.Ens_rows_all.shape[0], self.Ens_count, replace=False)
+        self.Ens_rows = self.Ens_rows_all[sample_indices]
+        self.Ens_cols = self.Ens_cols_all[sample_indices]
+
+    def process_negative_sampling_edges_filtered(self, node_list_A, node_list_B):
+        if self.training_network is not None:
+            adj_positive = self.adj_directed + self.adj_undirected + self.training_network.get_adjacency_matrix(
+                edge_types=["d"],
+                node_list=self.node_list)
+        else:
+            adj_positive = self.adj_directed + self.adj_undirected
+        self.Ens_rows_all, self.Ens_cols_all = np.where(adj_positive.todense() == 0)
+
+        # Filter by nodes list
+        node_A_ind = [self.node_list.index(node) for node in self.node_list if node in node_list_A]
+        node_B_ind = [self.node_list.index(node) for node in self.node_list if node in node_list_B]
+        filter_indices = np.where(np.isin(self.Ens_rows_all, node_A_ind) & np.isin(self.Ens_cols_all, node_B_ind))
+
+        self.Ens_rows_all = self.Ens_rows_all[filter_indices]
+        self.Ens_cols_all = self.Ens_cols_all[filter_indices]
+
+    def __getitem__(self, training_index):
         # Generate indexes of the batch
         indices = self.indexes[training_index * self.batch_size: (training_index + 1) * self.batch_size]
 
         # Find list of IDs
         edges_batch = [self.split_index(i) for i in indices]
 
-        X_list = []
-        y_list = []
-        for id, edge_type in edges_batch:
-            if edge_type == DIRECTED_EDGE:
-                X_list.append((self.node_list[self.Ed_rows[id]], self.node_list[self.Ed_cols[id]]))
-                y_list.append(
-                    self.get_edge_weight(self.Ed_rows[id], self.Ed_cols[id], edge_type, positive=True, weighted=True))
+        # Generate data
+        X, y = self.__data_generation(edges_batch)
 
-            elif edge_type == UNDIRECTED_EDGE:
-                X_list.append((self.node_list[self.Eu_rows[id]], self.node_list[self.Eu_cols[id]]))
-                y_list.append(
-                    self.get_edge_weight(self.Eu_rows[id], self.Eu_cols[id], edge_type, positive=True, weighted=True))
+        return X, y
 
-            elif edge_type == UNDIRECTED_NEG_EDGE:
-                X_list.append((self.node_list[self.En_rows[id]], self.node_list[self.En_cols[id]]))
-                y_list.append(
-                    self.get_edge_weight(self.En_rows[id], self.En_cols[id], edge_type, positive=False, weighted=True))
-            elif edge_type == DIRECTED_NEG_EDGE:
-                X_list.append((self.node_list[self.Ens_rows[id]], self.node_list[self.Ens_cols[id]]))
-                y_list.append(self.get_edge_weight(self.Ens_rows[id], self.Ens_cols[id], edge_type, positive=False,
-                                                   weighted=False))
-
-        # assert self.batch_size == len(X_list)
-        X_list = np.array(X_list, dtype="O")
-        y_list = np.array(y_list).reshape((-1, 1))
-        return X_list, y_list
-
-    def get_sequence_data(self, node_list, variable_length=False, minlen=None):
-        """
-        Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
-        (indexing from self.node_list)
-        :param node_list: a list of node names to fetch transcript sequences
-        :param variable_length: returns a list of sequences with different timestep length
-        :param minlen: pad all sequences with length lower than this minlen
-        """
-        if not variable_length:
-            padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
-                                                         maxlen=self.maxlen)
-        else:
-            padded_encoded_sequences = [
-                self.encode_texts([self.genes_info.loc[node, "Transcript sequence"]], minlen=minlen)
-                for node in
-                node_list]
-
-        return padded_encoded_sequences
-
-    def encode_texts(self, texts, maxlen=None, minlen=None):
-        """
-        Returns a one-hot-vector for a string of RNA transcript sequence
-        :param texts: [str | list(str)]
-        :param maxlen: Set length to maximum length
-        :param single: Set to True if texts is not a list (i.e. only a single node name string).
-        :return:
-        """
-        # integer encode
-        encoded = self.tokenizer.texts_to_sequences(texts)
-
-        batch_maxlen = max([len(x) for x in encoded])
-        if batch_maxlen < self.maxlen:
-            maxlen = batch_maxlen
-
-        if minlen and len(texts) == 1 and len(texts[0]) < minlen:
-            maxlen = minlen
-
-        # pad encoded sequences
-        encoded = pad_sequences(encoded, maxlen=maxlen, padding=self.padding,
-                                truncating=np.random.choice(
-                                    ["post", "pre"]) if self.truncating == "random" else self.truncating,
-                                dtype="int8")
-
-        if self.sequence_to_matrix:
-            encoded_expanded = np.expand_dims(encoded, axis=-1)
-
-            return np.array([self.tokenizer.sequences_to_matrix(s) for s in encoded_expanded])
-        else:
-            return encoded
+    def __len__(self):
+        return int(np.floor((self.Ed_count + self.Eu_count + self.En_count + self.Ens_count) / self.batch_size))
 
 
-
-
-class SampledDataGenerator(DataGenerator):
+class SampledDataGenerator(EdgeGenerator):
     def __init__(self, network, weighted=False,
                  batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
                  maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
@@ -382,10 +276,10 @@ class SampledDataGenerator(DataGenerator):
         self.compression_func = compression_func
         self.n_steps = n_steps
         self.directed_proba = directed_proba
-        super().__init__(network, weighted,
-                         batch_size, negative_sampling_ratio,
-                         maxlen, padding, truncating, tokenizer, sequence_to_matrix,
-                         shuffle, seed, verbose)
+        super(SampledDataGenerator, self).__init__(network, weighted,
+                                                   batch_size, negative_sampling_ratio,
+                                                   maxlen, padding, truncating, tokenizer, sequence_to_matrix,
+                                                   shuffle, seed, verbose)
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):
@@ -405,7 +299,7 @@ class SampledDataGenerator(DataGenerator):
                 if d["type"] in self.edge_dict[node]:
                     self.edge_dict[node][d["type"]].append((u, v, d["type"]))
                 else:
-                    self.edge_dict[node][d["type"]] = SampleEdgelistGenerator([(u, v, d["type"])])
+                    self.edge_dict[node][d["type"]] = EdgelistSampler([(u, v, d["type"])])
 
             for edge_type in self.edge_dict[node].keys():
                 self.edge_counts_dict[node][edge_type] = len(self.edge_dict[node][edge_type])
@@ -532,8 +426,8 @@ class SampledDataGenerator(DataGenerator):
         self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
 
 
-class SampleEdgelistGenerator(Generator):
-    def __init__(self, edgelist:list):
+class EdgelistSampler(Generator):
+    def __init__(self, edgelist: list):
         """
         This class is used to perform sampling without replacement from a node's edgelist
         :param edgelist:
