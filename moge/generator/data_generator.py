@@ -71,7 +71,6 @@ class SequenceTokenizer():
         else:
             return encoded
 
-
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
     def __init__(self, network, weighted=False,
