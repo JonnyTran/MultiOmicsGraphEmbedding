@@ -99,11 +99,10 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         if network_val is not None:
             self.generator_val = SampledTripletDataGenerator(network=network_val, weighted=self.weighted,
-                                                             maxlen=self.max_length, padding='post', truncating="post",
-                                                             tokenizer=generator_train.tokenizer,
-                                                             negative_sampling_ratio=1.0,
-                                                             batch_size=self.batch_size, shuffle=True, seed=seed,
-                                                             verbose=self.verbose) \
+                                                             batch_size=self.batch_size, maxlen=self.max_length,
+                                                             padding='post', truncating="post",
+                                                             tokenizer=generator_train.tokenizer, shuffle=True,
+                                                             seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
@@ -127,13 +126,9 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
     def get_training_data_generator(self, network, n_steps=250, seed=0):
         if not hasattr(self, "generator_train"):
             self.generator_train = SampledTripletDataGenerator(network=network, weighted=self.weighted,
-                                                               compression_func=self.compression_func, n_steps=n_steps,
-                                                               maxlen=self.max_length, padding='post',
-                                                               truncating=self.truncating,
-                                                               negative_sampling_ratio=self.negative_sampling_ratio,
-                                                               directed_proba=self.directed_proba,
-                                                               batch_size=self.batch_size, shuffle=True, seed=seed,
-                                                               verbose=self.verbose)
+                                                               batch_size=self.batch_size, maxlen=self.max_length,
+                                                               padding='post', truncating=self.truncating, shuffle=True,
+                                                               seed=seed, verbose=self.verbose)
         else:
             return self.generator_train
         self.node_list = self.generator_train.node_list

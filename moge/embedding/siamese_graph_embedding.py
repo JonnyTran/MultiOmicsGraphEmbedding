@@ -286,11 +286,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
 
         if network_val is not None:
-            self.generator_val = DataGenerator(network=network_val, weighted=self.weighted,
+            self.generator_val = DataGenerator(network=network_val, weighted=self.weighted, batch_size=self.batch_size,
                                                maxlen=self.max_length, padding='post', truncating="post",
-                                               tokenizer=generator_train.tokenizer,
-                                               negative_sampling_ratio=2.0,
-                                               batch_size=self.batch_size, shuffle=True, seed=seed, verbose=self.verbose) \
+                                               tokenizer=generator_train.tokenizer, shuffle=True, seed=seed,
+                                               verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
@@ -313,20 +312,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
     def get_training_data_generator(self, network, n_steps=500, seed=0):
         if self.subsample:
             self.generator_train = SampledDataGenerator(network=network, weighted=self.weighted,
-                                                        compression_func=self.compression_func, n_steps=n_steps,
-                                                        maxlen=self.max_length, padding='post',
-                                                        truncating=self.truncating,
-                                                        negative_sampling_ratio=self.negative_sampling_ratio,
-                                                        directed_proba=self.directed_proba,
-                                                        batch_size=self.batch_size, shuffle=True, seed=seed,
-                                                        verbose=self.verbose) \
+                                                        batch_size=self.batch_size, maxlen=self.max_length,
+                                                        padding='post', truncating=self.truncating, shuffle=True,
+                                                        seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_train") else self.generator_train
         else:
-            self.generator_train = DataGenerator(network=network, weighted=self.weighted,
+            self.generator_train = DataGenerator(network=network, weighted=self.weighted, batch_size=self.batch_size,
                                                  maxlen=self.max_length, padding='post', truncating=self.truncating,
-                                                 negative_sampling_ratio=self.negative_sampling_ratio,
-                                                 batch_size=self.batch_size, shuffle=True, seed=seed,
-                                                 verbose=self.verbose) \
+                                                 shuffle=True, seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
         self.word_index = self.generator_train.tokenizer.word_index

@@ -4,8 +4,6 @@ import random
 import networkx as nx
 import numpy as np
 
-from moge.generator.edge_generator import SampledDataGenerator
-
 
 class NetworkTrainTestSplit():
     def __init__(self) -> None:
@@ -85,25 +83,11 @@ class NetworkTrainTestSplit():
         print("val_network", self.val_network.G.number_of_nodes(),
               self.val_network.G.number_of_edges()) if verbose else None
 
-    def get_train_generator(self, weighted=False,
-                            batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500,
-                            compression_func="log",
-                            maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
-                            shuffle=True, seed=0, verbose=True):
-        return SampledDataGenerator(self.train_network, weighted,
-                                    batch_size, directed_proba, negative_sampling_ratio, n_steps, compression_func,
-                                    maxlen, padding, truncating, tokenizer, sequence_to_matrix,
-                                    shuffle, seed, verbose)
+    def get_train_generator(self, generator, *args):
+        return generator(self.train_network, *args)
 
-    def get_test_generator(self, weighted=False,
-                           batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500,
-                           compression_func="log",
-                           maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
-                           shuffle=True, seed=0, verbose=True):
-        return SampledDataGenerator(self.test_network, weighted,
-                                    batch_size, directed_proba, negative_sampling_ratio, n_steps, compression_func,
-                                    maxlen, padding, truncating, tokenizer, sequence_to_matrix,
-                                    shuffle, seed, verbose)
+    def get_test_generator(self, generator, *args):
+        return generator(self.test_network, *args)
 
 
 def mask_test_edges_by_nodes(network, node_list,

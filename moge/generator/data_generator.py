@@ -8,7 +8,21 @@ from keras.preprocessing.text import Tokenizer
 
 
 class SequenceTokenizer():
-    def __init__(self, tokenizer=None) -> None:
+    def __init__(self, padding, maxlen, truncating, sequence_to_matrix=None, tokenizer=None) -> None:
+        """
+
+        Args:
+            padding: ['post', 'pre', None]
+            maxlen: pad all RNA sequence strings to this length
+            truncating: ['post', 'pre', 'random']. If 'random', then 'post' or 'pre' truncating is chosen randomly for each sequence at each iteration
+            sequence_to_matrix:
+            tokenizer:
+        """
+        self.padding = padding
+        self.maxlen = maxlen
+        self.truncating = truncating
+        self.sequence_to_matrix = sequence_to_matrix
+
         if tokenizer is None:
             self.tokenizer = Tokenizer(char_level=True, lower=False)
             self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
@@ -71,12 +85,11 @@ class SequenceTokenizer():
         else:
             return encoded
 
+
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
-    def __init__(self, network, weighted=False,
-                 batch_size=1, negative_sampling_ratio=3,
-                 maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
-                 shuffle=True, seed=0, verbose=True, training_network=None):
+    def __init__(self, network, weighted=False, batch_size=1, maxlen=1400, padding='post', truncating='post',
+                 sequence_to_matrix=False, tokenizer=None, shuffle=True, seed=0, verbose=True, training_network=None):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
         each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
@@ -87,34 +100,27 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         :param batch_size: Sample batch size at each iteration
         :param dim: Dimensionality of the sample input
         :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
-        :param maxlen: pad all RNA sequence strings to this length
-        :param padding: ['post', 'pre', None]
-        :param sequence_to_matrix: [True, False]
-        :param truncating: ['post', 'pre', 'random']. If 'random', then 'post' or 'pre' truncating is chosen randomly for each sequence at each iteration
         :param shuffle:
         :param seed:
         """
         self.batch_size = batch_size
         self.weighted = weighted
-        self.negative_sampling_ratio = negative_sampling_ratio
         self.network = network
         self.shuffle = shuffle
-        self.padding = padding
-        self.maxlen = maxlen
-        self.truncating = truncating
+
         self.seed = seed
-        self.sequence_to_matrix = sequence_to_matrix
         self.verbose = verbose
         self.training_network = training_network
-        np.random.seed(seed)
 
         self.genes_info = network.genes_info
         self.transcripts_to_sample = network.genes_info["Transcript sequence"].copy()
         self.node_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
         self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
 
+        np.random.seed(seed)
         self.on_epoch_end()
-        super(DataGenerator, self).__init__(tokenizer=tokenizer)
+        super(DataGenerator, self).__init__(maxlen=maxlen, padding=padding, truncating=truncating,
+                                            sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer)
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'

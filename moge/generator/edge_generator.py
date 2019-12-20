@@ -17,12 +17,13 @@ UNDIRECTED_NEG_EDGE = 'u_n'
 
 class EdgeGenerator(DataGenerator):
 
-    def __init__(self, network, weighted=False, batch_size=1, negative_sampling_ratio=3, maxlen=1400, padding='post',
-                 truncating='post', tokenizer=None, sequence_to_matrix=False, shuffle=True, seed=0, verbose=True,
+    def __init__(self, network, weighted=False, batch_size=1, neg_sampling_ratio=2, maxlen=1400, padding='post',
+                 truncating='post', sequence_to_matrix=False, tokenizer=None, shuffle=True, seed=0, verbose=True,
                  training_network=None):
-        super(EdgeGenerator, self).__init__(network, weighted, batch_size, negative_sampling_ratio, maxlen, padding,
-                                            truncating, tokenizer,
-                                            sequence_to_matrix, shuffle, seed, verbose, training_network)
+        self.negative_sampling_ratio = neg_sampling_ratio
+
+        super(EdgeGenerator, self).__init__(network, weighted, batch_size, maxlen, padding, truncating,
+                                            sequence_to_matrix, tokenizer, shuffle, seed, verbose, training_network)
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
 
@@ -269,17 +270,15 @@ class EdgeGenerator(DataGenerator):
 
 
 class SampledDataGenerator(EdgeGenerator):
-    def __init__(self, network, weighted=False,
-                 batch_size=1, directed_proba=0.5, negative_sampling_ratio=3, n_steps=500, compression_func="log",
-                 maxlen=1400, padding='post', truncating='post', tokenizer=None, sequence_to_matrix=False,
-                 shuffle=True, seed=0, verbose=True):
+    def __init__(self, network, weighted=False, batch_size=1, neg_sampling_ratio=2, maxlen=1400, padding='post',
+                 truncating='post', sequence_to_matrix=False, tokenizer=None, shuffle=True, seed=0, verbose=True,
+                 training_network=None):
         self.compression_func = compression_func
         self.n_steps = n_steps
         self.directed_proba = directed_proba
-        super(SampledDataGenerator, self).__init__(network, weighted,
-                                                   batch_size, negative_sampling_ratio,
-                                                   maxlen, padding, truncating, tokenizer, sequence_to_matrix,
-                                                   shuffle, seed, verbose)
+        super(SampledDataGenerator, self).__init__(network, weighted, batch_size, maxlen=maxlen, padding=padding,
+                                                   truncating=truncating, sequence_to_matrix=sequence_to_matrix,
+                                                   tokenizer=tokenizer, shuffle=shuffle, seed=seed, verbose=verbose)
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):

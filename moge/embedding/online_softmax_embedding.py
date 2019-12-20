@@ -101,23 +101,17 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
                         multi_gpu=False, subsample=True, n_steps=500, validation_steps=None, edge_f=None,
                         is_weighted=False, no_python=False, rebuild_model=False, seed=0):
-        self.generator_train = OnlineTripletGenerator(network=network, compression_func=self.compression_func,
-                                                      n_steps=n_steps,
+        self.generator_train = OnlineTripletGenerator(network=network, batch_size=self.batch_size,
                                                       maxlen=self.max_length, padding='post',
-                                                      truncating=self.truncating,
-                                                      negative_sampling_ratio=self.negative_sampling_ratio,
-                                                      directed_proba=self.directed_proba,
-                                                      batch_size=self.batch_size, shuffle=True, seed=seed,
+                                                      truncating=self.truncating, shuffle=True, seed=seed,
                                                       verbose=self.verbose) \
             if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
 
         if network_val is not None:
-            self.generator_val = OnlineTripletGenerator(network=network_val,
+            self.generator_val = OnlineTripletGenerator(network=network_val, batch_size=self.batch_size,
                                                         maxlen=self.max_length, padding='post', truncating="post",
-                                                        negative_sampling_ratio=40.0,
-                                                        batch_size=self.batch_size, shuffle=True, seed=seed,
-                                                        verbose=self.verbose) \
+                                                        shuffle=True, seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
