@@ -193,7 +193,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
             self.generator_val = OnlineTripletGenerator(network=network_val, weighted=self.weighted,
                                                         batch_size=self.batch_size, maxlen=self.max_length,
                                                         padding='post', truncating="post",
-                                                        tokenizer=generator_train.tokenizer, shuffle=True, seed=seed,
+                                                        tokenizer=generator_train.tokenizer, replace=True, seed=seed,
                                                         verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
@@ -217,7 +217,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
     def get_training_data_generator(self, network, n_steps=250, seed=0):
         self.generator_train = OnlineTripletGenerator(network=network, weighted=self.weighted,
                                                       batch_size=self.batch_size, maxlen=self.max_length,
-                                                      padding='post', truncating=self.truncating, shuffle=True,
+                                                      padding='post', truncating=self.truncating, replace=True,
                                                       seed=seed, verbose=self.verbose) \
             if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list

@@ -21,7 +21,7 @@ def get_rename_dict(dataframe, alias_col_name):
 
 
 class HeterogeneousNetwork(NetworkTrainTestSplit):
-    def __init__(self, modalities: list, multi_omics_data: MultiOmics, process_genes_info=True):
+    def __init__(self, modalities: list, multi_omics_data: MultiOmics, process_annotations=True):
         """
         This class manages a networkx graph consisting of heterogeneous gene nodes, and heterogeneous edge types.
 
@@ -34,7 +34,7 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
         self.G_u = nx.Graph()
 
         self.preprocess_graph()
-        if process_genes_info:
+        if process_annotations:
             self.process_annotations()
 
         super(HeterogeneousNetwork, self).__init__()
@@ -67,17 +67,17 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
         print("Total nodes:", len(self.get_node_list()))
 
     def process_annotations(self):
-        genes_info_list = []
+        annotations_list = []
 
         for modality in self.modalities:
             gene_info = self.multi_omics_data[modality].get_annotations()
-            genes_info_list.append(gene_info)
+            annotations_list.append(gene_info)
 
-        self.genes_info = pd.concat(genes_info_list, join="inner", copy=True)
-        # self.genes_info["Family"] = self.genes_info["Family"].str.split("|", expand=True)[
+        self.annotations = pd.concat(annotations_list, join="inner", copy=True)
+        # self.annotations["Family"] = self.annotations["Family"].str.split("|", expand=True)[
         #     0]  # TODO Selects only first family annotation if an RNA belongs to multiple
-        print("Genes info columns:", self.genes_info.columns.tolist())
-        self.genes_info = self.genes_info[~self.genes_info.index.duplicated(keep='first')]
+        print("Genes info columns:", self.annotations.columns.tolist())
+        self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
 
     def add_directed_edges(self, edgelist, modalities, database,
                            correlation_weights=False, threshold=None):
@@ -227,7 +227,7 @@ network if the similarity measures passes the threshold
         :param histological_subtypes: the patients' cancer subtype group to calculate correlation from
         :param pathologic_stages: the patient's cancer stage group to calculate correlations from
         """
-        genes_info = self.multi_omics_data[modality].get_annotations()
+        annotations = self.multi_omics_data[modality].get_annotations()
 
         # Filter similarity adj by correlation
         if compute_correlation:
@@ -242,7 +242,7 @@ network if the similarity measures passes the threshold
             correlation_dist = None
 
         annotation_affinities_df = pd.DataFrame(
-            data=compute_annotation_affinities(genes_info, node_list=node_list, modality=modality,
+            data=compute_annotation_affinities(annotations, node_list=node_list, modality=modality,
                                                correlation_dist=correlation_dist, nanmean=nanmean,
                                                features=features, weights=weights, squareform=True),
             index=node_list)

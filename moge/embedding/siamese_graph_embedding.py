@@ -19,7 +19,7 @@ from sklearn.neighbors import radius_neighbors_graph
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.metrics import precision_d, recall_d, precision, recall
 from moge.generator.data_generator import DataGenerator
-from moge.generator.edge_generator import SampledDataGenerator
+from moge.generator.sampled_generator import SampledDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
@@ -288,7 +288,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if network_val is not None:
             self.generator_val = DataGenerator(network=network_val, weighted=self.weighted, batch_size=self.batch_size,
                                                maxlen=self.max_length, padding='post', truncating="post",
-                                               tokenizer=generator_train.tokenizer, shuffle=True, seed=seed,
+                                               tokenizer=generator_train.tokenizer, replace=True, seed=seed,
                                                verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
@@ -313,13 +313,13 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if self.subsample:
             self.generator_train = SampledDataGenerator(network=network, weighted=self.weighted,
                                                         batch_size=self.batch_size, maxlen=self.max_length,
-                                                        padding='post', truncating=self.truncating, shuffle=True,
+                                                        padding='post', truncating=self.truncating, replace=True,
                                                         seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_train") else self.generator_train
         else:
             self.generator_train = DataGenerator(network=network, weighted=self.weighted, batch_size=self.batch_size,
                                                  maxlen=self.max_length, padding='post', truncating=self.truncating,
-                                                 shuffle=True, seed=seed, verbose=self.verbose) \
+                                                 replace=True, seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
         self.word_index = self.generator_train.tokenizer.word_index

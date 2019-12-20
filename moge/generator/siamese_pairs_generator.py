@@ -15,15 +15,16 @@ DIRECTED_NEG_EDGE = 'd_n'
 UNDIRECTED_NEG_EDGE = 'u_n'
 
 
-class EdgeGenerator(DataGenerator):
+class PairsGenerator(DataGenerator):
 
     def __init__(self, network, weighted=False, batch_size=1, neg_sampling_ratio=2, maxlen=1400, padding='post',
-                 truncating='post', sequence_to_matrix=False, tokenizer=None, shuffle=True, seed=0, verbose=True,
-                 training_network=None):
+                 truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True, seed=0, verbose=True):
         self.negative_sampling_ratio = neg_sampling_ratio
 
-        super(EdgeGenerator, self).__init__(network, weighted, batch_size, maxlen, padding, truncating,
-                                            sequence_to_matrix, tokenizer, shuffle, seed, verbose, training_network)
+        super(PairsGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size, maxlen=maxlen,
+                                             padding=padding, truncating=truncating,
+                                             sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
+                                             replace=replace, seed=seed, verbose=verbose, )
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
 
@@ -96,11 +97,11 @@ class EdgeGenerator(DataGenerator):
 
     def on_epoch_end(self):
         self.update_negative_samples()
-        self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
+        self.annotations["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
 
         self.indexes = np.arange(self.Ed_count + self.Eu_count + self.En_count + self.Ens_count)
 
-        if self.shuffle == True:
+        if self.replace == True:
             np.random.shuffle(self.indexes)
 
     def get_training_edges(self, training_index):
@@ -158,7 +159,7 @@ class EdgeGenerator(DataGenerator):
         elif edge_type == DIRECTED_NEG_EDGE:
             return 0
 
-    def __data_generation(self, edges_batch):
+    def __getdata__(self, edges_batch):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
         for id, edge_type in edges_batch:
@@ -261,7 +262,7 @@ class EdgeGenerator(DataGenerator):
         edges_batch = [self.split_index(i) for i in indices]
 
         # Generate data
-        X, y = self.__data_generation(edges_batch)
+        X, y = self.__getdata__(edges_batch)
 
         return X, y
 
@@ -269,16 +270,38 @@ class EdgeGenerator(DataGenerator):
         return int(np.floor((self.Ed_count + self.Eu_count + self.En_count + self.Ens_count) / self.batch_size))
 
 
-class SampledDataGenerator(EdgeGenerator):
-    def __init__(self, network, weighted=False, batch_size=1, neg_sampling_ratio=2, maxlen=1400, padding='post',
-                 truncating='post', sequence_to_matrix=False, tokenizer=None, shuffle=True, seed=0, verbose=True,
-                 training_network=None):
+class SampledDataGenerator(PairsGenerator):
+    def __init__(self, network, weighted=False, batch_size=1, neg_sampling_ratio=2, compression_func="log", n_steps=100,
+                 directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
+                 tokenizer=None, replace=True, seed=0, verbose=True):
+        """
+
+        Args:
+            network (HeterogeneousNetwork):
+            weighted:
+            batch_size:
+            neg_sampling_ratio:
+            compression_func:
+            n_steps: Number of sampling steps each iteration
+            directed_proba:
+            maxlen:
+            padding:
+            truncating:
+            sequence_to_matrix:
+            tokenizer:
+            replace:
+            seed:
+            verbose:
+        """
         self.compression_func = compression_func
         self.n_steps = n_steps
+        self.neg_sampling_ratio = neg_sampling_ratio
         self.directed_proba = directed_proba
-        super(SampledDataGenerator, self).__init__(network, weighted, batch_size, maxlen=maxlen, padding=padding,
-                                                   truncating=truncating, sequence_to_matrix=sequence_to_matrix,
-                                                   tokenizer=tokenizer, shuffle=shuffle, seed=seed, verbose=verbose)
+        super(SampledDataGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
+                                                   replace=replace, seed=seed, verbose=verbose,
+                                                   maxlen=maxlen, padding=padding, truncating=truncating,
+                                                   sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer
+                                                   )
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):
@@ -345,7 +368,7 @@ class SampledDataGenerator(EdgeGenerator):
 
         sampled_edges = [self.sample_edge_from_node(node) for node in sampling_nodes]
 
-        X, y = self.__data_generation(sampled_edges)
+        X, y = self.__getdata__(sampled_edges)
 
         return X, y
 
@@ -384,10 +407,10 @@ class SampledDataGenerator(EdgeGenerator):
         node_v = self.node_list[np.random.choice(col)]
         return (node_u, node_v, DIRECTED_NEG_EDGE)
 
-    def __data_generation(self, sampled_edges):
+    def __getdata__(self, sampled_edges):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
-        for u,v,type in sampled_edges:
+        for u, v, type in sampled_edges:
             if type == DIRECTED_EDGE:
                 X_list.append((u, v, IS_DIRECTED,
                                self.get_edge_weight(self.node_list.index(u), self.node_list.index(v),
@@ -422,6 +445,4 @@ class SampledDataGenerator(EdgeGenerator):
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         self.indexes = np.arange(self.n_steps)
-        self.genes_info["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
-
-
+        self.annotations["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)

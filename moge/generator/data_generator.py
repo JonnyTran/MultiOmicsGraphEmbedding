@@ -8,15 +8,15 @@ from keras.preprocessing.text import Tokenizer
 
 
 class SequenceTokenizer():
-    def __init__(self, padding, maxlen, truncating, sequence_to_matrix=None, tokenizer=None) -> None:
+    def __init__(self, padding='post', maxlen=2000, truncating='post', sequence_to_matrix=None, tokenizer=None) -> None:
         """
 
         Args:
             padding: ['post', 'pre', None]
-            maxlen: pad all RNA sequence strings to this length
+            maxlen (int): pad all RNA sequence strings to this length
             truncating: ['post', 'pre', 'random']. If 'random', then 'post' or 'pre' truncating is chosen randomly for each sequence at each iteration
-            sequence_to_matrix:
-            tokenizer:
+            sequence_to_matrix: a dict(<word in sequence>: <integer code>)
+            tokenizer: pass an existing tokenizer instead of creating one
         """
         self.padding = padding
         self.maxlen = maxlen
@@ -25,8 +25,8 @@ class SequenceTokenizer():
 
         if tokenizer is None:
             self.tokenizer = Tokenizer(char_level=True, lower=False)
-            self.tokenizer.fit_on_texts(self.genes_info.loc[self.node_list, "Transcript sequence"])
-            self.genes_info["Transcript length"] = self.genes_info["Transcript sequence"].apply(
+            self.tokenizer.fit_on_texts(self.annotations.loc[self.node_list, "Transcript sequence"])
+            self.annotations["Transcript length"] = self.annotations["Transcript sequence"].apply(
                 lambda x: len(x) if type(x) == str else None)
             print("word index:", self.tokenizer.word_index) if self.verbose else None
         else:
@@ -88,8 +88,7 @@ class SequenceTokenizer():
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
-    def __init__(self, network, weighted=False, batch_size=1, maxlen=1400, padding='post', truncating='post',
-                 sequence_to_matrix=False, tokenizer=None, shuffle=True, seed=0, verbose=True, training_network=None):
+    def __init__(self, network, weighted=False, batch_size=1, replace=True, seed=0, verbose=True, **kwargs):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
         each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
@@ -100,31 +99,29 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         :param batch_size: Sample batch size at each iteration
         :param dim: Dimensionality of the sample input
         :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
-        :param shuffle:
+        :param replace:
         :param seed:
         """
         self.batch_size = batch_size
         self.weighted = weighted
         self.network = network
-        self.shuffle = shuffle
+        self.replace = replace
 
         self.seed = seed
         self.verbose = verbose
-        self.training_network = training_network
 
-        self.genes_info = network.genes_info
+        self.annotations = network.annotations
         self.transcripts_to_sample = network.genes_info["Transcript sequence"].copy()
-        self.node_list = self.genes_info[self.genes_info["Transcript sequence"].notnull()].index.tolist()
+        self.node_list = self.annotations[self.annotations["Transcript sequence"].notnull()].index.tolist()
         self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
 
         np.random.seed(seed)
         self.on_epoch_end()
-        super(DataGenerator, self).__init__(maxlen=maxlen, padding=padding, truncating=truncating,
-                                            sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer)
+        super(DataGenerator, self).__init__(**kwargs)
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
-        raise NotImplementedError()
+        pass
 
     def __len__(self):
         'Denotes the number of batches per epoch'
@@ -133,7 +130,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
     def __getitem__(self, training_index):
         raise NotImplementedError()
 
-    def __data_generation(self, edges_batch):
+    def __getdata__(self, edges_batch):
         raise NotImplementedError()
 
     def load_data(self, return_sequence_data=False, batch_size=None):

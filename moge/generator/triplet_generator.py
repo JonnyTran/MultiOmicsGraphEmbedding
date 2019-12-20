@@ -2,7 +2,8 @@ import networkx as nx
 import numpy as np
 import tensorflow as tf
 
-from moge.generator.edge_generator import SampledDataGenerator, DIRECTED_EDGE, UNDIRECTED_EDGE, \
+from moge.generator.sampled_generator import SampledDataGenerator
+from moge.generator.siamese_pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
     UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
 from moge.network.heterogeneous_network import HeterogeneousNetwork, EPSILON
 
@@ -12,14 +13,17 @@ def sparse_matrix_to_sparse_tensor(X):
     indices = np.mat([coo.row, coo.col]).transpose()
     return tf.SparseTensor(indices, coo.data, coo.shape)
 
+
 class SampledTripletDataGenerator(SampledDataGenerator):
-    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, neg_sampling_ratio=2,
-                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, shuffle=True,
-                 seed=0, verbose=True, training_network=None):
+    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, compression_func="log", n_steps=100,
+                 directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
+                 tokenizer=None, replace=True, seed=0, verbose=True):
         super(SampledTripletDataGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
-                                                          maxlen=maxlen, padding=padding, truncating=truncating,
-                                                          sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
-                                                          shuffle=shuffle, seed=seed, verbose=verbose)
+                                                          compression_func=compression_func, n_steps=n_steps,
+                                                          directed_proba=directed_proba, maxlen=maxlen, padding=padding,
+                                                          truncating=truncating, sequence_to_matrix=sequence_to_matrix,
+                                                          tokenizer=tokenizer, replace=replace, seed=seed,
+                                                          verbose=verbose)
 
     def __getitem__(self, item):
         sampled_edges = []
@@ -31,7 +35,7 @@ class SampledTripletDataGenerator(SampledDataGenerator):
                 sampled_edges.append(sampled_triplet)
             else:
                 continue
-        X, y = self.__data_generation(sampled_edges)
+        X, y = self.__getdata__(sampled_edges)
 
         return X, y
 
@@ -65,11 +69,10 @@ class SampledTripletDataGenerator(SampledDataGenerator):
 
         return edge_type
 
-
-    def __data_generation(self, sampled_edges):
+    def __getdata__(self, sampled_nodes):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         X_list = []
-        for u,v,w,type in sampled_edges:
+        for u, v, w, type in sampled_nodes:
             if type == DIRECTED_EDGE:
                 X_list.append((u, v, w, IS_DIRECTED))
             elif type == UNDIRECTED_EDGE:
@@ -92,14 +95,13 @@ class SampledTripletDataGenerator(SampledDataGenerator):
 
 
 class OnlineTripletGenerator(SampledDataGenerator):
-    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, neg_sampling_ratio=2,
-                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, shuffle=True,
-                 seed=0, verbose=True, training_network=None):
-        super(OnlineTripletGenerator, self).__init__(network, weighted, batch_size, maxlen=neg_sampling_ratio,
-                                                     padding=n_steps, truncating=compression_func,
-                                                     sequence_to_matrix=padding, tokenizer=maxlen, shuffle=truncating,
-                                                     seed=tokenizer, verbose=sequence_to_matrix,
-                                                     training_network=shuffle)
+    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, compression_func="log", n_steps=100,
+                 directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
+                 tokenizer=None, replace=True, seed=0, verbose=True):
+        super(OnlineTripletGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
+                                                     maxlen=maxlen, padding=padding, truncating=truncating,
+                                                     sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
+                                                     replace=replace, seed=seed, verbose=verbose)
 
     def process_sampling_table(self, network):
         graph = nx.compose(network.G, network.G_u)
@@ -118,17 +120,17 @@ class OnlineTripletGenerator(SampledDataGenerator):
     def __getitem__(self, item):
         sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
                                          p=self.node_sampling_freq)
-        X, y = self.__data_generation(sampled_nodes)
+        X, y = self.__getdata__(sampled_nodes)
 
         return X, y
 
     def load_data(self, return_node_name=False):
         sampled_nodes = self.get_nonzero_nodelist()
-        X, y = self.__data_generation(sampled_nodes, return_node_name=return_node_name)
+        X, y = self.__getdata__(sampled_nodes, return_node_name=return_node_name)
 
         return X, y
 
-    def __data_generation(self, sampled_nodes, return_node_name=False):
+    def __getdata__(self, sampled_nodes, return_node_name=False):
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         sampled_directed_adj = self.sample_random_negative_edges(
@@ -194,14 +196,14 @@ class OnlineTripletGenerator(SampledDataGenerator):
 
 
 class OnlineSoftmaxGenerator(OnlineTripletGenerator):
-    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, neg_sampling_ratio=2,
-                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, shuffle=True,
-                 seed=0, verbose=True, training_network=None):
-        super().__init__(network, weighted, batch_size, maxlen=neg_sampling_ratio, padding=n_steps,
-                         truncating=compression_func, sequence_to_matrix=padding, tokenizer=maxlen, shuffle=truncating,
-                         seed=sequence_to_matrix, verbose=shuffle, training_network=seed)
+    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, compression_func="log", n_steps=100,
+                 directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
+                 tokenizer=None, replace=True, seed=0, verbose=True):
+        super().__init__(network, weighted=weighted, batch_size=batch_size, maxlen=maxlen, padding=padding,
+                         truncating=truncating, sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
+                         replace=replace, seed=seed, verbose=verbose)
 
-    def __data_generation(self, sampled_nodes):
+    def __getdata__(self, sampled_nodes):
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         sampled_directed_adj = self.sample_directed_negative_edges(

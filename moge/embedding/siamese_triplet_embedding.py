@@ -101,7 +101,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             self.generator_val = SampledTripletDataGenerator(network=network_val, weighted=self.weighted,
                                                              batch_size=self.batch_size, maxlen=self.max_length,
                                                              padding='post', truncating="post",
-                                                             tokenizer=generator_train.tokenizer, shuffle=True,
+                                                             tokenizer=generator_train.tokenizer, replace=True,
                                                              seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
@@ -127,7 +127,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         if not hasattr(self, "generator_train"):
             self.generator_train = SampledTripletDataGenerator(network=network, weighted=self.weighted,
                                                                batch_size=self.batch_size, maxlen=self.max_length,
-                                                               padding='post', truncating=self.truncating, shuffle=True,
+                                                               padding='post', truncating=self.truncating, replace=True,
                                                                seed=seed, verbose=self.verbose)
         else:
             return self.generator_train

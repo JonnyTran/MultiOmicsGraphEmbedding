@@ -103,7 +103,7 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
                         is_weighted=False, no_python=False, rebuild_model=False, seed=0):
         self.generator_train = OnlineTripletGenerator(network=network, batch_size=self.batch_size,
                                                       maxlen=self.max_length, padding='post',
-                                                      truncating=self.truncating, shuffle=True, seed=seed,
+                                                      truncating=self.truncating, replace=True, seed=seed,
                                                       verbose=self.verbose) \
             if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
@@ -111,7 +111,7 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
         if network_val is not None:
             self.generator_val = OnlineTripletGenerator(network=network_val, batch_size=self.batch_size,
                                                         maxlen=self.max_length, padding='post', truncating="post",
-                                                        shuffle=True, seed=seed, verbose=self.verbose) \
+                                                        replace=True, seed=seed, verbose=self.verbose) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
