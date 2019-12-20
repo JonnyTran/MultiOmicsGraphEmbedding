@@ -97,7 +97,6 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna().str.split("|")
                 self.feature_transformer[label].fit(features)
-                print(label, ":", self.feature_transformer[label].classes_[:3])
 
             elif self.annotations[label].dtypes == int or self.annotations[label].dtypes == float:
                 self.feature_transformer[label] = preprocessing.StandardScaler()
@@ -108,7 +107,6 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna()
                 self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
-                print(label, ":", self.feature_transformer[label].classes_[:3])
 
     def add_directed_edges(self, edgelist, modalities, database,
                            correlation_weights=False, threshold=None):

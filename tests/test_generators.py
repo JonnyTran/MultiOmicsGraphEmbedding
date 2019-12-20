@@ -35,7 +35,7 @@ def get_luad_data_network() -> HeterogeneousNetwork:
 
 @pytest.fixture
 def get_traintestsplit_network(get_luad_data_network):
-    get_luad_data_network.split_train_test_nodes(get_luad_data_network.node_list, verbose=True)
+    get_luad_data_network.split_train_test_nodes(get_luad_data_network.node_list, verbose=False)
     assert hasattr(get_luad_data_network, 'train_network')
     assert hasattr(get_luad_data_network, 'test_network')
     assert hasattr(get_luad_data_network, 'val_network')
@@ -58,5 +58,8 @@ def test_training_generator(get_training_generator):
     X, y = get_training_generator.__getitem__(0)
     print({k: v.shape for k, v in X.items()}, {"y": y.shape})
     print("get_training_generator.variables", get_training_generator.variables)
-    # assert get_training_generator.variables in X
-    assert X["input_seqs"].shape[0] == y.shape[0]
+
+    assert set(get_training_generator.variables) < set(X.keys())
+    for variable in get_training_generator.variables:
+        assert X[variable].shape[0] == y.shape[0]
+    assert get_training_generator.batch_size == y.shape[0]

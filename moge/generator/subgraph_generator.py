@@ -36,12 +36,15 @@ class SubgraphGenerator(SampledDataGenerator):
             X[variable] = self.network.feature_transformer[variable].transform(labels_vector.to_numpy().reshape(-1, 1))
 
         if len(self.targets) == 1:
-            targets_vector = self.annotations.loc[sampled_nodes, self.targets]
+            targets_vector = self.annotations.loc[sampled_nodes, self.targets].to_numpy().reshape(-1, 1)
+            print("targets_vector")
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
+            print("y", y)
         else:
+            y = {}
             for target in self.targets:
                 targets_vector = self.annotations.loc[sampled_nodes, target]
-                y = self.network.feature_transformer[target].transform(targets_vector)
+                y[target] = self.network.feature_transformer[target].transform(targets_vector)
 
         return X, y
 
