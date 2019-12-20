@@ -91,7 +91,6 @@ class NetworkTrainTestSplit():
 
     def get_train_generator(self, generator, **kwargs):
         kwargs['network'] = self.train_network
-        print(kwargs)
         return generator(**kwargs)
 
     def get_test_generator(self, generator, **kwargs):

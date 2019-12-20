@@ -1,8 +1,6 @@
-import networkx as nx
 import numpy as np
 
 from moge.generator.siamese.pairs_generator import DataGenerator
-from moge.generator.utils import EdgelistSampler
 
 
 class SampledDataGenerator(DataGenerator):
@@ -27,30 +25,14 @@ class SampledDataGenerator(DataGenerator):
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):
-        graph = nx.compose(network.G, network.G_u)
+        # graph = nx.compose(network.G, network.G_u)
         self.edge_dict = {}
         self.edge_counts_dict = {}
-        self.node_degrees = dict(zip(self.node_list, [0] * len(self.node_list)))
-
-        for node in network.node_list:
-            self.edge_dict[node] = {}
-            self.edge_counts_dict[node] = {}
-
-            edgelist_bunch = graph.edges(node, data=True)
-            self.node_degrees[node] = len(edgelist_bunch)
-
-            for u, v, d in edgelist_bunch:
-                if d["type"] in self.edge_dict[node]:
-                    self.edge_dict[node][d["type"]].append((u, v, d["type"]))
-                else:
-                    self.edge_dict[node][d["type"]] = EdgelistSampler([(u, v, d["type"])])
-
-            for edge_type in self.edge_dict[node].keys():
-                self.edge_counts_dict[node][edge_type] = len(self.edge_dict[node][edge_type])
+        self.node_degrees = {node: degree for node, degree in network.G.degree(self.node_list)}
 
         self.node_degrees_list = [self.node_degrees[node] for node in self.node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
-                                                                  compression_func=self.compression_func)
+                                                                  compression=self.compression_func)
         print("# of nodes to sample from (non-zero degree):",
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
 
@@ -61,18 +43,18 @@ class SampledDataGenerator(DataGenerator):
         """
         return [self.node_list[id] for id in self.node_sampling_freq.nonzero()[0]]
 
-    def compute_node_sampling_freq(self, node_degrees, compression_func):
-        if compression_func == "sqrt":
-            compression = np.sqrt
-        elif compression_func == "sqrt3":
-            compression = lambda x: x ** (1 / 3)
-        elif compression_func == "log":
-            compression = lambda x: np.log(1 + x)
+    def compute_node_sampling_freq(self, node_degrees, compression):
+        if compression == "sqrt":
+            compression_func = np.sqrt
+        elif compression == "sqrt3":
+            compression_func = lambda x: x ** (1 / 3)
+        elif compression == "log":
+            compression_func = lambda x: np.log(1 + x)
         else:
-            compression = lambda x: x
+            compression_func = lambda x: x
 
-        denominator = sum(compression(np.array(node_degrees)))
-        return compression(np.array(node_degrees)) / denominator
+        denominator = sum(compression_func(np.array(node_degrees)))
+        return compression_func(np.array(node_degrees)) / denominator
 
     def __len__(self):
         return self.n_steps

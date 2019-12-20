@@ -44,11 +44,11 @@ class SequenceTokenizer():
         :param minlen: pad all sequences with length lower than this minlen
         """
         if not variable_length:
-            padded_encoded_sequences = self.encode_texts(self.genes_info.loc[node_list, "Transcript sequence"],
+            padded_encoded_sequences = self.encode_texts(self.annotations.loc[node_list, "Transcript sequence"],
                                                          maxlen=self.maxlen)
         else:
             padded_encoded_sequences = [
-                self.encode_texts([self.genes_info.loc[node, "Transcript sequence"]], minlen=minlen)
+                self.encode_texts([self.annotations.loc[node, "Transcript sequence"]], minlen=minlen)
                 for node in
                 node_list]
 
@@ -111,7 +111,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         self.verbose = verbose
 
         self.annotations = network.annotations
-        self.transcripts_to_sample = network.genes_info["Transcript sequence"].copy()
+        self.transcripts_to_sample = network.annotations["Transcript sequence"].copy()
         self.node_list = self.annotations[self.annotations["Transcript sequence"].notnull()].index.tolist()
         self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
 

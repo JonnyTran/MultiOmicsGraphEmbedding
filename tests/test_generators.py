@@ -55,5 +55,6 @@ def get_training_generator(get_traintestsplit_network):
 
 
 def test_training_generator(get_training_generator):
+    print("get_training_generator", get_training_generator)
     X, y = get_training_generator.__getitem__(0)
     assert X[X.keys()[0]].shape[0] == y.shape[0]
