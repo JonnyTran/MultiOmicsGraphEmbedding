@@ -43,11 +43,11 @@ def get_traintestsplit_network(get_luad_data_network):
 
 
 @pytest.fixture
-def get_training_generator(get_traintestsplit_network):
+def get_training_generator(get_traintestsplit_network) -> SubgraphGenerator:
     variables = ['chromosome_name', 'transcript_start', 'transcript_end']
     targets = ['gene_biotype']
     return get_traintestsplit_network.get_train_generator(SubgraphGenerator, variables=variables, targets=targets,
-                                                          weighted=False, batch_size=1,
+                                                          weighted=False, batch_size=100,
                                                           compression_func="log", n_steps=100, directed_proba=1.0,
                                                           maxlen=1400, padding='post', truncating='post',
                                                           sequence_to_matrix=False, tokenizer=None, replace=True,
@@ -55,6 +55,8 @@ def get_training_generator(get_traintestsplit_network):
 
 
 def test_training_generator(get_training_generator):
-    print("get_training_generator", get_training_generator)
     X, y = get_training_generator.__getitem__(0)
-    assert X[X.keys()[0]].shape[0] == y.shape[0]
+    print({k: v.shape for k, v in X.items()}, {"y": y.shape})
+    print("get_training_generator.variables", get_training_generator.variables)
+    # assert get_training_generator.variables in X
+    assert X["input_seqs"].shape[0] == y.shape[0]

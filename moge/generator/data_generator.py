@@ -26,8 +26,6 @@ class SequenceTokenizer():
         if tokenizer is None:
             self.tokenizer = Tokenizer(char_level=True, lower=False)
             self.tokenizer.fit_on_texts(self.annotations.loc[self.node_list, "Transcript sequence"])
-            self.annotations["Transcript length"] = self.annotations["Transcript sequence"].apply(
-                lambda x: len(x) if type(x) == str else None)
             print("word index:", self.tokenizer.word_index) if self.verbose else None
         else:
             self.tokenizer = tokenizer

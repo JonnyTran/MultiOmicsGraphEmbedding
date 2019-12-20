@@ -1,11 +1,10 @@
 import numpy as np
-import pandas as pd
 
 from .sampled_generator import SampledDataGenerator
 
 
 class SubgraphGenerator(SampledDataGenerator):
-    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, compression_func="log",
+    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=500, compression_func="log",
                  n_steps=100, directed_proba=1.0,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
                  seed=0, verbose=True):
@@ -19,24 +18,30 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, )
 
     def __getitem__(self, item):
-        print("self.node_sampling_freq", self.node_sampling_freq)
         sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=True,
                                          p=self.node_sampling_freq)
-        print("sampling_nodes", sampled_nodes)
         X, y = self.__getdata__(sampled_nodes)
 
         return X, y
 
     def __getdata__(self, sampled_nodes):
+        sampled_nodes = list(self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index)
+
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         X["labels_directed"] = self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes)
 
         for variable in self.variables:
-            X[variable] = pd.get_dummies(self.annotations.loc[sampled_nodes], columns=[variable, ],
-                                         dummy_na=True).to_numpy()
-        y = pd.get_dummies(self.annotations.loc[sampled_nodes], columns=self.targets,
-                           dummy_na=True).to_numpy()
+            labels_vector = self.annotations.loc[sampled_nodes, variable]
+            X[variable] = self.network.feature_transformer[variable].transform(labels_vector.to_numpy().reshape(-1, 1))
+
+        if len(self.targets) == 1:
+            targets_vector = self.annotations.loc[sampled_nodes, self.targets]
+            y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
+        else:
+            for target in self.targets:
+                targets_vector = self.annotations.loc[sampled_nodes, target]
+                y = self.network.feature_transformer[target].transform(targets_vector)
 
         return X, y
 

@@ -2,6 +2,7 @@ from collections import OrderedDict
 
 import networkx as nx
 import scipy.sparse as sp
+from sklearn import preprocessing
 
 from moge.evaluation.utils import sample_edges
 from moge.network.omics_distance import *
@@ -34,8 +35,10 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
         self.G_u = nx.Graph()
 
         self.preprocess_graph()
+
         if process_annotations:
             self.process_annotations()
+            self.process_feature_tranformer()
 
         super(HeterogeneousNetwork, self).__init__()
 
@@ -74,10 +77,38 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
             annotations_list.append(gene_info)
 
         self.annotations = pd.concat(annotations_list, join="inner", copy=True)
-        # self.annotations["Family"] = self.annotations["Family"].str.split("|", expand=True)[
-        #     0]  # TODO Selects only first family annotation if an RNA belongs to multiple
-        print("Genes info columns:", self.annotations.columns.tolist())
+        print("Annotation columns:", self.annotations.columns.tolist())
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
+
+        self.annotations['transcript_start'] = pd.to_numeric(
+            self.annotations['transcript_start'].str.split("|", expand=True)[0])
+        self.annotations['transcript_end'] = pd.to_numeric(
+            self.annotations['transcript_end'].str.split("|", expand=True)[0])
+        self.annotations['transcript_length'] = pd.to_numeric(
+            self.annotations['transcript_length'].str.split("|", expand=True)[0])
+
+    def process_feature_tranformer(self):
+        self.feature_transformer = {}
+        for label in self.annotations.columns:
+            if label == 'Transcript sequence':
+                continue
+
+            if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains("|").any():
+                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
+                features = self.annotations.loc[self.node_list, label].dropna().str.split("|")
+                self.feature_transformer[label].fit(features)
+                print(label, ":", self.feature_transformer[label].classes_[:3])
+
+            elif self.annotations[label].dtypes == int or self.annotations[label].dtypes == float:
+                self.feature_transformer[label] = preprocessing.StandardScaler()
+                features = self.annotations.loc[self.node_list, label].dropna()
+                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
+
+            else:
+                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
+                features = self.annotations.loc[self.node_list, label].dropna()
+                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
+                print(label, ":", self.feature_transformer[label].classes_[:3])
 
     def add_directed_edges(self, edgelist, modalities, database,
                            correlation_weights=False, threshold=None):

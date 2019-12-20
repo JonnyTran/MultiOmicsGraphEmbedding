@@ -30,7 +30,8 @@ class SampledDataGenerator(DataGenerator):
         self.edge_counts_dict = {}
         self.node_degrees = {node: degree for node, degree in network.G.degree(self.node_list)}
 
-        self.node_degrees_list = [self.node_degrees[node] for node in self.node_list]
+        self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
+                                  self.node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
                                                                   compression=self.compression_func)
         print("# of nodes to sample from (non-zero degree):",
