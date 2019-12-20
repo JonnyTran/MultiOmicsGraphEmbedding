@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='MultiOmicsGraphEmbedding',
     version='0.1',
-    packages=['moge', 'moge.embedding', 'moge.network', 'moge.evaluation', 'moge.visualization'],
+    packages=['moge', 'moge.embedding', 'moge.network', 'moge.evaluation', 'moge.visualization', 'moge.generator'],
     url='',
     license='',
     author='JonnyTran',
