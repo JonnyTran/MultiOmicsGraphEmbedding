@@ -26,12 +26,15 @@ class NetworkTrainTestSplit():
         G_train.remove_edges_from(val_edges)
 
         self.train_network = copy.copy(self)
+        self.train_network.annotations = self.annotations
         self.train_network.G = G_train
 
         self.test_network = copy.copy(self)
+        self.test_network.annotations = self.annotations
         self.test_network.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
 
         self.val_network = copy.copy(self)
+        self.val_network.annotations = self.annotations
         self.val_network.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
 
         print("train_network", self.train_network.G.number_of_nodes(),
@@ -63,15 +66,18 @@ class NetworkTrainTestSplit():
                                                          test_frac=test_frac, val_frac=val_frac, seed=seed,
                                                          verbose=verbose)
         self.train_network = copy.copy(self)
+        self.train_network.annotations = self.annotations
         # self.train_network.node_list = [node for node in self.node_list if node in network_train.nodes()]
         self.train_network.G = network_train
 
         self.test_network = copy.copy(self)
+        self.test_network.annotations = self.annotations
         self.test_network.G = nx.DiGraph()
         self.test_network.G.add_nodes_from(test_nodes)
         self.test_network.G.add_edges_from(test_edges)
 
         self.val_network = copy.copy(self)
+        self.val_network.annotations = self.annotations
         self.val_network.G = nx.DiGraph()
         self.val_network.G.add_nodes_from(val_nodes)
         self.val_network.G.add_edges_from(val_edges)
@@ -83,11 +89,14 @@ class NetworkTrainTestSplit():
         print("val_network", self.val_network.G.number_of_nodes(),
               self.val_network.G.number_of_edges()) if verbose else None
 
-    def get_train_generator(self, generator, *args):
-        return generator(self.train_network, *args)
+    def get_train_generator(self, generator, **kwargs):
+        kwargs['network'] = self.train_network
+        print(kwargs)
+        return generator(**kwargs)
 
-    def get_test_generator(self, generator, *args):
-        return generator(self.test_network, *args)
+    def get_test_generator(self, generator, **kwargs):
+        kwargs['network'] = self.test_network
+        return generator(**kwargs)
 
 
 def mask_test_edges_by_nodes(network, node_list,

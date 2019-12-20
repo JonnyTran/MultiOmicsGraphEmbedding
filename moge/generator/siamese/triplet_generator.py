@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from moge.generator.sampled_generator import SampledDataGenerator
-from moge.generator.siamese_pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
+from moge.generator.siamese.pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
     UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
 from moge.network.heterogeneous_network import HeterogeneousNetwork, EPSILON
 
@@ -199,9 +199,11 @@ class OnlineSoftmaxGenerator(OnlineTripletGenerator):
     def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, compression_func="log", n_steps=100,
                  directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  tokenizer=None, replace=True, seed=0, verbose=True):
-        super().__init__(network, weighted=weighted, batch_size=batch_size, maxlen=maxlen, padding=padding,
-                         truncating=truncating, sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
-                         replace=replace, seed=seed, verbose=verbose)
+        super(OnlineSoftmaxGenerator, self).__init__(network, weighted=weighted, batch_size=batch_size, maxlen=maxlen,
+                                                     padding=padding,
+                                                     truncating=truncating, sequence_to_matrix=sequence_to_matrix,
+                                                     tokenizer=tokenizer,
+                                                     replace=replace, seed=seed, verbose=verbose)
 
     def __getdata__(self, sampled_nodes):
         X = {}

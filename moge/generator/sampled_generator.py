@@ -1,7 +1,7 @@
 import networkx as nx
 import numpy as np
 
-from moge.generator.siamese_pairs_generator import DataGenerator
+from moge.generator.siamese.pairs_generator import DataGenerator
 from moge.generator.utils import EdgelistSampler
 
 
@@ -78,10 +78,10 @@ class SampledDataGenerator(DataGenerator):
         return self.n_steps
 
     def __getitem__(self, item):
-        sampling_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=self.replace,
-                                          p=self.node_sampling_freq)
+        sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=self.replace,
+                                         p=self.node_sampling_freq)
 
-        X, y = self.__getdata__(sampling_nodes)
+        X, y = self.__getdata__(sampled_nodes)
 
         return X, y
 

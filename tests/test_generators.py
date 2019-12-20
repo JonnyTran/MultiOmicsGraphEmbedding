@@ -1,0 +1,59 @@
+import pickle
+
+import pytest
+
+from moge.generator import SubgraphGenerator
+from moge.network import HeterogeneousNetwork
+
+cohort_folder_path = "tests/data/luad_data_openomics.pickle"
+
+
+@pytest.fixture
+def get_luad_data_network() -> HeterogeneousNetwork:
+    with open(cohort_folder_path, 'rb') as file:
+        luad_data = pickle.load(file)
+
+    network = HeterogeneousNetwork(modalities=["MicroRNA", "MessengerRNA", "LncRNA"],
+                                   multi_omics_data=luad_data)
+    network.import_edgelist_file(
+        file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/GE/lmn_train.BioGRID.interactions.edgelist",
+        is_directed=True)
+
+    network.import_edgelist_file(
+        file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/MIR/lmn_train.miRTarBase.interactions.edgelist",
+        is_directed=True)
+
+    network.import_edgelist_file(
+        file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/LNC/lmn_train.lncBase.interactions.edgelist",
+        is_directed=True)
+
+    network.import_edgelist_file(
+        file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/LNC/lmn_train.lncrna2target.interactions.edgelist",
+        is_directed=True)
+    return network
+
+
+@pytest.fixture
+def get_traintestsplit_network(get_luad_data_network):
+    get_luad_data_network.split_train_test_nodes(get_luad_data_network.node_list, verbose=True)
+    assert hasattr(get_luad_data_network, 'train_network')
+    assert hasattr(get_luad_data_network, 'test_network')
+    assert hasattr(get_luad_data_network, 'val_network')
+    return get_luad_data_network
+
+
+@pytest.fixture
+def get_training_generator(get_traintestsplit_network):
+    variables = ['chromosome_name', 'transcript_start', 'transcript_end']
+    targets = ['gene_biotype']
+    return get_traintestsplit_network.get_train_generator(SubgraphGenerator, variables=variables, targets=targets,
+                                                          weighted=False, batch_size=1,
+                                                          compression_func="log", n_steps=100, directed_proba=1.0,
+                                                          maxlen=1400, padding='post', truncating='post',
+                                                          sequence_to_matrix=False, tokenizer=None, replace=True,
+                                                          seed=0, verbose=True)
+
+
+def test_training_generator(get_training_generator):
+    X, y = get_training_generator.__getitem__(0)
+    assert X[X.keys()[0]].shape[0] == y.shape[0]
