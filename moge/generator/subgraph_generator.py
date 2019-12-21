@@ -10,7 +10,7 @@ class SubgraphGenerator(SampledDataGenerator):
                  seed=0, verbose=True):
         self.variables = variables
         self.targets = targets
-        network.annotations.dropna(axis=0, subset=self.variables + self.targets, inplace=True)
+        network.annotations = network.annotations.dropna(axis=0, subset=self.variables + self.targets, inplace=False)
         super(SubgraphGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
                                                 compression_func=compression_func, n_steps=n_steps,
                                                 directed_proba=directed_proba, replace=replace,
@@ -30,8 +30,7 @@ class SubgraphGenerator(SampledDataGenerator):
         while len(sampled_nodes) < self.batch_size:
             add_nodes = np.random.choice(self.node_list, size=self.batch_size - len(sampled_nodes), replace=False,
                                          p=self.node_sampling_freq).tolist()
-            sampled_nodes = sampled_nodes + add_nodes
-            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
             sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
 
         X = {}
