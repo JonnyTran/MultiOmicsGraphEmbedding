@@ -1,13 +1,13 @@
 import numpy as np
 
-from moge.generator.siamese.pairs_generator import DataGenerator
+from moge.generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator):
     def __init__(self, network, weighted=False, batch_size=1,
                  compression_func="log", n_steps=100, directed_proba=1.0,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None,
-                 replace=True, seed=0, verbose=True):
+                 replace=False, seed=0, verbose=True):
         """
 
         Args:
@@ -61,7 +61,7 @@ class SampledDataGenerator(DataGenerator):
         return self.n_steps
 
     def __getitem__(self, item):
-        sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=self.replace,
+        sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
                                          p=self.node_sampling_freq)
 
         X, y = self.__getdata__(sampled_nodes)

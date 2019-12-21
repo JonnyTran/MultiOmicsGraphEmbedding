@@ -77,8 +77,8 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
             annotations_list.append(gene_info)
 
         self.annotations = pd.concat(annotations_list, join="inner", copy=True)
-        print("Annotation columns:", self.annotations.columns.tolist())
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
+        print("Annotation columns:", self.annotations.columns.tolist())
 
         self.annotations['transcript_start'] = pd.to_numeric(
             self.annotations['transcript_start'].str.split("|", expand=True)[0])

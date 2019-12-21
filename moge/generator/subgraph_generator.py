@@ -4,8 +4,8 @@ from .sampled_generator import SampledDataGenerator
 
 
 class SubgraphGenerator(SampledDataGenerator):
-    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=500, compression_func="log",
-                 n_steps=100, directed_proba=1.0,
+    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=500,
+                 compression_func="log", n_steps=100, directed_proba=1.0,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
                  seed=0, verbose=True):
         self.variables = variables
@@ -18,7 +18,7 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, )
 
     def __getitem__(self, item):
-        sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=True,
+        sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
                                          p=self.node_sampling_freq)
         X, y = self.__getdata__(sampled_nodes)
 
@@ -33,13 +33,19 @@ class SubgraphGenerator(SampledDataGenerator):
 
         for variable in self.variables:
             labels_vector = self.annotations.loc[sampled_nodes, variable]
-            X[variable] = self.network.feature_transformer[variable].transform(labels_vector.to_numpy().reshape(-1, 1))
+            if labels_vector.dtypes == np.object and labels_vector.str.contains("|").any():
+                labels_vector = labels_vector.str.split("|")
+            else:
+                labels_vector = labels_vector.reshape(-1, 1)
+            X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
 
         if len(self.targets) == 1:
-            targets_vector = self.annotations.loc[sampled_nodes, self.targets].to_numpy().reshape(-1, 1)
-            print("targets_vector")
+            targets_vector = self.annotations.loc[sampled_nodes, self.targets]
+            if targets_vector.dtypes == np.object and targets_vector.str.contains("|").any():
+                targets_vector = targets_vector.str.split("|")
+            else:
+                targets_vector = targets_vector.reshape(-1, 1)
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
-            print("y", y)
         else:
             y = {}
             for target in self.targets:

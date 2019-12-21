@@ -270,7 +270,7 @@ class PairsGenerator(DataGenerator):
         return int(np.floor((self.Ed_count + self.Eu_count + self.En_count + self.Ens_count) / self.batch_size))
 
 
-class SampledDataGenerator(PairsGenerator):
+class SampledPairsGenerator(PairsGenerator):
     def __init__(self, network, weighted=False, batch_size=1, neg_sampling_ratio=2, compression_func="log", n_steps=100,
                  directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
                  tokenizer=None, replace=True, seed=0, verbose=True):
@@ -297,11 +297,11 @@ class SampledDataGenerator(PairsGenerator):
         self.n_steps = n_steps
         self.neg_sampling_ratio = neg_sampling_ratio
         self.directed_proba = directed_proba
-        super(SampledDataGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
-                                                   replace=replace, seed=seed, verbose=verbose,
-                                                   maxlen=maxlen, padding=padding, truncating=truncating,
-                                                   sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer
-                                                   )
+        super(SampledPairsGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
+                                                    replace=replace, seed=seed, verbose=verbose,
+                                                    maxlen=maxlen, padding=padding, truncating=truncating,
+                                                    sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer
+                                                    )
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):

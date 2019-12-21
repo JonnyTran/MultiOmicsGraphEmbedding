@@ -1,4 +1,3 @@
-from moge.generator.siamese.triplet_generator import OnlineTripletGenerator, SampledTripletDataGenerator
 from .data_generator import DataGenerator
 from .sampled_generator import SampledDataGenerator
 from .subgraph_generator import SubgraphGenerator
