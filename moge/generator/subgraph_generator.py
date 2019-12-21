@@ -12,7 +12,7 @@ class SubgraphGenerator(SampledDataGenerator):
                  seed=0, verbose=True):
         self.variables = variables
         self.targets = targets
-        # network.annotations.dropna(axis=0, subset=self.variables + self.targets, inplace=True)
+
         super(SubgraphGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
                                                 compression_func=compression_func, n_steps=n_steps,
                                                 directed_proba=directed_proba, replace=replace,
@@ -70,7 +70,8 @@ class SubgraphGenerator(SampledDataGenerator):
         return X, y
 
     def load_data(self, return_sequence_data=False, batch_size=None):
-        sampled_nodes = self.get_nonzero_nodelist()
+        sampled_nodes = self.annotations.loc[
+            self.get_nonzero_nodelist(), self.variables + self.targets].dropna().index.tolist()
         X, y = self.__getdata__(sampled_nodes)
 
         return X, y
