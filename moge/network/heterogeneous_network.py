@@ -195,7 +195,7 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         return adj.astype(float)
 
-    def get_graph_laplacian(self, edge_types: list, node_list=None, databases=None, sample_negative=0.0):
+    def get_graph_laplacian(self, edge_types: list, node_list=None, databases=None):
         """
         Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
         :param edge_types: A list of edge types letter codes in ["d", "u", "u_n"]
@@ -222,8 +222,6 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
             adj = nx.directed_laplacian_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         elif is_directed:
             adj = nx.directed_laplacian_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
-            if sample_negative:
-                adj = self.sample_random_negative_edges(adj.astype(float), negative_sampling_ratio=sample_negative)
         elif not is_directed and (("u" in edge_types and "u_n" in edge_types) or "u" in edge_types):
             adj = nx.normalized_laplacian_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
         elif not is_directed and ("u_n" == edge_types or "u_n" in edge_types):
@@ -231,8 +229,6 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
                          d['type'] in edge_types]
             adj = nx.normalized_laplacian_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
 
-        # Eliminate self-edges
-        adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         return adj.astype(float)
 
     def sample_random_negative_edges(self, pos_adj, negative_sampling_ratio):

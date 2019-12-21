@@ -41,10 +41,10 @@ class SubgraphGenerator(SampledDataGenerator):
 
         if len(self.targets) == 1:
             targets_vector = self.annotations.loc[sampled_nodes, self.targets]
-            # if (targets_vector.dtypes == np.object) and targets_vector.str.contains("|").any():
-            #     targets_vector = targets_vector.str.split("|")
-            # else:
-            targets_vector = targets_vector.to_numpy().reshape(-1, 1)
+            if (targets_vector.dtypes == np.object) and targets_vector.str.contains("|").any().any():
+                targets_vector = targets_vector.str.split("|")
+            else:
+                targets_vector = targets_vector.to_numpy().reshape(-1, 1)
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
         else:
             y = {}
