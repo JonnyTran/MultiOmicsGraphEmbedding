@@ -25,7 +25,7 @@ class SubgraphGenerator(SampledDataGenerator):
         return X, y
 
     def __getdata__(self, sampled_nodes):
-        sampled_nodes = list(self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index)
+        sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
 
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
@@ -33,18 +33,18 @@ class SubgraphGenerator(SampledDataGenerator):
 
         for variable in self.variables:
             labels_vector = self.annotations.loc[sampled_nodes, variable]
-            if labels_vector.dtypes == np.object and labels_vector.str.contains("|").any():
+            if (labels_vector.dtypes == np.object) and labels_vector.str.contains("|").any().any():
                 labels_vector = labels_vector.str.split("|")
             else:
-                labels_vector = labels_vector.reshape(-1, 1)
+                labels_vector = labels_vector.to_numpy().reshape(-1, 1)
             X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
 
         if len(self.targets) == 1:
             targets_vector = self.annotations.loc[sampled_nodes, self.targets]
-            if targets_vector.dtypes == np.object and targets_vector.str.contains("|").any():
-                targets_vector = targets_vector.str.split("|")
-            else:
-                targets_vector = targets_vector.reshape(-1, 1)
+            # if (targets_vector.dtypes == np.object) and targets_vector.str.contains("|").any():
+            #     targets_vector = targets_vector.str.split("|")
+            # else:
+            targets_vector = targets_vector.to_numpy().reshape(-1, 1)
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
         else:
             y = {}

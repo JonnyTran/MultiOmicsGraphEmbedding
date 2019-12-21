@@ -59,7 +59,7 @@ def test_training_generator(get_training_generator):
     print({k: v.shape for k, v in X.items()}, {"y": y.shape})
     print("get_training_generator.variables", get_training_generator.variables)
 
-    assert set(get_training_generator.variables) < set(X.keys())
+    assert set(get_training_generator.variables) <= set(X.keys())
     for variable in get_training_generator.variables:
         assert X[variable].shape[0] == y.shape[0]
 
@@ -81,8 +81,8 @@ def test_testing_generator(get_testing_generator):
     print({k: v.shape for k, v in X.items()}, {k: v.shape for k, v in y.items()})
     print("get_training_generator.variables", get_testing_generator.variables)
 
-    assert set(get_testing_generator.variables) < set(X.keys())
-    assert set(get_testing_generator.targets) < set(y.keys())
+    assert set(get_testing_generator.variables) <= set(X.keys())
+    assert set(get_testing_generator.targets) <= set(y.keys())
     for variable in get_testing_generator.variables:
         for target in get_testing_generator.targets:
             assert X[variable].shape[0] == y[target].shape[0]
