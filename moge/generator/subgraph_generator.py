@@ -30,6 +30,7 @@ class SubgraphGenerator(SampledDataGenerator):
             add_nodes = np.random.choice(self.node_list, size=self.batch_size - len(sampled_nodes), replace=False,
                                          p=self.node_sampling_freq)
             sampled_nodes.append(add_nodes)
+            sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
 
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
