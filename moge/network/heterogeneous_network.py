@@ -230,7 +230,7 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
                          d['type'] in edge_types]
             adj = nx.normalized_laplacian_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
 
-        return sparse.coo_matrix(adj.astype(float))
+        return adj.astype(float)
 
     def sample_random_negative_edges(self, pos_adj, negative_sampling_ratio):
         pos_rows, pos_cols = pos_adj.nonzero()
