@@ -1,7 +1,9 @@
+from collections import OrderedDict
+
 import numpy as np
 
 from .sampled_generator import SampledDataGenerator
-from collections import OrderedDict
+
 
 class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=500,
@@ -67,6 +69,8 @@ class SubgraphGenerator(SampledDataGenerator):
 
         return X, y
 
-
     def load_data(self, return_sequence_data=False, batch_size=None):
-        pass
+        sampled_nodes = self.get_nonzero_nodelist()
+        X, y = self.__getdata__(sampled_nodes)
+
+        return X, y
