@@ -28,7 +28,7 @@ class SubgraphGenerator(SampledDataGenerator):
         sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
         while len(sampled_nodes) < self.batch_size:
             add_nodes = np.random.choice(self.node_list, size=self.batch_size - len(sampled_nodes), replace=False,
-                                         p=self.node_sampling_freq)
+                                         p=self.node_sampling_freq).tolist()
             sampled_nodes.append(add_nodes)
             sampled_nodes = list(set(sampled_nodes))
             sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
