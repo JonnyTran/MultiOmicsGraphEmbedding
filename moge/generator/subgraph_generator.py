@@ -33,16 +33,18 @@ class SubgraphGenerator(SampledDataGenerator):
 
         for variable in self.variables:
             labels_vector = self.annotations.loc[sampled_nodes, variable]
-            if (labels_vector.dtypes == np.object) and labels_vector.str.contains("|").any().any():
-                labels_vector = labels_vector.str.split("|")
+            if labels_vector.dtypes == np.object:
+                if labels_vector.str.contains("|").any():
+                    labels_vector = labels_vector.str.split("|")
             else:
                 labels_vector = labels_vector.to_numpy().reshape(-1, 1)
             X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
 
         if len(self.targets) == 1:
-            targets_vector = self.annotations.loc[sampled_nodes, self.targets]
-            if (targets_vector.dtypes == np.object) and targets_vector.str.contains("|").any().any():
-                targets_vector = targets_vector.str.split("|")
+            targets_vector = self.annotations.loc[sampled_nodes, self.targets[0]]
+            if targets_vector.dtypes == np.object:
+                if targets_vector.str.contains("|").any():
+                    targets_vector = targets_vector.str.split("|")
             else:
                 targets_vector = targets_vector.to_numpy().reshape(-1, 1)
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
@@ -50,6 +52,11 @@ class SubgraphGenerator(SampledDataGenerator):
             y = {}
             for target in self.targets:
                 targets_vector = self.annotations.loc[sampled_nodes, target]
+                if targets_vector.dtypes == np.object:
+                    if targets_vector.str.contains("|").any():
+                        targets_vector = targets_vector.str.split("|")
+                else:
+                    targets_vector = targets_vector.to_numpy().reshape(-1, 1)
                 y[target] = self.network.feature_transformer[target].transform(targets_vector)
 
         return X, y
