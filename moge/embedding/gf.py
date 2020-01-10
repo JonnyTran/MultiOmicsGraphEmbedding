@@ -1,10 +1,10 @@
-import tensorflow as tf
 import networkx as nx
 import numpy as np
 import pandas as pd
-import scipy.sparse
+import tensorflow as tf
 
 from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
+
 
 class GraphFactorization(ImportedGraphEmbedding):
 
@@ -71,7 +71,7 @@ class GraphFactorization(ImportedGraphEmbedding):
 
                 self.embedding = session.run(z_emb)
 
-    def get_embedding(self):
+    def get_embeddings(self):
         return self.embedding
 
     def get_reconstructed_adj(self):

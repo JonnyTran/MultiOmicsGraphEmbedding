@@ -139,3 +139,9 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             batch_size:
         """
         raise NotImplementedError()
+
+    def get_node_labels(self, label, node_list=None):
+        if node_list is None:
+            node_list = self.node_list
+
+        return self.annotations.loc[node_list, label]

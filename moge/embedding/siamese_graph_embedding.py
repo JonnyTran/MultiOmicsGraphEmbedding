@@ -70,7 +70,6 @@ def l1_diff_alpha(u, v, weights):
     return sigmoid(matmul)
 
 
-
 class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
     def __init__(self, d=128, margin=0.2, batch_size=2048, lr=0.001, epochs=10, directed_proba=0.5, weighted=False,
                  compression_func="sqrt", negative_sampling_ratio=2.0,
@@ -120,11 +119,6 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         for key in hyper_params.keys():
             self.__setattr__('_%s' % key, hyper_params[key])
 
-    def get_method_name(self):
-        return self._method_name
-
-    def get_method_summary(self):
-        return '%s_%d' % (self._method_name, self._d)
 
     def create_lstm_network(self):
         """ Base network to be shared (eq. to feature extraction).
@@ -250,7 +244,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             input_seq_j = Input(batch_shape=(self.batch_size, None), name="input_seq_j")
             is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.int8, name="is_directed")
 
-            # build create_lstm_network to use in each siamese 'leg'
+            # build create_network to use in each siamese 'leg'
             self.lstm_network = self.create_lstm_network()
 
             # encode each of the two inputs into a vector with the conv_lstm_network
@@ -382,7 +376,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         if hasattr(self, "reconstructed_adj") and edge_type=="d":
             adj = self.reconstructed_adj
         else:
-            embs = self.get_embedding(variable_length=var_len)
+            embs = self.get_embeddings(variable_length=var_len)
             assert len(self.node_list) == embs.shape[0]
             adj = self._pairwise_similarity(embs, edge_type)
 
@@ -451,7 +445,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         return adj_pred
 
     def save_embeddings(self, filename, logdir=True, variable_length=True, recompute=True, minlen=None):
-        embs = self.get_embedding(variable_length=variable_length, recompute=recompute, minlen=minlen)
+        embs = self.get_embeddings(variable_length=variable_length, recompute=recompute, minlen=minlen)
         assert len(self.node_list) == embs.shape[0]
         if logdir and hasattr(self, "log_dir"):
             file_path = os.path.join(self.log_dir, filename)
@@ -465,7 +459,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         fout.close()
         print("Saved at", file_path)
 
-    def get_embedding(self, variable_length=False, recompute=False, node_list=None, minlen=None):
+    def get_embeddings(self, variable_length=False, recompute=False, node_list=None, minlen=None):
         if (not hasattr(self, "_X") or recompute):
             self.process_embeddings(variable_length, batch_size=self.batch_size, minlen=minlen)
 
@@ -551,4 +545,4 @@ if __name__ == '__main__':
     gf.learn_embedding(network)
     np.save(
         "/home/jonny_admin/PycharmProjects/MultiOmicsGraphEmbedding/moge/data/lncRNA_miRNA_mRNA/miRNA-mRNA_source_target_embeddings_128.npy",
-        gf.get_embedding())
+        gf.get_embeddings())

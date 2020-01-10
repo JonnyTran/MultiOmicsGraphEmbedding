@@ -57,7 +57,7 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
             print("labels_directed", labels_directed) if self.verbose else None
             print("labels_undirected", labels_undirected) if self.verbose else None
 
-            # build create_lstm_network to use in each siamese 'leg'
+            # build create_network to use in each siamese 'leg'
             self.lstm_network = self.create_lstm_network()
             print("lstm_network", self.lstm_network) if self.verbose else None
 

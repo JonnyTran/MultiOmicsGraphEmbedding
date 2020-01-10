@@ -3,27 +3,18 @@ from keras.layers import LSTM
 from keras.regularizers import l2
 
 from .siamese_triplet_online_embedding import *
+from .static_graph_embedding import NeuralGraphEmbedding
 
 
-class GCNEmbedding(SiameseOnlineTripletGraphEmbedding):
-    def __init__(self, d=128, num_labels=None, batch_size=256, lr=0.001, epochs=10, directed_proba=0.5, weighted=True,
-                 compression_func="sqrt", negative_sampling_ratio=2.0, max_length=1400, truncating="post", seed=0,
-                 verbose=False, conv1_kernel_size=12, conv1_batch_norm=False, max1_pool_size=6, conv2_kernel_size=6,
-                 conv2_batch_norm=True, max2_pool_size=3, lstm_unit_size=320, dense1_unit_size=1024,
-                 dense2_unit_size=512, directed_distance="euclidean", undirected_distance="euclidean",
-                 source_target_dense_layers=True, embedding_normalization=False, **kwargs):
-        self.num_labels = num_labels
-        super(GCNEmbedding, self).__init__(d, None, batch_size, lr, epochs, directed_proba, weighted,
-                                           compression_func,
-                                           negative_sampling_ratio, max_length, truncating, seed, verbose,
-                                           conv1_kernel_size,
-                                           conv1_batch_norm, max1_pool_size, conv2_kernel_size, conv2_batch_norm,
-                                           max2_pool_size,
-                                           lstm_unit_size, dense1_unit_size, dense2_unit_size, directed_distance,
-                                           undirected_distance,
-                                           source_target_dense_layers, embedding_normalization, **kwargs)
+class GCNEmbedding(NeuralGraphEmbedding):
+    def __init__(self, d: int, method_name: str, x_features: list, y_label: str, n_labels: int):
+        self.x_features = x_features
+        self.y_label = y_label
+        self.n_labels = n_labels
+        self.support = 1
+        super(GCNEmbedding, self).__init__(d, method_name)
 
-    def create_lstm_network(self):
+    def create_network(self):
         input = Input(batch_shape=(None, None))  # (batch_number, sequence_length)
         x = Embedding(5, 4, input_length=None, mask_zero=True, trainable=True)(
             input)  # (batch_number, sequence_length, 5)
@@ -49,7 +40,7 @@ class GCNEmbedding(SiameseOnlineTripletGraphEmbedding):
         print("brnn", x)
         x = Dropout(0.5)(x)
 
-        x = Dense(self._d, activation='linear', name="embedding_output")(x)
+        x = Dense(self._d, activation='linear')(x)
         #     x = BatchNormalization(center=True, scale=True, name="embedding_output_normalized")(x)
 
         print("embedding", x)
@@ -76,60 +67,99 @@ class GCNEmbedding(SiameseOnlineTripletGraphEmbedding):
                                    name="transcript_end")
             print("labels_directed", labels_directed)
 
-            # build create_lstm_network to use in each siamese 'leg'
-            lstm_network = self.create_lstm_network()
+            # build create_network to use in each siamese 'leg'
+            lstm_network = self.create_network()
 
             # encode each of the inputs into a list of embedding vectors with the conv_lstm_network
             x = lstm_network(input_seqs)
             print("embeddings", x)
-            support = 1
+
             #     x = Dropout(0.5)(x)
-            x = GraphConvolution(128, support,
+            x = GraphConvolution(128, self.support,
                                  activation='relu',
                                  kernel_regularizer=l2(5e-4),
                                  use_bias=False)([x, labels_directed])
             x = Dropout(0.5)(x)
 
-            x = GraphConvolution(64, support,
+            x = GraphConvolution(64, self.support, name="embedding_output",
                                  activation='relu',
                                  use_bias=False)([x, labels_directed])
             x = Dropout(0.5)(x)
 
-            y_pred = Dense(self.num_labels,
-                           activation='sigmoid',
-                           #                    kernel_regularizer=l1()
-                           )(x)
+            y_pred = Dense(self.n_labels, activation='sigmoid')(x)
 
-            siamese_net = Model(inputs=[input_seqs, labels_directed, chromosome_name, transcript_start, transcript_end],
-                                outputs=y_pred)
+            self.model = Model(inputs=[input_seqs, labels_directed, chromosome_name, transcript_start, transcript_end],
+                               outputs=y_pred)
 
         # Multi-gpu parallelization
         if multi_gpu:
-            siamese_net = multi_gpu_model(siamese_net, gpus=4, cpu_merge=True, cpu_relocation=True)
+            self.model = multi_gpu_model(self.model, gpus=4, cpu_merge=True, cpu_relocation=True)
 
         # Compile & train
-        siamese_net.compile(
+        self.model.compile(
             loss="binary_crossentropy",
             optimizer="adam",
             metrics=["top_k_categorical_accuracy",
                      #              precision_m, recall_m
                      ],
         )
-        print("Network total weights:", siamese_net.count_params())
+        print("Network total weights:", self.model.count_params())
 
     def learn_embedding(self, generator_train, generator_test, tensorboard=True, histogram_freq=0,
                         embeddings=False, early_stopping=False,
                         multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0,
                         **kwargs):
+        self.generator_train = generator_train
+        self.generator_test = generator_test
         try:
-            self.hist = self.siamese_net.fit_generator(generator_train, epochs=self.epochs, shuffle=False,
-                                                       validation_data=generator_test,
-                                                       validation_steps=validation_steps,
-                                                       callbacks=self.get_callbacks(early_stopping, tensorboard,
-                                                                                    histogram_freq, embeddings),
-                                                       use_multiprocessing=True, workers=8, **kwargs)
+            self.hist = self.model.fit_generator(generator_train, epochs=self.epochs, shuffle=False,
+                                                 validation_data=generator_test,
+                                                 validation_steps=validation_steps,
+                                                 callbacks=self.get_callbacks(early_stopping, tensorboard,
+                                                                              histogram_freq, embeddings),
+                                                 use_multiprocessing=True, workers=8, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
-        finally:
-            self.save_network_weights()
+
+    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=0, embeddings=False, write_grads=False):
+        callbacks = []
+        if tensorboard:
+            if not hasattr(self, "tensorboard"):
+                self.build_tensorboard(histogram_freq=histogram_freq, embeddings=embeddings, write_grads=write_grads)
+            callbacks.append(self.tensorboard)
+
+        if early_stopping > 0:
+            if not hasattr(self, "early_stopping"):
+                self.early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=early_stopping, verbose=0,
+                                                    mode='auto',
+                                                    baseline=None, restore_best_weights=False)
+            callbacks.append(self.early_stopping)
+
+        if len(callbacks) == 0: callbacks = None
+        return callbacks
+
+    def build_tensorboard(self, histogram_freq, embeddings: bool, write_grads):
+        if not hasattr(self, "log_dir"):
+            self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%H-%M%p').strip(" "))
+            print("log_dir:", self.log_dir)
+
+        if embeddings:
+            x_test, node_labels = self.generator_test.load_data(return_node_names=True, y_label=self.y_label)
+            if not os.path.exists(self.log_dir): os.makedirs(self.log_dir)
+            with open(os.path.join(self.log_dir, "metadata.tsv"), 'w') as f:
+                np.savetxt(f, node_labels, fmt="%s")
+                f.close()
+
+        self.tensorboard = TensorBoard(
+            log_dir=self.log_dir,
+            histogram_freq=histogram_freq,
+            write_grads=write_grads, write_graph=False, write_images=False,
+            batch_size=self.batch_size,
+            update_freq="epoch",
+            embeddings_freq=1 if embeddings else 0,
+            embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
+            embeddings_data=x_test if embeddings else None,
+            embeddings_layer_names=["embedding_output"] if embeddings else None,
+        )
+        # Add params text to tensorboard

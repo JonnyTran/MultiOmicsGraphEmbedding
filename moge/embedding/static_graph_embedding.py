@@ -13,7 +13,7 @@ from moge.evaluation.node_clustering import _get_top_enrichr_term, chunkIt
 from moge.evaluation.utils import get_scalefree_fit_score
 
 
-class StaticGraphEmbedding:
+class BaseGraphEmbedding:
     __metaclass__ = ABCMeta
 
     def __init__(self, d):
@@ -48,7 +48,7 @@ class StaticGraphEmbedding:
         '''
         pass
 
-    def get_embedding(self):
+    def get_embeddings(self):
         ''' Returns the learnt embedding
 
         Return:
@@ -84,7 +84,8 @@ class StaticGraphEmbedding:
         '''
         pass
 
-class ImportedGraphEmbedding(StaticGraphEmbedding):
+
+class ImportedGraphEmbedding(BaseGraphEmbedding):
     __metaclass__ = ABCMeta
 
     def __init__(self, d, method_name="ImportedGraphEmbedding"):
@@ -118,9 +119,9 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         Args:
             graph: the graph to embed in networkx DiGraph format
         '''
-        pass
+        raise NotImplementedError()
 
-    def get_embedding(self, node_list=None):
+    def get_embeddings(self, node_list=None):
         ''' Returns the learnt embedding
 
         Return:
@@ -143,10 +144,10 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             A single number represent the weight of edge between node i and node j
 
         '''
-        pass
+        raise NotImplementedError()
 
     def save_embeddings(self, file_path):
-        embs = self.get_embedding()
+        embs = self.get_embeddings()
         assert len(self.node_list) == embs.shape[0]
         fout = open(file_path, 'w')
         fout.write("{} {}\n".format(len(self.node_list), self._d))
@@ -259,6 +260,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             idx_B = [self.node_list.index(node) for node in node_list_B]
             return adj[idx_A, :][:, idx_B]
 
+    @DeprecationWarning
     def transform_adj_adaptive_threshold(self, adj_pred, network_train, margin=0.01, edge_types="d"):
         print("adaptive threshold")
         adj_true = network_train.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list)
@@ -267,6 +269,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         adj_pred = np.where(adj_pred < self.distance_threshold_nodes, 1, 0)
         return adj_pred
 
+    @DeprecationWarning
     def get_adaptive_threshold(self, adj_pred, adj_true, margin):
         distance_threshold = np.zeros((len(self.node_list),))
         for nonzero_node_id in np.unique(adj_true.nonzero()[0]):
@@ -277,6 +280,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         distance_threshold[distance_threshold == 0] = median_threshold
         return distance_threshold + margin
 
+    @DeprecationWarning
     def transform_adj_beta_exp(self, adj_dist, network_train, edge_types, sample_negative):
         print("beta exp func")
         adj_true = network_train.get_adjacency_matrix(edge_types=edge_types, node_list=self.node_list,
@@ -375,7 +379,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         return y_pred
 
     def process_tsne_node_pos(self):
-        embs = self.get_embedding()
+        embs = self.get_embeddings()
         embs_pca = PCA(n_components=2).fit_transform(embs)
         self.node_pos = TSNE(init=embs_pca, n_jobs=8).fit_transform(embs)
 
@@ -387,7 +391,7 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
             return self.node_pos
 
     def predict_cluster(self, n_clusters=8, node_list=None, n_jobs=-2, save_kmeans=False):
-        embs = self.get_embedding()
+        embs = self.get_embeddings()
         kmeans = KMeans(n_clusters, n_jobs=n_jobs)
         y_pred = kmeans.fit_predict(embs)
         if save_kmeans:
@@ -425,3 +429,23 @@ class ImportedGraphEmbedding(StaticGraphEmbedding):
         pool.close()
         pool.join()
         return df.sort_values(by="Adjusted P-value")
+
+
+class NeuralGraphEmbedding(ImportedGraphEmbedding):
+    def __init__(self, d, method_name="ImportedGraphEmbedding"):
+        super(NeuralGraphEmbedding, self).__init__(d, method_name)
+
+    def create_network(self):
+        raise NotImplementedError()
+
+    def learn_embedding(self, generator_train, generator_test, **kwargs):
+        raise NotImplementedError()
+
+    def get_callbacks(self, early_stopping=0, tensorboard=True, histogram_freq=0, embeddings=False, write_grads=False):
+        raise NotImplementedError()
+
+    def save_model(self, filename, model="lstm", logdir=True):
+        raise NotImplementedError()
+
+    def load_weights(self):
+        raise NotImplementedError()

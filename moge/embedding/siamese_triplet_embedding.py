@@ -64,7 +64,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
             input_seq_k = Input(batch_shape=(self.batch_size, None), name="input_seq_k")
             is_directed = Input(batch_shape=(self.batch_size, 1), dtype=tf.int8, name="is_directed")
 
-            # build create_lstm_network to use in each siamese 'leg'
+            # build create_network to use in each siamese 'leg'
             self.lstm_network = self.create_lstm_network()
 
             # encode each of the two inputs into a vector with the conv_lstm_network
@@ -144,7 +144,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
         if hasattr(self, "reconstructed_adj") and edge_type == "d":
             adj = self.reconstructed_adj
         else:
-            embs = self.get_embedding()
+            embs = self.get_embeddings()
             assert len(self.node_list) == embs.shape[0]
 
             adj = self._pairwise_similarity(embs, edge_type)

@@ -69,9 +69,12 @@ class SubgraphGenerator(SampledDataGenerator):
 
         return X, y
 
-    def load_data(self, return_sequence_data=False, batch_size=None):
+    def load_data(self, return_node_names=False, y_label=None):
         sampled_nodes = self.annotations.loc[
             self.get_nonzero_nodelist(), self.variables + self.targets].dropna().index.tolist()
         X, y = self.__getdata__(sampled_nodes)
+
+        if return_node_names:
+            y = self.get_node_labels(y_label, node_list=sampled_nodes)
 
         return X, y

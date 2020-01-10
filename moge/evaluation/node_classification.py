@@ -24,7 +24,7 @@ def evaluate_classification(embedding, network, cv=5, node_label="Family", multi
     print("labels_to_test", labels_to_test) if verbose > 1 else None
     print("# of labels with >cv samples:", len(labels_to_test), ", # of nodes to train/test:", len(nodelist)) if verbose else None
 
-    X = embedding.get_embedding(node_list=nodelist)
+    X = embedding.get_embeddings(node_list=nodelist)
     assert len(nodelist) == X.shape[0]
 
     if multilabel:
