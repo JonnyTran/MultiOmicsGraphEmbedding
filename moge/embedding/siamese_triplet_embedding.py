@@ -10,7 +10,7 @@ from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
 from moge.embedding.siamese_graph_embedding import SiameseGraphEmbedding, sigmoid, softmax
-from moge.generator.siamese.triplet_generator import SampledTripletDataGenerator
+from moge.generator import SampledTripletDataGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 

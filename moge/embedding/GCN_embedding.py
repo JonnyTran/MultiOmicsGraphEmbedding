@@ -1,8 +1,16 @@
-from kegra.layers.graph import GraphConvolution
-from keras.layers import LSTM
-from keras.regularizers import l2
+import os
+import time
 
-from .siamese_triplet_online_embedding import *
+import numpy as np
+import tensorflow as tf
+from kegra.layers.graph import GraphConvolution
+from keras.callbacks import TensorBoard, EarlyStopping
+from keras.layers import Input, Conv2D, Dropout, Dense, MaxPooling1D, Lambda, Embedding, Bidirectional, LSTM
+from keras.models import Model
+from keras.regularizers import l2
+from keras.utils import multi_gpu_model
+from tensorflow.keras import backend as K
+
 from .static_graph_embedding import NeuralGraphEmbedding
 
 
