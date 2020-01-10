@@ -81,7 +81,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                  directed_distance="euclidean", undirected_distance="euclidean",
                  source_target_dense_layers=True, embedding_normalization=False, subsample=False,
                  **kwargs):
-        super().__init__(d)
+        super(SiameseGraphEmbedding, self).__init__(d)
 
         self._d = d
         assert self._d % 2 == 0, "Embedding dimension (d) must be an even integer"
