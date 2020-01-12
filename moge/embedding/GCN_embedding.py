@@ -15,12 +15,12 @@ from .static_graph_embedding import NeuralGraphEmbedding
 
 
 class GCNEmbedding(NeuralGraphEmbedding):
-    def __init__(self, d: int, method_name: str, x_features: list, y_label: str, n_labels: int):
+    def __init__(self, d: int, batch_size: int, x_features: list, y_label: str, n_labels: int):
         self.x_features = x_features
         self.y_label = y_label
         self.n_labels = n_labels
-        self.support = 1
-        super(GCNEmbedding, self).__init__(d, method_name)
+        self.batch_size = batch_size
+        super(GCNEmbedding, self).__init__(d, method_name="GCN_embedding")
 
     def create_network(self):
         input = Input(batch_shape=(None, None))  # (batch_number, sequence_length)
@@ -56,12 +56,11 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
     def build_keras_model(self, multi_gpu=False):
         K.clear_session()
+
         if multi_gpu:
             device = "/cpu:0"
-            allow_soft_placement = True
         else:
             device = "/gpu:0"
-            allow_soft_placement = False
 
         with tf.device(device):
             input_seqs = Input(batch_shape=(None, None), dtype=tf.int8, name="input_seqs")
@@ -83,13 +82,13 @@ class GCNEmbedding(NeuralGraphEmbedding):
             print("embeddings", x)
 
             #     x = Dropout(0.5)(x)
-            x = GraphConvolution(128, self.support,
+            x = GraphConvolution(128, support=1,
                                  activation='relu',
                                  kernel_regularizer=l2(5e-4),
                                  use_bias=False)([x, labels_directed])
             x = Dropout(0.5)(x)
 
-            x = GraphConvolution(64, self.support, name="embedding_output",
+            x = GraphConvolution(64, support=1, name="embedding_output",
                                  activation='relu',
                                  use_bias=False)([x, labels_directed])
             x = Dropout(0.5)(x)
@@ -115,18 +114,17 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
     def learn_embedding(self, generator_train, generator_test, tensorboard=True, histogram_freq=0,
                         embeddings=False, early_stopping=False,
-                        multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
-                        edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0,
-                        **kwargs):
+                        epochs=50, validation_steps=None,
+                        seed=0, **kwargs):
         self.generator_train = generator_train
         self.generator_test = generator_test
         try:
-            self.hist = self.model.fit_generator(generator_train, epochs=self.epochs, shuffle=False,
+            self.hist = self.model.fit_generator(generator_train, epochs=epochs, shuffle=False,
                                                  validation_data=generator_test,
                                                  validation_steps=validation_steps,
                                                  callbacks=self.get_callbacks(early_stopping, tensorboard,
                                                                               histogram_freq, embeddings),
-                                                 use_multiprocessing=True, workers=8, **kwargs)
+                                                 use_multiprocessing=True, workers=8, verbose=2, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
 
@@ -156,7 +154,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
             x_test, node_labels = self.generator_test.load_data(return_node_names=True, y_label=self.y_label)
             if not os.path.exists(self.log_dir): os.makedirs(self.log_dir)
             with open(os.path.join(self.log_dir, "metadata.tsv"), 'w') as f:
-                np.savetxt(f, node_labels, fmt="%s")
+                np.savetxt(f, node_labels.reset_index(), fmt="%s")
                 f.close()
 
         self.tensorboard = TensorBoard(
