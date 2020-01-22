@@ -78,6 +78,8 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
             annotations_list.append(gene_info)
 
         self.annotations = pd.concat(annotations_list, join="inner", copy=True)
+        assert type(
+            self.annotations.index) != pd.MultiIndex, "Annotation index must be a pandas.Index type and not a MultiIndex."
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
         print("Annotation columns:", self.annotations.columns.tolist())
 
