@@ -113,11 +113,10 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
             source_genes_matched = set(self.nodes[modalities[0]]) & source_genes
             target_genes_matched = set(self.nodes[modalities[1]]) & target_genes
 
-            print("Adding edgelist with", len(source_genes), "total unique", modalities[0],
-                  "genes (source), but only matching", len(source_genes_matched), "nodes")
-
-            print("Adding edgelist with", len(target_genes), "total unique", modalities[1],
-                  "genes (target), but only matching", len(target_genes_matched), "nodes")
+            print(len(source_genes), "total unique", modalities[0],
+                  "genes (source), matching", len(source_genes_matched), "nodes with annotations")
+            print(len(target_genes), "total unique", modalities[1],
+                  "genes (target), matching", len(target_genes_matched), "nodes with annotations")
 
         if correlation_weights == False:
             self.G.add_edges_from(edgelist, type="d", source=modalities[0], target=modalities[1], database=database)
