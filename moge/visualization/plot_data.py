@@ -1,7 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
 from scipy.sparse import coo_matrix
 from scipy.sparse import issparse
+
 
 def bar_chart(results: dict, measures, title=None, bar_width=0.08, loc="best"):
     methods = list(results.keys())
@@ -76,19 +79,17 @@ def plot_coo_matrix(m):
     return ax
 
 
-import pandas as pd
-import plotly.graph_objects as go
-
-
 def heatmap(table, file_output=None, title=None, autosize=True, width=800, height=1000):
-    if type(table.columns) == pd.MultiIndex:
+    if ~hasattr(table, "columns"):
+        columns = None
+    elif type(table.columns) == pd.MultiIndex:
         columns = table.columns.to_series().apply(lambda x: '{0}-{1}'.format(*x))
     else:
         columns = table.columns
     fig = go.Figure(data=go.Heatmap(
         z=table,
-        x=columns,
-        y=table.index,
+        x=columns if columns else None,
+        y=table.index if hasattr(table, "index") else None,
         hoverongaps=False, ))
     fig.update_layout(
         title=title,
