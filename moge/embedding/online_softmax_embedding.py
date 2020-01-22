@@ -101,17 +101,16 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
     def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
                         multi_gpu=False, subsample=True, n_steps=500, validation_steps=None, edge_f=None,
                         is_weighted=False, no_python=False, rebuild_model=False, seed=0):
-        self.generator_train = OnlineTripletGenerator(network=network, batch_size=self.batch_size,
-                                                      maxlen=self.max_length, padding='post',
-                                                      truncating=self.truncating, replace=True, seed=seed,
-                                                      verbose=self.verbose) \
+        self.generator_train = OnlineTripletGenerator(network=network, batch_size=self.batch_size, replace=True,
+                                                      seed=seed, verbose=self.verbose, maxlen=self.max_length,
+                                                      padding='post', truncating=self.truncating) \
             if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
 
         if network_val is not None:
-            self.generator_val = OnlineTripletGenerator(network=network_val, batch_size=self.batch_size,
-                                                        maxlen=self.max_length, padding='post', truncating="post",
-                                                        replace=True, seed=seed, verbose=self.verbose) \
+            self.generator_val = OnlineTripletGenerator(network=network_val, batch_size=self.batch_size, replace=True,
+                                                        seed=seed, verbose=self.verbose, maxlen=self.max_length,
+                                                        padding='post', truncating="post") \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None

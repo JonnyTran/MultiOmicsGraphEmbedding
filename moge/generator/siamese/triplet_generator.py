@@ -15,15 +15,14 @@ def sparse_matrix_to_sparse_tensor(X):
 
 
 class SampledTripletDataGenerator(SampledDataGenerator):
-    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, compression_func="log", n_steps=100,
-                 directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
-                 tokenizer=None, replace=True, seed=0, verbose=True):
+    def __init__(self, network: HeterogeneousNetwork, variables=None, targets=None, weighted=False, batch_size=1,
+                 replace=True, seed=0, verbose=True, **kwargs):
         super(SampledTripletDataGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
+                                                          replace=replace, seed=seed, verbose=verbose,
                                                           compression_func=compression_func, n_steps=n_steps,
                                                           directed_proba=directed_proba, maxlen=maxlen, padding=padding,
                                                           truncating=truncating, sequence_to_matrix=sequence_to_matrix,
-                                                          tokenizer=tokenizer, replace=replace, seed=seed,
-                                                          verbose=verbose)
+                                                          tokenizer=tokenizer)
 
     def __getitem__(self, item):
         sampled_edges = []
@@ -95,13 +94,12 @@ class SampledTripletDataGenerator(SampledDataGenerator):
 
 
 class OnlineTripletGenerator(SampledDataGenerator):
-    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, compression_func="log", n_steps=100,
-                 directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
-                 tokenizer=None, replace=True, seed=0, verbose=True):
+    def __init__(self, network: HeterogeneousNetwork, variables=None, targets=None, weighted=False, batch_size=1,
+                 replace=True, seed=0, verbose=True, **kwargs):
         super(OnlineTripletGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
-                                                     maxlen=maxlen, padding=padding, truncating=truncating,
-                                                     sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
-                                                     replace=replace, seed=seed, verbose=verbose)
+                                                     replace=replace, seed=seed, verbose=verbose, maxlen=maxlen,
+                                                     padding=padding, truncating=truncating,
+                                                     sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer)
 
     def process_sampling_table(self, network):
         graph = nx.compose(network.G, network.G_u)
@@ -196,14 +194,12 @@ class OnlineTripletGenerator(SampledDataGenerator):
 
 
 class OnlineSoftmaxGenerator(OnlineTripletGenerator):
-    def __init__(self, network: HeterogeneousNetwork, weighted=False, batch_size=1, compression_func="log", n_steps=100,
-                 directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
-                 tokenizer=None, replace=True, seed=0, verbose=True):
-        super(OnlineSoftmaxGenerator, self).__init__(network, weighted=weighted, batch_size=batch_size, maxlen=maxlen,
-                                                     padding=padding,
+    def __init__(self, network: HeterogeneousNetwork, variables=None, targets=None, weighted=False, batch_size=1,
+                 replace=True, seed=0, verbose=True, **kwargs):
+        super(OnlineSoftmaxGenerator, self).__init__(network, weighted=weighted, batch_size=batch_size, replace=replace,
+                                                     seed=seed, verbose=verbose, maxlen=maxlen, padding=padding,
                                                      truncating=truncating, sequence_to_matrix=sequence_to_matrix,
-                                                     tokenizer=tokenizer,
-                                                     replace=replace, seed=seed, verbose=verbose)
+                                                     tokenizer=tokenizer)
 
     def __getdata__(self, sampled_nodes):
         X = {}

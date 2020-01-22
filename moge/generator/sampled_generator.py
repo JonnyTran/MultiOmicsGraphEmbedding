@@ -4,10 +4,7 @@ from moge.generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator):
-    def __init__(self, network, weighted=False, batch_size=1,
-                 compression_func="log", n_steps=100, directed_proba=1.0,
-                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None,
-                 replace=False, seed=0, verbose=True):
+    def __init__(self, network, compression_func="log", n_steps=100, directed_proba=1.0, **kwargs):
         """
 
         Args:
@@ -17,11 +14,7 @@ class SampledDataGenerator(DataGenerator):
         self.compression_func = compression_func
         self.n_steps = n_steps
         self.directed_proba = directed_proba
-        super(SampledDataGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
-                                                   replace=replace, seed=seed, verbose=verbose,
-                                                   maxlen=maxlen, padding=padding, truncating=truncating,
-                                                   sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer
-                                                   )
+        super(SampledDataGenerator, self).__init__(network=network, **kwargs)
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):

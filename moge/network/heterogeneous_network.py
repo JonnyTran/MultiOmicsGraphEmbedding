@@ -81,13 +81,6 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
         print("Annotation columns:", self.annotations.columns.tolist())
 
-        self.annotations['transcript_start'] = pd.to_numeric(
-            self.annotations['transcript_start'].str.split("|", expand=True)[0])
-        self.annotations['transcript_end'] = pd.to_numeric(
-            self.annotations['transcript_end'].str.split("|", expand=True)[0])
-        self.annotations['transcript_length'] = pd.to_numeric(
-            self.annotations['transcript_length'].str.split("|", expand=True)[0])
-
     def process_feature_tranformer(self):
         self.feature_transformer = {}
         for label in self.annotations.columns:

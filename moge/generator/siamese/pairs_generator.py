@@ -17,14 +17,14 @@ UNDIRECTED_NEG_EDGE = 'u_n'
 
 class PairsGenerator(DataGenerator):
 
-    def __init__(self, network, weighted=False, batch_size=1, neg_sampling_ratio=2, maxlen=1400, padding='post',
-                 truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True, seed=0, verbose=True):
+    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
+                 verbose=True, **kwargs):
         self.negative_sampling_ratio = neg_sampling_ratio
 
-        super(PairsGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size, maxlen=maxlen,
-                                             padding=padding, truncating=truncating,
-                                             sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
-                                             replace=replace, seed=seed, verbose=verbose, )
+        super(PairsGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size, replace=replace,
+                                             seed=seed, verbose=verbose, maxlen=maxlen, padding=padding,
+                                             truncating=truncating, sequence_to_matrix=sequence_to_matrix,
+                                             tokenizer=tokenizer)
         self.process_training_edges_data()
         self.process_negative_sampling_edges()
 
@@ -271,9 +271,8 @@ class PairsGenerator(DataGenerator):
 
 
 class SampledPairsGenerator(PairsGenerator):
-    def __init__(self, network, weighted=False, batch_size=1, neg_sampling_ratio=2, compression_func="log", n_steps=100,
-                 directed_proba=1.0, maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False,
-                 tokenizer=None, replace=True, seed=0, verbose=True):
+    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
+                 verbose=True, **kwargs):
         """
 
         Args:
@@ -298,10 +297,9 @@ class SampledPairsGenerator(PairsGenerator):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.directed_proba = directed_proba
         super(SampledPairsGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
-                                                    replace=replace, seed=seed, verbose=verbose,
-                                                    maxlen=maxlen, padding=padding, truncating=truncating,
-                                                    sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer
-                                                    )
+                                                    replace=replace, seed=seed, verbose=verbose, maxlen=maxlen,
+                                                    padding=padding, truncating=truncating,
+                                                    sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer)
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):

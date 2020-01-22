@@ -86,7 +86,8 @@ class SequenceTokenizer():
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
-    def __init__(self, network, weighted=False, batch_size=1, replace=True, seed=0, verbose=True, **kwargs):
+    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
+                 verbose=True, **kwargs):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
         each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
@@ -110,7 +111,11 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
         self.annotations = network.annotations
         self.transcripts_to_sample = network.annotations["Transcript sequence"].copy()
-        self.node_list = self.annotations[self.annotations["Transcript sequence"].notnull()].index.tolist()
+
+        if variables and targets:
+            self.variables = variables
+            self.targets = targets
+            self.node_list = self.annotations[self.annotations["Transcript sequence"].notnull()].index.tolist()
         self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
 
         np.random.seed(seed)

@@ -99,10 +99,10 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
         if network_val is not None:
             self.generator_val = SampledTripletDataGenerator(network=network_val, weighted=self.weighted,
-                                                             batch_size=self.batch_size, maxlen=self.max_length,
+                                                             batch_size=self.batch_size, replace=True, seed=seed,
+                                                             verbose=self.verbose, maxlen=self.max_length,
                                                              padding='post', truncating="post",
-                                                             tokenizer=generator_train.tokenizer, replace=True,
-                                                             seed=seed, verbose=self.verbose) \
+                                                             tokenizer=generator_train.tokenizer) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
@@ -126,9 +126,9 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
     def get_training_data_generator(self, network, n_steps=250, seed=0):
         if not hasattr(self, "generator_train"):
             self.generator_train = SampledTripletDataGenerator(network=network, weighted=self.weighted,
-                                                               batch_size=self.batch_size, maxlen=self.max_length,
-                                                               padding='post', truncating=self.truncating, replace=True,
-                                                               seed=seed, verbose=self.verbose)
+                                                               batch_size=self.batch_size, replace=True, seed=seed,
+                                                               verbose=self.verbose, maxlen=self.max_length,
+                                                               padding='post', truncating=self.truncating)
         else:
             return self.generator_train
         self.node_list = self.generator_train.node_list

@@ -3,7 +3,7 @@ from collections import OrderedDict
 import numpy as np
 
 from .sampled_generator import SampledDataGenerator
-
+from collections import OrderedDict
 
 class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=500,
