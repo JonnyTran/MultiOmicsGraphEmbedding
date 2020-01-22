@@ -115,7 +115,8 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         if variables or targets:
             self.variables = variables
             self.targets = targets
-            self.node_list = self.annotations[self.annotations["Transcript sequence"].notnull()].index.tolist()
+
+        self.node_list = self.annotations[self.annotations["Transcript sequence"].notnull()].index.tolist()
         self.node_list = list(OrderedDict.fromkeys(self.node_list))  # Remove duplicates
 
         np.random.seed(seed)
