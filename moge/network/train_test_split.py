@@ -116,7 +116,7 @@ def mask_test_edges_by_nodes(network, node_list,
     test_nodes = []
     for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
-        test_nodes.extend(random.sample(nodes, int(test_nodes_size * node_type_ratio)))
+        test_nodes.extend(random.sample(list(nodes), int(test_nodes_size * node_type_ratio)))
     test_edges = [(u, v, d) for u, v, d in g.edges(test_nodes, data=True)]
 
     val_nodes = []
