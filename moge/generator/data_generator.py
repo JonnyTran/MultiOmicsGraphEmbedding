@@ -112,7 +112,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         self.annotations = network.annotations
         self.transcripts_to_sample = network.annotations["Transcript sequence"].copy()
 
-        if variables and targets:
+        if variables or targets:
             self.variables = variables
             self.targets = targets
             self.node_list = self.annotations[self.annotations["Transcript sequence"].notnull()].index.tolist()
