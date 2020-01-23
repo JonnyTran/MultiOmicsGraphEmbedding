@@ -3,7 +3,7 @@ from collections import OrderedDict
 import numpy as np
 
 from .sampled_generator import SampledDataGenerator
-from collections import OrderedDict
+
 
 class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=500,
@@ -37,7 +37,7 @@ class SubgraphGenerator(SampledDataGenerator):
 
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
-        X["labels_directed"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
+        X["labels_undirected"] = self.network.get_graph_laplacian(edge_types=["u"], node_list=sampled_nodes)
 
         for variable in self.variables:
             labels_vector = self.annotations.loc[sampled_nodes, variable]

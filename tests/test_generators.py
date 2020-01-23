@@ -17,19 +17,19 @@ def get_luad_data_network() -> HeterogeneousNetwork:
                                    multi_omics_data=luad_data)
     network.import_edgelist_file(
         file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/GE/lmn_train.BioGRID.interactions.edgelist",
-        is_directed=True)
+        directed=True)
 
     network.import_edgelist_file(
         file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/MIR/lmn_train.miRTarBase.interactions.edgelist",
-        is_directed=True)
+        directed=True)
 
     network.import_edgelist_file(
         file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/LNC/lmn_train.lncBase.interactions.edgelist",
-        is_directed=True)
+        directed=True)
 
     network.import_edgelist_file(
         file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/LNC/lmn_train.lncrna2target.interactions.edgelist",
-        is_directed=True)
+        directed=True)
     return network
 
 

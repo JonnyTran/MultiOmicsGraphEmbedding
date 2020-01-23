@@ -2,7 +2,6 @@ from collections import OrderedDict
 
 import networkx as nx
 import scipy.sparse as sp
-from scipy import sparse
 from sklearn import preprocessing
 
 from moge.evaluation.utils import sample_edges
@@ -104,48 +103,15 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
                 features = self.annotations.loc[self.node_list, label].dropna()
                 self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
 
-    def add_directed_edges(self, edgelist, modalities, database,
-                           correlation_weights=False, threshold=None):
-        if not (modalities is None):
-            source_genes = set([edge[0] for edge in edgelist])
-            target_genes = set([edge[1] for edge in edgelist])
-
-            source_genes_matched = set(self.nodes[modalities[0]]) & source_genes
-            target_genes_matched = set(self.nodes[modalities[1]]) & target_genes
-
-            print(len(source_genes), "total unique", modalities[0],
-                  "genes (source), matching", len(source_genes_matched), "nodes with annotations")
-            print(len(target_genes), "total unique", modalities[1],
-                  "genes (target), matching", len(target_genes_matched), "nodes with annotations")
-
-        if correlation_weights == False:
-            self.G.add_edges_from(edgelist, type="d", source=modalities[0], target=modalities[1], database=database)
-            print(len(edgelist), "edges added.")
+    def add_edges(self, edgelist, directed, **kwargs):
+        if directed:
+            self.G.add_edges_from(edgelist, type="d", **kwargs)
         else:
-            node_list = [node for node in self.node_list if
-                         node in self.nodes[modalities[0]] or node in self.nodes[modalities[1]]]
-            correlation_df = compute_expression_correlation_dists(self.multi_omics_data, modalities=modalities,
-                                                                  node_list=node_list, absolute_corr=True,
-                                                                  return_distance=False,
-                                                                  squareform=True)
+            self.G_u.add_edges_from(edgelist, type="u", **kwargs)
+        print(len(edgelist), "edges added.")
 
-            edgelist_weighted = [(edge[0], edge[1], {"weight": correlation_df.loc[edge[0], edge[1]]}) for edge in
-                                 edgelist if
-                                 edge[0] in node_list and edge[1] in node_list]
-
-            if threshold is not None:
-                no_edges = len(edgelist_weighted)
-                edgelist_weighted = [(u, v, d) for u, v, d in edgelist_weighted if d["weight"] >= threshold]
-                print("Filtered out", no_edges, "-", len(edgelist_weighted), "edges by correlation weight.")
-
-            self.G.add_edges_from(edgelist_weighted, type="d", source=modalities[0], target=modalities[1],
-                                  database=database)
-            print(len(edgelist_weighted),
-                  "weighted (directed interaction) edges added. Note: only added edges that are in the modalities:",
-                  modalities)
-
-    def import_edgelist_file(self, file, is_directed):
-        if is_directed:
+    def import_edgelist_file(self, file, directed):
+        if directed:
             self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.DiGraph()).edges(data=True))
         else:
             self.G_u.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
@@ -202,24 +168,24 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
 
         if type(edge_types) == list:
             if "d" in edge_types:
-                is_directed = True
+                directed = True
             elif "u" in edge_types or "u_n" in edge_types:
-                is_directed = False
+                directed = False
         elif type(edge_types) == str:
             if "d" == edge_types:
-                is_directed = True
+                directed = True
             elif "u" == edge_types or "u_n" == edge_types:
-                is_directed = False
+                directed = False
 
-        if databases is not None and is_directed:
+        if databases is not None and directed:
             edge_list = [(u, v, d) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
                          'database' in d and d['database'] in databases]
             adj = nx.directed_laplacian_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
-        elif is_directed:
+        elif directed:
             adj = nx.directed_laplacian_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
-        elif not is_directed and (("u" in edge_types and "u_n" in edge_types) or "u" in edge_types):
+        elif not directed and (("u" in edge_types and "u_n" in edge_types) or "u" in edge_types):
             adj = nx.normalized_laplacian_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
-        elif not is_directed and ("u_n" == edge_types or "u_n" in edge_types):
+        elif not directed and ("u_n" == edge_types or "u_n" in edge_types):
             edge_list = [(u, v, d) for u, v, d in self.G_u.edges(nbunch=node_list, data=True) if
                          d['type'] in edge_types]
             adj = nx.normalized_laplacian_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
