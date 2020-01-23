@@ -187,7 +187,7 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
         elif directed:
             adj = nx.directed_laplacian_matrix(graph.subgraph(nodes=node_list), nodelist=node_list)
         elif not directed:
-            adj = nx.normalized_laplacian_matrix(graph.subgraph(nodes=node_list), nodelist=node_list)
+            adj = nx.normalized_laplacian_matrix(graph.subgraph(nodes=node_list), nodelist=node_list).toarray()
 
         return adj
 
