@@ -11,12 +11,19 @@ class NetworkTrainTestSplit():
         self.test_network = None
         self.val_network = None
 
-    def split_train_test_edges(self,
+    def split_train_test_edges(self, directed: bool,
                                node_list=None,
                                databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                                test_frac=.05, val_frac=.01, seed=0, verbose=False):
-        print("full_network", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
-        G_train = self.G.copy()
+        if directed:
+            print("full_network", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
+        else:
+            print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
+
+        if directed:
+            G_train = self.G.copy()
+        else:
+            G_train = self.G_u.copy()
 
         test_edges, val_edges = mask_test_edges(self,
                                                 node_list=node_list,
@@ -31,18 +38,32 @@ class NetworkTrainTestSplit():
 
         self.test_network = copy.copy(self)
         self.test_network.annotations = self.annotations
-        self.test_network.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
+        if directed:
+            self.test_network.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
+        else:
+            self.test_network.G_u = nx.from_edgelist(edgelist=test_edges, create_using=nx.Graph)
 
         self.val_network = copy.copy(self)
         self.val_network.annotations = self.annotations
-        self.val_network.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
+        if directed:
+            self.val_network.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
+        else:
+            self.val_network.G_u = nx.from_edgelist(edgelist=val_edges, create_using=nx.Graph)
 
-        print("train_network", self.train_network.G.number_of_nodes(),
-              self.train_network.G.number_of_edges()) if verbose else None
-        print("test_network", self.test_network.G.number_of_nodes(),
-              self.test_network.G.number_of_edges()) if verbose else None
-        print("val_network", self.val_network.G.number_of_nodes(),
-              self.val_network.G.number_of_edges()) if verbose else None
+        if directed:
+            print("train_network", self.train_network.G.number_of_nodes(),
+                  self.train_network.G.number_of_edges()) if verbose else None
+            print("test_network", self.test_network.G.number_of_nodes(),
+                  self.test_network.G.number_of_edges()) if verbose else None
+            print("val_network", self.val_network.G.number_of_nodes(),
+                  self.val_network.G.number_of_edges()) if verbose else None
+        else:
+            print("train_network", self.train_network.G_u.number_of_nodes(),
+                  self.train_network.G_u.number_of_edges()) if verbose else None
+            print("test_network", self.test_network.G.number_of_nodes(),
+                  self.test_network.G_u.number_of_edges()) if verbose else None
+            print("val_network", self.val_network.G.number_of_nodes(),
+                  self.val_network.G_u.number_of_edges()) if verbose else None
 
     def split_train_test_nodes(self,
                                node_list,
