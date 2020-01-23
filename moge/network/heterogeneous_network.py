@@ -138,7 +138,7 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
                 is_directed = False
 
         if databases is not None and is_directed:
-            edge_list = [(u, v, d) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
+            edge_list = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
                          'database' in d and d['database'] in databases]
             adj = nx.adjacency_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
         elif is_directed:
@@ -148,7 +148,7 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
         elif not is_directed and (("u" in edge_types and "u_n" in edge_types) or "u" in edge_types):
             adj = nx.adjacency_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
         elif not is_directed and ("u_n" == edge_types or "u_n" in edge_types):
-            edge_list = [(u, v, d) for u, v, d in self.G_u.edges(nbunch=node_list, data=True) if
+            edge_list = [(u, v) for u, v, d in self.G_u.edges(nbunch=node_list, data=True) if
                          d['type'] in edge_types]
             adj = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
 
@@ -168,26 +168,24 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
 
         if "d" in edge_types:
             directed = True
-            graph = self.G
         elif "u" in edge_types:
             directed = False
-            graph = self.G_u
         else:
             raise Exception("edge_types must be either 'd' or 'u'")
 
         if databases is not None:
             if directed:
-                edge_list = [(u, v, d) for u, v, d in graph.edges(nbunch=node_list, data=True) if
+                edge_list = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
                              'database' in d and d['database'] in databases]
                 adj = nx.directed_laplacian_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
             else:
-                edge_list = [(u, v, d) for u, v, d in graph.edges(nbunch=node_list, data=True) if
+                edge_list = [(u, v) for u, v, d in self.G_u.edges(nbunch=node_list, data=True) if
                              d['type'] in edge_types]
-                adj = nx.directed_laplacian_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
+                adj = nx.normalized_laplacian_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
         elif directed:
-            adj = nx.directed_laplacian_matrix(graph.subgraph(nodes=node_list), nodelist=node_list)
+            adj = nx.directed_laplacian_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
         elif not directed:
-            adj = nx.normalized_laplacian_matrix(graph.subgraph(nodes=node_list), nodelist=node_list).toarray()
+            adj = nx.normalized_laplacian_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
 
         return adj
 
@@ -209,8 +207,8 @@ class HeterogeneousNetwork(NetworkTrainTestSplit):
             pos_adj.count_nonzero(), sample_neg_count, Ed_count)
         return pos_adj
 
-    def get_subgraph(self, modalities=["MIR", "LNC", "GE"], edge_type="d"):
-        if modalities==None:
+    def get_subgraph(self, modalities=["MicroRNA", "LncRNA", "MessengerRNA"], edge_type="d"):
+        if modalities == None:
             modalities = self.modalities
 
         nodes = []
