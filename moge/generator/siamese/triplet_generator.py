@@ -20,7 +20,7 @@ class SampledTripletDataGenerator(SampledDataGenerator):
         super(SampledTripletDataGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
                                                           replace=replace, seed=seed, verbose=verbose,
                                                           compression_func=compression_func, n_steps=n_steps,
-                                                          directed_proba=directed_proba, maxlen=maxlen, padding=padding,
+                                                          directed=directed_proba, maxlen=maxlen, padding=padding,
                                                           truncating=truncating, sequence_to_matrix=sequence_to_matrix,
                                                           tokenizer=tokenizer)
 

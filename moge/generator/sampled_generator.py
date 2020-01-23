@@ -4,7 +4,7 @@ from moge.generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator):
-    def __init__(self, network, compression_func="log", n_steps=100, directed_proba=1.0, **kwargs):
+    def __init__(self, network, compression_func="log", n_steps=100, directed=True, **kwargs):
         """
 
         Args:
@@ -13,7 +13,7 @@ class SampledDataGenerator(DataGenerator):
         """
         self.compression_func = compression_func
         self.n_steps = n_steps
-        self.directed_proba = directed_proba
+        self.directed = directed
         super(SampledDataGenerator, self).__init__(network=network, **kwargs)
         self.process_sampling_table(network)
 
@@ -21,7 +21,10 @@ class SampledDataGenerator(DataGenerator):
         # graph = nx.compose(network.G, network.G_u)
         self.edge_dict = {}
         self.edge_counts_dict = {}
-        self.node_degrees = {node: degree for node, degree in network.G.degree(self.node_list)}
+        if self.directed:
+            self.node_degrees = {node: degree for node, degree in network.G.degree(self.node_list)}
+        else:
+            self.node_degrees = {node: degree for node, degree in network.G_u.degree(self.node_list)}
 
         self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
                                   self.node_list]
