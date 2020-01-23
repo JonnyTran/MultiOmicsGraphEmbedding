@@ -65,7 +65,7 @@ class NetworkTrainTestSplit():
             print("val_network", self.val_network.G.number_of_nodes(),
                   self.val_network.G_u.number_of_edges()) if verbose else None
 
-    def split_train_test_nodes(self,
+    def split_train_test_nodes(self, directed: bool,
                                node_list,
                                test_frac=.05, val_frac=.01, seed=0, verbose=False):
         """
@@ -81,34 +81,59 @@ class NetworkTrainTestSplit():
         :param verbose:
         :return: network, val_edges_dict, test_edges_dict
         """
-        print("full_network", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
+        if directed:
+            print("full_network", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
+        else:
+            print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
+
         network_train, test_edges, val_edges, \
-        test_nodes, val_nodes = mask_test_edges_by_nodes(self, node_list,
+        test_nodes, val_nodes = mask_test_edges_by_nodes(network=self, directed=directed, node_list=node_list,
                                                          test_frac=test_frac, val_frac=val_frac, seed=seed,
                                                          verbose=verbose)
         self.train_network = copy.copy(self)
         self.train_network.annotations = self.annotations
         # self.train_network.node_list = [node for node in self.node_list if node in network_train.nodes()]
-        self.train_network.G = network_train
+        if directed:
+            self.train_network.G = network_train
+        else:
+            self.train_network.G_u = network_train
 
         self.test_network = copy.copy(self)
         self.test_network.annotations = self.annotations
-        self.test_network.G = nx.DiGraph()
-        self.test_network.G.add_nodes_from(test_nodes)
-        self.test_network.G.add_edges_from(test_edges)
+        if directed:
+            self.test_network.G = nx.DiGraph()
+            self.test_network.G.add_nodes_from(test_nodes)
+            self.test_network.G.add_edges_from(test_edges)
+        else:
+            self.test_network.G_u = nx.Graph()
+            self.test_network.G_u.add_nodes_from(test_nodes)
+            self.test_network.G_u.add_edges_from(test_edges)
 
         self.val_network = copy.copy(self)
         self.val_network.annotations = self.annotations
-        self.val_network.G = nx.DiGraph()
-        self.val_network.G.add_nodes_from(val_nodes)
-        self.val_network.G.add_edges_from(val_edges)
+        if directed:
+            self.val_network.G = nx.DiGraph()
+            self.val_network.G.add_nodes_from(val_nodes)
+            self.val_network.G.add_edges_from(val_edges)
+        else:
+            self.val_network.G_u = nx.Graph()
+            self.val_network.G_u.add_nodes_from(val_nodes)
+            self.val_network.G_u.add_edges_from(val_edges)
 
-        print("train_network", self.train_network.G.number_of_nodes(),
-              self.train_network.G.number_of_edges()) if verbose else None
-        print("test_network", self.test_network.G.number_of_nodes(),
-              self.test_network.G.number_of_edges()) if verbose else None
-        print("val_network", self.val_network.G.number_of_nodes(),
-              self.val_network.G.number_of_edges()) if verbose else None
+        if directed:
+            print("train_network", self.train_network.G.number_of_nodes(),
+                  self.train_network.G.number_of_edges()) if verbose else None
+            print("test_network", self.test_network.G.number_of_nodes(),
+                  self.test_network.G.number_of_edges()) if verbose else None
+            print("val_network", self.val_network.G.number_of_nodes(),
+                  self.val_network.G.number_of_edges()) if verbose else None
+        else:
+            print("train_network", self.train_network.G_u.number_of_nodes(),
+                  self.train_network.G_u.number_of_edges()) if verbose else None
+            print("test_network", self.test_network.G.number_of_nodes(),
+                  self.test_network.G_u.number_of_edges()) if verbose else None
+            print("val_network", self.val_network.G.number_of_nodes(),
+                  self.val_network.G_u.number_of_edges()) if verbose else None
 
     def get_train_generator(self, generator, **kwargs):
         kwargs['network'] = self.train_network
@@ -119,10 +144,13 @@ class NetworkTrainTestSplit():
         return generator(**kwargs)
 
 
-def mask_test_edges_by_nodes(network, node_list,
+def mask_test_edges_by_nodes(network, directed, node_list,
                              test_frac=.1, val_frac=.05,
                              seed=0, verbose=False):
-    g = network.G.copy()
+    if directed:
+        g = network.G.copy()
+    else:
+        g = network.G_u.copy()
     nodes_dict = network.nodes
 
     g.remove_nodes_from(list(nx.isolates(g)))
