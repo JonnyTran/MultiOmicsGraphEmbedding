@@ -36,7 +36,7 @@ class SubgraphGenerator(SampledDataGenerator):
             sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
 
         X = {}
-        X["input_1"] = self.get_sequence_data(sampled_nodes, variable_length=False)
+        X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         X["labels_undirected"] = self.network.get_graph_laplacian(edge_types=["u"], node_list=sampled_nodes)
 
         for variable in self.variables:
