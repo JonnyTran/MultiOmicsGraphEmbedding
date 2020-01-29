@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 from sklearn import preprocessing
 
-from moge.network.heterogeneous_network import EPSILON
 from moge.network.omics_distance import compute_expression_correlation_dists, compute_annotation_affinities
 
+EPSILON = 1e-16
 
 class AttributedNetwork():
     def __init__(self, multi_omics_data, process_annotations=False) -> None:
