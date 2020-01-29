@@ -1,8 +1,8 @@
 from keras.layers import Layer
 from keras.optimizers import Adam
 
-from moge.embedding.siamese_graph_embedding import *
-from moge.embedding.siamese_triplet_online_embedding import SiameseOnlineTripletGraphEmbedding
+from moge.embedding.siamese.siamese_graph_embedding import *
+from moge.embedding.siamese.siamese_triplet_online_embedding import SiameseOnlineTripletGraphEmbedding
 from moge.generator.siamese.triplet_generator import OnlineTripletGenerator
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 

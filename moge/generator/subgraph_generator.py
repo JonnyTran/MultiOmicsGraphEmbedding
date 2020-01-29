@@ -13,20 +13,14 @@ class SubgraphGenerator(SampledDataGenerator):
         """
         Samples a batch subnetwork for classification task.
 
-        :param network:
-        :param variables:
-        :param targets:
-        :param weighted:
+        :param network: a HeterogeneousNetwork object
+        :param variables: list of annotation column names as features
+        :param targets: list of annotation column names to prediction target
         :param batch_size: number of nodes to sample each batch
-        :param compression_func:
+        :param compression_func: {"log", "sqrt", "linear"}
         :param n_steps:
         :param directed:
         :param maxlen:
-        :param padding:
-        :param truncating:
-        :param sequence_to_matrix:
-        :param tokenizer:
-        :param replace:
         :param seed:
         :param verbose:
         """
