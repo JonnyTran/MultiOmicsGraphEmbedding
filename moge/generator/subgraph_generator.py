@@ -6,14 +6,34 @@ from .sampled_generator import SampledDataGenerator
 
 
 class SubgraphGenerator(SampledDataGenerator):
-    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=500,
+    def __init__(self, network, variables=None, targets=None, batch_size=500,
                  compression_func="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
                  seed=0, verbose=True):
+        """
+        Samples a batch subnetwork for classification task.
+
+        :param network:
+        :param variables:
+        :param targets:
+        :param weighted:
+        :param batch_size: number of nodes to sample each batch
+        :param compression_func:
+        :param n_steps:
+        :param directed:
+        :param maxlen:
+        :param padding:
+        :param truncating:
+        :param sequence_to_matrix:
+        :param tokenizer:
+        :param replace:
+        :param seed:
+        :param verbose:
+        """
         self.variables = variables
         self.targets = targets
 
-        super(SubgraphGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
+        super(SubgraphGenerator, self).__init__(network=network, batch_size=batch_size,
                                                 compression_func=compression_func, n_steps=n_steps,
                                                 directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
@@ -37,7 +57,7 @@ class SubgraphGenerator(SampledDataGenerator):
 
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
-        X["labels_undirected"] = self.network.get_graph_laplacian(edge_types=["u"], node_list=sampled_nodes)
+        X["labels_undirected"] = self.network.get_graph_laplacian(edge_types=["u"], node_list=sampled_nodes).toarray()
 
         for variable in self.variables:
             labels_vector = self.annotations.loc[sampled_nodes, variable]
