@@ -7,18 +7,19 @@ import numpy as np
 
 class NetworkTrainTestSplit():
     def __init__(self) -> None:
-        self.train_network = None
-        self.test_network = None
-        self.val_network = None
+        self.training = None
+        self.testing = None
+        self.validation = None
 
     def split_train_test_edges(self, directed: bool,
                                node_list=None,
                                databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                                test_frac=.05, val_frac=.01, seed=0, verbose=False):
         if directed:
-            print("full_network", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
+            print("full_network directed", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
         else:
-            print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
+            print("full_network undirected", self.G_u.number_of_nodes(),
+                  self.G_u.number_of_edges()) if verbose else None
 
         if directed:
             G_train = self.G.copy()
@@ -32,41 +33,45 @@ class NetworkTrainTestSplit():
         G_train.remove_edges_from(test_edges)
         G_train.remove_edges_from(val_edges)
 
-        self.train_network = copy.copy(self)
-        self.train_network.annotations = self.annotations
-        self.train_network.G = G_train
-
-        self.test_network = copy.copy(self)
-        self.test_network.annotations = self.annotations
-        if directed:
-            self.test_network.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
-        else:
-            self.test_network.G_u = nx.from_edgelist(edgelist=test_edges, create_using=nx.Graph)
-
-        self.val_network = copy.copy(self)
-        self.val_network.annotations = self.annotations
-        if directed:
-            self.val_network.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
-        else:
-            self.val_network.G_u = nx.from_edgelist(edgelist=val_edges, create_using=nx.Graph)
+        self.training = copy.copy(self)
+        self.training.annotations = self.annotations
 
         if directed:
-            print("train_network", self.train_network.G.number_of_nodes(),
-                  self.train_network.G.number_of_edges()) if verbose else None
-            print("test_network", self.test_network.G.number_of_nodes(),
-                  self.test_network.G.number_of_edges()) if verbose else None
-            print("val_network", self.val_network.G.number_of_nodes(),
-                  self.val_network.G.number_of_edges()) if verbose else None
+            self.training.G = G_train
         else:
-            print("train_network", self.train_network.G_u.number_of_nodes(),
-                  self.train_network.G_u.number_of_edges()) if verbose else None
-            print("test_network", self.test_network.G.number_of_nodes(),
-                  self.test_network.G_u.number_of_edges()) if verbose else None
-            print("val_network", self.val_network.G.number_of_nodes(),
-                  self.val_network.G_u.number_of_edges()) if verbose else None
+            self.training.G_u = G_train
 
-    def split_train_test_nodes(self, directed: bool,
-                               node_list,
+        self.testing = copy.copy(self)
+        self.testing.annotations = self.annotations
+        if directed:
+            self.testing.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
+        else:
+            self.testing.G_u = nx.from_edgelist(edgelist=test_edges, create_using=nx.Graph)
+
+        if val_frac > 0:
+            self.validation = copy.copy(self)
+            self.validation.annotations = self.annotations
+            if directed:
+                self.validation.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
+            else:
+                self.validation.G_u = nx.from_edgelist(edgelist=val_edges, create_using=nx.Graph)
+
+        if directed:
+            print("train_network", self.training.G.number_of_nodes(),
+                  self.training.G.number_of_edges()) if verbose else None
+            print("test_network", self.testing.G.number_of_nodes(),
+                  self.testing.G.number_of_edges()) if verbose else None
+            print("val_network", self.validation.G.number_of_nodes(),
+                  self.validation.G.number_of_edges()) if verbose and val_frac > 0 else None
+        else:
+            print("train_network", self.training.G_u.number_of_nodes(),
+                  self.training.G_u.number_of_edges()) if verbose else None
+            print("test_network", self.testing.G.number_of_nodes(),
+                  self.testing.G_u.number_of_edges()) if verbose else None
+            print("val_network", self.validation.G.number_of_nodes(),
+                  self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
+
+    def split_train_test_nodes(self, directed: bool, node_list,
                                test_frac=.05, val_frac=.01, seed=0, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
@@ -90,57 +95,61 @@ class NetworkTrainTestSplit():
         test_nodes, val_nodes = mask_test_edges_by_nodes(network=self, directed=directed, node_list=node_list,
                                                          test_frac=test_frac, val_frac=val_frac, seed=seed,
                                                          verbose=verbose)
-        self.train_network = copy.copy(self)
-        self.train_network.annotations = self.annotations
-        # self.train_network.node_list = [node for node in self.node_list if node in network_train.nodes()]
+        self.training = copy.copy(self)
+        self.training.annotations = self.annotations
+        self.training.nodelist = [node for node in self.node_list if node in network_train.nodes()]
         if directed:
-            self.train_network.G = network_train
+            self.training.G = network_train
         else:
-            self.train_network.G_u = network_train
+            self.training.G_u = network_train
 
-        self.test_network = copy.copy(self)
-        self.test_network.annotations = self.annotations
+        # Test network
+        self.testing = copy.copy(self)
+        self.testing.annotations = self.annotations
+        self.testing.nodelist = test_nodes
         if directed:
-            self.test_network.G = nx.DiGraph()
-            self.test_network.G.add_nodes_from(test_nodes)
-            self.test_network.G.add_edges_from(test_edges)
+            self.testing.G = nx.DiGraph()
+            self.testing.G.add_nodes_from(test_nodes)
+            self.testing.G.add_edges_from(test_edges)
         else:
-            self.test_network.G_u = nx.Graph()
-            self.test_network.G_u.add_nodes_from(test_nodes)
-            self.test_network.G_u.add_edges_from(test_edges)
+            self.testing.G_u = nx.Graph()
+            self.testing.G_u.add_nodes_from(test_nodes)
+            self.testing.G_u.add_edges_from(test_edges)
 
-        self.val_network = copy.copy(self)
-        self.val_network.annotations = self.annotations
-        if directed:
-            self.val_network.G = nx.DiGraph()
-            self.val_network.G.add_nodes_from(val_nodes)
-            self.val_network.G.add_edges_from(val_edges)
-        else:
-            self.val_network.G_u = nx.Graph()
-            self.val_network.G_u.add_nodes_from(val_nodes)
-            self.val_network.G_u.add_edges_from(val_edges)
+        if val_frac > 0:
+            self.validation = copy.copy(self)
+            self.validation.annotations = self.annotations
+            self.validation.nodelist = val_nodes
+            if directed:
+                self.validation.G = nx.DiGraph()
+                self.validation.G.add_nodes_from(val_nodes)
+                self.validation.G.add_edges_from(val_edges)
+            else:
+                self.validation.G_u = nx.Graph()
+                self.validation.G_u.add_nodes_from(val_nodes)
+                self.validation.G_u.add_edges_from(val_edges)
 
         if directed:
-            print("train_network", self.train_network.G.number_of_nodes(),
-                  self.train_network.G.number_of_edges()) if verbose else None
-            print("test_network", self.test_network.G.number_of_nodes(),
-                  self.test_network.G.number_of_edges()) if verbose else None
-            print("val_network", self.val_network.G.number_of_nodes(),
-                  self.val_network.G.number_of_edges()) if verbose else None
+            print("train_network", self.training.G.number_of_nodes(),
+                  self.training.G.number_of_edges()) if verbose else None
+            print("test_network", self.testing.G.number_of_nodes(),
+                  self.testing.G.number_of_edges()) if verbose else None
+            print("val_network", self.validation.G.number_of_nodes(),
+                  self.validation.G.number_of_edges()) if verbose and val_frac > 0 else None
         else:
-            print("train_network", self.train_network.G_u.number_of_nodes(),
-                  self.train_network.G_u.number_of_edges()) if verbose else None
-            print("test_network", self.test_network.G.number_of_nodes(),
-                  self.test_network.G_u.number_of_edges()) if verbose else None
-            print("val_network", self.val_network.G.number_of_nodes(),
-                  self.val_network.G_u.number_of_edges()) if verbose else None
+            print("train_network", self.training.G_u.number_of_nodes(),
+                  self.training.G_u.number_of_edges()) if verbose else None
+            print("test_network", self.testing.G.number_of_nodes(),
+                  self.testing.G_u.number_of_edges()) if verbose else None
+            print("val_network", self.validation.G.number_of_nodes(),
+                  self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
 
     def get_train_generator(self, generator, **kwargs):
-        kwargs['network'] = self.train_network
+        kwargs['network'] = self.training
         return generator(**kwargs)
 
     def get_test_generator(self, generator, **kwargs):
-        kwargs['network'] = self.test_network
+        kwargs['network'] = self.testing
         return generator(**kwargs)
 
 
@@ -160,22 +169,23 @@ def mask_test_edges_by_nodes(network, directed, node_list,
     test_nodes_size = int(len(node_list) * test_frac)
     val_nodes_size = int(len(node_list) * val_frac)
 
-    # Sample nodes then create a set of edges induced by the sampled nodes
     random.seed(seed)
+    # Sample nodes then create a set of edges induced by the sampled nodes
     test_nodes = []
     for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         test_nodes.extend(random.sample(list(nodes), int(test_nodes_size * node_type_ratio)))
-    test_edges = [(u, v, d) for u, v, d in g.edges(test_nodes, data=True)]
+    test_edges = [(u, v, d) for u, v, d in g.edges(test_nodes, data=True) if (u in test_nodes and v in test_nodes)]
+    g.remove_nodes_from(test_nodes)
+    print("test nodes", len(test_nodes), ", edges", len(test_edges))
 
     val_nodes = []
     for node_type, nodes in nodes_dict.items():
         node_type_ratio = len(nodes) / len(node_list)
         val_nodes.extend(random.sample(list(nodes), int(val_nodes_size * node_type_ratio)))
-    val_edges = [(u, v, d) for u, v, d in g.edges(val_nodes, data=True)]
-
-    g.remove_nodes_from(test_nodes)
+    val_edges = [(u, v, d) for u, v, d in g.edges(val_nodes, data=True) if (u in val_nodes and v in val_nodes)]
     g.remove_nodes_from(val_nodes)
+    print("val nodes", len(val_nodes), ", edges", len(val_edges))
 
     print('removed', no_of_edges_before - g.number_of_edges(), "edges, and ",
           no_of_nodes_before - g.number_of_nodes(), "nodes.") if verbose else None
