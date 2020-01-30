@@ -1,9 +1,6 @@
 import networkx as nx
 import plotly.express as px
-import plotly.graph_objects as go
 from fa2 import ForceAtlas2
-
-px.scatter()
 
 forceatlas2 = ForceAtlas2(
     # Behavior alternatives
@@ -27,7 +24,7 @@ forceatlas2 = ForceAtlas2(
     verbose=False)
 
 
-def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", pos=None, iterations=100):
+def graph_viz(g: nx.Graph, nodelist: list, annotations, labels=None, title="Graph", pos=None, iterations=100):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
 
@@ -40,39 +37,35 @@ def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", pos=None,
         Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
         Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
 
-    edge_trace = go.Scatter(x=Xed,
-                            y=Yed,
-                            mode='lines',
-                            line=dict(color='rgb(210,210,210)', width=1),
-                            hoverinfo='none'
-                            )
-    # node_trace = go.Scatter(x=Xv,
-    #                    y=Yv,
-    #                    mode='markers',
-    #                    text=nodelist,
-    #                    marker_color=labels if labels is not None else None,
-    #                    )
-    node_trace = go.Scatter(
-        x=Xv, y=Yv,
-        mode='markers',
-        hoverinfo='text',
-        marker=dict(
-            showscale=True,
-            # colorscale options
-            # 'Greys' | 'YlGnBu' | 'Greens' | 'YlOrRd' | 'Bluered' | 'RdBu' |
-            # 'Reds' | 'Blues' | 'Picnic' | 'Rainbow' | 'Portland' | 'Jet' |
-            # 'Hot' | 'Blackbody' | 'Earth' | 'Electric' | 'Viridis' |
-            colorscale='YlGnBu',
-            reversescale=True,
-            color=labels if labels is not None else None,
-            size=10,
-            colorbar=dict(
-                thickness=15,
-                title='Node Connections',
-                xanchor='left',
-                titleside='right'
-            ),
-            line_width=2))
+    # edge_trace = go.Scatter(x=Xed,
+    #                         y=Yed,
+    #                         mode='lines',
+    #                         line=dict(color='rgb(210,210,210)', width=1),
+    #                         hoverinfo='none'
+    #                         )
+    fig = px.scatter(x=Xv, y=Yv, color=labels if labels is not None else None, )
+    fig.add_scatter(x=Xed, y=Yed, mode='lines', line=dict(color='rgb(210,210,210)', width=1), hoverinfo='none')
+    # node_trace = go.Scatter(
+    #     x=Xv, y=Yv,
+    #     mode='markers',
+    #     hoverinfo='text',
+    #     marker=dict(
+    #         showscale=True,
+    #         # colorscale options
+    #         # 'Greys' | 'YlGnBu' | 'Greens' | 'YlOrRd' | 'Bluered' | 'RdBu' |
+    #         # 'Reds' | 'Blues' | 'Picnic' | 'Rainbow' | 'Portland' | 'Jet' |
+    #         # 'Hot' | 'Blackbody' | 'Earth' | 'Electric' | 'Viridis' |
+    #         colorscale='YlGnBu',
+    #         reversescale=True,
+    #         color=labels if labels is not None else None,
+    #         size=10,
+    #         colorbar=dict(
+    #             thickness=15,
+    #             title='Node Connections',
+    #             xanchor='left',
+    #             titleside='right'
+    #         ),
+    #         line_width=2))
 
-    fig1 = go.Figure(data=[edge_trace, node_trace])
-    return fig1
+    # fig1 = go.Figure(data=[edge_trace, node_trace])
+    return fig
