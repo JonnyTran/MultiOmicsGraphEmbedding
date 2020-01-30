@@ -21,17 +21,17 @@ forceatlas2 = ForceAtlas2(
     # Log
     verbose=False)
 
-colors = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
-          "beige", "bisque", "black", "blanchedalmond", "blue",
-          "blueviolet", "brown", "burlywood", "cadetblue",
-          "chartreuse", "chocolate", "coral", "cornflowerblue",
-          "cornsilk", "crimson", "cyan", "darkblue", "darkcyan",
-          "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
-          "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange",
-          "darkorchid", "darkred", "darksalmon", "darkseagreen",
-          "darkslateblue", "darkslategray", "darkslategrey",
-          "darkturquoise", "darkviolet", "deeppink", "deepskyblue",
-          "dimgray", "dimgrey", "dodgerblue", "firebrick",
+color = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
+         "beige", "bisque", "black", "blanchedalmond", "blue",
+         "blueviolet", "brown", "burlywood", "cadetblue",
+         "chartreuse", "chocolate", "coral", "cornflowerblue",
+         "cornsilk", "crimson", "cyan", "darkblue", "darkcyan",
+         "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
+         "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange",
+         "darkorchid", "darkred", "darksalmon", "darkseagreen",
+         "darkslateblue", "darkslategray", "darkslategrey",
+         "darkturquoise", "darkviolet", "deeppink", "deepskyblue",
+         "dimgray", "dimgrey", "dodgerblue", "firebrick",
           "floralwhite", "forestgreen", "fuchsia", "gainsboro",
           "ghostwhite", "gold", "goldenrod", "gray", "grey", "green",
           "greenyellow", "honeydew", "hotpink", "indianred", "indigo",
@@ -42,25 +42,25 @@ colors = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
           "lightskyblue", "lightslategray", "lightslategrey",
           "lightsteelblue", "lightyellow", "lime", "limegreen",
           "linen", "magenta", "maroon", "mediumaquamarine",
-          "mediumblue", "mediumorchid", "mediumpurple",
-          "mediumseagreen", "mediumslateblue", "mediumspringgreen",
-          "mediumturquoise", "mediumvioletred", "midnightblue",
-          "mintcream", "mistyrose", "moccasin", "navajowhite", "navy",
-          "oldlace", "olive", "olivedrab", "orange", "orangered",
-          "orchid", "palegoldenrod", "palegreen", "paleturquoise",
-          "palevioletred", "papayawhip", "peachpuff", "peru", "pink",
-          "plum", "powderblue", "purple", "red", "rosybrown",
-          "royalblue", "rebeccapurple", "saddlebrown", "salmon",
-          "sandybrown", "seagreen", "seashell", "sienna", "silver",
-          "skyblue", "slateblue", "slategray", "slategrey", "snow",
-          "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
-          "turquoise", "violet", "wheat", "white", "whitesmoke",
-          "yellow", "yellowgreen"]
+         "mediumblue", "mediumorchid", "mediumpurple",
+         "mediumseagreen", "mediumslateblue", "mediumspringgreen",
+         "mediumturquoise", "mediumvioletred", "midnightblue",
+         "mintcream", "mistyrose", "moccasin", "navajowhite", "navy",
+         "oldlace", "olive", "olivedrab", "orange", "orangered",
+         "orchid", "palegoldenrod", "palegreen", "paleturquoise",
+         "palevioletred", "papayawhip", "peachpuff", "peru", "pink",
+         "plum", "powderblue", "purple", "red", "rosybrown",
+         "royalblue", "rebeccapurple", "saddlebrown", "salmon",
+         "sandybrown", "seagreen", "seashell", "sienna", "silver",
+         "skyblue", "slateblue", "slategray", "slategrey", "snow",
+         "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
+         "turquoise", "violet", "wheat", "white", "whitesmoke",
+         "yellow", "yellowgreen"]
 
 
 def hash_color(labels):
     sorted_node_labels = sorted(set(labels), reverse=True)
-    colormap = {node: colors[sorted_node_labels.index(node) % len(colors)] for node in set(labels)}
+    colormap = {node: color[sorted_node_labels.index(node) % len(color)] for node in set(labels)}
     colors = [colormap[n] if n in colormap.keys() else None for n in labels]
     return colors
 
