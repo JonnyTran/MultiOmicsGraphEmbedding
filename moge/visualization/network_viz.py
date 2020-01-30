@@ -31,20 +31,21 @@ def graph_viz(g: nx.Graph, nodelist: list, node_labels=None, edge_label=None, ti
     if node_labels is not None and node_labels.isna().any():
         node_labels.fillna("nan", inplace=True)
 
-    node_x, node_y = zip([(pos[node][0], pos[node][1]) for node in nodelist])
-    edge_x, edge_y, edge_data = zip([([pos[edge[0]][0], pos[edge[1]][0], None],
-                                      [pos[edge[0]][1], pos[edge[1]][1], None],
-                                      edge[2]
-                                      ) for edge in g.subgraph(nodelist).edges(data=True)])
+    node_x, node_y = zip(*[(pos[node][0], pos[node][1])
+                           for node in nodelist])
+    edge_x, edge_y, edge_data = zip(*[([pos[edge[0]][0], pos[edge[1]][0], None],
+                                       [pos[edge[0]][1], pos[edge[1]][1], None],
+                                       edge[2])
+                                      for edge in g.subgraph(nodelist).edges(data=True)])
     edge_data = pd.DataFrame(edge_data)
 
     fig = px.scatter(x=node_x, y=node_y,
                      hover_name=nodelist,
                      symbol=node_labels if node_labels is not None else None,
                      title=title)
-    fig.add_scatter(x=edge_x, y=edge_y,
+    fig.add_scatter(edge_data, x=edge_x, y=edge_y,
                     mode='lines', line=dict(width=1),
-                    color=edge_label if edge_label else 'rgb(210,210,210)',
+                    color=edge_data[edge_label] if edge_label else 'rgb(210,210,210)',
                     hoverinfo='none')
 
     return fig
