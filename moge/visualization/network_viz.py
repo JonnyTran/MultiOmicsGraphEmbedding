@@ -1,5 +1,4 @@
 import networkx as nx
-import numpy as np
 import pandas as pd
 import plotly.express as px
 from fa2 import ForceAtlas2
@@ -10,18 +9,15 @@ forceatlas2 = ForceAtlas2(
     linLogMode=False,  # NOT IMPLEMENTED
     adjustSizes=False,  # Prevent overlap (NOT IMPLEMENTED)
     edgeWeightInfluence=1.0,
-
     # Performance
     jitterTolerance=1.0,  # Tolerance
     barnesHutOptimize=True,
     barnesHutTheta=1.2,
     multiThreaded=False,
-
     # Tuning
     scalingRatio=2.0,
     strongGravityMode=False,
     gravity=1.0,
-
     # Log
     verbose=False)
 
@@ -64,8 +60,7 @@ color = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
 
 def hash_color(node_labels, cmap="viridis"):
     sorted_node_labels = sorted(set(node_labels), reverse=True)
-    colors = np.linspace(0, 1, len(sorted_node_labels))
-    node_colormap = {node: colors[sorted_node_labels.index(node)] for node in set(node_labels)}
+    node_colormap = {node: color[sorted_node_labels.index(node)] for node in set(node_labels)}
     node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
     return node_colors
 
