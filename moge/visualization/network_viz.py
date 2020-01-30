@@ -14,7 +14,7 @@ forceatlas2 = ForceAtlas2(
     jitterTolerance=1.0,  # Tolerance
     barnesHutOptimize=True,
     barnesHutTheta=1.2,
-    multiThreaded=True,
+    multiThreaded=False,
 
     # Tuning
     scalingRatio=2.0,
