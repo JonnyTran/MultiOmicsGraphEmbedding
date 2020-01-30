@@ -21,48 +21,48 @@ forceatlas2 = ForceAtlas2(
     # Log
     verbose=False)
 
-color = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
-         "beige", "bisque", "black", "blanchedalmond", "blue",
-         "blueviolet", "brown", "burlywood", "cadetblue",
-         "chartreuse", "chocolate", "coral", "cornflowerblue",
-         "cornsilk", "crimson", "cyan", "darkblue", "darkcyan",
-         "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
-         "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange",
-         "darkorchid", "darkred", "darksalmon", "darkseagreen",
-         "darkslateblue", "darkslategray", "darkslategrey",
-         "darkturquoise", "darkviolet", "deeppink", "deepskyblue",
-         "dimgray", "dimgrey", "dodgerblue", "firebrick",
-         "floralwhite", "forestgreen", "fuchsia", "gainsboro",
-         "ghostwhite", "gold", "goldenrod", "gray", "grey", "green",
-         "greenyellow", "honeydew", "hotpink", "indianred", "indigo",
-         "ivory", "khaki", "lavender", "lavenderblush", "lawngreen",
-         "lemonchiffon", "lightblue", "lightcoral", "lightcyan",
-         "lightgoldenrodyellow", "lightgray", "lightgrey",
-         "lightgreen", "lightpink", "lightsalmon", "lightseagreen",
-         "lightskyblue", "lightslategray", "lightslategrey",
-         "lightsteelblue", "lightyellow", "lime", "limegreen",
-         "linen", "magenta", "maroon", "mediumaquamarine",
-         "mediumblue", "mediumorchid", "mediumpurple",
-         "mediumseagreen", "mediumslateblue", "mediumspringgreen",
-         "mediumturquoise", "mediumvioletred", "midnightblue",
-         "mintcream", "mistyrose", "moccasin", "navajowhite", "navy",
-         "oldlace", "olive", "olivedrab", "orange", "orangered",
-         "orchid", "palegoldenrod", "palegreen", "paleturquoise",
-         "palevioletred", "papayawhip", "peachpuff", "peru", "pink",
-         "plum", "powderblue", "purple", "red", "rosybrown",
-         "royalblue", "rebeccapurple", "saddlebrown", "salmon",
-         "sandybrown", "seagreen", "seashell", "sienna", "silver",
-         "skyblue", "slateblue", "slategray", "slategrey", "snow",
-         "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
-         "turquoise", "violet", "wheat", "white", "whitesmoke",
-         "yellow", "yellowgreen"]
+colors = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
+          "beige", "bisque", "black", "blanchedalmond", "blue",
+          "blueviolet", "brown", "burlywood", "cadetblue",
+          "chartreuse", "chocolate", "coral", "cornflowerblue",
+          "cornsilk", "crimson", "cyan", "darkblue", "darkcyan",
+          "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
+          "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange",
+          "darkorchid", "darkred", "darksalmon", "darkseagreen",
+          "darkslateblue", "darkslategray", "darkslategrey",
+          "darkturquoise", "darkviolet", "deeppink", "deepskyblue",
+          "dimgray", "dimgrey", "dodgerblue", "firebrick",
+          "floralwhite", "forestgreen", "fuchsia", "gainsboro",
+          "ghostwhite", "gold", "goldenrod", "gray", "grey", "green",
+          "greenyellow", "honeydew", "hotpink", "indianred", "indigo",
+          "ivory", "khaki", "lavender", "lavenderblush", "lawngreen",
+          "lemonchiffon", "lightblue", "lightcoral", "lightcyan",
+          "lightgoldenrodyellow", "lightgray", "lightgrey",
+          "lightgreen", "lightpink", "lightsalmon", "lightseagreen",
+          "lightskyblue", "lightslategray", "lightslategrey",
+          "lightsteelblue", "lightyellow", "lime", "limegreen",
+          "linen", "magenta", "maroon", "mediumaquamarine",
+          "mediumblue", "mediumorchid", "mediumpurple",
+          "mediumseagreen", "mediumslateblue", "mediumspringgreen",
+          "mediumturquoise", "mediumvioletred", "midnightblue",
+          "mintcream", "mistyrose", "moccasin", "navajowhite", "navy",
+          "oldlace", "olive", "olivedrab", "orange", "orangered",
+          "orchid", "palegoldenrod", "palegreen", "paleturquoise",
+          "palevioletred", "papayawhip", "peachpuff", "peru", "pink",
+          "plum", "powderblue", "purple", "red", "rosybrown",
+          "royalblue", "rebeccapurple", "saddlebrown", "salmon",
+          "sandybrown", "seagreen", "seashell", "sienna", "silver",
+          "skyblue", "slateblue", "slategray", "slategrey", "snow",
+          "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
+          "turquoise", "violet", "wheat", "white", "whitesmoke",
+          "yellow", "yellowgreen"]
 
 
-def hash_color(node_labels, cmap="viridis"):
-    sorted_node_labels = sorted(set(node_labels), reverse=True)
-    node_colormap = {node: color[sorted_node_labels.index(node)] for node in set(node_labels)}
-    node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
-    return node_colors
+def hash_color(labels):
+    sorted_node_labels = sorted(set(labels), reverse=True)
+    colormap = {node: colors[sorted_node_labels.index(node) % len(colors)] for node in set(labels)}
+    colors = [colormap[n] if n in colormap.keys() else None for n in labels]
+    return colors
 
 
 def graph_viz(g: nx.Graph,
