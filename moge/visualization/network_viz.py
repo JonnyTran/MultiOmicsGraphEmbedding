@@ -52,7 +52,7 @@ def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", iteration
                                    ),
                        text=nodelist,
                        hoverinfo='text',
-                       color=labels if labels is not None else None,
+                       fillcolor=labels if labels is not None else None,
                        )
 
     data1 = [edges, nodes]
