@@ -4,14 +4,14 @@ import plotly.graph_objects as go
 from igraph.layout import Layout
 
 
-def graph_viz(g: nx.Graph, title="Graph"):
+def graph_viz(g: nx.Graph, nodelist, title="Graph"):
     pos = nx.spring_layout(g)
 
-    Xv = [pos[k][0] for k in g.nodes]
-    Yv = [pos[k][1] for k in g.nodes]
+    Xv = [pos[k][0] for k in nodelist]
+    Yv = [pos[k][1] for k in nodelist]
     Xed = []
     Yed = []
-    for edge in g.edges(data=False):
+    for edge in g.edges(nbunch=nodelist, data=False):
         Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
         Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
 
@@ -30,7 +30,7 @@ def graph_viz(g: nx.Graph, title="Graph"):
                                    color='#6959CD',
                                    line=dict(color='rgb(50,50,50)', width=0.5)
                                    ),
-                       text=list(g.nodes),
+                       text=nodelist,
                        hoverinfo='text'
                        )
 
