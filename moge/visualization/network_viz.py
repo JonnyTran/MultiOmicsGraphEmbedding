@@ -5,10 +5,10 @@ from igraph.layout import Layout
 
 
 def graph_viz(g: nx.Graph, nodelist, title="Graph"):
-    pos = nx.spring_layout(g)
-
+    pos = nx.spring_layout(g.subgraph(nodelist))
     Xv = [pos[k][0] for k in nodelist]
     Yv = [pos[k][1] for k in nodelist]
+
     Xed = []
     Yed = []
     for edge in g.subgraph(nodelist).edges(data=False):
