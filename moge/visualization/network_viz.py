@@ -24,9 +24,8 @@ forceatlas2 = ForceAtlas2(
     verbose=False)
 
 
-def graph_viz(g: nx.Graph, nodelist: list, title="Graph", iterations=100):
+def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", iterations=100):
     pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
-    print("spring_layout done")
     Xv = [pos[node][0] for node in nodelist]
     Yv = [pos[node][1] for node in nodelist]
 
@@ -52,7 +51,8 @@ def graph_viz(g: nx.Graph, nodelist: list, title="Graph", iterations=100):
                                    line=dict(color='rgb(50,50,50)', width=0.5)
                                    ),
                        text=nodelist,
-                       hoverinfo='text'
+                       hoverinfo='text',
+                       color=labels if labels is not None else None,
                        )
 
     data1 = [edges, nodes]
