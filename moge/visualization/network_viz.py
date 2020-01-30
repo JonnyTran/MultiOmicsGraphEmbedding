@@ -1,6 +1,6 @@
+import chart_studio.plotly as py
 import networkx as nx
 import plotly.graph_objects as go
-import plotly.plotly as py
 from igraph.layout import Layout
 
 

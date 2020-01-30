@@ -1,7 +1,7 @@
 from setuptools import setup
 
 requirements = [
-    'numpy', 'pandas', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph',
+    'numpy', 'pandas', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph', 'chart-studio',
 ]
 
 setup(
