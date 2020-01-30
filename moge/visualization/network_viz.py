@@ -50,7 +50,7 @@ def graph_viz(g: nx.Graph,
                      title=title)
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
-                    line=dict(color='rgb(210,210,210)', width=1),
+                    line=dict(width=0.5, color='#888'),
                     # fillcolor=edge_data[edge_label] if edge_label else 'rgb(210,210,210)',
                     hoverinfo='none')
 
