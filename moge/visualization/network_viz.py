@@ -50,6 +50,5 @@ def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", pos=None,
                        marker_color=labels if labels is not None else None,
                        )
 
-    data1 = [edges, nodes]
-    fig1 = go.Figure(data=data1)
+    fig1 = go.Figure(data=[edges, nodes])
     return fig1
