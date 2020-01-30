@@ -21,7 +21,7 @@ forceatlas2 = ForceAtlas2(
     gravity=1.0,
 
     # Log
-    verbose=True)
+    verbose=False)
 
 
 def graph_viz(g: nx.Graph, nodelist: list, title="Graph", iterations=100):
