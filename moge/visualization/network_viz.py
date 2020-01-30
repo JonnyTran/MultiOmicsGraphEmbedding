@@ -6,6 +6,7 @@ from igraph.layout import Layout
 
 def graph_viz(g: nx.Graph, nodelist, title="Graph"):
     pos = nx.spring_layout(g.subgraph(nodelist))
+    print("spring_layout done")
     Xv = [pos[k][0] for k in nodelist]
     Yv = [pos[k][1] for k in nodelist]
 
