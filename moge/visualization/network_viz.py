@@ -1,14 +1,34 @@
-import chart_studio.plotly as py
 import networkx as nx
 import plotly.graph_objects as go
-from igraph.layout import Layout
+from fa2 import ForceAtlas2
+
+forceatlas2 = ForceAtlas2(
+    # Behavior alternatives
+    outboundAttractionDistribution=True,  # Dissuade hubs
+    linLogMode=False,  # NOT IMPLEMENTED
+    adjustSizes=False,  # Prevent overlap (NOT IMPLEMENTED)
+    edgeWeightInfluence=1.0,
+
+    # Performance
+    jitterTolerance=1.0,  # Tolerance
+    barnesHutOptimize=True,
+    barnesHutTheta=1.2,
+    multiThreaded=False,  # NOT IMPLEMENTED
+
+    # Tuning
+    scalingRatio=2.0,
+    strongGravityMode=False,
+    gravity=1.0,
+
+    # Log
+    verbose=True)
 
 
-def graph_viz(g: nx.Graph, nodelist, title="Graph"):
-    pos = nx.spring_layout(g.subgraph(nodelist))
+def graph_viz(g: nx.Graph, nodelist: list, title="Graph"):
+    pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=2000)
     print("spring_layout done")
-    Xv = [pos[k][0] for k in nodelist]
-    Yv = [pos[k][1] for k in nodelist]
+    Xv = [pos[node][0] for node in nodelist]
+    Yv = [pos[node][1] for node in nodelist]
 
     Xed = []
     Yed = []
@@ -35,28 +55,6 @@ def graph_viz(g: nx.Graph, nodelist, title="Graph"):
                        hoverinfo='text'
                        )
 
-    layout = Layout(title=title,
-                    font=dict(size=12),
-                    showlegend=False,
-                    autosize=True,
-                    hovermode='closest',
-                    annotations=[
-                        dict(
-                            showarrow=False,
-                            text='This igraph.Graph has the Kamada-Kawai layout',
-                            xref='paper',
-                            yref='paper',
-                            x=0,
-                            y=-0.1,
-                            xanchor='left',
-                            yanchor='bottom',
-                            font=dict(
-                                size=14
-                            )
-                        )
-                    ]
-                    )
-
     data1 = [edges, nodes]
-    fig1 = go.Figure(data=data1, layout=layout)
-    return py.iplot(fig1)
+    fig1 = go.Figure(data=data1)
+    return fig1
