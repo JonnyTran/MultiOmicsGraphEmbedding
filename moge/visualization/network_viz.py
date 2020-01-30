@@ -42,16 +42,16 @@ def graph_viz(g: nx.Graph,
                                **edge[2]  # edge d
                                }
                               for edge in g.subgraph(nodelist).edges(data=True)])
-    print(edge_data.info())
+
     fig = px.scatter(x=node_x, y=node_y,
                      hover_name=nodelist,
                      symbol=node_symbol if node_symbol is not None else None,
                      color=node_color if node_color is not None else None,
                      title=title)
-    fig.add_scatter(x=edge_data["x"].tolist(), y=edge_data["y"].tolist(),
+    fig.add_scatter(edge_data, x="x", y="y",
                     mode='lines',
-                    line=dict(width=1.0, color='#888'),
-                    # fillcolor=edge_data[edge_label] if edge_label else 'rgb(210,210,210)',
+                    line=dict(color=edge_data[edge_label] if edge_label else 'rgb(210,210,210)',
+                              width=1),
                     hoverinfo='none')
 
     return fig
