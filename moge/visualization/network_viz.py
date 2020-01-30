@@ -45,7 +45,7 @@ def graph_viz(g: nx.Graph,
 
     fig = px.line(edge_data, x="x", y="y",
                   color=edge_label if edge_label else 'rgb(210,210,210)',
-                  hover_name="none"
+                  hover_name=None,
                   )
 
     fig.add_scatter(x=node_x, y=node_y,
