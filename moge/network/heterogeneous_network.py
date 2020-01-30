@@ -130,15 +130,14 @@ class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
             if directed:
                 edge_list = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
                              'database' in d and d['database'] in databases]
-                # adj = nx.directed_laplacian_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
-                adj = nx.normalized_laplacian_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
+                adj = sp.csr_matrix(
+                    nx.directed_laplacian_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list))
             else:
                 edge_list = [(u, v) for u, v, d in self.G_u.edges(nbunch=node_list, data=True) if
                              d['type'] in edge_types]
                 adj = nx.normalized_laplacian_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
         elif directed:
-            # adj = nx.directed_laplacian_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
-            adj = nx.normalized_laplacian_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
+            adj = sp.csr_matrix(nx.directed_laplacian_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list))
         elif not directed:
             adj = nx.normalized_laplacian_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
 
