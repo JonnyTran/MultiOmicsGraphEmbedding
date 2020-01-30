@@ -11,7 +11,7 @@ def graph_viz(g: nx.Graph, nodelist, title="Graph"):
     Yv = [pos[k][1] for k in nodelist]
     Xed = []
     Yed = []
-    for edge in g.edges(nbunch=nodelist, data=False):
+    for edge in g.subgraph(nodelist).edges(data=False):
         Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
         Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
 
