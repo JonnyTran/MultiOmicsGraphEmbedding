@@ -28,7 +28,7 @@ forceatlas2 = ForceAtlas2(
 def graph_viz(g: nx.Graph, nodelist: list, node_labels=None, edge_label=None, title="Graph", pos=None, iterations=100):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
-    if node_labels and node_labels.isna().any():
+    if node_labels is not None and node_labels.isna().any():
         node_labels.fillna("nan", inplace=True)
 
     node_x, node_y = zip([(pos[node][0], pos[node][1]) for node in nodelist])
