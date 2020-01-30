@@ -121,7 +121,7 @@ def plot_embedding2D(node_pos, node_list, di_graph=None,
 
 
 def get_node_colormap(cmap, network, node_label, nodelist):
-    genes_info = network.genes_info
+    annotations = network.annotations
     if type(node_label) == list:
         node_labels = node_label
         assert len(node_label) == len(nodelist)
@@ -130,16 +130,16 @@ def get_node_colormap(cmap, network, node_label, nodelist):
         node_colormap = {f: colors[sorted_node_labels.index(f)] for f in set(node_labels)}
         node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
 
-    elif genes_info[node_label].dtype == "object":
-        node_labels = genes_info.loc[nodelist][node_label].str.split("|", expand=True)[0].astype(str)
+    elif annotations[node_label].dtype == "object":
+        node_labels = annotations.loc[nodelist][node_label].str.split("|", expand=True)[0].astype(str)
         sorted_node_labels = sorted(node_labels.unique(), reverse=True)
         colors = np.linspace(0, 1, len(sorted_node_labels))
         node_colormap = {f: colors[sorted_node_labels.index(f)] for f in node_labels.unique()}
         node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
 
-    elif genes_info[node_label].dtype == "float":
+    elif annotations[node_label].dtype == "float":
 
-        node_labels = genes_info.loc[nodelist][node_label].values
+        node_labels = annotations.loc[nodelist][node_label].values
         cmap = "gray"
         node_colormap = None
         node_colors = [n / node_labels.max() for n in node_labels]

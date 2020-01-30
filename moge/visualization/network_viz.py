@@ -1,4 +1,5 @@
 import networkx as nx
+import numpy as np
 import pandas as pd
 import plotly.express as px
 from fa2 import ForceAtlas2
@@ -23,6 +24,50 @@ forceatlas2 = ForceAtlas2(
 
     # Log
     verbose=False)
+
+color = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
+         "beige", "bisque", "black", "blanchedalmond", "blue",
+         "blueviolet", "brown", "burlywood", "cadetblue",
+         "chartreuse", "chocolate", "coral", "cornflowerblue",
+         "cornsilk", "crimson", "cyan", "darkblue", "darkcyan",
+         "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
+         "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange",
+         "darkorchid", "darkred", "darksalmon", "darkseagreen",
+         "darkslateblue", "darkslategray", "darkslategrey",
+         "darkturquoise", "darkviolet", "deeppink", "deepskyblue",
+         "dimgray", "dimgrey", "dodgerblue", "firebrick",
+         "floralwhite", "forestgreen", "fuchsia", "gainsboro",
+         "ghostwhite", "gold", "goldenrod", "gray", "grey", "green",
+         "greenyellow", "honeydew", "hotpink", "indianred", "indigo",
+         "ivory", "khaki", "lavender", "lavenderblush", "lawngreen",
+         "lemonchiffon", "lightblue", "lightcoral", "lightcyan",
+         "lightgoldenrodyellow", "lightgray", "lightgrey",
+         "lightgreen", "lightpink", "lightsalmon", "lightseagreen",
+         "lightskyblue", "lightslategray", "lightslategrey",
+         "lightsteelblue", "lightyellow", "lime", "limegreen",
+         "linen", "magenta", "maroon", "mediumaquamarine",
+         "mediumblue", "mediumorchid", "mediumpurple",
+         "mediumseagreen", "mediumslateblue", "mediumspringgreen",
+         "mediumturquoise", "mediumvioletred", "midnightblue",
+         "mintcream", "mistyrose", "moccasin", "navajowhite", "navy",
+         "oldlace", "olive", "olivedrab", "orange", "orangered",
+         "orchid", "palegoldenrod", "palegreen", "paleturquoise",
+         "palevioletred", "papayawhip", "peachpuff", "peru", "pink",
+         "plum", "powderblue", "purple", "red", "rosybrown",
+         "royalblue", "rebeccapurple", "saddlebrown", "salmon",
+         "sandybrown", "seagreen", "seashell", "sienna", "silver",
+         "skyblue", "slateblue", "slategray", "slategrey", "snow",
+         "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
+         "turquoise", "violet", "wheat", "white", "whitesmoke",
+         "yellow", "yellowgreen"]
+
+
+def hash_color(node_labels, cmap="viridis"):
+    sorted_node_labels = sorted(set(node_labels), reverse=True)
+    colors = np.linspace(0, 1, len(sorted_node_labels))
+    node_colormap = {node: colors[sorted_node_labels.index(node)] for node in set(node_labels)}
+    node_colors = [node_colormap[n] if n in node_colormap.keys() else None for n in node_labels]
+    return node_colors
 
 
 def graph_viz(g: nx.Graph,
@@ -50,7 +95,7 @@ def graph_viz(g: nx.Graph,
                      title=title)
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
-                    line=dict(color=edge_data[edge_label] if edge_label else 'rgb(210,210,210)',
+                    line=dict(color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
                               width=1),
                     hoverinfo='none')
 
