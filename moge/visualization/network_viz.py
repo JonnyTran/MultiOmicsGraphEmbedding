@@ -24,8 +24,10 @@ forceatlas2 = ForceAtlas2(
     verbose=False)
 
 
-def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", iterations=100):
-    pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
+def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", pos=None, iterations=100):
+    if pos is None:
+        pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
+
     Xv = [pos[node][0] for node in nodelist]
     Yv = [pos[node][1] for node in nodelist]
 
@@ -47,12 +49,11 @@ def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", iteration
                        name='net',
                        marker=dict(symbol='circle-dot',
                                    size=5,
-                                   color='#6959CD',
                                    line=dict(color='rgb(50,50,50)', width=0.5)
                                    ),
                        text=nodelist,
                        hoverinfo='text',
-                       fillcolor=labels if labels is not None else None,
+                       marker_color=labels if labels is not None else None,
                        )
 
     data1 = [edges, nodes]
