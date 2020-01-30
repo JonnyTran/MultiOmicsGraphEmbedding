@@ -1,4 +1,5 @@
 import networkx as nx
+import pandas as pd
 import plotly.express as px
 from fa2 import ForceAtlas2
 
@@ -24,48 +25,26 @@ forceatlas2 = ForceAtlas2(
     verbose=False)
 
 
-def graph_viz(g: nx.Graph, nodelist: list, annotations, labels=None, title="Graph", pos=None, iterations=100):
+def graph_viz(g: nx.Graph, nodelist: list, node_labels=None, edge_label=None, title="Graph", pos=None, iterations=100):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
+    if node_labels and node_labels.isna().any():
+        node_labels.fillna("nan", inplace=True)
 
-    Xv = [pos[node][0] for node in nodelist]
-    Yv = [pos[node][1] for node in nodelist]
+    node_x, node_y = zip([(pos[node][0], pos[node][1]) for node in nodelist])
+    edge_x, edge_y, edge_data = zip([([pos[edge[0]][0], pos[edge[1]][0], None],
+                                      [pos[edge[0]][1], pos[edge[1]][1], None],
+                                      edge[2]
+                                      ) for edge in g.subgraph(nodelist).edges(data=True)])
+    edge_data = pd.DataFrame(edge_data)
 
-    Xed = []
-    Yed = []
-    for edge in g.subgraph(nodelist).edges(data=False):
-        Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
-        Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
+    fig = px.scatter(x=node_x, y=node_y,
+                     hover_name=nodelist,
+                     symbol=node_labels if node_labels is not None else None,
+                     title=title)
+    fig.add_scatter(x=edge_x, y=edge_y,
+                    mode='lines', line=dict(width=1),
+                    color=edge_label if edge_label else 'rgb(210,210,210)',
+                    hoverinfo='none')
 
-    # edge_trace = go.Scatter(x=Xed,
-    #                         y=Yed,
-    #                         mode='lines',
-    #                         line=dict(color='rgb(210,210,210)', width=1),
-    #                         hoverinfo='none'
-    #                         )
-    fig = px.scatter(x=Xv, y=Yv, color=labels if labels is not None else None, )
-    fig.add_scatter(x=Xed, y=Yed, mode='lines', line=dict(color='rgb(210,210,210)', width=1), hoverinfo='none')
-    # node_trace = go.Scatter(
-    #     x=Xv, y=Yv,
-    #     mode='markers',
-    #     hoverinfo='text',
-    #     marker=dict(
-    #         showscale=True,
-    #         # colorscale options
-    #         # 'Greys' | 'YlGnBu' | 'Greens' | 'YlOrRd' | 'Bluered' | 'RdBu' |
-    #         # 'Reds' | 'Blues' | 'Picnic' | 'Rainbow' | 'Portland' | 'Jet' |
-    #         # 'Hot' | 'Blackbody' | 'Earth' | 'Electric' | 'Viridis' |
-    #         colorscale='YlGnBu',
-    #         reversescale=True,
-    #         color=labels if labels is not None else None,
-    #         size=10,
-    #         colorbar=dict(
-    #             thickness=15,
-    #             title='Node Connections',
-    #             xanchor='left',
-    #             titleside='right'
-    #         ),
-    #         line_width=2))
-
-    # fig1 = go.Figure(data=[edge_trace, node_trace])
     return fig
