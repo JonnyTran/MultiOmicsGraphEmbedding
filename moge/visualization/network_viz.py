@@ -46,13 +46,7 @@ def graph_viz(g: nx.Graph, nodelist: list, labels=None, title="Graph", pos=None,
     nodes = go.Scatter(x=Xv,
                        y=Yv,
                        mode='markers',
-                       name='net',
-                       marker=dict(symbol='circle-dot',
-                                   size=5,
-                                   line=dict(color='rgb(50,50,50)', width=0.5)
-                                   ),
                        text=nodelist,
-                       hoverinfo='text',
                        marker_color=labels if labels is not None else None,
                        )
 
