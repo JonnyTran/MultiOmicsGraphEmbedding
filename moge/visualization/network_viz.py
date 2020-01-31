@@ -69,7 +69,7 @@ def hash_color(labels):
 def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol=None, node_color=None,
               edge_label: str = None, max_edges=50000,
-              title=None, width=600, height=600,
+              title=None, width=1000, height=800,
               pos=None, iterations=100, ):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
@@ -104,7 +104,7 @@ def graph_viz(g: nx.Graph,
         edge_data = edge_data.sample(n=max_edges)
 
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
-    fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
+    fig.add_scatter(x=edge_data["x"].to_list(), y=edge_data["y"].to_list(),
                     mode='lines',
                     line=go.scatter.Line(
                         # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
@@ -121,7 +121,7 @@ def graph_viz(g: nx.Graph,
                 )
     fig.update_layout(
         title=title,
-        autosize=False,
+        autosize=True,
         width=width,
         height=height,
         xaxis=axis,
