@@ -59,8 +59,8 @@ color = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
 
 
 def hash_color(labels):
-    sorted_node_labels = sorted(set(labels), reverse=True)
-    colormap = {node: color[sorted_node_labels.index(node) % len(color)] for node in set(labels)}
+    sorted_labels = sorted(set(labels), reverse=True)
+    colormap = {item: color[sorted_labels.index(item) % len(color)] for item in set(labels)}
     colors = [colormap[n] if n in colormap.keys() else None for n in labels]
     return colors
 
@@ -89,8 +89,18 @@ def graph_viz(g: nx.Graph,
                      color=node_color if node_color is not None else None,
                      title=title)
 
-    fig.add_trace(px.line(edge_data, x="x", y="y",
-                          color=edge_label if edge_label else 'rgb(210,210,210)'))
+    if edge_label:
+        sorted_node_labels = sorted(set(edge_data[edge_label]), reverse=True)
+        colormap = {item: color[sorted_node_labels.index(item) % len(color)] for item in set(edge_data[edge_label])}
+
+    edges_list = [dict(type='scatter',
+                       x=[pos[d[0]][0], pos[d[1]][0]],
+                       y=[pos[d[0]][1], pos[d[1]][1]],
+                       mode='lines',
+                       line=dict(width=1, color=colormap[d[edge_data.columns.tolist().index(edge_label)]])) for d in
+                  edge_data.to_records(index=False)]
+
+    fig.add_trace(edges_list)
 
     # fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
     #                 mode='lines',
