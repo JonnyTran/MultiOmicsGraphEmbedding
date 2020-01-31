@@ -88,10 +88,14 @@ def graph_viz(g: nx.Graph,
                      symbol=node_symbol if node_symbol is not None else None,
                      color=node_color if node_color is not None else None,
                      title=title)
-    fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
-                    mode='lines',
-                    line=dict(width=1),
-                    fillcolor=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
-                    hoverinfo='none')
+
+    fig.add_trace(px.line(edge_data, x="x", y="y",
+                          color=edge_label if edge_label else 'rgb(210,210,210)'))
+
+    # fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
+    #                 mode='lines',
+    #                 line=dict(width=1),
+    #                 fillcolor=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+    #                 hoverinfo='none')
 
     return fig
