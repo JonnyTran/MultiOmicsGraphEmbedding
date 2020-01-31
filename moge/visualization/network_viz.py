@@ -1,6 +1,7 @@
 import networkx as nx
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from fa2 import ForceAtlas2
 
 forceatlas2 = ForceAtlas2(
@@ -76,12 +77,12 @@ def graph_viz(g: nx.Graph,
     # Nodes data
     if node_symbol is not None and type(node_symbol) is pd.Series:
         if node_symbol.isna().any():
-            node_symbol.fillna("nan", inplace=True)
+            node_symbol.fillna("None", inplace=True)
         if node_symbol.dtype == "object" and node_symbol.str.contains("|").any():
             node_symbol = node_symbol.str.split("|", expand=True)[0].astype(str)
     if node_color is not None and type(node_color) is pd.Series:
         if node_color.isna().any():
-            node_color.fillna("nan", inplace=True)
+            node_color.fillna("None", inplace=True)
         if node_color.dtype == "object" and node_color.str.contains("|").any():
             node_color = node_color.str.split("|", expand=True)[0].astype(str)
 
@@ -107,8 +108,9 @@ def graph_viz(g: nx.Graph,
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
-                    line=dict(color="rgb(51, 51, 51)", width=10),
+                    line=go.scatter.Line(color="gray"),
                     # fillcolor=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+                    showlegend=True,
                     hoverinfo='none')
 
     return fig
