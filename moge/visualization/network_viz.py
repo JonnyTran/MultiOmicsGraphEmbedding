@@ -82,7 +82,7 @@ def graph_viz(g: nx.Graph,
                                **edge[2]  # edge d
                                }
                               for edge in g.subgraph(nodelist).edges(data=True)])
-    print("edge_data", edge_data.shape)
+    print("edge_data", edge_data.shape[0], edge_data.columns)
 
     fig = px.scatter(x=node_x, y=node_y,
                      hover_name=nodelist,
