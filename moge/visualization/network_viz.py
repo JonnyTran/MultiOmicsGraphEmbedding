@@ -82,7 +82,7 @@ def graph_viz(g: nx.Graph,
                                **edge[2]  # edge d
                                }
                               for edge in g.subgraph(nodelist).edges(data=True)])
-    print(edge_data.info())
+    print("edge_data", edge_data.shape)
 
     fig = px.scatter(x=node_x, y=node_y,
                      hover_name=nodelist,
@@ -92,7 +92,7 @@ def graph_viz(g: nx.Graph,
 
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
-                    line=dict(color="rgb(210,210,210)", width=1),
+                    line=dict(color="rgb(51, 51, 51)", width=1),
                     # fillcolor=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
                     hoverinfo='none')
 
