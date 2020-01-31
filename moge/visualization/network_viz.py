@@ -72,26 +72,37 @@ def graph_viz(g: nx.Graph,
               pos=None, iterations=100):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
+
+    # Nodes data
     if node_symbol is not None and node_symbol.isna().any():
         node_symbol.fillna("nan", inplace=True)
+    if node_color is not None and node_color.isna().any():
+        node_color.fillna("nan", inplace=True)
+    if node_color.str.contains("|").any():
+        node_color = node_color.str.split("|", expand=True)[0].astype(str)
+    if node_symbol.str.contains("|").any():
+        node_symbol = node_symbol.str.split("|", expand=True)[0].astype(str)
 
     node_x, node_y = zip(*[(pos[node][0], pos[node][1])
                            for node in nodelist])
-    edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0], None],
-                               "y": [pos[edge[0]][1], pos[edge[1]][1], None],
-                               **edge[2]  # edge d
-                               }
-                              for edge in g.subgraph(nodelist).edges(data=True)])
-    print("edge_data", edge_data.shape[0], edge_data.columns)
-    if edge_data.shape[0] > 50000:
-        edge_data = edge_data.sample(n=50000)
-
     fig = px.scatter(x=node_x, y=node_y,
                      hover_name=nodelist,
                      symbol=node_symbol if node_symbol is not None else None,
                      color=node_color if node_color is not None else None,
                      title=title)
 
+    # Edges data
+    edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0], None],
+                               "y": [pos[edge[0]][1], pos[edge[1]][1], None],
+                               **edge[2]  # edge d
+                               }
+                              for edge in g.subgraph(nodelist).edges(data=True)])
+
+    # Samples only 50,000 edges
+    if edge_data.shape[0] > 50000:
+        edge_data = edge_data.sample(n=50000)
+
+        print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns)
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
                     line=dict(color="rgb(51, 51, 51)", width=1),
