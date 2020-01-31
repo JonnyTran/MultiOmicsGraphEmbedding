@@ -103,7 +103,7 @@ def graph_viz(g: nx.Graph,
 
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
     fig = px.line(x=edge_data["x"].tolist(), y=edge_data["y"].tolist(),
-                  color=edge_label,
+                  color=edge_data[edge_label],
                   )
     fig.add_scatter(x=node_x, y=node_y,
                     mode="markers",
