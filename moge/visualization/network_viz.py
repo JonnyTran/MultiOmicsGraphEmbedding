@@ -67,9 +67,9 @@ def hash_color(labels):
 
 def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol=None, node_color=None,
-              edge_label: str = None,
+              edge_label: str = None, max_edges=50000,
               title=None,
-              pos=None, iterations=100):
+              pos=None, iterations=100, ):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
 
@@ -94,15 +94,15 @@ def graph_viz(g: nx.Graph,
                      title=title)
 
     # Edges data
-    edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0], None],
-                               "y": [pos[edge[0]][1], pos[edge[1]][1], None],
+    edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0]],
+                               "y": [pos[edge[0]][1], pos[edge[1]][1]],
                                **edge[2]  # edge d
                                }
                               for edge in g.subgraph(nodelist).edges(data=True)])
 
-    # Samples only 50,000 edges
-    if edge_data.shape[0] > 50000:
-        edge_data = edge_data.sample(n=50000)
+    # Samples only certain edges
+    if edge_data.shape[0] > max_edges:
+        edge_data = edge_data.sample(n=max_edges)
 
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
