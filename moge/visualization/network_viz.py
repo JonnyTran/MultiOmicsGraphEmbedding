@@ -95,8 +95,8 @@ def graph_viz(g: nx.Graph,
                      )
 
     # Edges data
-    edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0]],
-                               "y": [pos[edge[0]][1], pos[edge[1]][1]],
+    edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0], None],
+                               "y": [pos[edge[0]][1], pos[edge[1]][1], None],
                                **edge[2]} for edge in g.subgraph(nodelist).edges(data=True)])
     print(edge_data.head())
     # Samples only certain edges
