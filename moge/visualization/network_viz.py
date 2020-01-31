@@ -67,7 +67,7 @@ def hash_color(labels):
 
 def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol=None, node_color=None,
-              edge_label: str = None, max_edges=50000,
+              edge_label: str = None, max_edges=10000,
               title=None, width=1000, height=800,
               pos=None, iterations=100, ):
     if pos is None:
