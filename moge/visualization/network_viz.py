@@ -89,25 +89,10 @@ def graph_viz(g: nx.Graph,
                      color=node_color if node_color is not None else None,
                      title=title)
 
-    if edge_label:
-        sorted_node_labels = sorted(set(edge_data[edge_label]), reverse=True)
-        colormap = {item: color[sorted_node_labels.index(item) % len(color)] for item in set(edge_data[edge_label])}
-    print([d for d in edge_data.to_records(index=False)[:5]])
-    print("edge_data.columns.tolist()", edge_data.columns.tolist())
-    print("edge_data.columns.tolist().index(edge_label)", edge_data.columns.tolist().index(edge_label))
-    edges_list = [dict(type='scatter',
-                       x=d[0],
-                       y=d[1],
-                       mode='lines',
-                       line=dict(width=1, color=colormap[d[edge_data.columns.tolist().index(edge_label)]])) for d in
-                  edge_data.to_records(index=False)]
-
-    fig.add_trace(edges_list)
-
-    # fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
-    #                 mode='lines',
-    #                 line=dict(width=1),
-    #                 fillcolor=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
-    #                 hoverinfo='none')
+    fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
+                    mode='lines',
+                    line=dict(color="rgb(210,210,210)", width=1),
+                    # fillcolor=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+                    hoverinfo='none')
 
     return fig
