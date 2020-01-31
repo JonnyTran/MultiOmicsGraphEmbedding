@@ -69,7 +69,7 @@ def hash_color(labels):
 def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol=None, node_color=None,
               edge_label: str = None, max_edges=50000,
-              title=None,
+              title=None, width=600, height=600,
               pos=None, iterations=100, ):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
@@ -92,14 +92,12 @@ def graph_viz(g: nx.Graph,
                      hover_name=nodelist,
                      symbol=node_symbol if node_symbol is not None else None,
                      color=node_color if node_color is not None else None,
-                     title=title)
+                     )
 
     # Edges data
     edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0]],
                                "y": [pos[edge[0]][1], pos[edge[1]][1]],
-                               **edge[2]  # edge d
-                               }
-                              for edge in g.subgraph(nodelist).edges(data=True)])
+                               **edge[2]} for edge in g.subgraph(nodelist).edges(data=True)])
 
     # Samples only certain edges
     if edge_data.shape[0] > max_edges:
@@ -109,8 +107,25 @@ def graph_viz(g: nx.Graph,
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
                     line=go.scatter.Line(
-                        color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)', ),
+                        # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+                        color='rgb(50,50,50)',
+                    ),
                     showlegend=True,
                     hoverinfo='none')
+
+    axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
+                zeroline=False,
+                showgrid=False,
+                showticklabels=False,
+                title=''
+                )
+    fig.update_layout(
+        title=title,
+        autosize=False,
+        width=width,
+        height=height,
+        xaxis=axis,
+        yaxis=axis
+    )
 
     return fig
