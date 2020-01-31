@@ -98,7 +98,7 @@ def graph_viz(g: nx.Graph,
     edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0]],
                                "y": [pos[edge[0]][1], pos[edge[1]][1]],
                                **edge[2]} for edge in g.subgraph(nodelist).edges(data=True)])
-
+    print(edge_data.head())
     # Samples only certain edges
     if edge_data.shape[0] > max_edges:
         edge_data = edge_data.sample(n=max_edges)
