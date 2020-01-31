@@ -96,13 +96,13 @@ def graph_viz(g: nx.Graph,
     Xed = []
     Yed = []
     edges = list(g.subgraph(nodelist).edges(data=False))
+    np.random.shuffle(edges)
 
     # Samples only certain edges
     if len(edges) > max_edges:
         edges = edges[:max_edges]
     print("nodes", len(node_x), "edges", len(edges))
 
-    np.random.shuffle(edges)
     for edge in edges:
         Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
         Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
