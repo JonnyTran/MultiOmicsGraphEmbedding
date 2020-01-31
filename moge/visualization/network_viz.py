@@ -83,6 +83,8 @@ def graph_viz(g: nx.Graph,
                                }
                               for edge in g.subgraph(nodelist).edges(data=True)])
     print("edge_data", edge_data.shape[0], edge_data.columns)
+    if edge_data.shape[0] > 50000:
+        edge_data = edge_data.sample(n=50000)
 
     fig = px.scatter(x=node_x, y=node_y,
                      hover_name=nodelist,
