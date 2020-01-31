@@ -94,9 +94,14 @@ def graph_viz(g: nx.Graph,
     #                  )
 
     # Edges data
-    edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[0]][0], None],
-                               "y": [pos[edge[1]][1], pos[edge[1]][1], None],
-                               **edge[2]} for edge in g.subgraph(nodelist).edges(data=True)])
+    Xe, Ye = [], []
+    for e in g.subgraph(nodelist).edges(data=True):
+        Xe += [pos[e[0]][0], pos[e[1]][0], None]
+        Ye += [pos[e[0]][1], pos[e[1]][1], None]
+    edge_data = pd.DataFrame([{**edge[2]} for edge in g.subgraph(nodelist).edges(data=True)])
+    edge_data["x"] = Xe
+    edge_data["y"] = Ye
+
     # Samples only certain edges
     if edge_data.shape[0] > max_edges:
         edge_data = edge_data.sample(n=max_edges)
@@ -112,7 +117,7 @@ def graph_viz(g: nx.Graph,
     #                     width=1,
     #                 ),
     #                 showlegend=True,
-    #                 # hoverinfo='none'
+    #                 # hoverinfo='none˚'
     #                 )
 
     trace1 = go.Scatter(x=edge_data["x"],
