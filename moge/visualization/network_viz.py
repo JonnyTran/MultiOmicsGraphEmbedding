@@ -145,7 +145,7 @@ def graph_viz(g: nx.Graph,
     height = 800
     layout = go.Layout(title=title,
                        font=dict(size=12),
-                       showlegend=False,
+                       showlegend=True,
                        autosize=False,
                        width=width,
                        height=height,
