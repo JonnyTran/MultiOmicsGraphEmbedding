@@ -104,7 +104,7 @@ def graph_viz(g: nx.Graph,
         edge_data = edge_data.sample(n=max_edges)
 
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
-    fig.add_scatter(x=edge_data["x"].to_list(), y=edge_data["y"].to_list(),
+    fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
                     line=go.scatter.Line(
                         # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
