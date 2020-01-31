@@ -113,7 +113,7 @@ def graph_viz(g: nx.Graph,
                     line=dict(
                         # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
                         color='rgb(50,50,50)',
-                        width=1,
+                        width=0.5,
                     ),
                     # showlegend=True,
                     hoverinfo='none'
