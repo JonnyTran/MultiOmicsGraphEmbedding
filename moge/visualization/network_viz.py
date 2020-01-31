@@ -67,7 +67,7 @@ def hash_color(labels):
 
 def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol=None, node_color=None,
-              edge_label=None,
+              edge_label: str = None,
               title=None,
               pos=None, iterations=100):
     if pos is None:
@@ -78,9 +78,9 @@ def graph_viz(g: nx.Graph,
         node_symbol.fillna("nan", inplace=True)
     if node_color is not None and node_color.isna().any():
         node_color.fillna("nan", inplace=True)
-    if node_color.str.contains("|").any():
+    if node_color.dtype == "object" and node_color.str.contains("|").any():
         node_color = node_color.str.split("|", expand=True)[0].astype(str)
-    if node_symbol.str.contains("|").any():
+    if node_symbol.dtype == "object" and node_symbol.str.contains("|").any():
         node_symbol = node_symbol.str.split("|", expand=True)[0].astype(str)
 
     node_x, node_y = zip(*[(pos[node][0], pos[node][1])
@@ -102,7 +102,7 @@ def graph_viz(g: nx.Graph,
     if edge_data.shape[0] > 50000:
         edge_data = edge_data.sample(n=50000)
 
-        print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns)
+    print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
                     line=dict(color="rgb(51, 51, 51)", width=1),
