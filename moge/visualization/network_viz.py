@@ -96,8 +96,8 @@ def graph_viz(g: nx.Graph,
     print("edge_data.columns.tolist()", edge_data.columns.tolist())
     print("edge_data.columns.tolist().index(edge_label)", edge_data.columns.tolist().index(edge_label))
     edges_list = [dict(type='scatter',
-                       x=[pos[d[0]][0], pos[d[1]][0]],
-                       y=[pos[d[0]][1], pos[d[1]][1]],
+                       x=d[0],
+                       y=d[1],
                        mode='lines',
                        line=dict(width=1, color=colormap[d[edge_data.columns.tolist().index(edge_label)]])) for d in
                   edge_data.to_records(index=False)]
