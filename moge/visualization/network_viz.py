@@ -108,8 +108,8 @@ def graph_viz(g: nx.Graph,
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
-                    line=go.scatter.Line(color="gray"),
-                    # fillcolor=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+                    line=go.scatter.Line(
+                        color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)', ),
                     showlegend=True,
                     hoverinfo='none')
 
