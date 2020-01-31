@@ -1,4 +1,5 @@
 import networkx as nx
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -57,14 +58,13 @@ color = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
          "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
          "turquoise", "violet", "wheat", "white", "whitesmoke",
          "yellow", "yellowgreen"]
-
+np.random.shuffle(color)
 
 def hash_color(labels):
     sorted_labels = sorted(set(labels), reverse=True)
     colormap = {item: color[sorted_labels.index(item) % len(color)] for item in set(labels)}
     colors = [colormap[n] if n in colormap.keys() else None for n in labels]
     return colors
-
 
 def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol=None, node_color=None,
