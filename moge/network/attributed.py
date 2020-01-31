@@ -13,14 +13,14 @@ class AttributedNetwork():
         if process_annotations:
             self.process_annotations()
             self.process_feature_tranformer()
-        super().__init__()
 
     def process_annotations(self):
         annotations_list = []
 
         for modality in self.modalities:
-            gene_info = self.multi_omics_data[modality].get_annotations()
-            annotations_list.append(gene_info)
+            annotation = self.multi_omics_data[modality].get_annotations()
+            annotation["omic"] = modality
+            annotations_list.append(annotation)
 
         self.annotations = pd.concat(annotations_list, join="inner", copy=True)
         assert type(

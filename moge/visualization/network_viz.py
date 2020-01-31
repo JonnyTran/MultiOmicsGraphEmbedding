@@ -57,9 +57,9 @@ color = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
          "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
          "turquoise", "violet", "wheat", "white", "whitesmoke",
          "yellow", "yellowgreen"]
-np.random.shuffle(color)
 
 def hash_color(labels):
+    np.random.shuffle(color)
     sorted_labels = sorted(set(labels), reverse=True)
     colormap = {item: color[sorted_labels.index(item) % len(color)] for item in set(labels)}
     colors = [colormap[n] if n in colormap.keys() else None for n in labels]
@@ -94,31 +94,46 @@ def graph_viz(g: nx.Graph,
                      )
 
     # Edges data
-
-    edges = list(g.subgraph(nodelist).edges(data=False))
+    edges = list(g.subgraph(nodelist).edges(data=True))
     np.random.shuffle(edges)
-
     # Samples only certain edges
     if max_edges and len(edges) > max_edges:
         edges = edges[:max_edges]
 
-    Xed, Yed = [], []
-    for edge in edges:
-        Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
-        Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
+    if edge_label:
+        Xed_by_label = {}
+        Yed_by_label = {}
+        for edge in edges:
+            label = edge[2][edge_label]
+            Xed_by_label.setdefault(label, []).extend([pos[edge[0]][0], pos[edge[1]][0], None])
+            Yed_by_label.setdefault(label, []).extend([pos[edge[0]][1], pos[edge[1]][1], None])
 
-    print("nodes", len(node_x), "edges", len(edges))
-    fig.add_scatter(x=Xed, y=Yed,
-                    mode='lines',
-                    name='edges',
-                    line=dict(
-                        # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
-                        color='rgb(50,50,50)',
-                        width=0.25,
-                    ),
-                    # showlegend=True,
-                    hoverinfo='none'
-                    )
+        for label in Xed_by_label:
+            fig.add_scatter(x=Xed_by_label[label], y=Yed_by_label[label],
+                            mode='lines',
+                            name=label + ", " + str(len(Xed_by_label[label])),
+                            line=dict(
+                                color=hash_color([label])[0],
+                                # color='rgb(50,50,50)',
+                                width=0.5, ),
+                            # showlegend=True,
+                            hoverinfo='none')
+    else:
+        Xed, Yed = [], []
+        for edge in edges:
+            Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
+            Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
+
+        print("nodes", len(node_x), "edges", len(edges))
+        fig.add_scatter(x=Xed, y=Yed,
+                        mode='lines',
+                        name='edges, ' + str(len(Xed)),
+                        line=dict(
+                            # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+                            color='rgb(50,50,50)',
+                            width=0.25, ),
+                        # showlegend=True,
+                        hoverinfo='none')
 
     # Figure
     axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
