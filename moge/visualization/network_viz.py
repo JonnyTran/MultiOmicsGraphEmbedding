@@ -104,7 +104,7 @@ def graph_viz(g: nx.Graph,
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
     fig = px.line(edge_data, x="x", y="y",
                   color=edge_label,
-                  width=1)
+                  )
     fig.add_scatter(x=node_x, y=node_y,
                     hover_name=nodelist,
                     # symbol=node_symbol if node_symbol is not None else None,
