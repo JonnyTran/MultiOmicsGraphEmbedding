@@ -1,7 +1,7 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
-import plotly.express as px
+import plotly.graph_objects as go
 from fa2 import ForceAtlas2
 
 forceatlas2 = ForceAtlas2(
@@ -102,15 +102,6 @@ def graph_viz(g: nx.Graph,
         edge_data = edge_data.sample(n=max_edges)
 
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
-    fig = px.line(x=edge_data["x"], y=edge_data["y"],
-                  color=edge_data[edge_label],
-                  )
-    fig.add_scatter(x=node_x, y=node_y,
-                    mode="markers",
-                    # symbol=node_symbol if node_symbol is not None else None,
-                    # color=node_color if node_color is not None else None,
-                    )
-
     # hoverinfo='none')
     # fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
     #                 mode='lines',
@@ -124,19 +115,60 @@ def graph_viz(g: nx.Graph,
     #                 # hoverinfo='none'
     #                 )
 
+    trace1 = go.Scatter(x=edge_data["x"],
+                        y=edge_data["y"],
+                        mode='lines',
+                        line=dict(color='rgb(210,210,210)', width=1),
+                        hoverinfo='none'
+                        )
+    trace2 = go.Scatter(x=node_x,
+                        y=node_y,
+                        mode='markers',
+                        name='ntw',
+                        marker=dict(symbol='circle-dot',
+                                    size=5,
+                                    color='#6959CD',
+                                    line=dict(color='rgb(50,50,50)', width=0.5)
+                                    ),
+                        text=nodelist,
+                        hoverinfo='text'
+                        )
+
     axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
                 zeroline=False,
                 showgrid=False,
                 showticklabels=False,
                 title=''
                 )
-    fig.update_layout(
-        title=title,
-        autosize=True,
-        width=width,
-        height=height,
-        xaxis=axis,
-        yaxis=axis
-    )
 
+    width = 800
+    height = 800
+    layout = go.Layout(title=title,
+                       font=dict(size=12),
+                       showlegend=False,
+                       autosize=False,
+                       width=width,
+                       height=height,
+                       xaxis=axis,
+                       yaxis=axis,
+                       hovermode='closest',
+                       annotations=[
+                           dict(
+                               showarrow=False,
+                               text='This igraph.Graph has the Kamada-Kawai layout',
+                               xref='paper',
+                               yref='paper',
+                               x=0,
+                               y=-0.1,
+                               xanchor='left',
+                               yanchor='bottom',
+                               font=dict(
+                                   size=14
+                               )
+                           )
+                       ]
+                       )
+
+    data = [trace1, trace2]
+    fig = go.Figure(data=data, layout=layout)
     return fig
