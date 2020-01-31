@@ -87,11 +87,11 @@ def graph_viz(g: nx.Graph,
 
     node_x, node_y = zip(*[(pos[node][0], pos[node][1])
                            for node in nodelist])
-    fig = px.scatter(x=node_x, y=node_y,
-                     hover_name=nodelist,
-                     symbol=node_symbol if node_symbol is not None else None,
-                     color=node_color if node_color is not None else None,
-                     )
+    # fig = px.scatter(x=node_x, y=node_y,
+    #                  hover_name=nodelist,
+    #                  # symbol=node_symbol if node_symbol is not None else None,
+    #                  # color=node_color if node_color is not None else None,
+    #                  )
 
     # Edges data
     edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0], None],
@@ -102,16 +102,26 @@ def graph_viz(g: nx.Graph,
         edge_data = edge_data.sample(n=max_edges)
 
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
-    fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
-                    mode='lines',
-                    line=dict(
-                        # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
-                        color='rgb(50,50,50)',
-                        width=1,
-                    ),
-                    showlegend=True,
-                    # hoverinfo='none'
+    fig = px.line(edge_data, x="x", y="y",
+                  color=edge_label,
+                  width=1)
+    fig.add_scatter(x=node_x, y=node_y,
+                    hover_name=nodelist,
+                    # symbol=node_symbol if node_symbol is not None else None,
+                    # color=node_color if node_color is not None else None,
                     )
+
+    # hoverinfo='none')
+    # fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
+    #                 mode='lines',
+    #                 line=dict(
+    #                     # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+    #                     color='rgb(50,50,50)',
+    #                     width=1,
+    #                 ),
+    #                 showlegend=True,
+    #                 # hoverinfo='none'
+    #                 )
 
     axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
                 zeroline=False,
