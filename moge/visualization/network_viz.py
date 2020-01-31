@@ -94,14 +94,15 @@ def graph_viz(g: nx.Graph,
                      )
 
     # Edges data
-    Xed, Yed = [], []
+
     edges = list(g.subgraph(nodelist).edges(data=False))
     np.random.shuffle(edges)
 
     # Samples only certain edges
-    if len(edges) > max_edges:
+    if max_edges and len(edges) > max_edges:
         edges = edges[:max_edges]
 
+    Xed, Yed = [], []
     for edge in edges:
         Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
         Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
@@ -113,7 +114,7 @@ def graph_viz(g: nx.Graph,
                     line=dict(
                         # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
                         color='rgb(50,50,50)',
-                        width=0.5,
+                        width=0.25,
                     ),
                     # showlegend=True,
                     hoverinfo='none'
