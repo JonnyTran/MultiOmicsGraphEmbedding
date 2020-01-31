@@ -111,7 +111,8 @@ def graph_viz(g: nx.Graph,
                         width=100,
                     ),
                     showlegend=True,
-                    hoverinfo='none')
+                    # hoverinfo='none'
+                    )
 
     axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
                 zeroline=False,
