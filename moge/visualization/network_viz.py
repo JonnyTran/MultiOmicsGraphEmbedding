@@ -2,7 +2,6 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 from fa2 import ForceAtlas2
 
 forceatlas2 = ForceAtlas2(
@@ -105,7 +104,7 @@ def graph_viz(g: nx.Graph,
     print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
     fig.add_scatter(x=edge_data["x"], y=edge_data["y"],
                     mode='lines',
-                    line=go.scatter.Line(
+                    line=dict(
                         # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
                         color='rgb(50,50,50)',
                         width=1,
