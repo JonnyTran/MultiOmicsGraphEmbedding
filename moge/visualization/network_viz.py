@@ -92,7 +92,9 @@ def graph_viz(g: nx.Graph,
     if edge_label:
         sorted_node_labels = sorted(set(edge_data[edge_label]), reverse=True)
         colormap = {item: color[sorted_node_labels.index(item) % len(color)] for item in set(edge_data[edge_label])}
-
+    print([d for d in edge_data.to_records(index=False)[:5]])
+    print("edge_data.columns.tolist()", edge_data.columns.tolist())
+    print("edge_data.columns.tolist().index(edge_label)", edge_data.columns.tolist().index(edge_label))
     edges_list = [dict(type='scatter',
                        x=[pos[d[0]][0], pos[d[1]][0]],
                        y=[pos[d[0]][1], pos[d[1]][1]],
