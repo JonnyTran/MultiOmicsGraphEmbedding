@@ -89,8 +89,8 @@ def graph_viz(g: nx.Graph,
                            for node in nodelist])
     fig = px.scatter(x=node_x, y=node_y,
                      hover_name=nodelist,
-                     # symbol=node_symbol if node_symbol is not None else None,
-                     # color=node_color if node_color is not None else None,
+                     symbol=node_symbol if node_symbol is not None else None,
+                     color=node_color if node_color is not None else None,
                      )
 
     # Edges data
@@ -98,17 +98,17 @@ def graph_viz(g: nx.Graph,
     #                            "y": [pos[edge[0]][1], pos[edge[1]][1], None],
     #                            **edge[2]} for edge in g.subgraph(nodelist).edges(data=True)])
 
-    # Samples only certain edges
-    # if edge_data.shape[0] > max_edges:
-    #     edge_data = edge_data.sample(n=max_edges)
-
     Xed = []
     Yed = []
     for edge in g.subgraph(nodelist).edges(data=False):
         Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
         Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
 
-    # print("nodes", len(node_x), "edge_data", edge_data.shape[0], edge_data.columns.tolist())
+    # Samples only certain edges
+    if len(Xed) > max_edges:
+        Xed = Xed[:max_edges]
+        Yed = Yed[:max_edges]
+    print("nodes", len(node_x), "edges", len(Xed))
 
     fig.add_scatter(x=Xed, y=Yed,
                     mode='lines',
