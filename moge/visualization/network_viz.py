@@ -74,14 +74,16 @@ def graph_viz(g: nx.Graph,
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
 
     # Nodes data
-    if node_symbol is not None and node_symbol.isna().any():
-        node_symbol.fillna("nan", inplace=True)
-    if node_color is not None and node_color.isna().any():
-        node_color.fillna("nan", inplace=True)
-    if node_color.dtype == "object" and node_color.str.contains("|").any():
-        node_color = node_color.str.split("|", expand=True)[0].astype(str)
-    if node_symbol.dtype == "object" and node_symbol.str.contains("|").any():
-        node_symbol = node_symbol.str.split("|", expand=True)[0].astype(str)
+    if node_symbol is not None and type(node_symbol) is pd.Series:
+        if node_symbol.isna().any():
+            node_symbol.fillna("nan", inplace=True)
+        if node_symbol.dtype == "object" and node_symbol.str.contains("|").any():
+            node_symbol = node_symbol.str.split("|", expand=True)[0].astype(str)
+    if node_color is not None and type(node_color) is pd.Series:
+        if node_color.isna().any():
+            node_color.fillna("nan", inplace=True)
+        if node_color.dtype == "object" and node_color.str.contains("|").any():
+            node_color = node_color.str.split("|", expand=True)[0].astype(str)
 
     node_x, node_y = zip(*[(pos[node][0], pos[node][1])
                            for node in nodelist])
