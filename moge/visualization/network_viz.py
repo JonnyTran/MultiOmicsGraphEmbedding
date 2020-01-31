@@ -107,7 +107,6 @@ def graph_viz(g: nx.Graph,
                   )
     fig.add_scatter(x=node_x, y=node_y,
                     mode="markers",
-                    hover_text=nodelist,
                     # symbol=node_symbol if node_symbol is not None else None,
                     # color=node_color if node_color is not None else None,
                     )
