@@ -93,22 +93,19 @@ def graph_viz(g: nx.Graph,
                      color=node_color if node_color is not None else None,
                      )
 
-    # Edges data
-    # edge_data = pd.DataFrame([{"x": [pos[edge[0]][0], pos[edge[1]][0], None],
-    #                            "y": [pos[edge[0]][1], pos[edge[1]][1], None],
-    #                            **edge[2]} for edge in g.subgraph(nodelist).edges(data=True)])
-
     Xed = []
     Yed = []
-    for edge in g.subgraph(nodelist).edges(data=False):
-        Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
-        Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
+    edges = list(g.subgraph(nodelist).edges(data=False))
 
     # Samples only certain edges
-    if len(Xed) > max_edges:
-        Xed = Xed[:max_edges]
-        Yed = Yed[:max_edges]
-    print("nodes", len(node_x), "edges", len(Xed))
+    if len(edges) > max_edges:
+        edges = edges[:max_edges]
+    print("nodes", len(node_x), "edges", len(edges))
+
+    np.random.shuffle(edges)
+    for edge in edges:
+        Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
+        Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
 
     fig.add_scatter(x=Xed, y=Yed,
                     mode='lines',
