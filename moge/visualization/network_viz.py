@@ -17,7 +17,7 @@ forceatlas2 = ForceAtlas2(
     multiThreaded=False,
     # Tuning
     scalingRatio=2.0,
-    strongGravityMode=False,
+    strongGravityMode=True,
     gravity=1.0,
     # Log
     verbose=False)
@@ -94,7 +94,6 @@ def graph_viz(g: nx.Graph,
                      )
 
     # Edges data
-
     edges = list(g.subgraph(nodelist).edges(data=False))
     np.random.shuffle(edges)
 
