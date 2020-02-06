@@ -116,9 +116,6 @@ class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
         :param node_list: A list of node names
         :return: A csr_matrix sparse adjacency matrix
         """
-        if node_list is None:
-            node_list = self.node_list
-
         if "d" in edge_types:
             directed = True
         elif "u" in edge_types:
@@ -126,21 +123,45 @@ class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
         else:
             raise Exception("edge_types must be either 'd' or 'u'")
 
-        if databases is not None:
+        if hasattr(self, "laplacian_adj"):
+            laplacian_adj = self.laplacian_adj
+        elif databases is not None:
             if directed:
-                edge_list = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
+                edge_list = [(u, v) for u, v, d in self.G.edges(nbunch=self.node_list, data=True) if
                              'database' in d and d['database'] in databases]
-                adj = nx.directed_laplacian_matrix(nx.DiGraph(incoming_graph_data=edge_list), nodelist=node_list)
+                laplacian_adj = nx.directed_laplacian_matrix(nx.DiGraph(incoming_graph_data=edge_list),
+                                                             nodelist=self.node_list)
             else:
-                edge_list = [(u, v) for u, v, d in self.G_u.edges(nbunch=node_list, data=True) if
+                edge_list = [(u, v) for u, v, d in self.G_u.edges(nbunch=self.node_list, data=True) if
                              d['type'] in edge_types]
-                adj = nx.normalized_laplacian_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
+                laplacian_adj = nx.normalized_laplacian_matrix(nx.Graph(incoming_graph_data=edge_list),
+                                                               nodelist=self.node_list)
         elif directed:
-            adj = nx.directed_laplacian_matrix(self.G.subgraph(nodes=node_list), nodelist=node_list)
+            laplacian_adj = nx.directed_laplacian_matrix(self.G.subgraph(nodes=self.node_list), nodelist=self.node_list)
         elif not directed:
-            adj = nx.normalized_laplacian_matrix(self.G_u.subgraph(nodes=node_list), nodelist=node_list)
+            laplacian_adj = nx.normalized_laplacian_matrix(self.G_u.subgraph(nodes=self.node_list),
+                                                           nodelist=self.node_list)
+        else:
+            raise Exception()
 
-        return adj
+        if node_list is None or node_list == self.node_list:
+            self.laplacian_adj = laplacian_adj
+            return laplacian_adj
+        elif set(node_list) < set(self.node_list):
+            return self._select_adj_indices(laplacian_adj, node_list, None)
+        elif not (set(node_list) < set(self.node_list)):
+            raise Exception("A node in node_l is not in self.node_list.")
+
+        return laplacian_adj
+
+    def _select_adj_indices(self, adj, node_list_A, node_list_B=None):
+        if node_list_B is None:
+            idx = [self.node_list.index(node) for node in node_list_A]
+            return adj[idx, :][:, idx]
+        else:
+            idx_A = [self.node_list.index(node) for node in node_list_A]
+            idx_B = [self.node_list.index(node) for node in node_list_B]
+            return adj[idx_A, :][:, idx_B]
 
     def get_edge(self, i, j, is_directed=True):
         if is_directed:
