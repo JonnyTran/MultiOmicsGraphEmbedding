@@ -9,7 +9,7 @@ class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables=None, targets=None, batch_size=500,
                  compression_func="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
-                 seed=0, verbose=True):
+                 seed=0, verbose=True, **kwargs):
         """
         Samples a batch subnetwork for classification task.
 
@@ -32,7 +32,7 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
                                                 sequence_to_matrix=sequence_to_matrix,
-                                                tokenizer=tokenizer, seed=seed, verbose=verbose, )
+                                                tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def __getitem__(self, item):
         sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
