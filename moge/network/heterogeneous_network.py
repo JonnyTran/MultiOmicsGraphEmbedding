@@ -29,10 +29,11 @@ class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
         super(HeterogeneousNetwork, self).__init__(multi_omics_data=multi_omics_data,
                                                    process_annotations=process_annotations)
 
+        self.node_list = self.get_node_list()
+
     def get_node_list(self):
         node_list = list(OrderedDict.fromkeys(list(self.G.nodes) + list(self.G_u.nodes)))
         return node_list
-    node_list = property(get_node_list)
 
     def preprocess_graph(self):
         self.nodes = {}

@@ -98,7 +98,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         :param batch_size: Sample batch size at each iteration
         :param dim: Dimensionality of the sample input
         :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
-        :param replace:
+        :param replace: {True, False}, default True.
         :param seed:
         """
         self.batch_size = batch_size
