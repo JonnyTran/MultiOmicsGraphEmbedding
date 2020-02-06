@@ -1,5 +1,6 @@
 import copy
 import random
+from collections import OrderedDict
 
 import networkx as nx
 import numpy as np
@@ -98,6 +99,8 @@ class NetworkTrainTestSplit():
         self.training = copy.copy(self)
         self.training.annotations = self.annotations
         self.training.node_list = [node for node in self.node_list if node in network_train.nodes()]
+        self.training.node_list = list(OrderedDict.fromkeys(self.training.node_list))
+
         if directed:
             self.training.G = network_train
         else:
@@ -106,7 +109,7 @@ class NetworkTrainTestSplit():
         # Test network
         self.testing = copy.copy(self)
         self.testing.annotations = self.annotations
-        self.testing.node_list = test_nodes
+        self.testing.node_list = list(OrderedDict.fromkeys(test_nodes))
         if directed:
             self.testing.G = nx.DiGraph()
             self.testing.G.add_nodes_from(test_nodes)
@@ -119,7 +122,7 @@ class NetworkTrainTestSplit():
         if val_frac > 0:
             self.validation = copy.copy(self)
             self.validation.annotations = self.annotations
-            self.validation.node_list = val_nodes
+            self.validation.node_list = list(OrderedDict.fromkeys(val_nodes))
             if directed:
                 self.validation.G = nx.DiGraph()
                 self.validation.G.add_nodes_from(val_nodes)
