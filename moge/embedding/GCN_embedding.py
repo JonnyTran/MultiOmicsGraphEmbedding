@@ -1,31 +1,34 @@
 import os
 import time
 
-import numpy as np
 import tensorflow as tf
-from kegra.layers.graph import GraphConvolution
 from keras.callbacks import TensorBoard, EarlyStopping
-from keras.layers import Input, Conv2D, Dropout, Dense, MaxPooling1D, Lambda, Embedding, Bidirectional, LSTM
+from keras.layers import Input, Conv2D, Dropout, MaxPooling1D, Lambda, Embedding, Bidirectional, LSTM, Convolution1D
 from keras.models import Model
 from keras.regularizers import l2
 from keras.utils import multi_gpu_model
+# from kegra.layers.graph import GraphConvolution
+from spektral.layers import GraphConv
 from tensorflow.keras import backend as K
 
+from moge.evaluation.metrics import f1
 from .static_graph_embedding import NeuralGraphEmbedding
 
 
 class GCNEmbedding(NeuralGraphEmbedding):
-    def __init__(self, d: int, batch_size: int, x_features: list, y_label: str, n_labels: int):
-        self.x_features = x_features
+    def __init__(self, d: int, batch_size: int, vocabulary_size, word_embedding_size, y_label: str, n_classes: int):
         self.y_label = y_label
-        self.n_labels = n_labels
         self.batch_size = batch_size
+        self.vocabulary_size = vocabulary_size
+        self.word_embedding_size = word_embedding_size
+        self.n_classes = n_classes
         super(GCNEmbedding, self).__init__(d, method_name="GCN_embedding")
 
     def create_network(self):
         input = Input(batch_shape=(None, None))  # (batch_number, sequence_length)
-        x = Embedding(5, 4, input_length=None, mask_zero=True, trainable=True)(
-            input)  # (batch_number, sequence_length, 5)
+        x = Embedding(input_dim=self.vocabulary_size,
+                      output_dim=self.word_embedding_size,
+                      input_length=None, mask_zero=True, trainable=True)(input)  # (batch_number, sequence_length, 5)
         print("Embedding", x)
 
         x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm_lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
@@ -37,65 +40,48 @@ class GCNEmbedding(NeuralGraphEmbedding):
         x = MaxPooling1D(pool_size=13, padding="same")(x)
         x = Dropout(0.2)(x)
 
-        #     x = Convolution1D(filters=192, kernel_size=6, activation='relu', name="lstm_conv_2")(x)
-        #     print("conv1d_2", x)
-        # #     x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
-        #     x = MaxPooling1D(pool_size=3, padding="same")(x)
-        #     print("max pooling_2", x)
-        #     x = Dropout(0.5)(x)
+        x = Convolution1D(filters=192, kernel_size=6, activation='relu', name="lstm_conv_2")(x)
+        print("conv1d_2", x)
+        #     x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
+        x = MaxPooling1D(pool_size=3, padding="same")(x)
+        print("max pooling_2", x)
+        x = Dropout(0.2)(x)
 
-        x = Bidirectional(LSTM(64, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
+        x = Bidirectional(LSTM(160, return_sequences=False, return_state=False))(x)  # (batch_number, 320+320)
         print("brnn", x)
-        x = Dropout(0.5)(x)
-
-        x = Dense(self._d, activation='linear')(x)
+        #     x = Dropout(0.2)(x)
+        #     x = Dense(_d, activation='linear', name="embedding_output")(x)
         #     x = BatchNormalization(center=True, scale=True, name="embedding_output_normalized")(x)
-
         print("embedding", x)
-        return Model(input, x, name="lstm_network")
+        return Model(input, x, name="encoder_network")
 
     def build_keras_model(self, multi_gpu=False):
         K.clear_session()
 
-        if multi_gpu:
-            device = "/cpu:0"
-        else:
-            device = "/gpu:0"
-
-        with tf.device(device):
+        with tf.device("/cpu:0" if multi_gpu else "/gpu:0"):
             input_seqs = Input(batch_shape=(None, None), dtype=tf.int8, name="input_seqs")
-            labels_directed = Input(batch_shape=(None, None), sparse=False, dtype=tf.float32,
-                                    name="labels_directed")
-            chromosome_name = Input(batch_shape=(None, 323), sparse=False, dtype=tf.uint8,
-                                    name="chromosome_name")
-            transcript_start = Input(batch_shape=(None, 1), sparse=False, dtype=tf.float32,
-                                     name="transcript_start")
-            transcript_end = Input(batch_shape=(None, 1), sparse=False, dtype=tf.float32,
-                                   name="transcript_end")
-            print("labels_directed", labels_directed)
+            subnetwork = Input(batch_shape=(None, None), sparse=False, dtype=tf.float32, name="subnetwork")
+            print("subnetwork", subnetwork)
 
             # build create_network to use in each siamese 'leg'
-            lstm_network = self.create_network()
+            encoder_net = self.create_network()
 
             # encode each of the inputs into a list of embedding vectors with the conv_lstm_network
-            x = lstm_network(input_seqs)
+            x = encoder_net(input_seqs)
             print("embeddings", x)
 
             #     x = Dropout(0.5)(x)
-            x = GraphConvolution(128, support=1,
-                                 activation='relu',
-                                 kernel_regularizer=l2(5e-4),
-                                 use_bias=False)([x, labels_directed])
+            x = GraphConv(128, name="embedding_output",
+                          activation='relu',
+                          kernel_regularizer=l2(5e-4),
+                          use_bias=True)([x, subnetwork])
             x = Dropout(0.5)(x)
 
-            x = GraphConvolution(64, support=1, name="embedding_output",
-                                 activation='relu',
-                                 use_bias=False)([x, labels_directed])
-            x = Dropout(0.5)(x)
+            y_pred = GraphConv(self.n_classes, support=1,
+                               activation='sigmoid',
+                               use_bias=True)([x, subnetwork])
 
-            y_pred = Dense(self.n_labels, activation='sigmoid')(x)
-
-            self.model = Model(inputs=[input_seqs, labels_directed, chromosome_name, transcript_start, transcript_end],
+            self.model = Model(inputs=[input_seqs, subnetwork],
                                outputs=y_pred)
 
         # Multi-gpu parallelization
@@ -106,8 +92,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.model.compile(
             loss="binary_crossentropy",
             optimizer="adam",
-            metrics=["top_k_categorical_accuracy",
-                     #              precision_m, recall_m
+            metrics=["top_k_categorical_accuracy", f1
                      ],
         )
         print("Network total weights:", self.model.count_params())
@@ -153,9 +138,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         if embeddings:
             x_test, node_labels = self.generator_test.load_data(return_node_names=True, y_label=self.y_label)
             if not os.path.exists(self.log_dir): os.makedirs(self.log_dir)
-            with open(os.path.join(self.log_dir, "metadata.tsv"), 'w') as f:
-                np.savetxt(f, node_labels.reset_index(), fmt="%s")
-                f.close()
+            node_labels.to_csv(os.path.join(self.log_dir, "metadata.tsv"), sep="\t")
 
         self.tensorboard = TensorBoard(
             log_dir=self.log_dir,
