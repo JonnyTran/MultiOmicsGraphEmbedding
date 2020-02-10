@@ -49,7 +49,7 @@ class SampledDataGenerator(DataGenerator):
         elif compression == "log":
             compression_func = lambda x: np.log(1 + x)
         elif compression == "linear":
-            compression_func = lambda x: np.min(x, 1)
+            compression_func = lambda x: np.minimum(x, 1)
         else:
             compression_func = lambda x: x
 
