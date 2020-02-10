@@ -8,6 +8,7 @@ class SampledDataGenerator(DataGenerator):
         """
 
         Args:
+            compression_func: {"log", "linear", "sqrt", "sqrt3", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
             n_steps: Number of sampling steps each iteration
             replace: Whether to sample with or without replacement
         """
@@ -47,6 +48,8 @@ class SampledDataGenerator(DataGenerator):
             compression_func = lambda x: x ** (1 / 3)
         elif compression == "log":
             compression_func = lambda x: np.log(1 + x)
+        elif compression == "linear":
+            compression_func = lambda x: np.min(x, 1)
         else:
             compression_func = lambda x: x
 
