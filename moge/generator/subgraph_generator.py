@@ -83,7 +83,7 @@ class SubgraphGenerator(SampledDataGenerator):
                 y[target] = self.network.feature_transformer[target].transform(targets_vector)
 
         # Make a probability distribution
-        y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
+        # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
 
         return X, y
 
