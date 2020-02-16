@@ -85,6 +85,10 @@ class SubgraphGenerator(SampledDataGenerator):
 
         # Make a probability distribution
         # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
+        random_class = np.apply_along_axis(
+            lambda x: np.random.choice(np.arange(x.shape[0]), p=x / np.sum(x) if np.sum(x) > 0 else None),
+            axis=0, arr=y)
+        y = np.eye(y.shape[1])[random_class]
 
         return X, y
 
