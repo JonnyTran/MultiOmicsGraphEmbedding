@@ -16,7 +16,6 @@ from keras_transformer.position import TransformerCoordinateEmbedding
 from keras_transformer.transformer import TransformerBlock
 from tensorflow.keras import backend as K
 
-from moge.evaluation.metrics import f1, hamming_loss
 from .static_graph_embedding import NeuralGraphEmbedding
 
 
@@ -128,7 +127,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
                                            attn_kernel_regularizer=l2(5e-4))([embeddings, subnetwork])
 
         y_pred = Dense(self.n_classes,
-                       activation='sigmoid',
+                       activation='softmax',
                        kernel_regularizer=l1())(graph_attention_2)
 
         return Model([embeddings, subnetwork], y_pred, name="cls_model")
@@ -176,9 +175,9 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         # Compile & train
         self.model.compile(
-            loss=hamming_loss,
+            loss="categorical_accuracy",
             optimizer="adam",
-            metrics=["top_k_categorical_accuracy", f1],
+            metrics=["top_k_categorical_accuracy", "accuracy"],
         )
         print("Network total weights:", self.cls_model.count_params())
 
