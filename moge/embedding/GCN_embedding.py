@@ -198,6 +198,9 @@ class GCNEmbedding(NeuralGraphEmbedding):
         except KeyboardInterrupt:
             print("Stop training")
 
+    def get_embeddings(self, node_list=None):
+        pass
+
     def get_callbacks(self, early_stopping=10, tensorboard=True, histogram_freq=0, embeddings=False, write_grads=False):
         callbacks = []
         if tensorboard:

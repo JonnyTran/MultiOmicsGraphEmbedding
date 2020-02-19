@@ -7,12 +7,11 @@ def hamming_loss(y_true, y_pred, mode='multilabel'):
         raise TypeError('mode must be: [None, multilabel])')
 
     if mode == 'multiclass':
-        nonzero = tf.cast(tf.math.count_nonzero(y_true * y_pred, axis=-1), tf.float32)
+        nonzero = K.cast(tf.math.count_nonzero(y_true * y_pred, axis=-1), K.floatx())
         return 1.0 - nonzero
 
     else:
-        nonzero = tf.cast(tf.math.count_nonzero(y_true - y_pred, axis=-1),
-                          tf.float32)
+        nonzero = K.cast(tf.math.count_nonzero(y_true - y_pred, axis=-1), K.floatx())
         return nonzero / y_true.get_shape()[-1]
 
 
