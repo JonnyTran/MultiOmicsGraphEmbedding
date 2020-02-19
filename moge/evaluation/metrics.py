@@ -2,6 +2,26 @@ import keras.backend as K
 import tensorflow as tf
 
 
+def hamming_loss(y_true, y_pred, mode='multilabel'):
+    if mode not in ['multiclass', 'multilabel']:
+        raise TypeError('mode must be: [None, multilabel])')
+
+    if mode == 'multiclass':
+        nonzero = tf.cast(tf.math.count_nonzero(y_true * y_pred, axis=-1), tf.float32)
+        return 1.0 - nonzero
+
+    else:
+        nonzero = tf.cast(tf.math.count_nonzero(y_true - y_pred, axis=-1),
+                          tf.float32)
+        return nonzero / y_true.get_shape()[-1]
+
+
+class HammingLoss(tf.python.keras.metrics.MeanMetricWrapper):
+    def __init__(self, name='hamming_loss', dtype=None, mode='multilabel'):
+        super(HammingLoss, self).__init__(
+            hamming_loss, name, dtype=dtype, mode=mode)
+
+
 def precision(y_true, y_pred):
     """Precision metric.
 

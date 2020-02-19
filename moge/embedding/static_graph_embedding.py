@@ -438,6 +438,12 @@ class NeuralGraphEmbedding(ImportedGraphEmbedding):
     def create_encoder_network(self):
         raise NotImplementedError()
 
+    def create_embedding_model(self):
+        raise NotImplementedError()
+
+    def create_cls_model(self):
+        raise NotImplementedError()
+
     def learn_embedding(self, generator_train, generator_test, **kwargs):
         raise NotImplementedError()
 

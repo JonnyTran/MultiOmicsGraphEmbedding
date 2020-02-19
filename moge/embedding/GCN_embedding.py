@@ -6,7 +6,7 @@ from keras.callbacks import TensorBoard, EarlyStopping
 from keras.layers import Input, Conv2D, Dropout, MaxPooling1D, Lambda, Embedding, Bidirectional, LSTM, Convolution1D, \
     BatchNormalization, Dense
 from keras.models import Model
-from keras.regularizers import l2
+from keras.regularizers import l2, l1
 from keras.utils import multi_gpu_model
 # from kegra.layers.graph import GraphConvolution
 # from spektral.layers import GraphConv
@@ -16,7 +16,7 @@ from keras_transformer.position import TransformerCoordinateEmbedding
 from keras_transformer.transformer import TransformerBlock
 from tensorflow.keras import backend as K
 
-from moge.evaluation.metrics import f1
+from moge.evaluation.metrics import f1, HammingLoss
 from .static_graph_embedding import NeuralGraphEmbedding
 
 
@@ -32,7 +32,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.num_heads = attn_heads
         super(GCNEmbedding, self).__init__(d, method_name="GCN_embedding")
 
-    def create_encoder_network(self):
+    def create_encoder_network(self, batch_norm=True):
         input_seqs = Input(shape=(None,), name="input_seqs")  # (batch_number, sequence_length)
         x = Embedding(input_dim=self.vocabulary_size,
                       output_dim=self.vocabulary_size - 1,
@@ -45,13 +45,15 @@ class GCNEmbedding(NeuralGraphEmbedding):
                    data_format="channels_last", name="lstm_conv_1")(x)  # (batch_number, sequence_length-5, 1, 192)
         x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
         print("conv2D", x)
-        x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
+        if batch_norm:
+            x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
         x = MaxPooling1D(pool_size=13, padding="same")(x)
         x = Dropout(0.2)(x)
 
         x = Convolution1D(filters=192, kernel_size=6, activation='relu', name="lstm_conv_2")(x)
         print("conv1d_2", x)
-        x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
+        if batch_norm:
+            x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_2", x)
         x = Dropout(0.2)(x)
@@ -62,7 +64,8 @@ class GCNEmbedding(NeuralGraphEmbedding):
         x = Dropout(0.2)(x)
 
         x = Dense(self._d, activation='linear', name="encoder_output")(x)
-        x = BatchNormalization(center=True, scale=True, name="encoder_output_normalized")(x)
+        if batch_norm:
+            x = BatchNormalization(center=True, scale=True, name="encoder_output_normalized")(x)
 
         print("embedding", x)
         return Model(input_seqs, x, name="encoder_model")
@@ -126,9 +129,17 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         y_pred = Dense(self.n_classes,
                        activation='sigmoid',
-                       kernel_regularizer=l2())(graph_attention_2)
+                       kernel_regularizer=l1())(graph_attention_2)
 
         return Model([embeddings, subnetwork], y_pred, name="cls_model")
+
+    def one_error_loss(self, inputs):
+        y_true, y_pred = inputs
+
+        def categorical_accuracy(y_true, y_pred):
+            return K.cast(K.equal(K.argmax(y_true, axis=-1), K.argmax(y_pred, axis=-1)), K.floatx())
+
+        return categorical_accuracy(y_pred, y_pred)
 
     def build_keras_model(self, multi_gpu=False):
         K.clear_session()
@@ -165,14 +176,14 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         # Compile & train
         self.model.compile(
-            loss="binary_crossentropy",
+            loss=HammingLoss(mode="multilabel"),
             optimizer="adam",
             metrics=["top_k_categorical_accuracy", f1],
         )
         print("Network total weights:", self.cls_model.count_params())
 
-    def learn_embedding(self, generator_train, generator_test, tensorboard=True, histogram_freq=0,
-                        embeddings=False, early_stopping: int = False,
+    def learn_embedding(self, generator_train, generator_test, early_stopping: int = False,
+                        tensorboard=True, histogram_freq=0, embeddings=False,
                         epochs=50, validation_steps=None,
                         seed=0, **kwargs):
         self.generator_train = generator_train
@@ -207,7 +218,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
     def build_tensorboard(self, histogram_freq, embeddings: bool, write_grads):
         if not hasattr(self, "log_dir"):
             self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%H-%M%p').strip(" "))
-            print("log_dir:", self.log_dir)
+            print("created log_dir:", self.log_dir)
 
         if embeddings:
             x_test, node_labels = self.generator_test.load_data(return_node_names=True, y_label=self.y_label)
