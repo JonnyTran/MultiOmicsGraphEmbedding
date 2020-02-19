@@ -16,7 +16,7 @@ from keras_transformer.position import TransformerCoordinateEmbedding
 from keras_transformer.transformer import TransformerBlock
 from tensorflow.keras import backend as K
 
-from moge.evaluation.metrics import f1, HammingLoss
+from moge.evaluation.metrics import f1, hamming_loss
 from .static_graph_embedding import NeuralGraphEmbedding
 
 
@@ -176,7 +176,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         # Compile & train
         self.model.compile(
-            loss=HammingLoss(mode="multilabel"),
+            loss=hamming_loss,
             optimizer="adam",
             metrics=["top_k_categorical_accuracy", f1],
         )
