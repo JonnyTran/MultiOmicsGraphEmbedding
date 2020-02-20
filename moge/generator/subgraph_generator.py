@@ -36,19 +36,22 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def __getitem__(self, item):
-        sampled_nodes = np.random.choice(
-            self.annotations.loc[self.node_list, self.variables + self.targets].dropna().index.tolist(),
-            size=self.batch_size, replace=False,
-            p=self.node_sampling_freq)
-        while len(sampled_nodes) < self.batch_size:
-            add_nodes = np.random.choice(self.node_list, size=self.batch_size - len(sampled_nodes), replace=False,
-                                         p=self.node_sampling_freq).tolist()
-            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
-            sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
+        sampled_nodes = self.sample_subgraph(batch_size=self.batch_size)
 
         X, y = self.__getdata__(sampled_nodes)
 
         return X, y
+
+    def sample_subgraph(self, batch_size):
+        sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
+                                         p=self.node_sampling_freq)
+        sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
+        while len(sampled_nodes) < batch_size:
+            add_nodes = np.random.choice(self.node_list, size=batch_size - len(sampled_nodes), replace=False,
+                                         p=self.node_sampling_freq).tolist()
+            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
+            sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
+        return sampled_nodes
 
     def __getdata__(self, sampled_nodes):
         # Features
