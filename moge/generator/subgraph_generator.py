@@ -77,10 +77,10 @@ class SubgraphGenerator(SampledDataGenerator):
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
         # Make a probability distribution
-        y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
+        # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
 
         assert len(sampled_nodes) == y.shape[0]
-        y = pd.DataFrame(y, index=sampled_nodes)
+
         return X, y
 
     def load_data(self, return_node_names=False, y_label=None):
@@ -91,4 +91,5 @@ class SubgraphGenerator(SampledDataGenerator):
         if return_node_names:
             y = self.get_node_labels(y_label, node_list=sampled_nodes)
 
+        y = pd.DataFrame(y, index=sampled_nodes)
         return X, y

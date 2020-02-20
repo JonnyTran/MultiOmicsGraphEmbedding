@@ -16,7 +16,7 @@ from keras_transformer.position import TransformerCoordinateEmbedding
 from keras_transformer.transformer import TransformerBlock
 from tensorflow.keras import backend as K
 
-from moge.evaluation.metrics import f1
+from moge.evaluation.metrics import f1, hamming_loss
 from .static_graph_embedding import NeuralGraphEmbedding
 
 
@@ -133,14 +133,6 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         return Model([embeddings, subnetwork], y_pred, name="cls_model")
 
-    def one_error_loss(self, inputs):
-        y_true, y_pred = inputs
-
-        def categorical_accuracy(y_true, y_pred):
-            return K.cast(K.equal(K.argmax(y_true, axis=-1), K.argmax(y_pred, axis=-1)), K.floatx())
-
-        return categorical_accuracy(y_pred, y_pred)
-
     def build_keras_model(self, multi_gpu=False):
         K.clear_session()
 
@@ -176,7 +168,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         # Compile & train
         self.model.compile(
-            loss="binary_crossentropy",
+            loss=hamming_loss,
             optimizer="adam",
             metrics=["top_k_categorical_accuracy", f1],
         )
