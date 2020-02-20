@@ -80,7 +80,7 @@ class SubgraphGenerator(SampledDataGenerator):
         y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
 
         assert len(sampled_nodes) == y.shape[0]
-        y = pd.Series(y, index=sampled_nodes)
+        y = pd.DataFrame(y, index=sampled_nodes)
         return X, y
 
     def load_data(self, return_node_names=False, y_label=None):
