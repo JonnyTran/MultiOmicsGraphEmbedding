@@ -53,6 +53,18 @@ class SubgraphGenerator(SampledDataGenerator):
             sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
         return sampled_nodes
 
+    def sample_neighborhoods(self, batch_size):
+        sampled_nodes = []
+
+        while len(sampled_nodes) < batch_size:
+            seed_node = np.random.choice(self.node_list, size=1, replace=False, p=self.node_sampling_freq)
+            sampled_nodes = sampled_nodes + seed_node + self.network.G.neighbors(seed_node[0])
+
+        sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+        sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
+        if len(sampled_nodes) > batch_size: sampled_nodes = sampled_nodes[:batch_size]
+        return sampled_nodes
+
     def __getdata__(self, sampled_nodes):
         # Features
         X = {}
