@@ -1,5 +1,3 @@
-from collections import OrderedDict
-
 import numpy as np
 import pandas as pd
 
@@ -35,21 +33,19 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 sequence_to_matrix=sequence_to_matrix,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
+        self.node_list_w_labels = self.annotations.loc[
+            self.node_list, self.variables + self.targets].dropna().index.tolist()
+
     def __getitem__(self, item):
-        sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
+        sampled_nodes = np.random.choice(self.node_list_w_labels,
+                                         size=self.batch_size, replace=False,
                                          p=self.node_sampling_freq)
+
         X, y = self.__getdata__(sampled_nodes)
 
         return X, y
 
     def __getdata__(self, sampled_nodes):
-        sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
-        while len(sampled_nodes) < self.batch_size:
-            add_nodes = np.random.choice(self.node_list, size=self.batch_size - len(sampled_nodes), replace=False,
-                                         p=self.node_sampling_freq).tolist()
-            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
-            sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
-
         # Features
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
@@ -79,7 +75,6 @@ class SubgraphGenerator(SampledDataGenerator):
         # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
 
         assert len(sampled_nodes) == y.shape[0]
-
         return X, y
 
     def load_data(self, return_node_names=False, y_label=None):
