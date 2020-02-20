@@ -57,14 +57,9 @@ class SubgraphGenerator(SampledDataGenerator):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:
-            indices_to_sample = np.where(np.array(self.node_degrees_list) < batch_size - len(sampled_nodes))
-            p = self.node_sampling_freq[indices_to_sample]
-            print(p)
-            p = p / p.sum(axis=0, keepdims=1)
-            print(p)
-            seed_node = np.random.choice(np.array(self.node_list)[indices_to_sample], size=1, replace=False,
-                                         p=p)
-            sampled_nodes = sampled_nodes + list(seed_node) + list(self.network.G.neighbors(seed_node[0]))
+            seed_node = np.random.choice(self.node_list, size=batch_size - len(sampled_nodes), replace=False,
+                                         p=self.node_sampling_freq)
+            sampled_nodes += list(seed_node) + list(self.network.G.neighbors(seed_node[0]))
 
         sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
         sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
