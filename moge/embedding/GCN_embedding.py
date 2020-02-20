@@ -119,7 +119,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
     def create_cls_model(self):
         embeddings = Input(shape=(self._d,), name="embeddings")
         subnetwork = Input(shape=(None,), name="subnetwork")
-        y_pred = GraphAttention(self._d,
+        y_pred = GraphAttention(self.n_classes,
                                 attn_heads=1,
                                 attn_heads_reduction='average',
                                 dropout_rate=0.0,
