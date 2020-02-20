@@ -26,15 +26,15 @@ class SubgraphGenerator(SampledDataGenerator):
         self.variables = variables
         self.targets = targets
 
+        self.node_list = self.annotations.loc[
+            self.node_list, self.variables + self.targets].dropna().index.tolist()
+
         super(SubgraphGenerator, self).__init__(network=network, batch_size=batch_size,
                                                 compression_func=compression_func, n_steps=n_steps,
                                                 directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
                                                 sequence_to_matrix=sequence_to_matrix,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
-
-        self.node_list_w_labels = self.annotations.loc[
-            self.node_list, self.variables + self.targets].dropna().index.tolist()
 
     def __getitem__(self, item):
         sampled_nodes = np.random.choice(self.node_list_w_labels,
