@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 import numpy as np
 import pandas as pd
 
@@ -26,9 +28,6 @@ class SubgraphGenerator(SampledDataGenerator):
         self.variables = variables
         self.targets = targets
 
-        self.node_list = self.annotations.loc[
-            self.node_list, self.variables + self.targets].dropna().index.tolist()
-
         super(SubgraphGenerator, self).__init__(network=network, batch_size=batch_size,
                                                 compression_func=compression_func, n_steps=n_steps,
                                                 directed=directed, replace=replace,
@@ -37,9 +36,15 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def __getitem__(self, item):
-        sampled_nodes = np.random.choice(self.node_list_w_labels,
-                                         size=self.batch_size, replace=False,
-                                         p=self.node_sampling_freq)
+        sampled_nodes = np.random.choice(
+            self.annotations.loc[self.node_list, self.variables + self.targets].dropna().index.tolist(),
+            size=self.batch_size, replace=False,
+            p=self.node_sampling_freq)
+        while len(sampled_nodes) < self.batch_size:
+            add_nodes = np.random.choice(self.node_list, size=self.batch_size - len(sampled_nodes), replace=False,
+                                         p=self.node_sampling_freq).tolist()
+            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
+            sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
 
         X, y = self.__getdata__(sampled_nodes)
 
@@ -50,7 +55,7 @@ class SubgraphGenerator(SampledDataGenerator):
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
-        X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes).toarray()
+        X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["u"], node_list=sampled_nodes).toarray()
         X["subnetwork"] = X["subnetwork"] + np.eye(X["subnetwork"].shape[0])  # Add self-loops
 
         for variable in self.variables:
