@@ -1,6 +1,7 @@
 from collections import OrderedDict
 
 import numpy as np
+import pandas as pd
 
 from .sampled_generator import SampledDataGenerator
 
@@ -46,9 +47,11 @@ class SubgraphGenerator(SampledDataGenerator):
         while len(sampled_nodes) < self.batch_size:
             add_nodes = np.random.choice(self.node_list, size=self.batch_size - len(sampled_nodes), replace=False,
                                          p=self.node_sampling_freq).tolist()
+            print("sampled more nodes", len(add_nodes))
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
             sampled_nodes = self.annotations.loc[sampled_nodes, self.variables + self.targets].dropna().index.tolist()
 
+        # Features
         X = {}
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
@@ -64,28 +67,20 @@ class SubgraphGenerator(SampledDataGenerator):
                 labels_vector = labels_vector.to_numpy().reshape(-1, 1)
             X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
 
-        if len(self.targets) == 1:
-            targets_vector = self.annotations.loc[sampled_nodes, self.targets[0]]
-            if targets_vector.dtypes == np.object:
-                if targets_vector.str.contains("|").any():
-                    targets_vector = targets_vector.str.split("|")
-            else:
-                targets_vector = targets_vector.to_numpy().reshape(-1, 1)
-            y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
+        # Labels
+        targets_vector = self.annotations.loc[sampled_nodes, self.targets[0]]
+        if targets_vector.dtypes == np.object:
+            if targets_vector.str.contains("|").any():
+                targets_vector = targets_vector.str.split("|")
         else:
-            y = {}
-            for target in self.targets:
-                targets_vector = self.annotations.loc[sampled_nodes, target]
-                if targets_vector.dtypes == np.object:
-                    if targets_vector.str.contains("|").any():
-                        targets_vector = targets_vector.str.split("|")
-                else:
-                    targets_vector = targets_vector.to_numpy().reshape(-1, 1)
-                y[target] = self.network.feature_transformer[target].transform(targets_vector)
+            targets_vector = targets_vector.to_numpy().reshape(-1, 1)
+        y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
         # Make a probability distribution
         y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
 
+        assert len(sampled_nodes) == y.shape[0]
+        y = pd.Series(y, index=sampled_nodes)
         return X, y
 
     def load_data(self, return_node_names=False, y_label=None):

@@ -122,7 +122,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         y_pred = GraphAttention(self.n_classes,
                                 attn_heads=1,
                                 attn_heads_reduction='average',
-                                dropout_rate=0.0,
+                                dropout_rate=0.2,
                                 activation='softmax',
                                 kernel_regularizer=l2(5e-4),
                                 attn_kernel_regularizer=l2(5e-4))([embeddings, subnetwork])
@@ -176,11 +176,11 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         # Compile & train
         self.model.compile(
-            loss="categorical_crossentropy",
+            loss="binary_crossentropy",
             optimizer="adam",
             metrics=["top_k_categorical_accuracy", f1],
         )
-        print("Network total weights:", self.cls_model.count_params())
+        print(self.model.summary())
 
     def learn_embedding(self, generator_train, generator_test, early_stopping: int = False,
                         tensorboard=True, histogram_freq=0, embeddings=False,
