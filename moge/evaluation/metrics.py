@@ -12,7 +12,7 @@ def hamming_loss(y_true, y_pred, mode='multilabel'):
 
     else:
         nonzero = K.cast(tf.math.count_nonzero(y_true - y_pred, axis=-1), K.floatx())
-        return K.mean(nonzero / K.cast(y_pred.get_shape()[-1]), K.floatx())
+        return K.mean(nonzero / K.cast(y_pred.get_shape()[-1], K.floatx()))
 
 
 class HammingLoss(tf.python.keras.metrics.MeanMetricWrapper):
