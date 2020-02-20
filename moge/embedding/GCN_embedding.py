@@ -176,7 +176,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         # Compile & train
         self.model.compile(
-            loss="categorical_accuracy",
+            loss="categorical_crossentropy",
             optimizer="adam",
             metrics=["top_k_categorical_accuracy", f1],
         )
