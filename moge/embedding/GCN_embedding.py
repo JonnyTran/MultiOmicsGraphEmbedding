@@ -71,7 +71,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         return Model(input_seqs, x, name="encoder_model")
 
     def create_transformer_net(self):
-        input_seqs = Input(shape=(None,), dtype=tf.int8)  # (batch_number, sequence_length)
+        input_seqs = Input(shape=(None,), name="input_seqs")  # (batch_number, sequence_length)
         #     segment_ids = Input(shape=(None, max_length), dtype='int32', name='segment_ids')
         print("input_seqs", input_seqs)
         embedding_layer = ReusableEmbedding(input_dim=self.vocabulary_size,
