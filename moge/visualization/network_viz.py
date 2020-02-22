@@ -166,7 +166,7 @@ def graph_viz(g: nx.Graph,
     return fig
 
 
-def graph_3dviz(g: nx.Graph,
+def graph_viz3d(g: nx.Graph,
                 nodelist: list, node_symbol=None, node_color=None,
                 edge_label: str = None, max_edges=10000,
                 title=None, width=1000, height=800,
@@ -212,15 +212,15 @@ def graph_3dviz(g: nx.Graph,
             Zed_by_label.setdefault(label, []).extend([pos[edge[0]][2], pos[edge[1]][3], None])
 
         for label in Xed_by_label:
-            fig.add_scatter(x=Xed_by_label[label], y=Yed_by_label[label], z=Zed_by_label[label],
-                            mode='lines',
-                            name=label + ", " + str(len(Xed_by_label[label])),
-                            line=dict(
-                                color=hash_color([label])[0],
-                                # color='rgb(50,50,50)',
-                                width=0.5, ),
-                            # showlegend=True,
-                            hoverinfo='none')
+            fig.add_scatter3d(x=Xed_by_label[label], y=Yed_by_label[label], z=Zed_by_label[label],
+                              mode='lines',
+                              name=label + ", " + str(len(Xed_by_label[label])),
+                              line=dict(
+                                  color=hash_color([label])[0],
+                                  # color='rgb(50,50,50)',
+                                  width=0.5, ),
+                              # showlegend=True,
+                              hoverinfo='none')
     else:
         Xed, Yed, Zed = [], [], []
         for edge in edges:
@@ -229,15 +229,15 @@ def graph_3dviz(g: nx.Graph,
             Zed += [pos[edge[0]][2], pos[edge[1]][2], None]
 
         print("nodes", len(node_x), "edges", len(edges))
-        fig.add_scatter(x=Xed, y=Yed, z=Zed,
-                        mode='lines',
-                        name='edges, ' + str(len(Xed)),
-                        line=dict(
-                            # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
-                            color='rgb(50,50,50)',
-                            width=0.25, ),
-                        # showlegend=True,
-                        hoverinfo='none')
+        fig.add_scatter3d(x=Xed, y=Yed, z=Zed,
+                          mode='lines',
+                          name='edges, ' + str(len(Xed)),
+                          line=dict(
+                              # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+                              color='rgb(50,50,50)',
+                              width=0.25, ),
+                          # showlegend=True,
+                          hoverinfo='none')
 
     # Figure
     axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
