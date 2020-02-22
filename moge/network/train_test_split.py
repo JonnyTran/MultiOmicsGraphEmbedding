@@ -4,6 +4,33 @@ from collections import OrderedDict
 
 import networkx as nx
 import numpy as np
+import pandas as pd
+from sklearn.model_selection import StratifiedShuffleSplit
+
+
+def filter_y_labels(network, y_label="go_id"):
+    nodes_index = network.annotations[["Transcript sequence", y_label]].dropna().index
+
+    label_counts = {}
+    for items in network.annotations.loc[nodes_index, "go_id"].str.split("|"):
+        for item in items:
+            label_counts[item] = label_counts.setdefault(item, 0) + 1
+
+    label_counts = pd.Series(label_counts)
+    labels_filter = label_counts[label_counts < 2].index
+
+    y_labels = network.annotations.loc[nodes_index, y_label].str.split("|")
+    y_labels = y_labels.map(lambda go_terms: [item for item in go_terms if item not in labels_filter])
+
+    return y_labels
+
+
+def stratify_train_test(network, node_list, y_labels, n_splits=1, test_size=0.2):
+    sss = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size)
+    for train_index, test_index in sss.split(network.annotations.loc[node_list].index,
+                                             y_labels):
+        print(train_index, y_labels[train_index])
+        print(test_index, y_labels[test_index])
 
 
 class NetworkTrainTestSplit():

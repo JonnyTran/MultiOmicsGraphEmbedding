@@ -22,12 +22,14 @@ from .static_graph_embedding import NeuralGraphEmbedding
 
 class GCNEmbedding(NeuralGraphEmbedding):
     def __init__(self, d: int, attn_heads: int, batch_size: int, vocabulary_size: int, word_embedding_size: int,
-                 y_label: str, n_classes: int):
+                 max_length: int, y_label: str, n_classes: int):
         self.y_label = y_label
         self.n_classes = n_classes
         self.batch_size = batch_size
         self.vocabulary_size = vocabulary_size
         self.word_embedding_size = word_embedding_size
+
+        self.max_length = max_length
 
         self.num_heads = attn_heads
         super(GCNEmbedding, self).__init__(d, method_name="GCN_embedding")
@@ -70,7 +72,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         print("embedding", x)
         return Model(input_seqs, x, name="encoder_model")
 
-    def create_transformer_net(self):
+    def create_transformer_net(self, batch_norm=True, transformer_depth=1):
         input_seqs = Input(shape=(None,), name="input_seqs")  # (batch_number, sequence_length)
         #     segment_ids = Input(shape=(None, max_length), dtype='int32', name='segment_ids')
         print("input_seqs", input_seqs)
@@ -86,11 +88,11 @@ class GCNEmbedding(NeuralGraphEmbedding):
         next_step_input, embedding_matrix = embedding_layer(input_seqs)
         #     segment_embeddings = segment_embedding_layer(segment_ids)
         print("embedding_layer", next_step_input)
-        next_step_input = TransformerCoordinateEmbedding(self.transformer_depth,
+        next_step_input = TransformerCoordinateEmbedding(transformer_depth,
                                                          name='coordinate_embedding')(next_step_input, step=0)
         #     next_step_input = add_segment_layer([next_step_input, segment_embeddings])
 
-        for step in range(self.transformer_depth):
+        for step in range(transformer_depth):
             next_step_input = TransformerBlock(name='transformer_' + str(step),
                                                num_heads=self.num_heads,
                                                residual_dropout=0.1,
@@ -99,6 +101,9 @@ class GCNEmbedding(NeuralGraphEmbedding):
                                                vanilla_wiring=True)(next_step_input)
             print("transformer_block", next_step_input)
         cls_node_slice = Lambda(lambda x: x[:, 0], name='cls_node_slicer')(next_step_input)
+        if batch_norm:
+            cls_node_slice = BatchNormalization(center=True, scale=True, name="encoder_output_normalized")(
+                cls_node_slice)
         print("cls_node_slice", cls_node_slice)
         return Model(input_seqs, cls_node_slice, name="encoder_model")
 
