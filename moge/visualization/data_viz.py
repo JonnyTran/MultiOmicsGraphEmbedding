@@ -101,3 +101,16 @@ def heatmap(table, file_output=None, title=None, autosize=True, width=800, heigh
         fig.write_image(file_output)
 
     return fig
+
+def plot_training_history(history, title=""):
+    fig = go.Figure()
+    for metric in history.history.keys():
+        fig.add_trace(go.Scatter(x=np.arange(len(history.history["loss"])),
+                                 y=history.history[metric], name=metric,
+                                 mode='lines+markers'))
+    fig.update_layout(
+        title=title,
+        xaxis_title="Iteration",
+        yaxis_title="Percentage",
+    )
+    fig.show()
