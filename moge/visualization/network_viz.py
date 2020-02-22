@@ -114,7 +114,7 @@ def graph_viz(g: nx.Graph,
                 Zed_by_label.setdefault(label, []).extend([pos[edge[0]][2], pos[edge[1]][2], None])
 
         for label in Xed_by_label:
-            fig.add_scatter(x=Xed_by_label[label], y=Yed_by_label[label],
+            fig.add_scatter(x=Xed_by_label[label], y=Yed_by_label[label], z=Zed_by_label if three_d else None,
                             mode='lines',
                             name=label + ", " + str(len(Xed_by_label[label])),
                             line=dict(
