@@ -186,6 +186,7 @@ def graph_viz3d(g: nx.Graph,
     node_x, node_y, node_z = zip(*[(pos[node][0], pos[node][1], pos[node][2])
                                    for node in nodelist])
     fig = px.scatter_3d(x=node_x, y=node_y, z=node_z,
+                        size=10,
                         hover_name=nodelist,
                         symbol=node_symbol if node_symbol is not None else None,
                         color=node_color if node_color is not None else None,
