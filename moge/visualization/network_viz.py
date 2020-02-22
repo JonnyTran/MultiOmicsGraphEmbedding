@@ -67,7 +67,7 @@ def hash_color(labels):
 
 def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol=None, node_color=None,
-              edge_label: str = None, max_edges=10000,
+              edge_label: str = None, max_edges=10000, three_d=False,
               title=None, width=1000, height=800,
               pos=None, iterations=100, ):
     if pos is None:
@@ -105,10 +105,13 @@ def graph_viz(g: nx.Graph,
     if edge_label:
         Xed_by_label = {}
         Yed_by_label = {}
+        Zed_by_label = {}
         for edge in edges:
             label = edge[2][edge_label]
             Xed_by_label.setdefault(label, []).extend([pos[edge[0]][0], pos[edge[1]][0], None])
             Yed_by_label.setdefault(label, []).extend([pos[edge[0]][1], pos[edge[1]][1], None])
+            if three_d:
+                Zed_by_label.setdefault(label, []).extend([pos[edge[0]][2], pos[edge[1]][2], None])
 
         for label in Xed_by_label:
             fig.add_scatter(x=Xed_by_label[label], y=Yed_by_label[label],
@@ -121,13 +124,15 @@ def graph_viz(g: nx.Graph,
                             # showlegend=True,
                             hoverinfo='none')
     else:
-        Xed, Yed = [], []
+        Xed, Yed, Zed = [], [], []
         for edge in edges:
             Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
             Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
+            if three_d:
+                Zed += [pos[edge[0]][2], pos[edge[1]][2], None]
 
         print("nodes", len(node_x), "edges", len(edges))
-        fig.add_scatter(x=Xed, y=Yed,
+        fig.add_scatter(x=Xed, y=Yed, z=Zed if three_d else None,
                         mode='lines',
                         name='edges, ' + str(len(Xed)),
                         line=dict(
