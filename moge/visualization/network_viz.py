@@ -169,7 +169,7 @@ def graph_viz3d(g: nx.Graph,
                 title=None, width=1000, height=800,
                 pos=None, iterations=100, ):
     if pos is None:
-        pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
+        raise Exception("Must provide pos as dict, i.e. {<node>:<3d coordinates>}")
 
     # Nodes data
     if node_symbol is not None and type(node_symbol) is pd.Series:
