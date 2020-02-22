@@ -149,19 +149,16 @@ def graph_viz(g: nx.Graph,
         autosize=True,
         width=width,
         height=height,
-        # margin=dict(
-        #     l=10,
-        #     r=10,
-        #     b=10,
-        #     t=10,
-        #     pad=4
-        # ),
+        margin=dict(
+            l=10,
+            r=10,
+            b=10,
+            t=10,
+            pad=4
+        ),
         xaxis=axis,
         yaxis=axis
     )
-
-    fig.update_yaxes(automargin=True)
-    fig.update_xaxes(automargin=True)
 
     return fig
 
@@ -251,18 +248,15 @@ def graph_viz3d(g: nx.Graph,
         autosize=True,
         width=width,
         height=height,
-        # margin=dict(
-        #     l=10,
-        #     r=10,
-        #     b=10,
-        #     t=10,
-        #     pad=4
-        # ),
+        margin=dict(
+            l=5,
+            r=5,
+            b=5,
+            t=5,
+            pad=5
+        ),
         xaxis=axis,
         yaxis=axis
     )
-
-    fig.update_yaxes(automargin=True)
-    fig.update_xaxes(automargin=True)
 
     return fig
