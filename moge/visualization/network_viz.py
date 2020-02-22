@@ -149,15 +149,18 @@ def graph_viz(g: nx.Graph,
         autosize=True,
         width=width,
         height=height,
-        margin=dict(
-            l=10,
-            r=10,
-            b=10,
-            t=10,
-            pad=4
-        ),
+        # margin=dict(
+        #     l=10,
+        #     r=10,
+        #     b=10,
+        #     t=10,
+        #     pad=4
+        # ),
         xaxis=axis,
         yaxis=axis
     )
+
+    fig.update_yaxes(automargin=True)
+    fig.update_xaxes(automargin=True)
 
     return fig
