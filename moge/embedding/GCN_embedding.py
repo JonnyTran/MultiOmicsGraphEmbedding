@@ -22,7 +22,7 @@ from .static_graph_embedding import NeuralGraphEmbedding
 
 class GCNEmbedding(NeuralGraphEmbedding):
     def __init__(self, d: int, attn_heads: int, batch_size: int, vocabulary_size: int, word_embedding_size: int,
-                 max_length: int, y_label: str, n_classes: int):
+                 max_length: int, y_label: str, n_classes: int, multi_gpu=False):
         self.y_label = y_label
         self.n_classes = n_classes
         self.batch_size = batch_size
@@ -33,6 +33,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         self.num_heads = attn_heads
         super(GCNEmbedding, self).__init__(d, method_name="GCN_embedding")
+        self.build_keras_model(multi_gpu)
 
     def create_encoder_network(self, batch_norm=True):
         input_seqs = Input(shape=(None,), name="input_seqs")  # (batch_number, sequence_length)
@@ -194,15 +195,37 @@ class GCNEmbedding(NeuralGraphEmbedding):
                                                  use_multiprocessing=True, workers=8, verbose=2, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
+        finally:
+            self.save_model(self.log_dir)
 
-    def get_embeddings(self, node_list=None):
-        pass
+    def save_model(self, log_dir):
+        self.encoder_model.save(os.path.join(log_dir, "encoder_model.h5"))
+        self.embedding_model.save(os.path.join(log_dir, "embedding_model.h5"))
+        self.cls_model.save(os.path.join(log_dir, "cls_model.h5"))
+        self.model.save(os.path.join(log_dir, "model.h5"))
+
+    def load_model(self, log_dir):
+        self.encoder_model.load_weights(os.path.join(log_dir, "encoder_model.h5"))
+        self.embedding_model.load_weights(os.path.join(log_dir, "embedding_model.h5"))
+        self.cls_model.load_weights(os.path.join(log_dir, "cls_model.h5"))
+        self.model.load_weights(os.path.join(log_dir, "model.h5"))
+
+    def get_embeddings(self, X):
+        y_pred_encodings = self.encoder_model.predict(X)
+        y_pred_emb = self.embedding_model.predict([y_pred_encodings, X["subnetwork"]],
+                                                  batch_size=y_pred_encodings.shape[0])
+        return y_pred_emb
+
+    def predict(self, X):
+        y_pred_emb = self.get_embeddings(X)
+        y_pred = self.cls_model.predict(y_pred_emb, batch_size=y_pred_emb.shape[0])
+        return y_pred
 
     def get_callbacks(self, early_stopping=10, tensorboard=True, histogram_freq=0, embeddings=False, write_grads=False):
         callbacks = []
         if tensorboard:
             if not hasattr(self, "tensorboard"):
-                self.build_tensorboard(histogram_freq=histogram_freq, embeddings=embeddings, write_grads=write_grads)
+                self.build_tensorboard(embeddings=embeddings, histogram_freq=histogram_freq, write_grads=write_grads)
             callbacks.append(self.tensorboard)
 
         if early_stopping > 0:
@@ -215,7 +238,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         if len(callbacks) == 0: callbacks = None
         return callbacks
 
-    def build_tensorboard(self, histogram_freq, embeddings: bool, write_grads):
+    def build_tensorboard(self, embeddings: bool, histogram_freq, write_grads):
         if not hasattr(self, "log_dir"):
             self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%H-%M%p').strip(" "))
             print("created log_dir:", self.log_dir)
