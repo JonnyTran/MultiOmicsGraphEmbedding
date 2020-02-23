@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn import preprocessing
 
 from moge.network.omics_distance import compute_expression_correlation_dists, compute_annotation_affinities
+from moge.network.train_test_split import get_labels_filter
 
 EPSILON = 1e-16
 
@@ -37,10 +38,8 @@ class AttributedNetwork():
             if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains("|").any():
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split("|")
-                if hasattr(self, "labels_filter"):
-                    print("labels_filter")
-                    features = features.map(
-                        lambda labels: [item for item in labels if item not in self.labels_filter])
+                labels_filter = get_labels_filter(self, features.index, label, min_count=2)
+                features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 self.feature_transformer[label].fit(features)
 
             elif self.annotations[label].dtypes == int or self.annotations[label].dtypes == float:

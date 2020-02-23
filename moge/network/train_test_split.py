@@ -13,19 +13,23 @@ from skmultilearn.model_selection import IterativeStratification
 def filter_y_multilabel(network, y_label="go_id", min_count=2):
     nodes_index = network.annotations[["Transcript sequence", y_label]].dropna().index
 
-    label_counts = {}
-    for items in network.annotations.loc[nodes_index, y_label].str.split("|"):
-        for item in items:
-            label_counts[item] = label_counts.setdefault(item, 0) + 1
-
-    label_counts = pd.Series(label_counts)
-    labels_filter = label_counts[label_counts < min_count].index
+    labels_filter = get_labels_filter(network, nodes_index, y_label, min_count)
     print("labels_filter", len(labels_filter))
 
     y_labels = network.annotations.loc[nodes_index, y_label].str.split("|")
     y_labels = y_labels.map(lambda go_terms: [item for item in go_terms if item not in labels_filter])
 
     return y_labels, labels_filter
+
+
+def get_labels_filter(network, node_list, y_label, min_count):
+    label_counts = {}
+    for items in network.annotations.loc[node_list, y_label].str.split("|"):
+        for item in items:
+            label_counts[item] = label_counts.setdefault(item, 0) + 1
+    label_counts = pd.Series(label_counts)
+    labels_filter = label_counts[label_counts < min_count].index
+    return labels_filter
 
 
 def stratify_train_test(y_label, n_splits=10, seed=42):
