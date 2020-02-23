@@ -6,7 +6,6 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.preprocessing import OrdinalEncoder
 
 
 def filter_y_multilabel(network, y_label="go_id", min_count=2):
@@ -24,7 +23,7 @@ def filter_y_multilabel(network, y_label="go_id", min_count=2):
     y_labels = network.annotations.loc[nodes_index, y_label].str.split("|")
     y_labels = y_labels.map(lambda go_terms: [item for item in go_terms if item not in labels_filter])
 
-    y_labels = OrdinalEncoder().fit_transform(y_labels)
+    # y_labels = OrdinalEncoder().fit_transform(y_labels)
 
     return y_labels
 
