@@ -178,7 +178,7 @@ class NetworkTrainTestSplit():
             print("val_network", self.validation.G.number_of_nodes(),
                   self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
 
-    def split_train_test_stratified(self, directed: bool, stratify_label: str, n_splits=8, seed=42, verbose=False):
+    def split_train_test_stratified(self, directed: bool, stratify_label: str, n_splits=5, seed=42, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
         into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
@@ -197,9 +197,9 @@ class NetworkTrainTestSplit():
         else:
             print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
 
-        y_label, labels_filter = filter_y_multilabel(self, y_label=stratify_label, min_count=n_splits)
+        y_label, labels_filter = filter_y_multilabel(network=self, y_label=stratify_label, min_count=n_splits)
         self.labels_filter = labels_filter
-        train_nodes, test_nodes = stratify_train_test(y_label, n_splits=n_splits, seed=seed)
+        train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
 
         network_train, network_test = split_graph(self, directed=directed, train_nodes=train_nodes,
                                                   test_nodes=test_nodes)
