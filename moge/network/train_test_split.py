@@ -12,7 +12,7 @@ def filter_y_labels(network, y_label="go_id", min_count=2):
     nodes_index = network.annotations[["Transcript sequence", y_label]].dropna().index
 
     label_counts = {}
-    for items in network.annotations.loc[nodes_index, "go_id"].str.split("|"):
+    for items in network.annotations.loc[nodes_index, y_label].str.split("|"):
         for item in items:
             label_counts[item] = label_counts.setdefault(item, 0) + 1
 
