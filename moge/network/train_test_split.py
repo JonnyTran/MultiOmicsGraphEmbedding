@@ -58,35 +58,31 @@ class NetworkTrainTestSplit():
                   self.G_u.number_of_edges()) if verbose else None
 
         if directed:
-            G_train = self.G.copy()
+            network_train = self.G.copy()
         else:
-            G_train = self.G_u.copy()
+            network_train = self.G_u.copy()
 
         test_edges, val_edges = mask_test_edges(self,
                                                 node_list=node_list,
                                                 databases=databases,
                                                 test_frac=test_frac, val_frac=val_frac, seed=seed, verbose=verbose)
-        G_train.remove_edges_from(test_edges)
-        G_train.remove_edges_from(val_edges)
+        network_train.remove_edges_from(test_edges)
+        network_train.remove_edges_from(val_edges)
 
-        self.training = copy.copy(self)
-        self.training.annotations = self.annotations
-
+        self.set_training_data(network_train.nodes())
         if directed:
-            self.training.G = G_train
+            self.training.G = network_train
         else:
-            self.training.G_u = G_train
+            self.training.G_u = network_train
 
-        self.testing = copy.copy(self)
-        self.testing.annotations = self.annotations
+        self.set_testing_data(None)
         if directed:
             self.testing.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
         else:
             self.testing.G_u = nx.from_edgelist(edgelist=test_edges, create_using=nx.Graph)
 
         if val_frac > 0:
-            self.validation = copy.copy(self)
-            self.validation.annotations = self.annotations
+            self.set_val_data(None)
             if directed:
                 self.validation.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
             else:
@@ -131,20 +127,13 @@ class NetworkTrainTestSplit():
         test_nodes, val_nodes = mask_test_edges_by_nodes(network=self, directed=directed, node_list=node_list,
                                                          test_frac=test_frac, val_frac=val_frac, seed=seed,
                                                          verbose=verbose)
-        self.training = copy.copy(self)
-        self.training.annotations = self.annotations
-        self.training.node_list = [node for node in self.node_list if node in network_train.nodes()]
-        self.training.node_list = list(OrderedDict.fromkeys(self.training.node_list))
-
+        self.set_training_data(network_train.nodes())
         if directed:
             self.training.G = network_train
         else:
             self.training.G_u = network_train
 
-        # Test network
-        self.testing = copy.copy(self)
-        self.testing.annotations = self.annotations
-        self.testing.node_list = list(OrderedDict.fromkeys(test_nodes))
+        self.set_testing_data(test_nodes)
         if directed:
             self.testing.G = nx.DiGraph()
             self.testing.G.add_nodes_from(test_nodes)
@@ -155,9 +144,7 @@ class NetworkTrainTestSplit():
             self.testing.G_u.add_edges_from(test_edges)
 
         if val_frac > 0:
-            self.validation = copy.copy(self)
-            self.validation.annotations = self.annotations
-            self.validation.node_list = list(OrderedDict.fromkeys(val_nodes))
+            self.set_val_data(val_nodes)
             if directed:
                 self.validation.G = nx.DiGraph()
                 self.validation.G.add_nodes_from(val_nodes)
@@ -207,20 +194,14 @@ class NetworkTrainTestSplit():
 
         network_train, network_test = split_graph(self, directed=directed, train_nodes=train_nodes,
                                                   test_nodes=test_nodes)
-        self.training = copy.copy(self)
-        self.training.annotations = self.annotations
-        self.training.node_list = [node for node in self.node_list if node in network_train.nodes()]
-        self.training.node_list = list(OrderedDict.fromkeys(self.training.node_list))
-
+        self.set_training_data(train_nodes)
         if directed:
             self.training.G = network_train
         else:
             self.training.G_u = network_train
 
         # Test network
-        self.testing = copy.copy(self)
-        self.testing.annotations = self.annotations
-        self.testing.node_list = list(OrderedDict.fromkeys(test_nodes))
+        self.set_testing_data(test_nodes)
         if directed:
             self.testing.G = network_test
         else:
@@ -236,6 +217,27 @@ class NetworkTrainTestSplit():
                   self.training.G_u.number_of_edges()) if verbose else None
             print("test_network", self.testing.G.number_of_nodes(),
                   self.testing.G_u.number_of_edges()) if verbose else None
+
+    def set_val_data(self, val_nodes=None):
+        self.validation = copy.copy(self)
+        self.validation.annotations = self.annotations
+        if val_nodes:
+            self.validation.node_list = list(OrderedDict.fromkeys(val_nodes))
+        self.validation.feature_transformer = self.feature_transformer
+
+    def set_testing_data(self, test_nodes):
+        self.testing = copy.copy(self)
+        self.testing.annotations = self.annotations
+        if test_nodes:
+            self.testing.node_list = list(OrderedDict.fromkeys(test_nodes))
+        self.testing.feature_transformer = self.feature_transformer
+
+    def set_training_data(self, nodelist):
+        self.training = copy.copy(self)
+        self.training.annotations = self.annotations
+        if nodelist:
+            self.training.node_list = list(OrderedDict.fromkeys([node for node in self.node_list if node in nodelist]))
+        self.training.feature_transformer = self.feature_transformer
 
     def get_train_generator(self, generator, **kwargs):
         kwargs['network'] = self.training

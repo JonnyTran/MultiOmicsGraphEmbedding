@@ -29,7 +29,7 @@ class AttributedNetwork():
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def process_feature_tranformer(self):
+    def process_feature_tranformer(self, min_count=2):
         self.feature_transformer = {}
         for label in self.annotations.columns:
             if label == 'Transcript sequence':
@@ -38,7 +38,7 @@ class AttributedNetwork():
             if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains("|").any():
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split("|")
-                labels_filter = get_labels_filter(self, features.index, label, min_count=2)
+                labels_filter = get_labels_filter(self, features.index, label, min_count=min_count)
                 features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 self.feature_transformer[label].fit(features)
 
