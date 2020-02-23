@@ -28,10 +28,10 @@ def filter_y_multilabel(network, y_label="go_id", min_count=2):
     return y_labels
 
 
-def stratify_train_test(y_label, n_splits=10):
+def stratify_train_test(y_label, n_splits=10, seed=42):
     y_label_bin = MultiLabelBinarizer().fit_transform(y_label)
 
-    k_fold = IterativeStratification(n_splits=n_splits, order=1)
+    k_fold = IterativeStratification(n_splits=n_splits, order=1, random_state=seed)
     for train, test in k_fold.split(y_label.index.to_list(), sps.lil_matrix(y_label_bin)):
         train_nodes = list(y_label.index[train])
         test_nodes = list(y_label.index[test])
@@ -178,7 +178,7 @@ class NetworkTrainTestSplit():
             print("val_network", self.validation.G.number_of_nodes(),
                   self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
 
-    def split_train_test_stratified(self, directed: bool, stratify_label: str, n_splits=8, verbose=False):
+    def split_train_test_stratified(self, directed: bool, stratify_label: str, n_splits=8, seed=42, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
         into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
@@ -198,7 +198,7 @@ class NetworkTrainTestSplit():
             print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
 
         y_label = filter_y_multilabel(self, y_label=stratify_label, min_count=n_splits)
-        train_nodes, test_nodes = stratify_train_test(y_label, n_splits=n_splits)
+        train_nodes, test_nodes = stratify_train_test(y_label, n_splits=n_splits, seed=seed)
 
         network_train, network_test = split_graph(self, directed=directed, train_nodes=train_nodes,
                                                   test_nodes=test_nodes)
@@ -241,10 +241,7 @@ class NetworkTrainTestSplit():
         return generator(**kwargs)
 
 
-
-
-def mask_test_edges_by_nodes(network, directed, node_list,
-                             test_frac=0.10, val_frac=0.0,
+def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_frac=0.0,
                              seed=0, verbose=False):
     if directed:
         g = network.G.copy()
@@ -283,8 +280,7 @@ def mask_test_edges_by_nodes(network, directed, node_list,
     return g, test_edges, val_edges, test_nodes, val_nodes
 
 
-def split_graph(network, directed, train_nodes, test_nodes,
-                seed=0, verbose=False):
+def split_graph(network, directed, train_nodes, test_nodes, verbose=False):
     if directed:
         g_train = network.G.copy()
     else:
@@ -294,11 +290,10 @@ def split_graph(network, directed, train_nodes, test_nodes,
     no_of_edges_before = g_train.number_of_edges()
     no_of_nodes_before = g_train.number_of_nodes()
 
-    random.seed(seed)
     # Sample nodes then create a set of edges induced by the sampled nodes
     g_test = g_train.subgraph(test_nodes)
     g_train = g_train.subgraph(train_nodes)
-    print("test nodes", len(g_test.number_of_nodes()), ", edges", len(g_test.number_of_edges()))
+    print("test nodes", g_test.number_of_nodes(), ", edges", g_test.number_of_edges())
 
     print('removed', no_of_edges_before - g_train.number_of_edges(), "edges, and ",
           no_of_nodes_before - g_train.number_of_nodes(), "nodes.") if verbose else None
