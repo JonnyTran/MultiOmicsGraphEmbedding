@@ -296,8 +296,9 @@ def split_graph(network, directed, train_nodes, test_nodes, verbose=False):
     no_of_nodes_before = g_train.number_of_nodes()
 
     # Sample nodes then create a set of edges induced by the sampled nodes
-    g_test = g_train.subgraph(test_nodes)
     g_train = g_train.subgraph(train_nodes)
+    print("train nodes", g_train.number_of_nodes(), ", edges", g_train.number_of_edges())
+    g_test = g_train.subgraph(test_nodes)
     print("test nodes", g_test.number_of_nodes(), ", edges", g_test.number_of_edges())
 
     print('removed', no_of_edges_before - g_train.number_of_edges(), "edges, and ",
