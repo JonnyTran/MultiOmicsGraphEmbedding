@@ -289,17 +289,17 @@ def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_f
 
 def split_graph(network, directed, train_nodes, test_nodes, verbose=False):
     if directed:
-        g_train = network.G.copy()
+        g = network.G.copy()
     else:
-        g_train = network.G_u.copy()
+        g = network.G_u.copy()
 
-    g_train.remove_nodes_from(list(nx.isolates(g_train)))
-    no_of_edges_before = g_train.number_of_edges()
-    no_of_nodes_before = g_train.number_of_nodes()
+    g.remove_nodes_from(list(nx.isolates(g)))
+    no_of_edges_before = g.number_of_edges()
+    no_of_nodes_before = g.number_of_nodes()
 
-    g_test = g_train.subgraph(test_nodes)
+    g_test = g.subgraph(test_nodes)
     print("test nodes", g_test.number_of_nodes(), ", edges", g_test.number_of_edges())
-    g_train = g_train.subgraph(train_nodes)
+    g_train = g.subgraph(train_nodes)
     print("train nodes", g_train.number_of_nodes(), ", edges", g_train.number_of_edges())
 
     print('removed', no_of_edges_before - g_train.number_of_edges(), "edges, and ",
