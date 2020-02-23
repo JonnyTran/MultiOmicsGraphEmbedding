@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.model_selection import StratifiedShuffleSplit
 
 
-def filter_y_labels(network, y_label="go_id", min_count=2):
+def filter_y_multilabel(network, y_label="go_id", min_count=2):
     nodes_index = network.annotations[["Transcript sequence", y_label]].dropna().index
 
     label_counts = {}
