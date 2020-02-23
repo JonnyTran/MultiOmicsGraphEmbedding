@@ -191,7 +191,7 @@ class NetworkTrainTestSplit():
         y_label, labels_filter = filter_y_multilabel(network=self, y_label=stratify_label, min_count=n_splits)
         self.labels_filter = labels_filter
         train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
-
+        print("test_nodes", len(test_nodes))
         network_train, network_test = split_graph(self, directed=directed, train_nodes=train_nodes,
                                                   test_nodes=test_nodes)
         self.set_training_data(train_nodes)
