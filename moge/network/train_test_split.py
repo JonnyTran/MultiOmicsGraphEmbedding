@@ -25,7 +25,7 @@ def filter_y_multilabel(network, y_label="go_id", min_count=2):
     y_labels = network.annotations.loc[nodes_index, y_label].str.split("|")
     y_labels = y_labels.map(lambda go_terms: [item for item in go_terms if item not in labels_filter])
 
-    return y_labels
+    return y_labels, labels_filter
 
 
 def stratify_train_test(y_label, n_splits=10, seed=42):
@@ -197,7 +197,8 @@ class NetworkTrainTestSplit():
         else:
             print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
 
-        y_label = filter_y_multilabel(self, y_label=stratify_label, min_count=n_splits)
+        y_label, labels_filter = filter_y_multilabel(self, y_label=stratify_label, min_count=n_splits)
+        self.labels_filter = labels_filter
         train_nodes, test_nodes = stratify_train_test(y_label, n_splits=n_splits, seed=seed)
 
         network_train, network_test = split_graph(self, directed=directed, train_nodes=train_nodes,
