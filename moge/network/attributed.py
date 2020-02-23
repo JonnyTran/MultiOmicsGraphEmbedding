@@ -29,29 +29,29 @@ class AttributedNetwork():
         print("Annotation columns:", self.annotations.columns.tolist())
 
     def process_feature_tranformer(self):
-        self.feature_transformers = {}
+        self.feature_transformer = {}
         for label in self.annotations.columns:
             if label == 'Transcript sequence':
                 continue
 
             if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains("|").any():
-                self.feature_transformers[label] = preprocessing.MultiLabelBinarizer()
+                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split("|")
                 if hasattr(self, "labels_filter"):
                     print("labels_filter")
                     features = features.map(
                         lambda labels: [item for item in labels if item not in self.labels_filter])
-                self.feature_transformers[label].fit(features)
+                self.feature_transformer[label].fit(features)
 
             elif self.annotations[label].dtypes == int or self.annotations[label].dtypes == float:
-                self.feature_transformers[label] = preprocessing.StandardScaler()
+                self.feature_transformer[label] = preprocessing.StandardScaler()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0)
-                self.feature_transformers[label].fit(features.to_numpy().reshape(-1, 1))
+                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
 
             else:
-                self.feature_transformers[label] = preprocessing.MultiLabelBinarizer()
+                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0)
-                self.feature_transformers[label].fit(features.to_numpy().reshape(-1, 1))
+                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
 
     def add_undirected_edges_from_attibutes(self, modality, node_list, features=None, weights=None,
                                             nanmean=True,
