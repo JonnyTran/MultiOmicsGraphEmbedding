@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedShuffleSplit
+from sklearn.preprocessing import OrdinalEncoder
 
 
 def filter_y_multilabel(network, y_label="go_id", min_count=2):
