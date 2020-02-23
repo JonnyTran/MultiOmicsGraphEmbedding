@@ -5,7 +5,9 @@ from collections import OrderedDict
 import networkx as nx
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedShuffleSplit
+import scipy.sparse as sps
+from sklearn.preprocessing import MultiLabelBinarizer
+from skmultilearn.model_selection import IterativeStratification
 
 
 def filter_y_multilabel(network, y_label="go_id", min_count=2):
@@ -28,14 +30,14 @@ def filter_y_multilabel(network, y_label="go_id", min_count=2):
     return y_labels
 
 
-def stratify_train_test(network, node_list, y_labels, n_splits=1, test_size=0.2):
-    sss = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size)
-    for train_index, test_index in sss.split(network.annotations.loc[node_list].index,
-                                             y_labels):
-        print(train_index, y_labels[train_index])
-        print(test_index, y_labels[test_index])
-        return train_index, test_index
+def stratify_train_test(y_label, n_splits=10):
+    y_label_bin = MultiLabelBinarizer().fit_transform(y_label)
 
+    k_fold = IterativeStratification(n_splits=n_splits, order=1)
+    for train, test in k_fold.split(y_label.index.to_list(), sps.lil_matrix(y_label_bin)):
+        train_nodes = y_label.index[train]
+        test_nodes = y_label.index[test]
+        return train_nodes, test_nodes
 
 class NetworkTrainTestSplit():
     def __init__(self) -> None:

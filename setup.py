@@ -2,7 +2,7 @@ from setuptools import setup
 
 requirements = [
     'numpy', 'pandas', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph', 'chart-studio',
-    "fa2"
+    "fa2", "scikit-multilearn"
 ]
 
 setup(
