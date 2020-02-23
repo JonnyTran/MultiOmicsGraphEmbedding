@@ -84,7 +84,7 @@ class SubgraphGenerator(SampledDataGenerator):
                     labels_vector = labels_vector.str.split("|")
             else:
                 labels_vector = labels_vector.to_numpy().reshape(-1, 1)
-            X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
+            X[variable] = self.network.feature_transformers[variable].transform(labels_vector)
 
         # Labels
         targets_vector = self.annotations.loc[sampled_nodes, self.targets[0]]
@@ -93,7 +93,7 @@ class SubgraphGenerator(SampledDataGenerator):
                 targets_vector = targets_vector.str.split("|")
         else:
             targets_vector = targets_vector.to_numpy().reshape(-1, 1)
-        y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
+        y = self.network.feature_transformers[self.targets[0]].transform(targets_vector)
 
         # Make a probability distribution
         # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
@@ -110,5 +110,5 @@ class SubgraphGenerator(SampledDataGenerator):
             y = self.get_node_labels(y_label, node_list=sampled_nodes)
 
         y = pd.DataFrame(y, index=sampled_nodes,
-                         columns=self.network.feature_transformer[self.targets[0]].classes_)
+                         columns=self.network.feature_transformers[self.targets[0]].classes_)
         return X, y

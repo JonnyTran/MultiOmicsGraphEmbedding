@@ -40,7 +40,7 @@ class AttributedNetwork():
                 if hasattr(self, "labels_filter"):
                     print("labels_filter")
                     features = features.map(
-                        lambda go_terms: [item for item in go_terms if item not in self.labels_filter])
+                        lambda labels: [item for item in labels if item not in self.labels_filter])
                 self.feature_transformers[label].fit(features)
 
             elif self.annotations[label].dtypes == int or self.annotations[label].dtypes == float:
