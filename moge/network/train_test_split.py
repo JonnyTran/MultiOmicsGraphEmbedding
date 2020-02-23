@@ -35,7 +35,7 @@ def stratify_train_test(y_label, n_splits=10):
     for train, test in k_fold.split(y_label.index.to_list(), sps.lil_matrix(y_label_bin)):
         train_nodes = list(y_label.index[train])
         test_nodes = list(y_label.index[test])
-        yield train_nodes, test_nodes
+        return train_nodes, test_nodes
 
 class NetworkTrainTestSplit():
     def __init__(self) -> None:
