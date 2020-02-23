@@ -8,7 +8,7 @@ import pandas as pd
 from sklearn.model_selection import StratifiedShuffleSplit
 
 
-def filter_y_labels(network, y_label="go_id"):
+def filter_y_labels(network, y_label="go_id", min_count=2):
     nodes_index = network.annotations[["Transcript sequence", y_label]].dropna().index
 
     label_counts = {}
@@ -17,7 +17,7 @@ def filter_y_labels(network, y_label="go_id"):
             label_counts[item] = label_counts.setdefault(item, 0) + 1
 
     label_counts = pd.Series(label_counts)
-    labels_filter = label_counts[label_counts < 2].index
+    labels_filter = label_counts[label_counts < min_count].index
 
     y_labels = network.annotations.loc[nodes_index, y_label].str.split("|")
     y_labels = y_labels.map(lambda go_terms: [item for item in go_terms if item not in labels_filter])
@@ -31,6 +31,7 @@ def stratify_train_test(network, node_list, y_labels, n_splits=1, test_size=0.2)
                                              y_labels):
         print(train_index, y_labels[train_index])
         print(test_index, y_labels[test_index])
+        return train_index, test_index
 
 
 class NetworkTrainTestSplit():
