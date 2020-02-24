@@ -29,7 +29,7 @@ class AttributedNetwork():
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def process_feature_tranformer(self, min_count=2):
+    def process_feature_tranformer(self, min_count=5):
         self.feature_transformer = {}
         for label in self.annotations.columns:
             if label == 'Transcript sequence':

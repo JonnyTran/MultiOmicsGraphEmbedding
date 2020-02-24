@@ -1,5 +1,6 @@
 import tensorflow as tf
 from keras import backend as K
+
 from tensorflow_addons.metrics.utils import MeanMetricWrapper
 
 
@@ -54,12 +55,12 @@ def hamming_loss_fn(y_true, y_pred, threshold=0.5, mode="multilabel"):
 
     if mode == 'multiclass':
         nonzero = tf.cast(
-            tf.math.count_nonzero(y_true * y_pred, axis=-1), tf.float32)
+            K.sum(K.abs(y_true * y_pred), axis=-1), tf.float32)
         return 1.0 - nonzero
 
     else:
         nonzero = tf.cast(
-            tf.math.count_nonzero(y_true - y_pred, axis=-1), tf.float32)
+            K.sum(K.abs(y_true - y_pred), axis=-1), tf.float32)
         return nonzero / tf.cast(y_pred.get_shape()[-1], tf.float32)
 
 
@@ -77,7 +78,5 @@ class HammingLoss(MeanMetricWrapper):
 
 def hamming_loss(y_true, y_pred):
     incorrects = K.cast(K.sum(K.abs(y_true - y_pred), axis=-1), dtype=tf.float32)
-    print("incorrects", incorrects)
     means = K.mean(incorrects, axis=-1)
-    print("mean", means)
     return means

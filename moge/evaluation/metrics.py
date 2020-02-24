@@ -2,18 +2,6 @@ import keras.backend as K
 import tensorflow as tf
 
 
-def hamming_loss(y_true, y_pred, mode='multilabel'):
-    if mode not in ['multiclass', 'multilabel']:
-        raise TypeError('mode must be: [None, multilabel])')
-
-    if mode == 'multiclass':
-        nonzero = K.cast(tf.math.count_nonzero(y_true * y_pred, axis=-1), K.floatx())
-        return K.mean(1.0 - nonzero)
-    else:
-        nonzero = K.cast(tf.math.count_nonzero(y_true - y_pred, axis=-1), K.floatx())
-        return K.mean(nonzero / K.cast(y_pred.get_shape()[-1], K.floatx()))
-
-
 
 def precision(y_true, y_pred):
     """Precision metric.
