@@ -2,7 +2,7 @@ import biovec
 import numpy as np
 import pandas as pd
 
-from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
+from moge.model.static_graph_embedding import ImportedGraphEmbedding
 
 
 class BioVecEmbedding(ImportedGraphEmbedding):

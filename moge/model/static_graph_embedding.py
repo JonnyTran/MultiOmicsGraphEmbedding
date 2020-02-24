@@ -20,20 +20,20 @@ class BaseGraphEmbedding:
         '''Initialize the Embedding class
 
         Args:
-            d: dimension of embedding
+            d: dimension of model
         '''
         pass
 
     def get_method_name(self):
-        ''' Returns the name for the embedding method
+        ''' Returns the name for the model method
 
         Return:
-            The name of embedding
+            The name of model
         '''
         return ''
 
     def get_method_summary(self):
-        ''' Returns the summary for the embedding include method name and paramater setting
+        ''' Returns the summary for the model include method name and paramater setting
 
         Return:
             A summary string of the method
@@ -41,7 +41,7 @@ class BaseGraphEmbedding:
         return ''
 
     def learn_embedding(self, graph):
-        '''Learning the graph embedding from the adjcency matrix.
+        '''Learning the graph model from the adjcency matrix.
 
         Args:
             graph: the graph to embed in networkx DiGraph format
@@ -49,7 +49,7 @@ class BaseGraphEmbedding:
         pass
 
     def get_embeddings(self):
-        ''' Returns the learnt embedding
+        ''' Returns the learnt model
 
         Return:
             A numpy array of size #nodes * d
@@ -63,7 +63,7 @@ class BaseGraphEmbedding:
         '''Compute the weight for edge between node i and node j
 
         Args:
-            i, j: two node id in the graph for embedding
+            i, j: two node id in the graph for model
         Returns:
             A single number represent the weight of edge between node i and node j
 
@@ -77,7 +77,7 @@ class BaseGraphEmbedding:
             return False
 
     def get_reconstructed_adj(self, edge_type=None):
-        '''Compute the adjacency matrix from the learned embedding
+        '''Compute the adjacency matrix from the learned model
 
         Returns:
             A numpy array of size #nodes * #nodes containing the reconstructed adjacency matrix.
@@ -92,21 +92,21 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         '''Initialize the Embedding class
 
         Args:
-            d: dimension of embedding
+            d: dimension of model
         '''
         self._d = d
         self._method_name = method_name
 
     def get_method_name(self):
-        ''' Returns the name for the embedding method
+        ''' Returns the name for the model method
 
         Return:
-            The name of embedding
+            The name of model
         '''
         return self._method_name
 
     def get_method_summary(self):
-        ''' Returns the summary for the embedding include method name and paramater setting
+        ''' Returns the summary for the model include method name and paramater setting
 
         Return:
             A summary string of the method
@@ -114,7 +114,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         return self._method_name + str(self._d)
 
     def learn_embedding(self, graph):
-        '''Learning the graph embedding from the adjcency matrix.
+        '''Learning the graph model from the adjcency matrix.
 
         Args:
             graph: the graph to embed in networkx DiGraph format
@@ -122,7 +122,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         raise NotImplementedError()
 
     def get_embeddings(self, node_list=None):
-        ''' Returns the learnt embedding
+        ''' Returns the learnt model
 
         Return:
             A numpy array of size #nodes * d
@@ -139,7 +139,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         '''Compute the weight for edge between node i and node j
 
         Args:
-            i, j: two node id in the graph for embedding
+            i, j: two node id in the graph for model
         Returns:
             A single number represent the weight of edge between node i and node j
 
@@ -164,7 +164,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
             vectors = {}
             self.node_list = []
 
-            # Read embedding file
+            # Read model file
             while 1:
                 l = fin.readline()
                 if l == '':
@@ -202,7 +202,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         print(self.get_method_name(), "imported", self._X.shape)
 
     def get_reconstructed_adj(self, edge_type=None, node_l=None, node_l_b=None, interpolate=False):
-        '''Compute the adjacency matrix from the learned embedding
+        '''Compute the adjacency matrix from the learned model
 
         Returns:
             A numpy array of size #nodes * #nodes containing the reconstructed adjacency matrix.

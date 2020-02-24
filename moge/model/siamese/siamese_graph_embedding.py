@@ -16,10 +16,10 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
-from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
 from moge.evaluation.metrics import precision_d, recall_d, precision, recall
 from moge.generator.data_generator import DataGenerator
 from moge.generator.sampled_generator import SampledDataGenerator
+from moge.model.static_graph_embedding import ImportedGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
@@ -172,7 +172,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             if self.embedding_normalization:
                 x = Lambda(lambda x: K.l2_normalize(x, axis=-1), name="embedding_output_normalized")(x)
 
-        print("embedding", x) if self.verbose else None
+        print("model", x) if self.verbose else None
         return Model(input, x, name="lstm_network")
 
     def create_alpha_network(self):
@@ -536,7 +536,7 @@ if __name__ == '__main__':
     with open('moge/data/lncRNA_miRNA_mRNA/miRNA-mRNA_network.pickle', 'rb') as input_file:
         network = pickle.load(input_file)
 
-    ##### Run graph embedding #####
+    ##### Run graph model #####
     gf = SiameseGraphEmbedding(d=128, batch_size=10000, lr=0.05, epochs=50, reg=1.0)
 
 

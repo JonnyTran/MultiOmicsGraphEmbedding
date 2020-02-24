@@ -1,7 +1,7 @@
 import numpy as np
 
-from moge.embedding.static_graph_embedding import BaseGraphEmbedding
 from moge.evaluation.utils import getRandomEdgePairs
+from moge.model.static_graph_embedding import BaseGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 flatten = lambda l: [item for sublist in l for item in sublist]
@@ -28,7 +28,7 @@ def evaluateStaticGraphReconstruction(network: HeterogeneousNetwork, graph_emb: 
 
     true_edges = true_adj_matrix[eval_edge_rows, eval_edge_cols]
 
-    if ~hasattr(graph_emb, "_X") and train_embedding: # If graph embedding isn't trained
+    if ~hasattr(graph_emb, "_X") and train_embedding:  # If graph model isn't trained
         graph_emb.learn_embedding(network.G)
 
     estimated_edges = graph_emb.get_reconstructed_adj(edge_type=edge_type)[eval_edge_rows, eval_edge_cols]

@@ -14,11 +14,6 @@ def hamming_loss(y_true, y_pred, mode='multilabel'):
         return K.mean(nonzero / K.cast(y_pred.get_shape()[-1], K.floatx()))
 
 
-# class HammingLoss(tf.python.keras.metrics.MeanMetricWrapper):
-#     def __init__(self, name='hamming_loss', dtype=None, mode='multilabel'):
-#         super(HammingLoss, self).__init__(
-#             hamming_loss, name, dtype=dtype, mode=mode)
-
 
 def precision(y_true, y_pred):
     """Precision metric.
