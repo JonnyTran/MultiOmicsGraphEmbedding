@@ -1,9 +1,9 @@
 from keras.layers import Layer
 from keras.optimizers import Adam
 
-from moge.embedding.siamese.siamese_graph_embedding import *
-from moge.embedding.siamese.siamese_triplet_online_embedding import SiameseOnlineTripletGraphEmbedding
 from moge.generator.siamese.triplet_generator import OnlineTripletGenerator
+from moge.model.siamese.siamese_graph_embedding import *
+from moge.model.siamese.siamese_triplet_online_embedding import SiameseOnlineTripletGraphEmbedding
 from moge.network.heterogeneous_network import HeterogeneousNetwork
 
 
@@ -61,7 +61,7 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
             self.lstm_network = self.create_lstm_network()
             print("lstm_network", self.lstm_network) if self.verbose else None
 
-            # encode each of the inputs into a list of embedding vectors with the conv_lstm_network
+            # encode each of the inputs into a list of model vectors with the conv_lstm_network
             embeddings = self.lstm_network(input_seqs)
             print("embeddings", embeddings) if self.verbose else None
 
@@ -191,7 +191,7 @@ def _pairwise_distances(embeddings_A, embeddings_B, squared=False):
     # shape (batch_size, batch_size)
     dot_product = tf.matmul(embeddings_A, tf.transpose(embeddings_B))
 
-    # Get squared L2 norm for each embedding. We can just take the diagonal of `dot_product`.
+    # Get squared L2 norm for each model. We can just take the diagonal of `dot_product`.
     # This also provides more numerical stability (the diagonal of the result will be exactly 0).
     # shape (batch_size,)
     square_norm = tf.diag_part(dot_product)

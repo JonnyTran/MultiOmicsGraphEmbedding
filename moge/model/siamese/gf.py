@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from moge.embedding.static_graph_embedding import ImportedGraphEmbedding
+from moge.model.static_graph_embedding import ImportedGraphEmbedding
 
 
 class GraphFactorization(ImportedGraphEmbedding):

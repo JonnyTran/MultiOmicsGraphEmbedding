@@ -14,7 +14,7 @@ def filter_y_multilabel(network, y_label="go_id", min_count=2):
     nodes_index = network.annotations[["Transcript sequence", y_label]].dropna().index
 
     labels_filter = get_labels_filter(network, nodes_index, y_label, min_count)
-    print("labels_filter", len(labels_filter))
+    print("labels_filtered:", len(labels_filter))
 
     y_labels = network.annotations.loc[nodes_index, y_label].str.split("|")
     y_labels = y_labels.map(lambda go_terms: [item for item in go_terms if item not in labels_filter])
@@ -169,7 +169,8 @@ class NetworkTrainTestSplit():
             print("val_network", self.validation.G.number_of_nodes(),
                   self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
 
-    def split_train_test_stratified(self, directed: bool, stratify_label: str, n_splits=5, seed=42, verbose=False):
+    def split_train_test_stratified(self, directed: bool, stratify_label: str, stratify_omic=True, n_splits=5, seed=42,
+                                    verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
         into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
@@ -188,10 +189,13 @@ class NetworkTrainTestSplit():
         else:
             print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
 
-        y_label, labels_filter = filter_y_multilabel(network=self, y_label=stratify_label, min_count=n_splits)
-        self.labels_filter = labels_filter
+        y_label, _ = filter_y_multilabel(network=self, y_label=stratify_label, min_count=n_splits)
+        if stratify_omic:
+            y_omic = self.annotations.loc[y_label.index, "omic"].str.split("|")
+            y_label = y_label + y_omic
+
         train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
-        print("test_nodes", len(test_nodes))
+
         network_train, network_test = split_graph(self, directed=directed, train_nodes=train_nodes,
                                                   test_nodes=test_nodes)
         self.set_training_data(train_nodes)

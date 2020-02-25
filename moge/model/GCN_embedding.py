@@ -70,7 +70,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         if batch_norm:
             x = BatchNormalization(center=True, scale=True, name="encoder_output_normalized")(x)
 
-        print("embedding", x)
+        print("model", x)
         return Model(input_seqs, x, name="encoder_model")
 
     def create_transformer_net(self, batch_norm=True, transformer_depth=1):
