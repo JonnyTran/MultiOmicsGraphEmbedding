@@ -245,6 +245,7 @@ def graph_viz3d(g: nx.Graph,
                 )
     fig.update_layout(
         title=title,
+        showlegend=False,
         autosize=True,
         width=width,
         height=height,
