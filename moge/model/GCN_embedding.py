@@ -2,9 +2,6 @@ import os
 import time
 
 import tensorflow as tf
-# from kegra.layers.graph import GraphConvolution
-# from spektral.layers import GraphConv
-from keras_gat import GraphAttention
 from keras_transformer.extras import ReusableEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
 from keras_transformer.transformer import TransformerBlock
@@ -17,6 +14,9 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras.utils import multi_gpu_model
 
 from moge.evaluation.metrics import f1
+# from kegra.layers.graph import GraphConvolution
+# from spektral.layers import GraphConv
+from .graph_attention_layer import GraphAttention
 from .static_graph_embedding import NeuralGraphEmbedding
 
 
