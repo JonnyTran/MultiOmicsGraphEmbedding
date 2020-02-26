@@ -4,7 +4,7 @@ from collections import OrderedDict
 import keras
 import numpy as np
 from keras.preprocessing.sequence import pad_sequences
-from keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.text import Tokenizer
 
 
 class SequenceTokenizer():
