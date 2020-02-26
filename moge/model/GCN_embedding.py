@@ -2,12 +2,6 @@ import os
 import time
 
 import tensorflow as tf
-from keras.callbacks import TensorBoard, EarlyStopping
-from keras.layers import Input, Conv2D, Dropout, MaxPooling1D, Lambda, Embedding, Bidirectional, LSTM, Convolution1D, \
-    BatchNormalization, Dense
-from keras.models import Model
-from keras.regularizers import l2
-from keras.utils import multi_gpu_model
 # from kegra.layers.graph import GraphConvolution
 # from spektral.layers import GraphConv
 from keras_gat import GraphAttention
@@ -15,6 +9,12 @@ from keras_transformer.extras import ReusableEmbedding
 from keras_transformer.position import TransformerCoordinateEmbedding
 from keras_transformer.transformer import TransformerBlock
 from tensorflow.keras import backend as K
+from tensorflow.keras.callbacks import TensorBoard, EarlyStopping
+from tensorflow.keras.layers import Input, Conv2D, Dropout, MaxPooling1D, Embedding, Bidirectional, LSTM, \
+    BatchNormalization, Dense, Lambda, Convolution1D
+from tensorflow.keras.models import Model
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras.utils import multi_gpu_model
 
 from moge.evaluation.metrics import f1
 from .static_graph_embedding import NeuralGraphEmbedding
