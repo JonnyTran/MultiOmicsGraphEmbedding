@@ -246,7 +246,7 @@ def graph_viz3d(g: nx.Graph,
     fig.update_layout(
         title=title,
         showlegend=True,
-        legend=dict(autosize=True, width=100),
+        # legend=dict(autosize=True, width=100),
         legend_orientation="v",
         autosize=True,
         width=width,
