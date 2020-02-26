@@ -1,6 +1,5 @@
-import keras.backend as K
 import tensorflow as tf
-
+import tensorflow.keras.backend as K
 
 
 def precision(y_true, y_pred):
