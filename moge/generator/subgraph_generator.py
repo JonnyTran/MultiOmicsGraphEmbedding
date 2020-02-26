@@ -41,9 +41,6 @@ class SubgraphGenerator(SampledDataGenerator):
 
         return X, y
 
-    def __new__(cls, *args, **kwargs):
-        pass
-
     def sample_subgraph(self, batch_size):
         sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
                                          p=self.node_sampling_freq)
