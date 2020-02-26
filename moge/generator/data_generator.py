@@ -2,8 +2,8 @@ import random
 from collections import OrderedDict
 
 import numpy as np
-from keras.preprocessing.sequence import pad_sequences
 from tensorflow import keras
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 
 
