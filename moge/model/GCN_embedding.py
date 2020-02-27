@@ -7,13 +7,13 @@ import tensorflow as tf
 # from keras_transformer.transformer import TransformerBlock
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import TensorBoard, EarlyStopping
-from tensorflow.keras.layers import Input, Conv2D, Dropout, MaxPooling1D, Embedding, Bidirectional, LSTM, \
-    BatchNormalization, Dense, Lambda, Convolution1D
+from tensorflow.keras.layers import Input, Dropout, MaxPooling1D, Embedding, Bidirectional, LSTM, \
+    BatchNormalization, Dense, Convolution1D, LeakyReLU
 from tensorflow.keras.models import Model
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.utils import multi_gpu_model
 
-from moge.evaluation.metrics import f1
+from moge.evaluation.metrics import precision, recall
 # from kegra.layers.graph import GraphConvolution
 # from spektral.layers import GraphConv
 from .graph_attention_layer import GraphAttention
@@ -21,7 +21,11 @@ from .static_graph_embedding import NeuralGraphEmbedding
 
 
 class GCNEmbedding(NeuralGraphEmbedding):
-    def __init__(self, d: int, attn_heads: int, batch_size: int, vocabulary_size: int, word_embedding_size: int,
+    def __init__(self,
+                 embedding_d: int, encoding_d: int, attn_heads: int,
+                 encoding_dropout, embedding_dropout, cls_dropout,
+                 lstm_units, batchnorm: bool,
+                 batch_size: int, vocabulary_size: int, word_embedding_size: int,
                  max_length: int, y_label: str, n_classes: int, multi_gpu=False):
         self.y_label = y_label
         self.n_classes = n_classes
@@ -29,13 +33,21 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.vocabulary_size = vocabulary_size
         self.word_embedding_size = word_embedding_size
 
+        self.batchnorm = batchnorm
+        self.encoding_d = encoding_d
+        self.encoding_dropout = encoding_dropout
+        self.embedding_dropout = embedding_dropout
+        self.cls_dropout = cls_dropout
+
+        self.lstm_units = lstm_units
+
         self.max_length = max_length
 
         self.num_heads = attn_heads
-        super(GCNEmbedding, self).__init__(d, method_name="GCN_embedding")
+        super(GCNEmbedding, self).__init__(embedding_d, method_name="GCN_embedding")
         self.build_keras_model(multi_gpu)
 
-    def create_encoder_network(self, batch_norm=True):
+    def create_encoder_network(self, batch_norm=True, encoding_dropout=0.2, lstm_units=320, encoding_d=256):
         input_seqs = Input(shape=(None,), name="input_seqs")  # (batch_number, sequence_length)
         x = Embedding(input_dim=self.vocabulary_size,
                       output_dim=self.vocabulary_size - 1,
@@ -43,15 +55,14 @@ class GCNEmbedding(NeuralGraphEmbedding):
             input_seqs)  # (batch_number, sequence_length, 5)
         print("Embedding", x)
 
-        x = Lambda(lambda y: K.expand_dims(y, axis=2), name="lstm_lambda_1")(x)  # (batch_number, sequence_length, 1, 5)
-        x = Conv2D(filters=320, kernel_size=(26, 1), activation='relu',
-                   data_format="channels_last", name="lstm_conv_1")(x)  # (batch_number, sequence_length-5, 1, 192)
-        x = Lambda(lambda y: K.squeeze(y, axis=2), name="lstm_lambda_2")(x)  # (batch_number, sequence_length-5, 192)
-        print("conv2D", x)
+        x = Convolution1D(filters=320, kernel_size=26, activation='relu',
+                          data_format="channels_last", name="lstm_conv_1")(
+            x)  # (batch_number, sequence_length-5, 1, 192)
+        print("conv1D", x)
         if batch_norm:
             x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
         x = MaxPooling1D(pool_size=13, padding="same")(x)
-        x = Dropout(0.2)(x)
+        x = Dropout(encoding_dropout)(x)
 
         x = Convolution1D(filters=192, kernel_size=6, activation='relu', name="lstm_conv_2")(x)
         print("conv1d_2", x)
@@ -59,14 +70,14 @@ class GCNEmbedding(NeuralGraphEmbedding):
             x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
         x = MaxPooling1D(pool_size=3, padding="same")(x)
         print("max pooling_2", x)
-        x = Dropout(0.2)(x)
+        x = Dropout(encoding_dropout)(x)
 
-        x = Bidirectional(LSTM(320, return_sequences=False, return_state=False),
+        x = Bidirectional(LSTM(lstm_units, return_sequences=False, return_state=False),
                           merge_mode='concat')(x)  # (batch_number, 320+320)
         print("brnn", x)
-        x = Dropout(0.2)(x)
+        x = Dropout(encoding_dropout)(x)
 
-        x = Dense(self._d, activation='linear', name="encoder_output")(x)
+        x = Dense(encoding_d, activation='linear', name="encoder_output")(x)
         if batch_norm:
             x = BatchNormalization(center=True, scale=True, name="encoder_output_normalized")(x)
 
@@ -108,34 +119,32 @@ class GCNEmbedding(NeuralGraphEmbedding):
     #     print("cls_node_slice", cls_node_slice)
     #     return Model(input_seqs, cls_node_slice, name="encoder_model")
 
-    def create_embedding_model(self):
-        encodings = Input(shape=(self._d,), name="input_seqs")
+    def create_embedding_model(self, embedding_d=128, num_heads=4, embedding_dropout=0.5):
+        encodings = Input(shape=(embedding_d,), name="input_seqs")
         subnetwork = Input(shape=(None,), name="subnetwork")
 
-        graph_attention_1 = GraphAttention(int(self._d / self.num_heads), name="embedding_output",
-                                           dropout_rate=0.2,
-                                           activation='elu',
-                                           attn_heads=self.num_heads,
+        graph_attention_1 = GraphAttention(int(embedding_d / num_heads),
+                                           dropout_rate=embedding_dropout,
+                                           activation=LeakyReLU(0.2),
+                                           attn_heads=num_heads,
                                            attn_heads_reduction='concat',
                                            kernel_regularizer=l2(5e-4 / 2),
                                            attn_kernel_regularizer=l2(5e-4 / 2)
                                            )([encodings, subnetwork])
+
         return Model([encodings, subnetwork], graph_attention_1, name="embedding_model")
 
-    def create_cls_model(self):
-        embeddings = Input(shape=(self._d,), name="embeddings")
+    def create_cls_model(self, embedding_d, cls_dropout):
+        embeddings = Input(shape=(embedding_d,), name="embeddings")
         subnetwork = Input(shape=(None,), name="subnetwork")
+
         y_pred = GraphAttention(self.n_classes,
                                 attn_heads=1,
                                 attn_heads_reduction='average',
-                                dropout_rate=0.2,
+                                dropout_rate=cls_dropout,
                                 activation='sigmoid',
                                 kernel_regularizer=l2(5e-4),
                                 attn_kernel_regularizer=l2(5e-4))([embeddings, subnetwork])
-
-        # y_pred = Dense(self.n_classes,
-        #                activation='softmax',
-        #                kernel_regularizer=l1())(graph_attention_2)
 
         return Model([embeddings, subnetwork], y_pred, name="cls_model")
 
@@ -143,7 +152,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         K.clear_session()
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:0"):
-            input_seqs = Input(shape=(None,), dtype=tf.int8, name="input_seqs")
+            input_seqs = Input(shape=(None,), name="input_seqs")
             subnetwork = Input(shape=(None,), name="subnetwork")
             print("input_seqs", input_seqs)
             print("subnetwork", subnetwork)
@@ -152,18 +161,24 @@ class GCNEmbedding(NeuralGraphEmbedding):
             # transcript_end = Input(batch_shape=(None, 1), sparse=False, dtype=tf.float32, name="transcript_end")
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:1"):
-            self.encoder_model = self.create_encoder_network()  # Input: [input_seqs], output: encodings
-            #     encoder_model = create_transformer_net()
+            self.encoder_model = self.create_encoder_network(batch_norm=self.batchnorm,
+                                                             encoding_dropout=self.encoding_dropout,
+                                                             lstm_units=self.lstm_units,
+                                                             encoding_d=self.encoding_d,
+                                                             )  # Input: [input_seqs], output: encodings
             encodings = self.encoder_model(input_seqs)
             print("encodings", encodings)
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:2"):
-            self.embedding_model = self.create_embedding_model()  # Input: [encodings, subnetwork], output: embeddings
+            self.embedding_model = self.create_embedding_model(embedding_d=self.embedding_d,
+                                                               num_heads=self.num_heads,
+                                                               embedding_dropout=self.embedding_dropout)  # Input: [encodings, subnetwork], output: embeddings
             embeddings = self.embedding_model([encodings, subnetwork])
             print("embeddings", embeddings)
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:3"):
-            self.cls_model = self.create_cls_model()  # Input: [embeddings, subnetwork], output: y_pred
+            self.cls_model = self.create_cls_model(embedding_d=self.embedding_d,
+                                                   cls_dropout=self.cls_dropout)  # Input: [embeddings, subnetwork], output: y_pred
             y_pred = self.cls_model([embeddings, subnetwork])
 
             self.model = Model(inputs=[input_seqs, subnetwork], outputs=y_pred, name="cls_model")
@@ -176,7 +191,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.model.compile(
             loss="binary_crossentropy",
             optimizer="adam",
-            metrics=["top_k_categorical_accuracy", f1],
+            metrics=["top_k_categorical_accuracy", precision, recall],
         )
         print(self.model.summary())
 

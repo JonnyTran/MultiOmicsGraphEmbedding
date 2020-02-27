@@ -82,8 +82,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                  **kwargs):
         super(SiameseGraphEmbedding, self).__init__(d)
 
-        self._d = d
-        assert self._d % 2 == 0, "Embedding dimension (d) must be an even integer"
+        self.embedding_d = d
+        assert self.embedding_d % 2 == 0, "Embedding dimension (d) must be an even integer"
         self.batch_size = batch_size
         self.margin = margin
         self.lr = lr
@@ -157,8 +157,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             x = Dropout(0.2)(x)
 
         if self.source_target_dense_layers:
-            source = Dense(int(self._d / 2), activation='linear', name="dense_source")(x)
-            target = Dense(int(self._d / 2), activation='linear', name="dense_target")(x)
+            source = Dense(int(self.embedding_d / 2), activation='linear', name="dense_source")(x)
+            target = Dense(int(self.embedding_d / 2), activation='linear', name="dense_target")(x)
             if self.embedding_normalization:
                 source = Lambda(lambda x: K.l2_normalize(x, axis=-1))(source)
                 target = Lambda(lambda x: K.l2_normalize(x, axis=-1))(target)
@@ -168,7 +168,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             x = Concatenate(axis=-1, name="embedding_output")(
                 [source, target])  # Embedding space (batch_number, embedding_dim)
         else:
-            x = Dense(self._d, activation='linear', name="embedding_output")(x)
+            x = Dense(self.embedding_d, activation='linear', name="embedding_output")(x)
             if self.embedding_normalization:
                 x = Lambda(lambda x: K.l2_normalize(x, axis=-1), name="embedding_output_normalized")(x)
 
@@ -176,14 +176,17 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         return Model(input, x, name="lstm_network")
 
     def create_alpha_network(self):
-        encoded_i = Input(batch_shape=(None, self._d))
-        encoded_j = Input(batch_shape=(None, self._d))
+        encoded_i = Input(batch_shape=(None, self.embedding_d))
+        encoded_j = Input(batch_shape=(None, self.embedding_d))
         is_directed = Input(batch_shape=(None, 1), dtype=tf.int8)
 
-        abs_diff_directed = Lambda(lambda tup: K.abs(tup[0][:, 0:int(self._d/2)] - tup[1][:, int(self._d/2):self._d]),
-                                   output_shape=(None, int(self._d/2)), name="Lambda_abs_diff_directed")([encoded_i, encoded_j])
+        abs_diff_directed = Lambda(lambda tup: K.abs(
+            tup[0][:, 0:int(self.embedding_d / 2)] - tup[1][:, int(self.embedding_d / 2):self.embedding_d]),
+                                   output_shape=(None, int(self.embedding_d / 2)), name="Lambda_abs_diff_directed")(
+            [encoded_i, encoded_j])
         print("abs_diff_directed:", abs_diff_directed) if self.verbose else None
-        abs_diff_undirected = Lambda(get_abs_diff, output_shape=(None, self._d), name="Lambda_abs_diff_directed")([encoded_i, encoded_j])
+        abs_diff_undirected = Lambda(get_abs_diff, output_shape=(None, self.embedding_d),
+                                     name="Lambda_abs_diff_directed")([encoded_i, encoded_j])
         print("abs_diff_undirected:", abs_diff_undirected) if self.verbose else None
 
         alpha_directed = Dense(1, activation='sigmoid',
@@ -201,18 +204,20 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def st_euclidean_distance(self, inputs):
         emb_i, emb_j, is_directed = inputs
-        sum_directed = K.sum(K.square(emb_i[:, 0:int(self._d/2)] - emb_j[:, int(self._d/2):self._d]), axis=1,
-                             keepdims=True)
+        sum_directed = K.sum(
+            K.square(emb_i[:, 0:int(self.embedding_d / 2)] - emb_j[:, int(self.embedding_d / 2):self.embedding_d]),
+            axis=1,
+            keepdims=True)
         sum_undirected = K.sum(K.square(emb_i - emb_j), axis=1, keepdims=True)
         sum_switch = K.switch(is_directed, sum_directed, sum_undirected)
         return K.sqrt(K.maximum(sum_switch, K.epsilon()))
 
     def st_min_euclidean_distance(self, inputs):
         emb_i, emb_j, is_directed = inputs
-        source_i = emb_i[:, 0:int(self._d / 2)]
-        target_i = emb_i[:, int(self._d / 2):self._d]
-        source_j = emb_j[:, 0:int(self._d / 2)]
-        target_j = emb_j[:, int(self._d / 2):self._d]
+        source_i = emb_i[:, 0:int(self.embedding_d / 2)]
+        target_i = emb_i[:, int(self.embedding_d / 2):self.embedding_d]
+        source_j = emb_j[:, 0:int(self.embedding_d / 2)]
+        target_j = emb_j[:, int(self.embedding_d / 2):self.embedding_d]
 
         sum_directed = K.sum(K.square(source_i - target_j), axis=1, keepdims=True)
         sum_undirected = K.sum(K.minimum(K.square(source_i - source_j), K.square(target_i - target_j)), axis=1,
@@ -222,8 +227,9 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def st_emb_probability(self, inputs):
         emb_i, emb_j, is_directed = inputs
-        dot_directed = Lambda(lambda x: K.sum(x[0][:, 0:int(self._d/2)] * x[1][:, int(self._d/2):self._d],
-                                              axis=-1, keepdims=True))([emb_i, emb_j])
+        dot_directed = Lambda(
+            lambda x: K.sum(x[0][:, 0:int(self.embedding_d / 2)] * x[1][:, int(self.embedding_d / 2):self.embedding_d],
+                            axis=-1, keepdims=True))([emb_i, emb_j])
         dot_undirected = Dot(axes=1, normalize=False)([emb_i, emb_j])
         return K.switch(is_directed, K.sigmoid(dot_directed), K.sigmoid(dot_undirected))
 
@@ -389,8 +395,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def _pairwise_similarity(self, embeddings, edge_type="d"):
         if edge_type == 'd':
-            embeddings_X = embeddings[:, 0:int(self._d / 2)]
-            embeddings_Y = embeddings[:, int(self._d / 2):self._d]
+            embeddings_X = embeddings[:, 0:int(self.embedding_d / 2)]
+            embeddings_Y = embeddings[:, int(self.embedding_d / 2):self.embedding_d]
             if self.directed_distance == "euclidean_ball":
                 embeddings_stacked = np.vstack([embeddings_X, embeddings_Y])
                 adj = radius_neighbors_graph(embeddings_stacked, radius=self.margin, n_jobs=-2)
@@ -451,7 +457,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         else:
             file_path = filename
         fout = open(file_path, 'w')
-        fout.write("{} {}\n".format(len(self.node_list), self._d))
+        fout.write("{} {}\n".format(len(self.node_list), self.embedding_d))
         for i in range(len(self.node_list)):
             fout.write("{} {}\n".format(self.node_list[i],
                                         ' '.join([str(x) for x in embs[i]])))

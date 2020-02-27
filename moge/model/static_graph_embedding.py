@@ -94,7 +94,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         Args:
             d: dimension of model
         '''
-        self._d = d
+        self.embedding_d = d
         self._method_name = method_name
 
     def get_method_name(self):
@@ -111,7 +111,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         Return:
             A summary string of the method
         '''
-        return self._method_name + str(self._d)
+        return self._method_name + str(self.embedding_d)
 
     def learn_embedding(self, graph):
         '''Learning the graph model from the adjcency matrix.
@@ -150,7 +150,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         embs = self.get_embeddings()
         assert len(self.node_list) == embs.shape[0]
         fout = open(file_path, 'w')
-        fout.write("{} {}\n".format(len(self.node_list), self._d))
+        fout.write("{} {}\n".format(len(self.node_list), self.embedding_d))
         for i in range(len(self.node_list)):
             fout.write("{} {}\n".format(self.node_list[i],
                                         ' '.join([str(x) for x in embs[i]])))
@@ -176,14 +176,14 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
             assert len(vectors) == node_num
 
             if self.get_method_name() == "rna2rna":
-                self._d = size
+                self.embedding_d = size
                 self.embedding_s = []
                 self.embedding_t = []
 
                 for node in node_list:
                     if node in vectors.keys():
-                        self.embedding_s.append(vectors[node][0 : int(self._d/2)])
-                        self.embedding_t.append(vectors[node][int(self._d/2) : int(self._d)])
+                        self.embedding_s.append(vectors[node][0: int(self.embedding_d / 2)])
+                        self.embedding_t.append(vectors[node][int(self.embedding_d / 2): int(self.embedding_d)])
                         self.node_list.append(node)
 
                 self.embedding_s = np.array(self.embedding_s)
@@ -191,7 +191,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
                 self._X = np.concatenate([self.embedding_s, self.embedding_t], axis=1)
 
             else:
-                self._d = size
+                self.embedding_d = size
                 self._X = []
                 for node in node_list:
                     if node in vectors.keys():
@@ -222,8 +222,8 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
             # reconstructed_adj = reconstructed_adj.T  # Transpose matrix since there's a bug
 
         elif self._method_name == "rna2rna":
-            reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self._d / 2)],
-                                                   Y=self._X[:, int(self._d / 2):self._d],
+            reconstructed_adj = pairwise_distances(X=self._X[:, 0:int(self.embedding_d / 2)],
+                                                   Y=self._X[:, int(self.embedding_d / 2):self.embedding_d],
                                                    metric="euclidean", n_jobs=-2)
             reconstructed_adj = reconstructed_adj.T
             reconstructed_adj = self.transform_adj_adaptive_threshold(reconstructed_adj, self.network)
@@ -231,7 +231,8 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
             #                                                 edge_types="d", sample_negative=1.0)
             # reconstructed_adj = np.exp(-2.0 * reconstructed_adj)
         elif self._method_name == "HOPE":
-            reconstructed_adj = np.matmul(self._X[:, 0:int(self._d / 2)], self._X[:, int(self._d / 2):self._d].T)
+            reconstructed_adj = np.matmul(self._X[:, 0:int(self.embedding_d / 2)],
+                                          self._X[:, int(self.embedding_d / 2):self.embedding_d].T)
             interpolate = True
         elif self._method_name == "SDNE":
             reconstructed_adj = pairwise_distances(X=self._X, Y=self._X, metric="euclidean", n_jobs=-2)

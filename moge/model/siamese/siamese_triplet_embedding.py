@@ -161,8 +161,8 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
 
     def _pairwise_similarity(self, embeddings, edge_type="d"):
         if edge_type == 'd':
-            embeddings_X = embeddings[:, 0:int(self._d / 2)]
-            embeddings_Y = embeddings[:, int(self._d / 2):self._d]
+            embeddings_X = embeddings[:, 0:int(self.embedding_d / 2)]
+            embeddings_Y = embeddings[:, int(self.embedding_d / 2):self.embedding_d]
 
             if self.directed_distance == "euclidean_ball":
                 embeddings_stacked = np.vstack([embeddings_X, embeddings_Y])

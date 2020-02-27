@@ -49,8 +49,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         return _precision
 
     def pairwise_distances(self, embeddings, directed=True, squared=True):
-        embeddings_s = embeddings[:, 0:int(self._d / 2)]
-        embeddings_t = embeddings[:, int(self._d / 2):self._d]
+        embeddings_s = embeddings[:, 0:int(self.embedding_d / 2)]
+        embeddings_t = embeddings[:, int(self.embedding_d / 2):self.embedding_d]
         if directed:
             return self._pairwise_euclidean(embeddings_s, embeddings_t, squared)
         else:
@@ -119,8 +119,8 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
         return _kl_loss
 
     def pairwise_similarity(self, embeddings, directed=True):
-        embeddings_s = embeddings[:, 0:int(self._d / 2)]
-        embeddings_t = embeddings[:, int(self._d / 2):self._d]
+        embeddings_s = embeddings[:, 0:int(self.embedding_d / 2)]
+        embeddings_t = embeddings[:, int(self.embedding_d / 2):self.embedding_d]
         if directed:
             dot_product = K.dot(embeddings_s, K.transpose(embeddings_t))
             return K.sigmoid(dot_product)
