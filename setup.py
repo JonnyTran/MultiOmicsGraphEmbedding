@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 requirements = [
     'numpy', 'pandas', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph', 'chart-studio',
@@ -8,7 +8,7 @@ requirements = [
 setup(
     name='MultiOmicsGraphEmbedding',
     version='0.1',
-    packages=['moge', 'moge.model', 'moge.network', 'moge.evaluation', 'moge.visualization', 'moge.generator'],
+    packages=find_packages("moge", exclude=["data", "moge.data"]),
     install_requires=requirements,
     url='',
     license='',
