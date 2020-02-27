@@ -28,6 +28,7 @@ def filter_y_multilabel(network, y_label="go_id", min_count=2, dropna=False):
 def get_labels_filter(network, node_list, y_label, min_count):
     label_counts = {}
     for items in network.annotations.loc[node_list, y_label].str.split("|"):
+        if items is None: continue
         for item in items:
             label_counts[item] = label_counts.setdefault(item, 0) + 1
     label_counts = pd.Series(label_counts)
