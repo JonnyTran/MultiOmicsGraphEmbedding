@@ -154,7 +154,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         """
         raise NotImplementedError()
 
-    def get_node_labels(self, label, node_list=None):
+    def get_node_labels(self, label, node_list):
         if node_list is None:
             node_list = self.node_list
 
