@@ -85,8 +85,10 @@ class SubgraphGenerator(SampledDataGenerator):
         if targets_vector.dtypes == np.object:
             if targets_vector.str.contains("|").any():
                 targets_vector = targets_vector.str.split("|")
+                targets_vector = targets_vector.map(lambda x: x if type(x) == list else [])
         else:
             targets_vector = targets_vector.to_numpy().reshape(-1, 1)
+
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
         # Get a vector of nonnull indicators
