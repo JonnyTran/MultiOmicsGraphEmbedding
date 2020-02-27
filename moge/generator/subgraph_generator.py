@@ -107,8 +107,8 @@ class SubgraphGenerator(SampledDataGenerator):
         X, y = self.__getdata__(sampled_nodes)
 
         if y_label:
-            y = self.get_node_labels(y_label, node_list=sampled_nodes)
-            print("y", y)
+            y_labels = self.get_node_labels(y_label, node_list=sampled_nodes)
+            return X, y_labels
 
         y = pd.DataFrame(y, index=sampled_nodes,
                          columns=self.network.feature_transformer[self.targets[0]].classes_)
