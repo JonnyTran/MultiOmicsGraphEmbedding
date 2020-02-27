@@ -32,20 +32,18 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.targets = targets
         self.n_classes = n_classes
         self.batch_size = batch_size
+        self.max_length = max_length
         self.vocabulary_size = vocabulary_size
         self.word_embedding_size = word_embedding_size
 
-        self.batchnorm = batchnorm
         self.encoding_d = encoding_d
+        self.batchnorm = batchnorm
         self.encoding_dropout = encoding_dropout
         self.embedding_dropout = embedding_dropout
         self.cls_dropout = cls_dropout
-
         self.lstm_units = lstm_units
-
-        self.max_length = max_length
-
         self.num_heads = attn_heads
+
         super(GCNEmbedding, self).__init__(embedding_d, method_name="GCN_embedding")
         self.build_keras_model(multi_gpu)
 

@@ -7,7 +7,7 @@ from .sampled_generator import SampledDataGenerator
 
 
 class SubgraphGenerator(SampledDataGenerator):
-    def __init__(self, network, variables=None, targets=None, batch_size=500,
+    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
                  compression_func="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
