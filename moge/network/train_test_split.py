@@ -20,7 +20,8 @@ def filter_y_multilabel(network, y_label="go_id", min_count=2, dropna=False):
     print("labels_filtered:", len(labels_filter))
 
     y_labels = network.annotations.loc[nodes_index, y_label].str.split("|")
-    y_labels = y_labels.map(lambda go_terms: [item for item in go_terms if item not in labels_filter])
+    y_labels = y_labels.map(
+        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else None)
 
     return y_labels, labels_filter
 
