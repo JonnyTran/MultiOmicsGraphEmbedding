@@ -125,7 +125,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         encodings = Input(shape=(encoding_d,), name="input_seqs")
         subnetwork = Input(shape=(None,), name="subnetwork")
 
-        graph_attention_1 = GraphAttention(int(encoding_d / num_heads),
+        graph_attention_1 = GraphAttention(int(encoding_d / num_heads), name="embedding_gat",
                                            dropout_rate=embedding_dropout,
                                            activation=LeakyReLU(0.2),
                                            attn_heads=num_heads,
@@ -140,7 +140,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         embeddings = Input(shape=(embedding_d,), name="embeddings")
         subnetwork = Input(shape=(None,), name="subnetwork")
 
-        y_pred = GraphAttention(self.n_classes,
+        y_pred = GraphAttention(self.n_classes, name="cls_gat",
                                 attn_heads=1,
                                 attn_heads_reduction='average',
                                 dropout_rate=cls_dropout,
@@ -158,9 +158,6 @@ class GCNEmbedding(NeuralGraphEmbedding):
             subnetwork = Input(shape=(None,), name="subnetwork")
             print("input_seqs", input_seqs)
             print("subnetwork", subnetwork)
-            # chromosome_name = Input(batch_shape=(None, 323), sparse=False, dtype=tf.uint8, name="chromosome_name")
-            # transcript_start = Input(batch_shape=(None, 1), sparse=False, dtype=tf.float32, name="transcript_start")
-            # transcript_end = Input(batch_shape=(None, 1), sparse=False, dtype=tf.float32, name="transcript_end")
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:1"):
             self.encoder_model = self.create_encoder_network(batch_norm=self.batchnorm,
@@ -198,7 +195,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         print(self.model.summary())
 
     def learn_embedding(self, generator_train, generator_test, epochs=50,
-                        early_stopping: int = False, model_checkpoint=True, tensorboard=True, hparams=None,
+                        early_stopping: int = False, model_checkpoint=False, tensorboard=True, hparams=None,
                         seed=0, **kwargs):
         self.generator_train = generator_train
         self.generator_test = generator_test
