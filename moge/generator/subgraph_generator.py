@@ -92,7 +92,7 @@ class SubgraphGenerator(SampledDataGenerator):
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
         # Get a vector of nonnull indicators
-        idx_weights = self.annotations.loc[sampled_nodes, self.targets].notnull()
+        idx_weights = self.annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
 
         # Make a probability distribution
         # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
