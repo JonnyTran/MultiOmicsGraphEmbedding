@@ -2,9 +2,9 @@ import os
 import time
 
 import tensorflow as tf
-from keras_transformer.extras import ReusableEmbedding
-from keras_transformer.position import TransformerCoordinateEmbedding
-from keras_transformer.transformer import TransformerBlock
+# from keras_transformer.extras import ReusableEmbedding
+# from keras_transformer.position import TransformerCoordinateEmbedding
+# from keras_transformer.transformer import TransformerBlock
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import TensorBoard, EarlyStopping
 from tensorflow.keras.layers import Input, Conv2D, Dropout, MaxPooling1D, Embedding, Bidirectional, LSTM, \
@@ -73,40 +73,40 @@ class GCNEmbedding(NeuralGraphEmbedding):
         print("model", x)
         return Model(input_seqs, x, name="encoder_model")
 
-    def create_transformer_net(self, batch_norm=True, transformer_depth=1):
-        input_seqs = Input(shape=(None,), name="input_seqs")  # (batch_number, sequence_length)
-        #     segment_ids = Input(shape=(None, max_length), dtype='int32', name='segment_ids')
-        print("input_seqs", input_seqs)
-        embedding_layer = ReusableEmbedding(input_dim=self.vocabulary_size,
-                                            output_dim=self.word_embedding_size,
-                                            input_length=self.max_length,
-                                            name='bpe_embeddings',
-                                            mask_zero=False,
-                                            embeddings_regularizer=l2(1e-6)
-                                            )
-        #     segment_embedding_layer = Embedding(2, word_embedding_size, name='segment_embeddings')
-        #     add_segment_layer = Add(name='add_segment')
-        next_step_input, embedding_matrix = embedding_layer(input_seqs)
-        #     segment_embeddings = segment_embedding_layer(segment_ids)
-        print("embedding_layer", next_step_input)
-        next_step_input = TransformerCoordinateEmbedding(transformer_depth,
-                                                         name='coordinate_embedding')(next_step_input, step=0)
-        #     next_step_input = add_segment_layer([next_step_input, segment_embeddings])
-
-        for step in range(transformer_depth):
-            next_step_input = TransformerBlock(name='transformer_' + str(step),
-                                               num_heads=self.num_heads,
-                                               residual_dropout=0.1,
-                                               attention_dropout=0.1,
-                                               use_masking=True,
-                                               vanilla_wiring=True)(next_step_input)
-            print("transformer_block", next_step_input)
-        cls_node_slice = Lambda(lambda x: x[:, 0], name='cls_node_slicer')(next_step_input)
-        if batch_norm:
-            cls_node_slice = BatchNormalization(center=True, scale=True, name="encoder_output_normalized")(
-                cls_node_slice)
-        print("cls_node_slice", cls_node_slice)
-        return Model(input_seqs, cls_node_slice, name="encoder_model")
+    # def create_transformer_net(self, batch_norm=True, transformer_depth=1):
+    #     input_seqs = Input(shape=(None,), name="input_seqs")  # (batch_number, sequence_length)
+    #     #     segment_ids = Input(shape=(None, max_length), dtype='int32', name='segment_ids')
+    #     print("input_seqs", input_seqs)
+    #     embedding_layer = ReusableEmbedding(input_dim=self.vocabulary_size,
+    #                                         output_dim=self.word_embedding_size,
+    #                                         input_length=self.max_length,
+    #                                         name='bpe_embeddings',
+    #                                         mask_zero=False,
+    #                                         embeddings_regularizer=l2(1e-6)
+    #                                         )
+    #     #     segment_embedding_layer = Embedding(2, word_embedding_size, name='segment_embeddings')
+    #     #     add_segment_layer = Add(name='add_segment')
+    #     next_step_input, embedding_matrix = embedding_layer(input_seqs)
+    #     #     segment_embeddings = segment_embedding_layer(segment_ids)
+    #     print("embedding_layer", next_step_input)
+    #     next_step_input = TransformerCoordinateEmbedding(transformer_depth,
+    #                                                      name='coordinate_embedding')(next_step_input, step=0)
+    #     #     next_step_input = add_segment_layer([next_step_input, segment_embeddings])
+    #
+    #     for step in range(transformer_depth):
+    #         next_step_input = TransformerBlock(name='transformer_' + str(step),
+    #                                            num_heads=self.num_heads,
+    #                                            residual_dropout=0.1,
+    #                                            attention_dropout=0.1,
+    #                                            use_masking=True,
+    #                                            vanilla_wiring=True)(next_step_input)
+    #         print("transformer_block", next_step_input)
+    #     cls_node_slice = Lambda(lambda x: x[:, 0], name='cls_node_slicer')(next_step_input)
+    #     if batch_norm:
+    #         cls_node_slice = BatchNormalization(center=True, scale=True, name="encoder_output_normalized")(
+    #             cls_node_slice)
+    #     print("cls_node_slice", cls_node_slice)
+    #     return Model(input_seqs, cls_node_slice, name="encoder_model")
 
     def create_embedding_model(self):
         encodings = Input(shape=(self._d,), name="input_seqs")
