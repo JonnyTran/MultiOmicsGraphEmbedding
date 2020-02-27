@@ -101,12 +101,12 @@ class SubgraphGenerator(SampledDataGenerator):
         assert len(sampled_nodes) == y.shape[0]
         return X, y
 
-    def load_data(self, return_node_names=False, y_label=None):
+    def load_data(self, y_label=None):
         sampled_nodes = self.annotations.loc[
             self.get_nonzero_nodelist(), self.variables + self.targets].dropna().index.tolist()
         X, y = self.__getdata__(sampled_nodes)
 
-        if return_node_names:
+        if y_label:
             y = self.get_node_labels(y_label, node_list=sampled_nodes)
 
         y = pd.DataFrame(y, index=sampled_nodes,
