@@ -237,11 +237,20 @@ class GCNEmbedding(NeuralGraphEmbedding):
         return y_pred
 
     def get_callbacks(self, early_stopping=10, tensorboard=True, model_checkpoint=True, hparams=None,
-                      histogram_freq=1, write_grads=1):
+                      histogram_freq=0, write_grads=0):
+        if not hasattr(self, "log_dir"):
+            self.log_dir = os.path.join("logs", str.join("-", self.targets) + "_" + datetime.datetime.now().strftime(
+                "%m-%d_%H-%M%p"))
+            print("created log_dir:", self.log_dir)
+
         callbacks = []
         if tensorboard:
             if not hasattr(self, "tensorboard"):
-                self.build_tensorboard(histogram_freq, write_grads)
+                self.tensorboard = tf.keras.callbacks.TensorBoard(
+                    log_dir=self.log_dir,
+                    histogram_freq=histogram_freq,
+                    write_grads=write_grads, write_graph=False, write_images=False,
+                    update_freq="epoch", )
             callbacks.append(self.tensorboard)
 
         if early_stopping > 0:
@@ -267,15 +276,4 @@ class GCNEmbedding(NeuralGraphEmbedding):
         if len(callbacks) == 0: callbacks = None
         return callbacks
 
-    def build_tensorboard(self, histogram_freq, write_grads):
-        if not hasattr(self, "log_dir"):
-            self.log_dir = os.path.join("logs", str.join("-", self.targets) + "_" + datetime.datetime.now().strftime(
-                "%m-%d_%H-%M%p"))
 
-            print("created log_dir:", self.log_dir)
-
-        self.tensorboard = tf.keras.callbacks.TensorBoard(
-            log_dir=self.log_dir,
-            histogram_freq=histogram_freq,
-            write_grads=write_grads, write_graph=True, write_images=False,
-            update_freq="epoch", )
