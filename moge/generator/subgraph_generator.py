@@ -71,11 +71,13 @@ class SubgraphGenerator(SampledDataGenerator):
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes).toarray()
         X["subnetwork"] = X["subnetwork"] + np.eye(X["subnetwork"].shape[0])  # Add self-loops
 
+        # Features
         for variable in self.variables:
             labels_vector = self.annotations.loc[sampled_nodes, variable]
             if labels_vector.dtypes == np.object:
                 if labels_vector.str.contains("|").any():
                     labels_vector = labels_vector.str.split("|")
+                    labels_vector = labels_vector.map(lambda x: x if type(x) == list else [])
             else:
                 labels_vector = labels_vector.to_numpy().reshape(-1, 1)
             X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
