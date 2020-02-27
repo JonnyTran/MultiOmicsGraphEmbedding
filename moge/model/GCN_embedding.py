@@ -195,7 +195,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
     def learn_embedding(self, generator_train, generator_test, epochs=50,
                         early_stopping: int = False, model_checkpoint=False, tensorboard=True, hparams=None,
-                        seed=0, **kwargs):
+                        save_model=False, **kwargs):
         self.generator_train = generator_train
         self.generator_test = generator_test
         try:
@@ -207,7 +207,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         except KeyboardInterrupt:
             print("Stop training")
         finally:
-            self.save_model(self.log_dir)
+            if save_model: self.save_model(self.log_dir)
 
     def save_model(self, log_dir):
         self.encoder_model.save(os.path.join(log_dir, "encoder_model.h5"))
