@@ -37,9 +37,9 @@ class SubgraphGenerator(SampledDataGenerator):
 
     def __getitem__(self, item=None):
         sampled_nodes = self.sample_neighborhoods(batch_size=self.batch_size)
-        X, y = self.__getdata__(sampled_nodes)
+        X, y, idx_weights = self.__getdata__(sampled_nodes)
 
-        return X, y
+        return X, y, idx_weights
 
     def sample_subgraph(self, batch_size):
         sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
@@ -91,16 +91,16 @@ class SubgraphGenerator(SampledDataGenerator):
             targets_vector = targets_vector.to_numpy().reshape(-1, 1)
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
-        idx_weight = self.annotations.loc[sampled_nodes, self.targets].isna()
+        idx_weights = self.annotations.loc[sampled_nodes, self.targets].isna()
         # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y # Make a probability distribution
 
         assert len(sampled_nodes) == y.shape[0]
-        return X, y, idx_weight
+        return X, y, idx_weights
 
     def load_data(self, y_label=None):
         sampled_nodes = self.annotations.loc[
             self.get_nonzero_nodelist(), self.variables + self.targets].dropna().index.tolist()
-        X, y = self.__getdata__(sampled_nodes)
+        X, y, idx_weights = self.__getdata__(sampled_nodes)
 
         if y_label:
             y_labels = self.get_node_labels(y_label, node_list=sampled_nodes)
@@ -108,4 +108,4 @@ class SubgraphGenerator(SampledDataGenerator):
 
         y = pd.DataFrame(y, index=sampled_nodes,
                          columns=self.network.feature_transformer[self.targets[0]].classes_)
-        return X, y
+        return X, y, idx_weights
