@@ -10,8 +10,11 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from skmultilearn.model_selection import IterativeStratification
 
 
-def filter_y_multilabel(network, y_label="go_id", min_count=2):
-    nodes_index = network.annotations[["Transcript sequence", y_label]].dropna().index
+def filter_y_multilabel(network, y_label="go_id", min_count=2, dropna=False):
+    if dropna:
+        nodes_index = network.annotations[["Transcript sequence"] + y_label].dropna().index
+    else:
+        nodes_index = network.annotations[["Transcript sequence"]].dropna().index
 
     labels_filter = get_labels_filter(network, nodes_index, y_label, min_count)
     print("labels_filtered:", len(labels_filter))
