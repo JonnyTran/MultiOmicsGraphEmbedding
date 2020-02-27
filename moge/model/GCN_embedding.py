@@ -121,11 +121,11 @@ class GCNEmbedding(NeuralGraphEmbedding):
     #     print("cls_node_slice", cls_node_slice)
     #     return Model(input_seqs, cls_node_slice, name="encoder_model")
 
-    def create_embedding_model(self, encoding_d=128, num_heads=4, embedding_dropout=0.5):
+    def create_embedding_model(self, encoding_d=128, embedding_d=128, num_heads=4, embedding_dropout=0.5):
         encodings = Input(shape=(encoding_d,), name="input_seqs")
         subnetwork = Input(shape=(None,), name="subnetwork")
 
-        graph_attention_1 = GraphAttention(int(encoding_d / num_heads), name="embedding_gat",
+        graph_attention_1 = GraphAttention(int(embedding_d / num_heads), name="embedding_gat",
                                            dropout_rate=embedding_dropout,
                                            activation=LeakyReLU(0.2),
                                            attn_heads=num_heads,
@@ -170,6 +170,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:2"):
             self.embedding_model = self.create_embedding_model(encoding_d=self.encoding_d,
+                                                               embedding_d=self.embedding_d,
                                                                num_heads=self.num_heads,
                                                                embedding_dropout=self.embedding_dropout)  # Input: [encodings, subnetwork], output: embeddings
             embeddings = self.embedding_model([encodings, subnetwork])
