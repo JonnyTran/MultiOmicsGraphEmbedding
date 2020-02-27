@@ -1,15 +1,17 @@
+import datetime
 import os
-import time
 
 import tensorflow as tf
+from tensorboard.plugins.hparams import api as hp
 # from keras_transformer.extras import ReusableEmbedding
 # from keras_transformer.position import TransformerCoordinateEmbedding
 # from keras_transformer.transformer import TransformerBlock
 from tensorflow.keras import backend as K
-from tensorflow.keras.callbacks import TensorBoard, EarlyStopping
+from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.layers import Input, Dropout, MaxPooling1D, Embedding, Bidirectional, LSTM, \
     BatchNormalization, Dense, Convolution1D, LeakyReLU
 from tensorflow.keras.models import Model
+from tensorflow.keras.models import load_model
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.utils import multi_gpu_model
 
@@ -26,8 +28,8 @@ class GCNEmbedding(NeuralGraphEmbedding):
                  encoding_dropout, embedding_dropout, cls_dropout,
                  lstm_units, batchnorm: bool,
                  batch_size: int, vocabulary_size: int, word_embedding_size: int,
-                 max_length: int, y_label: str, n_classes: int, multi_gpu=False):
-        self.y_label = y_label
+                 max_length: int, targets: str, n_classes: int, multi_gpu=False):
+        self.targets = targets
         self.n_classes = n_classes
         self.batch_size = batch_size
         self.vocabulary_size = vocabulary_size
@@ -195,19 +197,17 @@ class GCNEmbedding(NeuralGraphEmbedding):
         )
         print(self.model.summary())
 
-    def learn_embedding(self, generator_train, generator_test, early_stopping: int = False,
-                        tensorboard=True, histogram_freq=0, embeddings=False,
-                        epochs=50, validation_steps=None,
+    def learn_embedding(self, generator_train, generator_test, epochs=50,
+                        early_stopping: int = False, model_checkpoint=True, tensorboard=True, hparams=None,
                         seed=0, **kwargs):
         self.generator_train = generator_train
         self.generator_test = generator_test
         try:
             self.hist = self.model.fit_generator(generator_train, epochs=epochs, shuffle=False,
                                                  validation_data=generator_test,
-                                                 validation_steps=validation_steps,
                                                  callbacks=self.get_callbacks(early_stopping, tensorboard,
-                                                                              histogram_freq, embeddings),
-                                                 use_multiprocessing=True, workers=8, verbose=2, **kwargs)
+                                                                              model_checkpoint, hparams),
+                                                 use_multiprocessing=True, workers=2, verbose=2, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
         finally:
@@ -220,10 +220,10 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.model.save(os.path.join(log_dir, "model.h5"))
 
     def load_model(self, log_dir):
-        self.encoder_model.load_weights(os.path.join(log_dir, "encoder_model.h5"))
-        self.embedding_model.load_weights(os.path.join(log_dir, "embedding_model.h5"))
-        self.cls_model.load_weights(os.path.join(log_dir, "cls_model.h5"))
-        self.model.load_weights(os.path.join(log_dir, "model.h5"))
+        self.encoder_model = load_model(os.path.join(log_dir, "encoder_model.h5"))
+        self.embedding_model = load_model(os.path.join(log_dir, "embedding_model.h5"))
+        self.cls_model = load_model(os.path.join(log_dir, "cls_model.h5"))
+        self.model = load_model(os.path.join(log_dir, "model.h5"))
 
     def get_embeddings(self, X):
         y_pred_encodings = self.encoder_model.predict(X)
@@ -236,11 +236,12 @@ class GCNEmbedding(NeuralGraphEmbedding):
         y_pred = self.cls_model.predict(y_pred_emb, batch_size=y_pred_emb.shape[0])
         return y_pred
 
-    def get_callbacks(self, early_stopping=10, tensorboard=True, histogram_freq=0, embeddings=False, write_grads=False):
+    def get_callbacks(self, early_stopping=10, tensorboard=True, model_checkpoint=True, hparams=None,
+                      histogram_freq=1, write_grads=1):
         callbacks = []
         if tensorboard:
             if not hasattr(self, "tensorboard"):
-                self.build_tensorboard(embeddings=embeddings, histogram_freq=histogram_freq, write_grads=write_grads)
+                self.build_tensorboard(histogram_freq, write_grads)
             callbacks.append(self.tensorboard)
 
         if early_stopping > 0:
@@ -250,27 +251,31 @@ class GCNEmbedding(NeuralGraphEmbedding):
                                                     baseline=None, restore_best_weights=False)
             callbacks.append(self.early_stopping)
 
+        if model_checkpoint:
+            self.model_checkpoint = tf.keras.callbacks.ModelCheckpoint(
+                os.path.join(self.log_dir, "model_checkpoint.hdf5"),
+                monitor='top_k_categorical_accuracy',
+                save_best_only=True)
+            callbacks.append(self.model_checkpoint)
+
+        if hparams:
+            self.hp_callback = hp.KerasCallback(tf.summary.create_file_writer(self.log_dir),
+                                                hparams, trial_id=self.log_dir.split("/")[-1])
+
+            callbacks.append(self.hp_callback)
+
         if len(callbacks) == 0: callbacks = None
         return callbacks
 
-    def build_tensorboard(self, embeddings: bool, histogram_freq, write_grads):
+    def build_tensorboard(self, histogram_freq, write_grads):
         if not hasattr(self, "log_dir"):
-            self.log_dir = "logs/{}_{}".format(type(self).__name__[0:20], time.strftime('%m-%d_%H-%M%p').strip(" "))
+            self.log_dir = os.path.join("logs", str.join("-", self.targets) + "_" + datetime.datetime.now().strftime(
+                "%m-%d_%H-%M%p"))
+
             print("created log_dir:", self.log_dir)
 
-        if embeddings:
-            x_test, node_labels = self.generator_test.load_data(return_node_names=True, y_label=self.y_label)
-            if not os.path.exists(self.log_dir): os.makedirs(self.log_dir)
-            node_labels.to_csv(os.path.join(self.log_dir, "metadata.tsv"), sep="\t")
-
-        self.tensorboard = TensorBoard(
+        self.tensorboard = tf.keras.callbacks.TensorBoard(
             log_dir=self.log_dir,
             histogram_freq=histogram_freq,
-            write_grads=write_grads, write_graph=False, write_images=False,
-            batch_size=self.batch_size,
-            update_freq="epoch",
-            embeddings_freq=1 if embeddings else 0,
-            embeddings_metadata=os.path.join(self.log_dir, "metadata.tsv") if embeddings else None,
-            embeddings_data=x_test if embeddings else None,
-            embeddings_layer_names=["embedding_output"] if embeddings else None,
-        )
+            write_grads=write_grads, write_graph=True, write_images=False,
+            update_freq="epoch", )
