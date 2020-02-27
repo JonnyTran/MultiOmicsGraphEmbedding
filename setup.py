@@ -8,7 +8,10 @@ requirements = [
 setup(
     name='MultiOmicsGraphEmbedding',
     version='0.1',
-    packages=find_packages("moge", exclude=["data", "moge.data"]),
+    packages=find_packages("moge",
+                           include=['moge', 'moge.model', 'moge.network', 'moge.evaluation', 'moge.visualization',
+                                    'moge.generator'],
+                           exclude=["data", "moge.data"]),
     install_requires=requirements,
     url='',
     license='',
