@@ -48,8 +48,6 @@ class SubgraphGenerator(SampledDataGenerator):
             add_nodes = np.random.choice(self.node_list, size=batch_size - len(sampled_nodes), replace=False,
                                          p=self.node_sampling_freq).tolist()
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
-            sampled_nodes = self.annotations.loc[
-                sampled_nodes, self.variables + self.targets + ["Transcript sequence"]].dropna().index.tolist()
         return sampled_nodes
 
     def sample_neighborhoods(self, batch_size):
@@ -99,15 +97,23 @@ class SubgraphGenerator(SampledDataGenerator):
         assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights
 
-    def load_data(self, y_label=None):
-        sampled_nodes = self.annotations.loc[
-            self.get_nonzero_nodelist(), self.variables + self.targets].dropna().index.tolist()
-        X, y, idx_weights = self.__getdata__(sampled_nodes)
+    def load_data(self, connected_nodes_only=True, dropna=True, y_label=None):
+        if connected_nodes_only:
+            node_list = self.get_nonzero_nodelist()
+        else:
+            node_list = self.network.node_list
+
+        if dropna:
+            node_list = self.annotations.loc[node_list, self.variables + self.targets].dropna().index.tolist()
+        else:
+            node_list = node_list
+
+        X, y, idx_weights = self.__getdata__(node_list)
 
         if y_label:
-            y_labels = self.get_node_labels(y_label, node_list=sampled_nodes)
+            y_labels = self.get_node_labels(y_label, node_list=node_list)
             return X, y_labels
 
-        y = pd.DataFrame(y, index=sampled_nodes,
+        y = pd.DataFrame(y, index=node_list,
                          columns=self.network.feature_transformer[self.targets[0]].classes_)
         return X, y, idx_weights
