@@ -91,7 +91,7 @@ class SubgraphGenerator(SampledDataGenerator):
             targets_vector = targets_vector.to_numpy().reshape(-1, 1)
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
-        idx_weights = self.annotations.loc[sampled_nodes, self.targets].isna()
+        idx_weights = ~self.annotations.loc[sampled_nodes, self.targets].isna()
         # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y # Make a probability distribution
 
         assert len(sampled_nodes) == y.shape[0]
