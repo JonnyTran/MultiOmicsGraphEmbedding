@@ -53,35 +53,29 @@ class GCNEmbedding(NeuralGraphEmbedding):
                       output_dim=self.vocabulary_size - 1,
                       input_length=None, mask_zero=True, trainable=True)(
             input_seqs)  # (batch_number, sequence_length, 5)
-        print("Embedding", x)
 
         x = Convolution1D(filters=320, kernel_size=26, activation='relu',
                           data_format="channels_last", name="lstm_conv_1")(
             x)  # (batch_number, sequence_length-5, 1, 192)
-        print("conv1D", x)
         if batch_norm:
             x = BatchNormalization(center=True, scale=True, name="conv1_batch_norm")(x)
         x = MaxPooling1D(pool_size=13, padding="same")(x)
         x = Dropout(encoding_dropout)(x)
 
         x = Convolution1D(filters=192, kernel_size=6, activation='relu', name="lstm_conv_2")(x)
-        print("conv1d_2", x)
         if batch_norm:
             x = BatchNormalization(center=True, scale=True, name="conv2_batch_norm")(x)
         x = MaxPooling1D(pool_size=3, padding="same")(x)
-        print("max pooling_2", x)
         x = Dropout(encoding_dropout)(x)
 
         x = Bidirectional(LSTM(lstm_units, return_sequences=False, return_state=False),
                           merge_mode='concat')(x)  # (batch_number, 320+320)
-        print("brnn", x)
         x = Dropout(encoding_dropout)(x)
 
         x = Dense(encoding_d, activation='linear', name="encoder_output")(x)
         if batch_norm:
             x = BatchNormalization(center=True, scale=True, name="encoder_output_normalized")(x)
 
-        print("model", x)
         return Model(input_seqs, x, name="encoder_model")
 
     # def create_transformer_net(self, batch_norm=True, transformer_depth=1):
@@ -154,8 +148,6 @@ class GCNEmbedding(NeuralGraphEmbedding):
         with tf.device("/cpu:0" if multi_gpu else "/gpu:0"):
             input_seqs = Input(shape=(None,), name="input_seqs")
             subnetwork = Input(shape=(None,), name="subnetwork")
-            print("input_seqs", input_seqs)
-            print("subnetwork", subnetwork)
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:1"):
             self.encoder_model = self.create_encoder_network(batch_norm=self.batchnorm,
@@ -164,7 +156,6 @@ class GCNEmbedding(NeuralGraphEmbedding):
                                                              encoding_d=self.encoding_d,
                                                              )  # Input: [input_seqs], output: encodings
             encodings = self.encoder_model(input_seqs)
-            print("encodings", encodings)
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:2"):
             self.embedding_model = self.create_embedding_model(encoding_d=self.encoding_d,
@@ -172,7 +163,6 @@ class GCNEmbedding(NeuralGraphEmbedding):
                                                                num_heads=self.num_heads,
                                                                embedding_dropout=self.embedding_dropout)  # Input: [encodings, subnetwork], output: embeddings
             embeddings = self.embedding_model([encodings, subnetwork])
-            print("embeddings", embeddings)
 
         with tf.device("/cpu:0" if multi_gpu else "/gpu:3"):
             self.cls_model = self.create_cls_model(embedding_d=self.embedding_d,
@@ -195,7 +185,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
     def learn_embedding(self, generator_train, generator_test, epochs=50,
                         early_stopping: int = False, model_checkpoint=False, tensorboard=True, hparams=None,
-                        save_model=False, **kwargs):
+                        save_model=False, verbose=2, **kwargs):
         self.generator_train = generator_train
         self.generator_test = generator_test
         try:
@@ -203,7 +193,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
                                                  validation_data=generator_test,
                                                  callbacks=self.get_callbacks(early_stopping, tensorboard,
                                                                               model_checkpoint, hparams),
-                                                 use_multiprocessing=True, workers=2, verbose=2, **kwargs)
+                                                 use_multiprocessing=True, workers=2, verbose=verbose, **kwargs)
         except KeyboardInterrupt:
             print("Stop training")
         finally:
@@ -264,7 +254,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
             callbacks.append(self.model_checkpoint)
 
         if hparams:
-            self.hp_callback = hp.KerasCallback(tf.summary.create_file_writer(self.log_dir),
+            self.hp_callback = hp.KerasCallback("logs/hparam_tuning/" + self.log_dir.split("/")[-1],
                                                 hparams, trial_id=self.log_dir.split("/")[-1])
 
             callbacks.append(self.hp_callback)
