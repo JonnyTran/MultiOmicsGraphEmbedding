@@ -28,7 +28,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
                  encoding_dropout, embedding_dropout, cls_dropout,
                  lstm_units, batchnorm: bool,
                  batch_size: int, vocabulary_size: int, word_embedding_size: int,
-                 max_length: int, targets: str, n_classes: int, multi_gpu=False):
+                 max_length: int, targets: str, n_classes: int, multi_gpu=False, verbose=False):
         self.targets = targets
         self.n_classes = n_classes
         self.batch_size = batch_size
@@ -44,6 +44,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.lstm_units = lstm_units
         self.num_heads = attn_heads
 
+        self.verbose = verbose
         super(GCNEmbedding, self).__init__(embedding_d, method_name="GCN_embedding")
         self.build_keras_model(multi_gpu)
 
@@ -170,7 +171,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
             y_pred = self.cls_model([embeddings, subnetwork])
 
             self.model = Model(inputs=[input_seqs, subnetwork], outputs=y_pred, name="cls_model")
-            print("cls_model", self.cls_model.inputs, self.cls_model.outputs)
+            print("cls_model", self.cls_model.inputs, self.cls_model.outputs) if self.verbose else None
 
         # Multi-gpu parallelization
         if multi_gpu: self.model = multi_gpu_model(self.model, gpus=4, cpu_merge=True, cpu_relocation=True)
@@ -181,7 +182,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
             optimizer="adam",
             metrics=["top_k_categorical_accuracy", precision, recall],
         )
-        print(self.model.summary())
+        print(self.model.summary()) if self.verbose else None
 
     def learn_embedding(self, generator_train, generator_test, epochs=50,
                         early_stopping: int = False, model_checkpoint=False, tensorboard=True, hparams=None,
@@ -195,7 +196,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
                                                                               model_checkpoint, hparams),
                                                  use_multiprocessing=True, workers=2, verbose=verbose, **kwargs)
         except KeyboardInterrupt:
-            print("Stop training")
+            print("Stop training") if self.verbose else None
         finally:
             if save_model: self.save_model(self.log_dir)
 
@@ -227,7 +228,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         if not hasattr(self, "log_dir"):
             self.log_dir = os.path.join("logs", str.join("-", self.targets) + "_" + datetime.datetime.now().strftime(
                 "%m-%d_%H-%M%p"))
-            print("created log_dir:", self.log_dir)
+            print("created log_dir:", self.log_dir) if self.verbose else None
 
         callbacks = []
         if tensorboard:
@@ -256,10 +257,9 @@ class GCNEmbedding(NeuralGraphEmbedding):
         if hparams:
             self.hp_callback = hp.KerasCallback("logs/hparam_tuning/" + self.log_dir.split("/")[-1],
                                                 hparams, trial_id=self.log_dir.split("/")[-1])
-
             callbacks.append(self.hp_callback)
 
-        if len(callbacks) == 0: callbacks = None
+        if len(callbacks) == 0: return None
         return callbacks
 
 
