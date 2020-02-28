@@ -25,11 +25,11 @@ class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
         self.modalities = modalities
 
         self.preprocess_graph()
+        self.node_list = self.get_node_list()
 
         super(HeterogeneousNetwork, self).__init__(multi_omics_data=multi_omics_data,
                                                    process_annotations=process_annotations)
 
-        self.node_list = self.get_node_list()
 
     def get_node_list(self):
         node_list = list(OrderedDict.fromkeys(list(self.G.nodes) + list(self.G_u.nodes)))
