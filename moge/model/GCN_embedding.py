@@ -256,7 +256,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         if hparams:
             self.hp_callback = hp.KerasCallback("logs/hparam_tuning/" + self.log_dir.split("/")[-1],
-                                                hparams, trial_id=self.log_dir.split("/")[-1])
+                                                hparams)
             callbacks.append(self.hp_callback)
 
         if len(callbacks) == 0: return None
