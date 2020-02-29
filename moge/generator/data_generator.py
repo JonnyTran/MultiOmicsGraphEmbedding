@@ -133,7 +133,8 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
-        pass
+        self.indexes = np.arange(self.n_steps)
+        self.annotations["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
 
     def __len__(self):
         'Denotes the number of batches per epoch'
