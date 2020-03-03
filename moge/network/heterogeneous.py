@@ -2,15 +2,14 @@ import networkx as nx
 import scipy.sparse as sp
 
 from moge.evaluation.utils import sample_edges
-from moge.network.attributed import Attributed
-from moge.network.base import Network
+from moge.network.attributednetwork import AttributedNetwork
 from moge.network.semantic_similarity import *
 from moge.network.train_test_split import TrainTestSplit
 
 EPSILON = 1e-16
 
 
-class HeterogeneousNetwork(Network, Attributed, TrainTestSplit):
+class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
     def __init__(self, multiomics: MultiOmics, modalities=None, process_annotations=True):
         """
         This class manages a networkx multiplex graph consisting of heterogeneous gene nodes, node attributes, and heterogeneous edge types.
@@ -30,7 +29,7 @@ class HeterogeneousNetwork(Network, Attributed, TrainTestSplit):
 
         networks = [self.G, self.G_u]
 
-        super(HeterogeneousNetwork, self).__init__(multiomics=multiomics, networks=networks,
+        super(HeterogeneousNetwork, self).__init__(networks=networks, multiomics=multiomics,
                                                    process_annotations=process_annotations, )
 
     def add_edges(self, edgelist, directed, **kwargs):

@@ -2,18 +2,21 @@ import numpy as np
 import pandas as pd
 from sklearn import preprocessing
 
+from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 from moge.network.train_test_split import get_labels_filter
 
 EPSILON = 1e-16
 
 
-class Attributed():
-    def __init__(self, multiomics, process_annotations=True) -> None:
+class AttributedNetwork(Network):
+    def __init__(self, multiomics, process_annotations=True, **kwargs) -> None:
         self.multiomics = multiomics
         if process_annotations:
             self.process_annotations()
             self.process_feature_tranformer()
+
+        super(AttributedNetwork, self).__init__(**kwargs)
 
     def process_annotations(self):
         annotations_list = []
@@ -125,7 +128,7 @@ network if the similarity measures passes the threshold
         return annotation_affinities_df
 
 
-class MultiplexAttributed(Attributed):
+class MultiplexAttributedNetwork(AttributedNetwork):
 
     def __init__(self, multiomics, process_annotations=True) -> None:
         super().__init__(multiomics, process_annotations)

@@ -1,18 +1,12 @@
 from networkx import Graph
 
-from moge.network.attributed import MultiplexAttributed
-from moge.network.semantic_similarity import *
-from moge.network.train_test_split import TrainTestSplit
-from moge.network.base import Network
-from networkx import Graph
-
-from moge.network.attributed import MultiplexAttributed
+from moge.network.attributednetwork import MultiplexAttributedNetwork
 from moge.network.base import Network
 from moge.network.semantic_similarity import *
 from moge.network.train_test_split import TrainTestSplit
 
 
-class MultiplexHeterogeneousNetwork(Network, MultiplexAttributed, TrainTestSplit):
+class MultiplexHeterogeneousNetwork(Network, MultiplexAttributedNetwork, TrainTestSplit):
     def __init__(self, modalities: list, layers: {str: Graph}, multiomics: MultiOmics, process_annotations=True):
         self.modalities = modalities
         self.layers = layers
