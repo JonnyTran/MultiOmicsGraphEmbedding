@@ -69,7 +69,7 @@ def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol=None, node_color=None,
               edge_label: str = None, max_edges=10000,
               title=None, width=1000, height=800,
-              pos=None, iterations=100, ):
+              pos=None, iterations=100, showlegend=True):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
 
@@ -146,6 +146,7 @@ def graph_viz(g: nx.Graph,
                 )
     fig.update_layout(
         title=title,
+        showlegend=showlegend,
         autosize=True,
         width=width,
         height=height,
@@ -167,7 +168,7 @@ def graph_viz3d(g: nx.Graph,
                 nodelist: list, node_symbol=None, node_color=None,
                 edge_label: str = None, max_edges=10000,
                 title=None, width=1000, height=800,
-                pos=None, iterations=100, ):
+                pos=None, iterations=100, showlegend=True):
     if pos is None:
         raise Exception("Must provide pos as dict, i.e. {<node>:<3d coordinates>}")
 
@@ -245,7 +246,7 @@ def graph_viz3d(g: nx.Graph,
                 )
     fig.update_layout(
         title=title,
-        showlegend=True,
+        showlegend=showlegend,
         # legend=dict(autosize=True, width=100),
         legend_orientation="v",
         autosize=True,
