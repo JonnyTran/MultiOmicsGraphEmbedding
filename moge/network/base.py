@@ -4,7 +4,7 @@ from collections import OrderedDict
 import numpy as np
 
 
-class Network():
+class Network(object):
     def __init__(self, networks: list, modalities: list) -> None:
         self.networks = networks
         self.modalities = modalities

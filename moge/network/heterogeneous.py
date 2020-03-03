@@ -30,8 +30,8 @@ class HeterogeneousNetwork(Network, Attributed, TrainTestSplit):
 
         networks = [self.G, self.G_u]
 
-        super(HeterogeneousNetwork, self).__init__(networks=networks, multiomics=multiomics,
-                                                   process_annotations=process_annotations)
+        super(HeterogeneousNetwork, self).__init__(multiomics=multiomics, networks=networks,
+                                                   process_annotations=process_annotations, )
 
     def add_edges(self, edgelist, directed, **kwargs):
         if directed:
