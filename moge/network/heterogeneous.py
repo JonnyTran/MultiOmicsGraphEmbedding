@@ -2,7 +2,7 @@ import networkx as nx
 import scipy.sparse as sp
 
 from moge.evaluation.utils import sample_edges
-from moge.network.attributednetwork import AttributedNetwork
+from moge.network.attributed import AttributedNetwork
 from moge.network.semantic_similarity import *
 from moge.network.train_test_split import TrainTestSplit
 

@@ -1,6 +1,6 @@
 from networkx import Graph
 
-from moge.network.attributednetwork import MultiplexAttributedNetwork
+from moge.network.attributed import MultiplexAttributedNetwork
 from moge.network.base import Network
 from moge.network.semantic_similarity import *
 from moge.network.train_test_split import TrainTestSplit

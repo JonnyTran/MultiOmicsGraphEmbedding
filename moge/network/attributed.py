@@ -12,11 +12,10 @@ EPSILON = 1e-16
 class AttributedNetwork(Network):
     def __init__(self, multiomics, process_annotations=True, **kwargs) -> None:
         self.multiomics = multiomics
+        super(AttributedNetwork, self).__init__(**kwargs)
         if process_annotations:
             self.process_annotations()
             self.process_feature_tranformer()
-
-        super(AttributedNetwork, self).__init__(**kwargs)
 
     def process_annotations(self):
         annotations_list = []
