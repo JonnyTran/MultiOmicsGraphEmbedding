@@ -95,7 +95,7 @@ def graph_viz(g: nx.Graph,
 
     # Edges data
 
-    edges = list(g.subgraph(nodelist).edges(data=False))
+    edges = list(g.subgraph(nodelist).edges(data=True if edge_label else False))
     np.random.shuffle(edges)
 
     # Samples only certain edges
