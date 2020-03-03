@@ -32,6 +32,29 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         super(HeterogeneousNetwork, self).__init__(networks=networks, multiomics=multiomics,
                                                    process_annotations=process_annotations, )
 
+    def preprocess_graph(self):
+        self.nodes = {}
+        self.node_to_modality = {}
+
+        bad_nodes = [node for node in self.get_node_list()
+                     if node is None or node == np.nan or \
+                     type(node) != str or \
+                     node == ""]
+
+        for network in self.networks:
+            network.remove_nodes_from(bad_nodes)
+
+        for modality in self.modalities:
+            for network in self.networks:
+                network.add_nodes_from(self.multiomics[modality].get_genes_list(), modality=modality)
+
+            self.nodes[modality] = self.multiomics[modality].get_genes_list()
+
+            for gene in self.multiomics[modality].get_genes_list():
+                self.node_to_modality[gene] = modality
+            print(modality, " nodes:", len(self.nodes[modality]))
+        print("Total nodes:", len(self.get_node_list()))
+
     def add_edges(self, edgelist, directed, **kwargs):
         if directed:
             self.G.add_edges_from(edgelist, type="d", **kwargs)

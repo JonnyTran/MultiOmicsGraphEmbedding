@@ -1,13 +1,10 @@
 from abc import abstractmethod
 from collections import OrderedDict
 
-import numpy as np
-
 
 class Network(object):
-    def __init__(self, networks: list, modalities: list) -> None:
+    def __init__(self, networks: list) -> None:
         self.networks = networks
-        self.modalities = modalities
         self.preprocess_graph()
         self.node_list = self.get_node_list()
 
@@ -15,28 +12,9 @@ class Network(object):
         node_list = list(OrderedDict.fromkeys([node for network in self.networks for node in network.nodes]))
         return node_list
 
+    @abstractmethod
     def preprocess_graph(self):
-        self.nodes = {}
-        self.node_to_modality = {}
-
-        bad_nodes = [node for node in self.get_node_list()
-                     if node is None or node == np.nan or \
-                     type(node) != str or \
-                     node == ""]
-
-        for network in self.networks:
-            network.remove_nodes_from(bad_nodes)
-
-        for modality in self.modalities:
-            for network in self.networks:
-                network.add_nodes_from(self.multiomics[modality].get_genes_list(), modality=modality)
-
-            self.nodes[modality] = self.multiomics[modality].get_genes_list()
-
-            for gene in self.multiomics[modality].get_genes_list():
-                self.node_to_modality[gene] = modality
-            print(modality, " nodes:", len(self.nodes[modality]))
-        print("Total nodes:", len(self.get_node_list()))
+        raise NotImplementedError
 
     @abstractmethod
     def add_edges(self, edgelist, **kwargs):
