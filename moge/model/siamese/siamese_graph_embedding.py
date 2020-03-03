@@ -20,7 +20,7 @@ from moge.evaluation.metrics import precision_d, recall_d, precision, recall
 from moge.generator.data_generator import DataGenerator
 from moge.generator.sampled_generator import SampledDataGenerator
 from moge.model.static_graph_embedding import ImportedGraphEmbedding
-from moge.network.heterogeneous_network import HeterogeneousNetwork
+from moge.network.heterogeneous import HeterogeneousNetwork
 
 
 def contrastive_loss(y_true, y_pred, margin=1.0):

@@ -1,2 +1,2 @@
 
-from .heterogeneous_network import HeterogeneousNetwork
+from .heterogeneous import HeterogeneousNetwork

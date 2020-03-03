@@ -74,7 +74,7 @@ def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, 
         edges_pred = embedding.get_top_k_predicted_edges(edge_type=edge_type, top_k=top_k,
                                                          node_list=nodes,
                                                          training_network=network_train, databases=databases)
-    edges_true = network_test.get_edgelist(node_list=nodes, databases=databases, inclusive=True)
+    edges_true = network_test.get_edgelist(node_list=nodes, inclusive=True, databases=databases)
 
     if len(edges_true) == 0:
         print("no edges in edges_true")

@@ -88,7 +88,7 @@ def heatmap(table, file_output=None, title=None, autosize=True, width=800, heigh
         columns = table.columns
     fig = go.Figure(data=go.Heatmap(
         z=table,
-        x=columns if columns else None,
+        x=columns,
         y=table.index if hasattr(table, "index") else None,
         hoverongaps=False, ))
     fig.update_layout(

@@ -13,8 +13,7 @@ def get_luad_data_network() -> HeterogeneousNetwork:
     with open(cohort_folder_path, 'rb') as file:
         luad_data = pickle.load(file)
 
-    network = HeterogeneousNetwork(modalities=["MicroRNA", "MessengerRNA", "LncRNA"],
-                                   multi_omics_data=luad_data)
+    network = HeterogeneousNetwork(multiomics=luad_data, modalities=["MicroRNA", "MessengerRNA", "LncRNA"])
     network.import_edgelist_file(
         file="moge/data/LMN_future_recall/TRAIN/Interactions_Only/GE/lmn_train.BioGRID.interactions.edgelist",
         directed=True)

@@ -2,7 +2,7 @@ import numpy as np
 
 from moge.evaluation.utils import getRandomEdgePairs
 from moge.model.static_graph_embedding import BaseGraphEmbedding
-from moge.network.heterogeneous_network import HeterogeneousNetwork
+from moge.network.heterogeneous import HeterogeneousNetwork
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 

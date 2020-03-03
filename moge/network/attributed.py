@@ -2,15 +2,15 @@ import numpy as np
 import pandas as pd
 from sklearn import preprocessing
 
-from moge.network.omics_distance import compute_expression_correlation_dists, compute_annotation_affinities
+from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 from moge.network.train_test_split import get_labels_filter
 
 EPSILON = 1e-16
 
-class AttributedNetwork():
-    def __init__(self, multi_omics_data, process_annotations=False) -> None:
-        self.multi_omics_data = multi_omics_data
 
+class Attributed():
+    def __init__(self, multiomics, process_annotations=True) -> None:
+        self.multiomics = multiomics
         if process_annotations:
             self.process_annotations()
             self.process_feature_tranformer()
@@ -19,7 +19,7 @@ class AttributedNetwork():
         annotations_list = []
 
         for modality in self.modalities:
-            annotation = self.multi_omics_data[modality].get_annotations()
+            annotation = self.multiomics[modality].get_annotations()
             annotation["omic"] = modality
             annotations_list.append(annotation)
 
@@ -29,7 +29,7 @@ class AttributedNetwork():
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def process_feature_tranformer(self, min_count=5):
+    def process_feature_tranformer(self, min_count=0):
         self.feature_transformer = {}
         for label in self.annotations.columns:
             if label == 'Transcript sequence':
@@ -38,8 +38,9 @@ class AttributedNetwork():
             if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains("|").any():
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split("|")
-                labels_filter = get_labels_filter(self, features.index, label, min_count=min_count)
-                features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
+                if min_count:
+                    labels_filter = get_labels_filter(self, features.index, label, min_count=min_count)
+                    features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 self.feature_transformer[label].fit(features)
 
             elif self.annotations[label].dtypes == int or self.annotations[label].dtypes == float:
@@ -70,11 +71,11 @@ network if the similarity measures passes the threshold
         :param histological_subtypes: the patients' cancer subtype group to calculate correlation from
         :param pathologic_stages: the patient's cancer stage group to calculate correlations from
         """
-        annotations = self.multi_omics_data[modality].get_annotations()
+        annotations = self.multiomics[modality].get_annotations()
 
         # Filter similarity adj by correlation
         if compute_correlation:
-            correlation_dist = compute_expression_correlation_dists(self.multi_omics_data, modalities=[modality],
+            correlation_dist = compute_expression_correlation_dists(self.multiomics, modalities=[modality],
                                                                     node_list=node_list, absolute_corr=True,
                                                                     return_distance=True,
                                                                     histological_subtypes=histological_subtypes,
@@ -122,3 +123,19 @@ network if the similarity measures passes the threshold
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
         return annotation_affinities_df
+
+
+class MultiplexAttributed(Attributed):
+
+    def __init__(self, multiomics, process_annotations=True) -> None:
+        super().__init__(multiomics, process_annotations)
+
+    def process_annotations(self):
+        self.annotations = {}
+        for modality in self.modalities:
+            annotation = self.multiomics[modality].get_annotations()
+
+            self.annotations[modality] = annotation
+
+        print("Annotation columns:",
+              {modality: annotations.columns.tolist() for modality, annotations in self.annotations.items()})

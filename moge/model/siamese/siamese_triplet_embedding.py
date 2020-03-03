@@ -11,7 +11,7 @@ from sklearn.neighbors import radius_neighbors_graph
 
 from moge.generator import SampledTripletDataGenerator
 from moge.model.siamese.siamese_graph_embedding import SiameseGraphEmbedding, sigmoid, softmax
-from moge.network.heterogeneous_network import HeterogeneousNetwork
+from moge.network.heterogeneous import HeterogeneousNetwork
 
 
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):

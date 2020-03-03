@@ -46,7 +46,7 @@ def stratify_train_test(y_label, n_splits=10, seed=42):
         test_nodes = list(y_label.index[test])
         return train_nodes, test_nodes
 
-class NetworkTrainTestSplit():
+class TrainTestSplit():
     def __init__(self) -> None:
         self.training = None
         self.testing = None

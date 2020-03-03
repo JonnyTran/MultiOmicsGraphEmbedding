@@ -5,7 +5,7 @@ from keras.optimizers import Adadelta
 from moge.generator.siamese.triplet_generator import OnlineTripletGenerator
 from moge.model.siamese.siamese_graph_embedding import *
 from moge.model.siamese.siamese_triplet_embedding import SiameseTripletGraphEmbedding
-from moge.network.heterogeneous_network import HeterogeneousNetwork
+from moge.network.heterogeneous import HeterogeneousNetwork
 
 
 class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):

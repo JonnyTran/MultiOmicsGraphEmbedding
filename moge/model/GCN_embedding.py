@@ -28,6 +28,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
                  encoding_dropout, embedding_dropout, cls_dropout,
                  lstm_units, batchnorm: bool,
                  batch_size: int, vocabulary_size: int, word_embedding_size: int,
+                 loss: str,
                  max_length: int, targets: str, n_classes: int, multi_gpu=False, verbose=False):
         self.targets = targets
         self.n_classes = n_classes
@@ -43,6 +44,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.cls_dropout = cls_dropout
         self.lstm_units = lstm_units
         self.num_heads = attn_heads
+        self.loss = loss
 
         self.verbose = verbose
         super(GCNEmbedding, self).__init__(embedding_d, method_name="GCN_embedding")
@@ -178,7 +180,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
 
         # Compile & train
         self.model.compile(
-            loss="binary_crossentropy",
+            loss=self.loss,
             optimizer="adam",
             metrics=["top_k_categorical_accuracy", precision, recall],
         )

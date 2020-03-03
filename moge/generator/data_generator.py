@@ -31,7 +31,7 @@ class SequenceTokenizer():
             self.tokenizer = tokenizer
 
     def sample_sequences(self, sequences):
-        return sequences.apply(lambda x: random.choice(x) if type(x) is list else x)
+        return sequences.apply(lambda x: random.choice(x) if isinstance(x, list) else x)
 
     def get_sequence_data(self, node_list, variable_length=False, minlen=None):
         """

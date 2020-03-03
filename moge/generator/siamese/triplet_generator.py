@@ -5,7 +5,7 @@ import tensorflow as tf
 from moge.generator.sampled_generator import SampledDataGenerator
 from moge.generator.siamese.pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
     UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
-from moge.network.heterogeneous_network import HeterogeneousNetwork, EPSILON
+from moge.network.heterogeneous import HeterogeneousNetwork, EPSILON
 
 
 def sparse_matrix_to_sparse_tensor(X):

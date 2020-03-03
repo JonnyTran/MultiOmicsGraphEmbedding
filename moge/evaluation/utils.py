@@ -46,19 +46,18 @@ def getRandomEdgePairs(sparse_adj_matrix, node_list=None, sample_ratio=0.01, ret
         return [(node_list[rows[i]], node_list[cols[i]]) for i in rand_indices]
 
 
-# Convert sparse matrix to tuple
-
 def sparse_to_tuple(sparse_mx):
+    # Convert sparse matrix to tuple
     if not sp.isspmatrix_coo(sparse_mx):
         sparse_mx = sparse_mx.tocoo()
     coords = np.vstack((sparse_mx.row, sparse_mx.col)).transpose()
     values = sparse_mx.data
     shape = sparse_mx.shape
     return coords, values, shape
-# Get normalized adjacency matrix: A_norm
 
 
 def preprocess_graph(adj):
+    # Get normalized adjacency matrix: A_norm
     adj = sp.coo_matrix(adj)
     adj_ = adj + sp.eye(adj.shape[0])
     rowsum = np.array(adj_.sum(1))
@@ -85,9 +84,6 @@ def mask_test_edges_old(adj, is_directed=True, test_frac=.1, val_frac=.05,
     :param verbose:
     :return:
     """
-    if verbose == True:
-        print('preprocessing...')
-
     # Remove diagonal elements
     adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
     adj.eliminate_zeros()
@@ -99,7 +95,6 @@ def mask_test_edges_old(adj, is_directed=True, test_frac=.1, val_frac=.05,
     edges = adj_tuple[0]  # List of ALL edges (either direction)
     edge_pairs = [(edge[0], edge[1]) for edge in edges]  # store edges as list of tuples (from_node, to_node)
     edge_values = adj_tuple[1]
-    # TODO validation edges have incorrect weight
 
     num_test = int(np.floor(edges.shape[0] * test_frac))  # controls how large the test set should be
     num_val = int(np.floor(edges.shape[0] * val_frac))  # controls how alrge the validation set should be
@@ -107,10 +102,6 @@ def mask_test_edges_old(adj, is_directed=True, test_frac=.1, val_frac=.05,
 
     ### ---------- TRUE EDGES ---------- ###
     # Shuffle and iterate over all edges
-
-    if verbose:
-        print('creating true edges...')
-
     # Add MST edges to train_edges, to exclude bridge edges from the test and validation set
     mst_edges = set(nx.minimum_spanning_tree(g.to_undirected() if is_directed else g).edges())
     train_edges = set([pair for pair in edge_pairs if
@@ -162,13 +153,6 @@ def mask_test_edges_old(adj, is_directed=True, test_frac=.1, val_frac=.05,
         frac_in_wcc = num_wcc_contained_edges / num_total_edges
         return frac_in_wcc
 
-    # Check what percentage of edges have both endpoints in largest WCC
-    if verbose:
-        print('Fraction of train edges with both endpoints in L-WCC: ', frac_edges_in_wcc(train_edges))
-        print('Fraction of test edges with both endpoints in L-WCC: ', frac_edges_in_wcc(test_edges))
-        print('Fraction of val edges with both endpoints in L-WCC: ', frac_edges_in_wcc(val_edges))
-
-
     # Ignore edges with endpoint not in largest WCC
     if only_largest_wcc:
         print('Removing edges with either endpoint not in L-WCC from train-test split...')
@@ -176,20 +160,10 @@ def mask_test_edges_old(adj, is_directed=True, test_frac=.1, val_frac=.05,
         test_edges = {edge for edge in test_edges if edge[0] in largest_wcc_set and edge[1] in largest_wcc_set}
         val_edges = {edge for edge in val_edges if edge[0] in largest_wcc_set and edge[1] in largest_wcc_set}
 
-
-    ### ---------- FINAL DISJOINTNESS CHECKS ---------- ###
-    if verbose == True:
-        print('final checks for disjointness...')
-
-
     # assert: test, val, train positive edges disjoint
     assert set(val_edges).isdisjoint(set(train_edges))
     assert set(test_edges).isdisjoint(set(train_edges))
     assert set(val_edges).isdisjoint(set(test_edges))
-
-    if verbose == True:
-        print('creating adj_train...')
-
 
     # Re-build adj matrix using remaining graph
     adj_train = nx.adjacency_matrix(g)
@@ -198,12 +172,6 @@ def mask_test_edges_old(adj, is_directed=True, test_frac=.1, val_frac=.05,
     train_edges = np.array([list(edge_tuple) for edge_tuple in train_edges])
     val_edges = np.array([list(edge_tuple) for edge_tuple in val_edges])
     test_edges = np.array([list(edge_tuple) for edge_tuple in test_edges])
-
-    if verbose == True:
-        print('Done with train-test split!')
-        print('Num train edges (true, ): (', train_edges.shape[0], ', ')
-        print('Num test edges (true, ): (', test_edges.shape[0], ', ')
-        print('Num val edges (true, ): (', val_edges.shape[0], ', ')
 
     # Return final edge lists (edges can go either direction!)
     return adj_train, train_edges, \

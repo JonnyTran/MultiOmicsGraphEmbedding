@@ -1,61 +1,37 @@
-from collections import OrderedDict
-
 import networkx as nx
 import scipy.sparse as sp
 
 from moge.evaluation.utils import sample_edges
-from moge.network.attributed import AttributedNetwork
-from moge.network.omics_distance import *
-from moge.network.train_test_split import NetworkTrainTestSplit
+from moge.network.attributed import Attributed
+from moge.network.base import Network
+from moge.network.semantic_similarity import *
+from moge.network.train_test_split import TrainTestSplit
 
 EPSILON = 1e-16
 
 
-class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
-    def __init__(self, modalities: list, multi_omics_data: MultiOmics, process_annotations=True):
+class HeterogeneousNetwork(Network, Attributed, TrainTestSplit):
+    def __init__(self, multiomics: MultiOmics, modalities=None, process_annotations=True):
         """
-        This class manages a networkx graph consisting of heterogeneous gene nodes, and heterogeneous edge types.
+        This class manages a networkx multiplex graph consisting of heterogeneous gene nodes, node attributes, and heterogeneous edge types.
 
-        :param modalities: A list of omics data to import (e.g. ["GE", "LNC"]). Each modalities has a list of genes
-        :param multi_omics_data: The multiomics data to import
+        :param multiomics: The MultiOmics (OpenOmics) data to import.
+        :param modalities: Default None, import all modalities. A list of omics data to import (e.g. ["MessengerRNA", "LncRNA"]). Each modality represents a
+            node type in a heterogeneous network.
         """
-        self.multi_omics_data = multi_omics_data
+        self.multiomics = multiomics
+        if modalities:
+            self.modalities = modalities
+        else:
+            self.modalities = self.multiomics.omics_list
+
         self.G = nx.DiGraph()
         self.G_u = nx.Graph()
-        self.modalities = modalities
 
-        self.preprocess_graph()
-        self.node_list = self.get_node_list()
+        networks = [self.G, self.G_u]
 
-        super(HeterogeneousNetwork, self).__init__(multi_omics_data=multi_omics_data,
+        super(HeterogeneousNetwork, self).__init__(networks=networks, multiomics=multiomics,
                                                    process_annotations=process_annotations)
-
-
-    def get_node_list(self):
-        node_list = list(OrderedDict.fromkeys(list(self.G.nodes) + list(self.G_u.nodes)))
-        return node_list
-
-    def preprocess_graph(self):
-        self.nodes = {}
-        self.node_to_modality = {}
-
-        bad_nodes = [node for node in self.get_node_list()
-                     if node is None or node == np.nan or \
-                     type(node) != str or \
-                     node == "" or " " in node \
-                     ]
-        self.G.remove_nodes_from(bad_nodes)
-        self.G_u.remove_nodes_from(bad_nodes)
-
-        for modality in self.modalities:
-            self.G.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
-            self.G_u.add_nodes_from(self.multi_omics_data[modality].get_genes_list(), modality=modality)
-            self.nodes[modality] = self.multi_omics_data[modality].get_genes_list()
-
-            for gene in self.multi_omics_data[modality].get_genes_list():
-                self.node_to_modality[gene] = modality
-            print(modality, " nodes:", len(self.nodes[modality]))
-        print("Total nodes:", len(self.get_node_list()))
 
     def add_edges(self, edgelist, directed, **kwargs):
         if directed:
@@ -152,20 +128,11 @@ class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
         if node_list is None or node_list == self.node_list:
             return laplacian_adj
         elif set(node_list) < set(self.node_list):
-            return self._select_adj_indices(laplacian_adj, node_list, None)
+            return self.slice_adj(laplacian_adj, node_list, None)
         elif not (set(node_list) < set(self.node_list)):
             raise Exception("A node in node_l is not in self.node_list.")
 
         return laplacian_adj
-
-    def _select_adj_indices(self, adj, node_list_A, node_list_B=None):
-        if node_list_B is None:
-            idx = [self.node_list.index(node) for node in node_list_A]
-            return adj[idx, :][:, idx]
-        else:
-            idx_A = [self.node_list.index(node) for node in node_list_A]
-            idx_B = [self.node_list.index(node) for node in node_list_B]
-            return adj[idx_A, :][:, idx_B]
 
     def get_edge(self, i, j, is_directed=True):
         if is_directed:
@@ -185,20 +152,7 @@ class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
             pos_adj.count_nonzero(), sample_neg_count, Ed_count)
         return pos_adj
 
-    def get_subgraph(self, modalities=["MicroRNA", "LncRNA", "MessengerRNA"], edge_type="d"):
-        if modalities == None:
-            modalities = self.modalities
-
-        nodes = []
-        for modality in modalities:
-            nodes.extend(self.nodes[modality])
-
-        if edge_type == "d":
-            return self.G.subgraph(nodes)  # returned subgraph is not mutable
-        elif edge_type == "u":
-            return self.G_u.subgraph(nodes)  # returned subgraph is not mutable
-
-    def get_edgelist(self, node_list, databases=None, inclusive=True):
+    def get_edgelist(self, node_list, inclusive=True, databases=None):
         if databases is not None:
             edgelist = [(u, v) for u, v, d in self.G.edges(nbunch=node_list, data=True) if
                         'database' in d and d['database'] in databases]
@@ -218,36 +172,18 @@ class HeterogeneousNetwork(AttributedNetwork, NetworkTrainTestSplit):
         print("Number of negative sampled edges between", modalities, "added:", len(edges_ebunch))
         self.G_u.add_edges_from(edges_ebunch)
 
-    def add_sampled_undirected_negative_edges_from_correlation(self, modalities=[], correlation_threshold=0.2,
-                                                               histological_subtypes=[],
-                                                               pathologic_stages=[]):
-        """
-        Sample edges with experssion values absolute-value correlations near zero, indicating no relationships
+    def get_subgraph(self, modalities=["MicroRNA", "LncRNA", "MessengerRNA"], edge_type="d"):
+        if modalities == None:
+            modalities = self.modalities
 
-        :param modalities:
-        :param correlation_threshold:
-        :return:
-        """
-        nodes_A = self.nodes[modalities[0]]
-        nodes_B = self.nodes[modalities[1]]
-        node_list = [node for node in self.node_list if node in nodes_A or node in nodes_B]
+        nodes = []
+        for modality in modalities:
+            nodes.extend(self.nodes[modality])
 
-        # Filter similarity adj by correlation
-        correlation_dist = compute_expression_correlation_dists(self.multi_omics_data, modalities=modalities,
-                                                                node_list=node_list,
-                                                                histological_subtypes=histological_subtypes,
-                                                                pathologic_stages=pathologic_stages,
-                                                                squareform=True)
-        correlation_dist = 1 - correlation_dist
-        correlation_dist = np.abs(correlation_dist)
-
-        similarity_filtered = np.triu(correlation_dist <= correlation_threshold, k=1)  # A True/False matrix
-        sim_edgelist_ebunch = [(node_list[x], node_list[y], correlation_dist.iloc[x, y]) for x, y in
-                               zip(*np.nonzero(similarity_filtered))]
-        print(sim_edgelist_ebunch[0:10])
-        self.G.add_weighted_edges_from(sim_edgelist_ebunch, type="u_n")
-        print(len(sim_edgelist_ebunch), "undirected positive edges (type='u') added.")
-
+        if edge_type == "d":
+            return self.G.subgraph(nodes)  # returned subgraph is not mutable
+        elif edge_type == "u":
+            return self.G_u.subgraph(nodes)  # returned subgraph is not mutable
 
     def remove_extra_nodes(self):
         self.G = self.get_subgraph(self.modalities).copy()
