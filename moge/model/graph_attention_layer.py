@@ -155,3 +155,21 @@ class GraphAttention(Layer):
     def compute_output_shape(self, input_shape):
         output_shape = input_shape[0][0], self.output_dim
         return output_shape
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'F_': self.F_,
+            'attn_heads': self.attn_heads,
+            'attn_heads_reduction': self.attn_heads_reduction,
+            'activation': self.activation,
+            'use_bias': self.use_bias,
+            'kernel_initializer': self.kernel_initializer,
+            'bias_initializer': self.bias_initializer,
+            'attn_kernel_initializer': self.attn_kernel_initializer,
+            'kernel_regularizer': self.kernel_regularizer,
+            'bias_regularizer': self.bias_regularizer,
+            'attn_kernel_regularizer': self.attn_kernel_regularizer,
+            'activity_regularizer': self.activity_regularizer,
+        })
+        return config
