@@ -10,10 +10,11 @@ EPSILON = 1e-16
 
 
 class AttributedNetwork(Network):
-    def __init__(self, multiomics, process_annotations=True, **kwargs) -> None:
+    def __init__(self, multiomics, annotations=True, **kwargs) -> None:
         self.multiomics = multiomics
+
         super(AttributedNetwork, self).__init__(**kwargs)
-        if process_annotations:
+        if annotations:
             self.process_annotations()
             self.process_feature_tranformer()
 
@@ -31,15 +32,21 @@ class AttributedNetwork(Network):
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def process_feature_tranformer(self, min_count=0):
+    def process_feature_tranformer(self, delimiter="|", min_count=0):
+        """
+        For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer
+        is used to convert a list of labels into a vector.
+        :param delimiter (str): default "|".
+        :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
+        """
         self.feature_transformer = {}
         for label in self.annotations.columns:
             if label == 'Transcript sequence':
                 continue
 
-            if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains("|").any():
+            if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains(delimiter).any():
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
-                features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split("|")
+                features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split(delimiter)
                 if min_count:
                     labels_filter = get_labels_filter(self, features.index, label, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
@@ -127,17 +134,3 @@ network if the similarity measures passes the threshold
         return annotation_affinities_df
 
 
-class MultiplexAttributedNetwork(AttributedNetwork):
-
-    def __init__(self, multiomics, process_annotations=True) -> None:
-        super().__init__(multiomics, process_annotations)
-
-    def process_annotations(self):
-        self.annotations = {}
-        for modality in self.modalities:
-            annotation = self.multiomics[modality].get_annotations()
-
-            self.annotations[modality] = annotation
-
-        print("Annotation columns:",
-              {modality: annotations.columns.tolist() for modality, annotations in self.annotations.items()})
