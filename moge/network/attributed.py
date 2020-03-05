@@ -2,15 +2,22 @@ import numpy as np
 import pandas as pd
 from sklearn import preprocessing
 
+from moge.generator.sequences import SEQUENCE
 from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 from moge.network.train_test_split import get_labels_filter
 
 EPSILON = 1e-16
 
-
 class AttributedNetwork(Network):
     def __init__(self, multiomics, annotations=True, **kwargs) -> None:
+        """
+        Handles the MultiOmics attributes associated to the network(s).
+
+        :param multiomics: an openomics.MultiOmics instance.
+        :param annotations: default True. Whether to run annotations processing.
+        :param kwargs: args to pass to Network() constructor.
+        """
         self.multiomics = multiomics
 
         super(AttributedNetwork, self).__init__(**kwargs)
@@ -41,7 +48,7 @@ class AttributedNetwork(Network):
         """
         self.feature_transformer = {}
         for label in self.annotations.columns:
-            if label == 'Transcript sequence':
+            if label == SEQUENCE:
                 continue
 
             if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains(delimiter).any():
@@ -58,6 +65,7 @@ class AttributedNetwork(Network):
                 self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
 
             else:
+                print("INFO: Label {} is transformed by MultiLabelBinarizer".format(label))
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0)
                 self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))

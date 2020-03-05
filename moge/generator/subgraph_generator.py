@@ -89,7 +89,7 @@ class SubgraphGenerator(SampledDataGenerator):
                 if labels_vector.dtypes == np.object:
                     if labels_vector.str.contains("|").any():
                         labels_vector = labels_vector.str.split("|")
-                        labels_vector = labels_vector.map(lambda x: x if type(x) == list else [])
+                        labels_vector = labels_vector.map(lambda x: x if isinstance(x, list) else [])
                 else:
                     labels_vector = labels_vector.to_numpy().reshape(-1, 1)
                 X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
