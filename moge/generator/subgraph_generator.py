@@ -35,7 +35,7 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def __getitem__(self, item=None):
-        sampled_nodes = self.neighborhood_sampling(batch_size=self.batch_size)
+        sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
         X, y, idx_weights = self.__getdata__(sampled_nodes)
 
         return X, y, idx_weights
