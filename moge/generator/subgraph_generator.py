@@ -74,10 +74,6 @@ class SubgraphGenerator(SampledDataGenerator):
     def __getdata__(self, sampled_nodes):
         # Features
         X = {}
-        for variable in self.variables:
-            if "expressions" == variable:
-                pass
-
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
@@ -86,13 +82,17 @@ class SubgraphGenerator(SampledDataGenerator):
 
         # Features
         for variable in self.variables:
-            labels_vector = self.annotations.loc[sampled_nodes, variable]
-            if labels_vector.dtypes == np.object:
-                if labels_vector.str.contains("|").any():
-                    labels_vector = labels_vector.str.split("|")
-                    labels_vector = labels_vector.map(lambda x: x if type(x) == list else [])
+            if "expressions" == variable:
+                X["expression"] = self.get_expression(sampled_nodes, modality="Protein")
+
             else:
-                labels_vector = labels_vector.to_numpy().reshape(-1, 1)
+                labels_vector = self.annotations.loc[sampled_nodes, variable]
+                if labels_vector.dtypes == np.object:
+                    if labels_vector.str.contains("|").any():
+                        labels_vector = labels_vector.str.split("|")
+                        labels_vector = labels_vector.map(lambda x: x if type(x) == list else [])
+                else:
+                    labels_vector = labels_vector.to_numpy().reshape(-1, 1)
             X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
 
         # Labels
