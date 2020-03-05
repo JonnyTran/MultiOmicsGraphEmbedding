@@ -17,10 +17,10 @@ def sparse_matrix_to_sparse_tensor(X):
 class SampledTripletDataGenerator(SampledDataGenerator):
     def __init__(self, network: HeterogeneousNetwork, variables=None, targets=None, weighted=False, batch_size=1,
                  replace=True, seed=0, verbose=True, **kwargs):
-        super(SampledTripletDataGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
-                                                          replace=replace, seed=seed, verbose=verbose,
-                                                          compression_func=compression_func, n_steps=n_steps,
-                                                          directed=directed_proba, maxlen=maxlen, padding=padding,
+        super(SampledTripletDataGenerator, self).__init__(network=network, compression_func=compression_func,
+                                                          n_steps=n_steps, directed=directed_proba, weighted=weighted,
+                                                          batch_size=batch_size, replace=replace, seed=seed,
+                                                          verbose=verbose, maxlen=maxlen, padding=padding,
                                                           truncating=truncating, sequence_to_matrix=sequence_to_matrix,
                                                           tokenizer=tokenizer)
 

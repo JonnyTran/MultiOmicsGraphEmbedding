@@ -8,15 +8,15 @@ from .sampled_generator import SampledDataGenerator
 
 class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
-                 compression_func="log", n_steps=100, directed=True,
+                 sampling_method='neighborhood', compression_func="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
         """
         Samples a batch subnetwork for classification task.
 
         :param network: a HeterogeneousNetwork object
-        :param variables: list of annotation column names as features
-        :param targets: list of annotation column names to prediction target
+        :param variables (list): list of annotation column names as features
+        :param targets (list): list of annotation column names to prediction target
         :param batch_size: number of nodes to sample each batch
         :param compression_func: {"log", "sqrt", "linear"}
         :param n_steps:
@@ -29,8 +29,8 @@ class SubgraphGenerator(SampledDataGenerator):
         self.targets = targets
 
         super(SubgraphGenerator, self).__init__(network=network, batch_size=batch_size,
-                                                compression_func=compression_func, n_steps=n_steps,
-                                                directed=directed, replace=replace,
+                                                sampling_method=sampling_method, compression_func=compression_func,
+                                                n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
                                                 sequence_to_matrix=sequence_to_matrix,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
@@ -40,6 +40,14 @@ class SubgraphGenerator(SampledDataGenerator):
         X, y, idx_weights = self.__getdata__(sampled_nodes)
 
         return X, y, idx_weights
+
+    def sample_nodes(self, batch_size):
+        if self.sampling_method == "subgraph":
+            return self.sample_subgraph(batch_size)
+        elif self.sampling_method == "neighborhood":
+            return self.sample_neighborhoods(batch_size)
+        else:
+            raise Exception("self.sampling_method must be {'subgraph', 'neighborhood'}")
 
     def sample_subgraph(self, batch_size):
         sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
@@ -66,6 +74,10 @@ class SubgraphGenerator(SampledDataGenerator):
     def __getdata__(self, sampled_nodes):
         # Features
         X = {}
+        for variable in self.variables:
+            if "expressions" == variable:
+                pass
+
         X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],

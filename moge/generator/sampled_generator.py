@@ -4,7 +4,7 @@ from moge.generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator):
-    def __init__(self, network, compression_func="log", n_steps=100, directed=True, **kwargs):
+    def __init__(self, network, sampling_method=None, compression_func="log", n_steps=100, directed=True, **kwargs):
         """
 
         Args:
@@ -13,6 +13,7 @@ class SampledDataGenerator(DataGenerator):
             replace: Whether to sample with or without replacement
         """
         self.compression_func = compression_func
+        self.sampling_method = sampling_method
         self.n_steps = n_steps
         self.directed = directed
         super(SampledDataGenerator, self).__init__(network=network, **kwargs)
@@ -69,7 +70,10 @@ class SampledDataGenerator(DataGenerator):
 
     def __getdata__(self, sampled_nodes):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
-        raise NotImplementedError()
+        raise NotImplementedError
+
+    def sample_nodes(self, batch_size):
+        raise NotImplementedError
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
