@@ -1,9 +1,11 @@
+from abc import ABCMeta
+
 import numpy as np
 
 from moge.generator import DataGenerator
 
 
-class SampledDataGenerator(DataGenerator):
+class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
     def __init__(self, network, sampling_method=None, compression_func="log", n_steps=100, directed=True, **kwargs):
         """
 
@@ -72,8 +74,13 @@ class SampledDataGenerator(DataGenerator):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         raise NotImplementedError
 
-    def sample_nodes(self, batch_size):
+    def sample_node_list(self, batch_size):
         raise NotImplementedError
+
+    def sample_node(self, batch_size):
+        sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
+                                         p=self.node_sampling_freq)
+        return sampled_nodes
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
