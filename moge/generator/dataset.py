@@ -5,16 +5,10 @@ from . import SubgraphGenerator, DataGenerator
 
 
 class Dataset(tf.data.Dataset):
-    # OUTPUT: (steps, timings, counters)
-    OUTPUT_TYPES = (tf.dtypes.string, tf.dtypes.float32, tf.dtypes.int32)
-    OUTPUT_SHAPES = (tf.TensorShape([None, None]),
-                     tf.TensorShape([None, None]),
-                     tf.TensorShape([None, None]))
-
     def __new__(cls, generator: DataGenerator):
         """
         A tf.data wrapper for keras.utils.Sequence generator
-        >>> dataset = SubgraphGenerator(network,)
+        >>> dataset = SubgraphGenerator()
         >>> strategy = tf.distribute.MirroredStrategy()
         >>> train_dist_dataset = strategy.experimental_distribute_dataset(dataset)
 
@@ -27,8 +21,8 @@ class Dataset(tf.data.Dataset):
             args=(generator)
         )
 
-    def generator(train_generator):
-        multi_enqueuer = OrderedEnqueuer(train_generator, use_multiprocessing=True)
+    def generator(generator):
+        multi_enqueuer = OrderedEnqueuer(generator, use_multiprocessing=True)
         multi_enqueuer.start(workers=10, max_queue_size=10)
         while True:
             batch_xs, batch_ys, dset_index = next(multi_enqueuer.get())  # I have three outputs

@@ -36,7 +36,7 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def get_output_types(self):
-        return (tf.float32, tf.float32,) + (tf.float32,) * len(self.variables)
+        return (tf.int8, tf.float32,) + (tf.float32,) * len(self.variables)
 
     def get_output_shapes(self):
         return (tf.TensorShape([None, None, ]),
