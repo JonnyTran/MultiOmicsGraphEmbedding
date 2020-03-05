@@ -4,7 +4,7 @@ import numpy as np
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 
-SEQUENCE = "Transcript sequence"
+SEQUENCE_COL = "Transcript sequence"
 
 class SequenceTokenizer():
     def __init__(self, padding='post', maxlen=2000, truncating='post', sequence_to_matrix=None, tokenizer=None) -> None:
@@ -24,7 +24,7 @@ class SequenceTokenizer():
 
         if tokenizer is None:
             self.tokenizer = Tokenizer(char_level=True, lower=False)
-            self.tokenizer.fit_on_texts(self.annotations.loc[self.node_list, SEQUENCE])
+            self.tokenizer.fit_on_texts(self.annotations.loc[self.node_list, SEQUENCE_COL])
             print("word index:", self.tokenizer.word_index) if self.verbose else None
         else:
             self.tokenizer = tokenizer
@@ -41,11 +41,11 @@ class SequenceTokenizer():
         :param minlen: pad all sequences with length lower than this minlen
         """
         if not variable_length:
-            padded_encoded_sequences = self.encode_texts(self.annotations.loc[node_list, SEQUENCE],
+            padded_encoded_sequences = self.encode_texts(self.annotations.loc[node_list, SEQUENCE_COL],
                                                          maxlen=self.maxlen)
         else:
             padded_encoded_sequences = [
-                self.encode_texts([self.annotations.loc[node, SEQUENCE]], minlen=minlen)
+                self.encode_texts([self.annotations.loc[node, SEQUENCE_COL]], minlen=minlen)
                 for node in
                 node_list]
 

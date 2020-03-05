@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from sklearn import preprocessing
 
-from moge.generator.sequences import SEQUENCE
+from moge.generator.sequences import SEQUENCE_COL
 from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 from moge.network.train_test_split import get_labels_filter
@@ -48,7 +48,7 @@ class AttributedNetwork(Network):
         """
         self.feature_transformer = {}
         for label in self.annotations.columns:
-            if label == SEQUENCE:
+            if label == SEQUENCE_COL:
                 continue
 
             if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains(delimiter,

@@ -2,13 +2,14 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 
 from .sampled_generator import SampledDataGenerator
 
 
 class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
-                 sampling_method='neighborhood_sampling', compression_func="log", n_steps=100, directed=True,
+                 sampling='neighborhood', compression_func="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
         """
@@ -18,7 +19,7 @@ class SubgraphGenerator(SampledDataGenerator):
         :param variables (list): list of annotation column names as features
         :param targets (list): list of annotation column names to prediction target
         :param batch_size: number of nodes to sample each batch
-        :param sampling_method: {'node_sampling', 'neighborhood_sampling', 'all'}. If 'all', overrides batch_size and returns the
+        :param sampling: {'node', 'neighborhood', 'all'}. If 'all', overrides batch_size and returns the
         :param compression_func: {"log", "sqrt", "linear"}
         :param n_steps:
         :param directed:
@@ -28,11 +29,18 @@ class SubgraphGenerator(SampledDataGenerator):
         """
         super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
                                                 batch_size=batch_size,
-                                                sampling_method=sampling_method, compression_func=compression_func,
+                                                sampling=sampling, compression_func=compression_func,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
                                                 sequence_to_matrix=sequence_to_matrix,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
+
+    def get_output_types(self):
+        return (tf.float32, tf.float32,) + (tf.float32,) * len(self.variables)
+
+    def get_output_shapes(self):
+        return (tf.TensorShape([None, None, ]),
+                tf.TensorShape([None, None, ]),) + (tf.TensorShape([None, None, ]),) * len(self.variables)
 
     def __getitem__(self, item=None):
         sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
@@ -41,14 +49,14 @@ class SubgraphGenerator(SampledDataGenerator):
         return X, y, idx_weights
 
     def sample_node_list(self, batch_size):
-        if self.sampling_method == "node_sampling":
+        if self.sampling == "node":
             return self.node_sampling(batch_size)
-        elif self.sampling_method == "neighborhood_sampling":
+        elif self.sampling == "neighborhood":
             return self.neighborhood_sampling(batch_size)
-        elif self.sampling_method == "all":
+        elif self.sampling == "all":
             return self.network.node_list
         else:
-            raise Exception("self.sampling_method must be {'node_sampling', 'neighborhood_sampling', 'all'}")
+            raise Exception("self.sampling_method must be {'node', 'neighborhood', 'all'}")
 
     def node_sampling(self, batch_size):
         sampled_nodes = self.sample_node(batch_size)

@@ -2,12 +2,12 @@ from abc import ABCMeta
 
 import numpy as np
 
-from moge.generator import NetworkDataGenerator
-from moge.generator.sequences import SEQUENCE
+from moge.generator import DataGenerator
+from moge.generator.sequences import SEQUENCE_COL
 
 
-class SampledDataGenerator(NetworkDataGenerator, metaclass=ABCMeta):
-    def __init__(self, network, sampling_method=None, compression_func="log", n_steps=100, directed=True, **kwargs):
+class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
+    def __init__(self, network, sampling=None, compression_func="log", n_steps=100, directed=True, **kwargs):
         """
 
         Args:
@@ -16,7 +16,7 @@ class SampledDataGenerator(NetworkDataGenerator, metaclass=ABCMeta):
             replace: Whether to sample with or without replacement
         """
         self.compression_func = compression_func
-        self.sampling_method = sampling_method
+        self.sampling = sampling
         self.n_steps = n_steps
         self.directed = directed
         super(SampledDataGenerator, self).__init__(network=network, **kwargs)
@@ -86,4 +86,4 @@ class SampledDataGenerator(NetworkDataGenerator, metaclass=ABCMeta):
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         self.indexes = np.arange(self.n_steps)
-        self.annotations[SEQUENCE] = self.sample_sequences(self.transcripts_to_sample)
+        self.annotations[SEQUENCE_COL] = self.sample_sequences(self.transcripts_to_sample)

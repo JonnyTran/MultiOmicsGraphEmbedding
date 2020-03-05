@@ -4,11 +4,10 @@ import numpy as np
 import pandas as pd
 from tensorflow import keras
 
-from moge.generator.sequences import SequenceTokenizer, SEQUENCE
+from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
 
 
-class NetworkDataGenerator(keras.utils.Sequence, SequenceTokenizer):
-
+class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
     def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
                  verbose=True, **kwargs):
         """
@@ -33,7 +32,7 @@ class NetworkDataGenerator(keras.utils.Sequence, SequenceTokenizer):
         self.verbose = verbose
 
         self.annotations = network.annotations
-        self.transcripts_to_sample = network.annotations[SEQUENCE].copy()
+        self.transcripts_to_sample = network.annotations[SEQUENCE_COL].copy()
 
         if variables or targets:
             self.variables = variables
@@ -42,22 +41,22 @@ class NetworkDataGenerator(keras.utils.Sequence, SequenceTokenizer):
         if "node_list" in kwargs:
             self.node_list = kwargs["node_list"]
             self.node_list = [node for node in self.node_list if node in self.annotations[
-                self.annotations[SEQUENCE].notnull()].index.tolist()]
+                self.annotations[SEQUENCE_COL].notnull()].index.tolist()]
             kwargs.pop("node_list")
         else:
-            self.node_list = self.annotations[self.annotations[SEQUENCE].notnull()].index.tolist()
+            self.node_list = self.annotations[self.annotations[SEQUENCE_COL].notnull()].index.tolist()
 
         # Remove duplicates
         self.node_list = list(OrderedDict.fromkeys(self.node_list))
 
         np.random.seed(seed)
         self.on_epoch_end()
-        super(NetworkDataGenerator, self).__init__(**kwargs)
+        super(DataGenerator, self).__init__(**kwargs)
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         self.indexes = np.arange(self.n_steps)
-        self.annotations["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
+        self.annotations[SEQUENCE_COL] = self.sample_sequences(self.transcripts_to_sample)
 
     def __len__(self):
         'Denotes the number of batches per epoch'
@@ -76,6 +75,12 @@ class NetworkDataGenerator(keras.utils.Sequence, SequenceTokenizer):
             return_sequence_data (bool):
             batch_size:
         """
+        raise NotImplementedError()
+
+    def get_output_types(self):
+        raise NotImplementedError()
+
+    def get_output_shapes(self):
         raise NotImplementedError()
 
     def get_node_labels(self, label, node_list):
