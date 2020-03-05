@@ -26,10 +26,8 @@ class SubgraphGenerator(SampledDataGenerator):
         :param seed:
         :param verbose:
         """
-        self.variables = variables
-        self.targets = targets
-
-        super(SubgraphGenerator, self).__init__(network=network, batch_size=batch_size,
+        super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
+                                                batch_size=batch_size,
                                                 sampling_method=sampling_method, compression_func=compression_func,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,

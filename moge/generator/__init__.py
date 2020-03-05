@@ -1,3 +1,3 @@
-from .data_generator import DataGenerator
+from .data_generator import AttributeGenerator
 from .sampled_generator import SampledDataGenerator
 from .subgraph_generator import SubgraphGenerator

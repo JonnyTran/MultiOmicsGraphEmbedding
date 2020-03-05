@@ -6,7 +6,7 @@ from tensorflow import keras
 from moge.generator.sequences import SequenceTokenizer
 
 
-class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
+class AttributeGenerator(keras.utils.Sequence, SequenceTokenizer):
 
     def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
                  verbose=True, **kwargs):
@@ -51,7 +51,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
         np.random.seed(seed)
         self.on_epoch_end()
-        super(DataGenerator, self).__init__(**kwargs)
+        super(AttributeGenerator, self).__init__(**kwargs)
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'

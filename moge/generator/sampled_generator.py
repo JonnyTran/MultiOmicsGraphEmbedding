@@ -2,10 +2,10 @@ from abc import ABCMeta
 
 import numpy as np
 
-from moge.generator import DataGenerator
+from moge.generator import AttributeGenerator
 
 
-class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
+class SampledDataGenerator(AttributeGenerator, metaclass=ABCMeta):
     def __init__(self, network, sampling_method=None, compression_func="log", n_steps=100, directed=True, **kwargs):
         """
 
