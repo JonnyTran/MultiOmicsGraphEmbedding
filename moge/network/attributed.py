@@ -51,7 +51,8 @@ class AttributedNetwork(Network):
             if label == SEQUENCE:
                 continue
 
-            if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains(delimiter).any():
+            if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains(delimiter,
+                                                                                                    regex=False).any():
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split(delimiter)
                 if min_count:
