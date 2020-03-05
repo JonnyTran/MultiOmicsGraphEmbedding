@@ -17,7 +17,7 @@ from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
 from moge.evaluation.metrics import precision_d, recall_d, precision, recall
-from moge.generator.data_generator import DataGenerator
+from moge.generator.data_generator import NetworkDataGenerator
 from moge.generator.sampled_generator import SampledDataGenerator
 from moge.model.static_graph_embedding import ImportedGraphEmbedding
 from moge.network.heterogeneous import HeterogeneousNetwork
@@ -286,9 +286,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
         generator_train = self.get_training_data_generator(network, n_steps, seed)
 
         if network_val is not None:
-            self.generator_val = DataGenerator(network=network_val, weighted=self.weighted, batch_size=self.batch_size,
-                                               replace=True, seed=seed, verbose=self.verbose, maxlen=self.max_length,
-                                               padding='post', truncating="post", tokenizer=generator_train.tokenizer) \
+            self.generator_val = NetworkDataGenerator(network=network_val, weighted=self.weighted,
+                                                      batch_size=self.batch_size,
+                                                      replace=True, seed=seed, verbose=self.verbose,
+                                                      maxlen=self.max_length,
+                                                      padding='post', truncating="post",
+                                                      tokenizer=generator_train.tokenizer) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
@@ -316,9 +319,11 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                                         truncating=self.truncating) \
                 if not hasattr(self, "generator_train") else self.generator_train
         else:
-            self.generator_train = DataGenerator(network=network, weighted=self.weighted, batch_size=self.batch_size,
-                                                 replace=True, seed=seed, verbose=self.verbose, maxlen=self.max_length,
-                                                 padding='post', truncating=self.truncating) \
+            self.generator_train = NetworkDataGenerator(network=network, weighted=self.weighted,
+                                                        batch_size=self.batch_size,
+                                                        replace=True, seed=seed, verbose=self.verbose,
+                                                        maxlen=self.max_length,
+                                                        padding='post', truncating=self.truncating) \
                 if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
         self.word_index = self.generator_train.tokenizer.word_index
@@ -475,7 +480,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             return self._X
 
     def process_embeddings(self, variable_length, batch_size=256, minlen=100):
-        seqs = self.generator_train.get_sequence_data(self.node_list, variable_length=variable_length, minlen=minlen)
+        seqs = self.generator_train.get_sequences(self.node_list, variable_length=variable_length, minlen=minlen)
 
         if variable_length:
             embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]

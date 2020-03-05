@@ -10,7 +10,7 @@ EPSILON = 1e-16
 
 
 class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics: MultiOmics, modalities=None, process_annotations=True):
+    def __init__(self, multiomics: MultiOmics, modalities=None, annotations=True):
         """
         This class manages a networkx multiplex graph consisting of heterogeneous gene nodes, node attributes, and heterogeneous edge types.
 
@@ -18,7 +18,6 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         :param modalities: Default None, import all modalities. A list of omics data to import (e.g. ["MessengerRNA", "LncRNA"]). Each modality represents a
             node type in a heterogeneous network.
         """
-        self.multiomics = multiomics
         if modalities:
             self.modalities = modalities
         else:
@@ -30,19 +29,11 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         networks = [self.G, self.G_u]
 
         super(HeterogeneousNetwork, self).__init__(networks=networks, multiomics=multiomics,
-                                                   process_annotations=process_annotations, )
+                                                   annotations=annotations, )
 
-    def preprocess_graph(self):
+    def process_network(self):
         self.nodes = {}
         self.node_to_modality = {}
-
-        bad_nodes = [node for node in self.get_node_list()
-                     if node is None or node == np.nan or \
-                     type(node) != str or \
-                     node == ""]
-
-        for network in self.networks:
-            network.remove_nodes_from(bad_nodes)
 
         for modality in self.modalities:
             for network in self.networks:

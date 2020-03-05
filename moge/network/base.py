@@ -1,19 +1,40 @@
 from abc import abstractmethod
 from collections import OrderedDict
 
+import numpy as np
+
 
 class Network(object):
     def __init__(self, networks: list) -> None:
+        """
+        A class that manages multiple graphs and the nodes between those graphs. Inheriting this class will run .process_network() and get_node_list()
+        :param networks (list): a list of Networkx Graph's
+        """
         self.networks = networks
-        self.preprocess_graph()
+        self.process_network()
+        self.remove_bad_nodes()
         self.node_list = self.get_node_list()
 
     def get_node_list(self):
-        node_list = list(OrderedDict.fromkeys([node for network in self.networks for node in network.nodes]))
+        if isinstance(self.networks, dict):
+            node_list = list(
+                OrderedDict.fromkeys([node for network in self.networks.values() for node in network.nodes]))
+        elif isinstance(self.networks, list):
+            node_list = list(OrderedDict.fromkeys([node for network in self.networks for node in network.nodes]))
+
         return node_list
 
+    def remove_bad_nodes(self):
+        bad_nodes = [node for node in self.get_node_list()
+                     if node is None or node == np.nan or \
+                     type(node) != str or \
+                     node == ""]
+
+        for network in self.networks:
+            network.remove_nodes_from(bad_nodes)
+
     @abstractmethod
-    def preprocess_graph(self):
+    def process_network(self):
         raise NotImplementedError
 
     @abstractmethod

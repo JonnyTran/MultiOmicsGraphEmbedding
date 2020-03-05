@@ -22,7 +22,7 @@ from .graph_attention_layer import GraphAttention
 from .static_graph_embedding import NeuralGraphEmbedding
 
 
-class GCNEmbedding(NeuralGraphEmbedding):
+class EncoderEmbedding(NeuralGraphEmbedding):
     def __init__(self,
                  embedding_d: int, encoding_d: int, attn_heads: int,
                  encoding_dropout, embedding_dropout, cls_dropout,
@@ -47,7 +47,7 @@ class GCNEmbedding(NeuralGraphEmbedding):
         self.loss = loss
 
         self.verbose = verbose
-        super(GCNEmbedding, self).__init__(embedding_d, method_name="GCN_embedding")
+        super(EncoderEmbedding, self).__init__(embedding_d, method_name="GCN_embedding")
         self.build_keras_model(multi_gpu)
 
     def create_encoder_network(self, batch_norm=True, encoding_dropout=0.2, lstm_units=320, encoding_d=256):
