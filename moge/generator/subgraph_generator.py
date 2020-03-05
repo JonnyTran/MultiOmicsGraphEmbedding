@@ -83,7 +83,7 @@ class SubgraphGenerator(SampledDataGenerator):
         # Features
         for variable in self.variables:
             if "expression" in variable:
-                X["expression"] = self.get_expression(sampled_nodes, modality="Protein")
+                X[variable] = self.get_expression(sampled_nodes, modality="Protein")
 
             else:
                 labels_vector = self.annotations.loc[sampled_nodes, variable]
@@ -93,7 +93,7 @@ class SubgraphGenerator(SampledDataGenerator):
                         labels_vector = labels_vector.map(lambda x: x if type(x) == list else [])
                 else:
                     labels_vector = labels_vector.to_numpy().reshape(-1, 1)
-            X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
+                X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
 
         # Labels
         targets_vector = self.annotations.loc[sampled_nodes, self.targets[0]]
