@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 
 from .sampled_generator import SampledDataGenerator
-from .sequences import SEQUENCE
 
 
 class SubgraphGenerator(SampledDataGenerator):
@@ -74,6 +73,7 @@ class SubgraphGenerator(SampledDataGenerator):
     def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
+        X["input_seqs"] = self.get_sequences(sampled_nodes, variable_length=variable_length)
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
                                                             node_list=sampled_nodes).toarray()
@@ -81,9 +81,6 @@ class SubgraphGenerator(SampledDataGenerator):
 
         # Features
         for variable in self.variables:
-            if SEQUENCE == variable:
-                X[variable] = self.get_sequences(sampled_nodes, variable_length=variable_length)
-
             if "expression" == variable:
                 X[variable] = self.get_expressions(sampled_nodes, modality="Protein")
 
