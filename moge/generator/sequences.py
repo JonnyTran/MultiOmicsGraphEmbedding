@@ -24,7 +24,7 @@ class SequenceTokenizer():
 
         if tokenizer is None:
             self.tokenizer = Tokenizer(char_level=True, lower=False)
-            self.tokenizer.fit_on_texts(self.annotations.loc[self.node_list, "Transcript sequence"])
+            self.tokenizer.fit_on_texts(self.annotations.loc[self.node_list, SEQUENCE])
             print("word index:", self.tokenizer.word_index) if self.verbose else None
         else:
             self.tokenizer = tokenizer
@@ -41,11 +41,11 @@ class SequenceTokenizer():
         :param minlen: pad all sequences with length lower than this minlen
         """
         if not variable_length:
-            padded_encoded_sequences = self.encode_texts(self.annotations.loc[node_list, "Transcript sequence"],
+            padded_encoded_sequences = self.encode_texts(self.annotations.loc[node_list, SEQUENCE],
                                                          maxlen=self.maxlen)
         else:
             padded_encoded_sequences = [
-                self.encode_texts([self.annotations.loc[node, "Transcript sequence"]], minlen=minlen)
+                self.encode_texts([self.annotations.loc[node, SEQUENCE]], minlen=minlen)
                 for node in
                 node_list]
 

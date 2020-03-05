@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from .sampled_generator import SampledDataGenerator
+from .sequences import SEQUENCE
 
 
 class SubgraphGenerator(SampledDataGenerator):
@@ -36,7 +37,7 @@ class SubgraphGenerator(SampledDataGenerator):
 
     def __getitem__(self, item=None):
         sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
-        X, y, idx_weights = self.__getdata__(sampled_nodes)
+        X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
 
         return X, y, idx_weights
 
@@ -70,10 +71,10 @@ class SubgraphGenerator(SampledDataGenerator):
             sampled_nodes = sampled_nodes[:batch_size]
         return sampled_nodes
 
-    def __getdata__(self, sampled_nodes):
+    def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
-        X["input_seqs"] = self.get_sequence_data(sampled_nodes, variable_length=False)
+
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
                                                             node_list=sampled_nodes).toarray()
@@ -81,13 +82,16 @@ class SubgraphGenerator(SampledDataGenerator):
 
         # Features
         for variable in self.variables:
+            if SEQUENCE in variable:
+                X[SEQUENCE] = self.get_sequence_data(sampled_nodes, variable_length=variable_length)
+
             if "expression" in variable:
                 X[variable] = self.get_expressions(sampled_nodes, modality="Protein")
 
             else:
                 labels_vector = self.annotations.loc[sampled_nodes, variable]
                 if labels_vector.dtypes == np.object:
-                    if labels_vector.str.contains("|").any():
+                    if labels_vector.str.contains("|", regex=False).any():
                         labels_vector = labels_vector.str.split("|")
                         labels_vector = labels_vector.map(lambda x: x if isinstance(x, list) else [])
                 else:
@@ -97,7 +101,7 @@ class SubgraphGenerator(SampledDataGenerator):
         # Labels
         targets_vector = self.annotations.loc[sampled_nodes, self.targets[0]]
         if targets_vector.dtypes == np.object:
-            if targets_vector.str.contains("|").any():
+            if targets_vector.str.contains("|", regex=False).any():
                 targets_vector = targets_vector.str.split("|")
                 targets_vector = targets_vector.map(lambda x: x if type(x) == list else [])
         else:
@@ -114,7 +118,7 @@ class SubgraphGenerator(SampledDataGenerator):
         assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights
 
-    def load_data(self, connected_nodes_only=True, dropna=True, y_label=None):
+    def load_data(self, connected_nodes_only=True, dropna=True, y_label=None, variable_length=False):
         if connected_nodes_only:
             node_list = self.get_nonzero_nodelist()
         else:
@@ -125,7 +129,7 @@ class SubgraphGenerator(SampledDataGenerator):
         else:
             node_list = node_list
 
-        X, y, idx_weights = self.__getdata__(node_list)
+        X, y, idx_weights = self.__getdata__(node_list, variable_length)
 
         if y_label:
             y_labels = self.get_node_labels(y_label, node_list=node_list)
