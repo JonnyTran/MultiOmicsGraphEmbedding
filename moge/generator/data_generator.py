@@ -85,6 +85,6 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
     def get_expression(self, node_list, modality=None):
         if modality:
-            return self.multiomics[modality].get_annotation_expressions().loc[node_list]
+            return self.network.multiomics[modality].get_annotation_expressions().loc[node_list]
 
-        return self.multiomics[modality].get_annotation_expressions().loc[node_list]
+        return self.network.multiomics[modality].get_annotation_expressions().loc[node_list]
