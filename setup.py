@@ -11,7 +11,7 @@ setup(
     packages=find_packages("moge",
                            include=['moge', 'moge.model', 'moge.network', 'moge.evaluation', 'moge.visualization',
                                     'moge.generator'],
-                           exclude=["data", "moge.data*"]),
+                           exclude=["data", "moge.data"]),
     install_requires=requirements,
     url='',
     license='',

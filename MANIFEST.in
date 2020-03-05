@@ -1,1 +1,2 @@
+prune moge/data/
 exclude moge/data/*
