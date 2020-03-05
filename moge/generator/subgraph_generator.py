@@ -82,7 +82,7 @@ class SubgraphGenerator(SampledDataGenerator):
 
         # Features
         for variable in self.variables:
-            if "expressions" == variable:
+            if "expression" in variable:
                 X["expression"] = self.get_expression(sampled_nodes, modality="Protein")
 
             else:
