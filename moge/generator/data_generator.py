@@ -1,12 +1,13 @@
 from collections import OrderedDict
 
 import numpy as np
+import pandas as pd
 from tensorflow import keras
 
-from moge.generator.sequences import SequenceTokenizer
+from moge.generator.sequences import SequenceTokenizer, SEQUENCE
 
 
-class AttributeGenerator(keras.utils.Sequence, SequenceTokenizer):
+class NetworkDataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
     def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
                  verbose=True, **kwargs):
@@ -32,7 +33,7 @@ class AttributeGenerator(keras.utils.Sequence, SequenceTokenizer):
         self.verbose = verbose
 
         self.annotations = network.annotations
-        self.transcripts_to_sample = network.annotations["Transcript sequence"].copy()
+        self.transcripts_to_sample = network.annotations[SEQUENCE].copy()
 
         if variables or targets:
             self.variables = variables
@@ -41,17 +42,17 @@ class AttributeGenerator(keras.utils.Sequence, SequenceTokenizer):
         if "node_list" in kwargs:
             self.node_list = kwargs["node_list"]
             self.node_list = [node for node in self.node_list if node in self.annotations[
-                self.annotations["Transcript sequence"].notnull()].index.tolist()]
+                self.annotations[SEQUENCE].notnull()].index.tolist()]
             kwargs.pop("node_list")
         else:
-            self.node_list = self.annotations[self.annotations["Transcript sequence"].notnull()].index.tolist()
+            self.node_list = self.annotations[self.annotations[SEQUENCE].notnull()].index.tolist()
 
         # Remove duplicates
         self.node_list = list(OrderedDict.fromkeys(self.node_list))
 
         np.random.seed(seed)
         self.on_epoch_end()
-        super(AttributeGenerator, self).__init__(**kwargs)
+        super(NetworkDataGenerator, self).__init__(**kwargs)
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
@@ -83,8 +84,17 @@ class AttributeGenerator(keras.utils.Sequence, SequenceTokenizer):
 
         return self.annotations.loc[node_list, label]
 
-    def get_expressions(self, node_list, modality=None):
+    def get_expressions(self, node_list, modality):
+        """
+        Get annotation expression associated to node_lists
+        :param node_list:
+        :param modality:
+        :return:
+        """
         if modality:
             return self.network.multiomics[modality].get_annotation_expressions().loc[node_list]
-
-        return self.network.multiomics[modality].get_annotation_expressions().loc[node_list]
+        elif modality is None:
+            if isinstance(node_list, list):
+                node_list = pd.Series(node_list)
+            return node_list.map(
+                lambda node: self.multiomics[self.node_to_modality[node]].get_annotation_expressions().loc[node])

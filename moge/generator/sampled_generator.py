@@ -2,10 +2,11 @@ from abc import ABCMeta
 
 import numpy as np
 
-from moge.generator import AttributeGenerator
+from moge.generator import NetworkDataGenerator
+from moge.generator.sequences import SEQUENCE
 
 
-class SampledDataGenerator(AttributeGenerator, metaclass=ABCMeta):
+class SampledDataGenerator(NetworkDataGenerator, metaclass=ABCMeta):
     def __init__(self, network, sampling_method=None, compression_func="log", n_steps=100, directed=True, **kwargs):
         """
 
@@ -85,4 +86,4 @@ class SampledDataGenerator(AttributeGenerator, metaclass=ABCMeta):
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         self.indexes = np.arange(self.n_steps)
-        self.annotations["Transcript sequence"] = self.sample_sequences(self.transcripts_to_sample)
+        self.annotations[SEQUENCE] = self.sample_sequences(self.transcripts_to_sample)

@@ -4,7 +4,7 @@ import networkx as nx
 import numpy as np
 from scipy.sparse import triu
 
-from moge.generator.data_generator import AttributeGenerator
+from moge.generator.data_generator import NetworkDataGenerator
 from moge.generator.utils import EdgelistSampler
 
 IS_DIRECTED = 1
@@ -15,7 +15,7 @@ DIRECTED_NEG_EDGE = 'd_n'
 UNDIRECTED_NEG_EDGE = 'u_n'
 
 
-class PairsGenerator(AttributeGenerator):
+class PairsGenerator(NetworkDataGenerator):
 
     def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
                  verbose=True, **kwargs):
