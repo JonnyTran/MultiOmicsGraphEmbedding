@@ -3,7 +3,7 @@ from collections import OrderedDict
 import numpy as np
 from tensorflow import keras
 
-from moge.generator.sequence import SequenceTokenizer
+from moge.generator.sequences import SequenceTokenizer
 
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
