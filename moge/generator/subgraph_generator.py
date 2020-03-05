@@ -74,7 +74,6 @@ class SubgraphGenerator(SampledDataGenerator):
     def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
-
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
                                                             node_list=sampled_nodes).toarray()
@@ -82,10 +81,10 @@ class SubgraphGenerator(SampledDataGenerator):
 
         # Features
         for variable in self.variables:
-            if SEQUENCE in variable:
-                X[SEQUENCE] = self.get_sequence_data(sampled_nodes, variable_length=variable_length)
+            if SEQUENCE == variable:
+                X[variable] = self.get_sequences(sampled_nodes, variable_length=variable_length)
 
-            if "expression" in variable:
+            if "expression" == variable:
                 X[variable] = self.get_expressions(sampled_nodes, modality="Protein")
 
             else:

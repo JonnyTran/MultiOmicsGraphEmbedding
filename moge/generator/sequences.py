@@ -32,7 +32,7 @@ class SequenceTokenizer():
     def sample_sequences(self, sequences):
         return sequences.apply(lambda x: random.choice(x) if isinstance(x, list) else x)
 
-    def get_sequence_data(self, node_list, variable_length=False, minlen=None):
+    def get_sequences(self, node_list, variable_length=False, minlen=None):
         """
         Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
         (indexing from self.node_list)

@@ -192,10 +192,10 @@ class PairsGenerator(NetworkDataGenerator):
         X_list = np.array(X_list, dtype="O")
 
         X = {}
-        X["input_seq_i"] = self.get_sequence_data([self.node_list[node_id] for node_id in X_list[:, 0].tolist()],
-                                                  variable_length=False)
-        X["input_seq_j"] = self.get_sequence_data([self.node_list[node_id] for node_id in X_list[:, 1].tolist()],
-                                                  variable_length=False)
+        X["input_seq_i"] = self.get_sequences([self.node_list[node_id] for node_id in X_list[:, 0].tolist()],
+                                              variable_length=False)
+        X["input_seq_j"] = self.get_sequences([self.node_list[node_id] for node_id in X_list[:, 1].tolist()],
+                                              variable_length=False)
         X["is_directed"] = np.expand_dims(X_list[:, 2], axis=-1)
 
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
@@ -223,10 +223,10 @@ class PairsGenerator(NetworkDataGenerator):
             X_seq = {}
             X[:, 0] = [self.node_list.index(node) for node in X[:, 0].tolist()]
             X[:, 1] = [self.node_list.index(node) for node in X[:, 1].tolist()]
-            X_seq["input_seq_i"] = self.get_sequence_data([self.node_list[node_id] for node_id in X[:, 0].tolist()],
-                                                          variable_length=False)
-            X_seq["input_seq_j"] = self.get_sequence_data([self.node_list[node_id] for node_id in X[:, 1].tolist()],
-                                                          variable_length=False)
+            X_seq["input_seq_i"] = self.get_sequences([self.node_list[node_id] for node_id in X[:, 0].tolist()],
+                                                      variable_length=False)
+            X_seq["input_seq_j"] = self.get_sequences([self.node_list[node_id] for node_id in X[:, 1].tolist()],
+                                                      variable_length=False)
             X_seq["is_directed"] = np.expand_dims(X[:, 2], axis=-1)
             X = X_seq
 
@@ -432,9 +432,9 @@ class SampledPairsGenerator(PairsGenerator):
         X_list = np.array(X_list, dtype="O")
 
         X = {}
-        X["input_seq_i"] = self.get_sequence_data(X_list[:, 0].tolist(), variable_length=False)
-        X["input_seq_j"] = self.get_sequence_data(X_list[:, 1].tolist(), variable_length=False)
-        X["is_directed"] = np.expand_dims(X_list[:,2], axis=-1)
+        X["input_seq_i"] = self.get_sequences(X_list[:, 0].tolist(), variable_length=False)
+        X["input_seq_j"] = self.get_sequences(X_list[:, 1].tolist(), variable_length=False)
+        X["is_directed"] = np.expand_dims(X_list[:, 2], axis=-1)
 
         y = np.expand_dims(X_list[:, 3].astype(np.float32), axis=-1)
 
