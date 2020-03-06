@@ -138,7 +138,7 @@ class SubgraphGenerator(SampledDataGenerator):
         else:
             node_list = node_list
 
-        X, y, idx_weights = self.__getdata__(node_list, variable_length)
+        X, y, idx_weights = self.__getdata__(node_list, variable_length=variable_length)
 
         if y_label:
             y_labels = self.get_node_labels(y_label, node_list=node_list)
