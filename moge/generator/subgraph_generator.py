@@ -37,7 +37,7 @@ class SubgraphGenerator(SampledDataGenerator):
 
     def get_output_types(self):
         return (tf.int8,  # input_seqs
-                tf.float32,  # subnetwork
+                tf.float64,  # subnetwork
                 ) + \
                (tf.float32,) * len(self.variables)
 
