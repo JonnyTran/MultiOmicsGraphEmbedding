@@ -122,8 +122,8 @@ class SubgraphGenerator(SampledDataGenerator):
         idx_weights = self.annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
 
         # Make sparse labels in y
-        y_df = pd.DataFrame(y, )
-        y = y_df.apply(lambda x: x.values.nonzero()[0], axis=1)
+        # y_df = pd.DataFrame(y, index=sampled_nodes)
+        # y = y_df.apply(lambda x: x.values.nonzero()[0], axis=1)
 
         # Make a probability distribution
         # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
