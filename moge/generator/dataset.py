@@ -1,5 +1,4 @@
 import tensorflow as tf
-from tensorflow.keras.utils import OrderedEnqueuer
 
 from . import SubgraphGenerator, DataGenerator
 
@@ -14,16 +13,16 @@ class Dataset(tf.data.Dataset):
 
         :param generator: a keras.utils.Sequence generator.
         """
+        cls.generator = generator
+
         return tf.data.Dataset.from_generator(
-            cls.generator,
+            cls.generate,
             output_types=generator.get_output_types(),
             output_shapes=generator.get_output_shapes(),
             args=(generator)
         )
 
-    def generator(generator):
-        multi_enqueuer = OrderedEnqueuer(generator, use_multiprocessing=True)
-        multi_enqueuer.start(workers=10, max_queue_size=10)
+    def generate(generator: DataGenerator):
         while True:
-            batch_xs, batch_ys, dset_index = next(multi_enqueuer.get())  # I have three outputs
+            batch_xs, batch_ys, dset_index = generator.__getitem__()
             yield batch_xs, batch_ys, dset_index
