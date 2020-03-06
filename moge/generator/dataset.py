@@ -1,13 +1,14 @@
 import tensorflow as tf
 
-from . import SubgraphGenerator, DataGenerator
+from . import DataGenerator
 
 
 class Dataset(tf.data.Dataset):
     def __new__(cls, generator: DataGenerator):
         """
         A tf.data wrapper for keras.utils.Sequence generator
-        >>> dataset = SubgraphGenerator()
+        >>> generator = DataGenerator()
+        >>> dataset = Dataset(generator)
         >>> strategy = tf.distribute.MirroredStrategy()
         >>> train_dist_dataset = strategy.experimental_distribute_dataset(dataset)
 
@@ -24,5 +25,5 @@ class Dataset(tf.data.Dataset):
 
     def generate(generator: DataGenerator):
         while True:
-            batch_xs, batch_ys, dset_index = generator.__getitem__()
+            batch_xs, batch_ys, dset_index = generator.__getitem__(0)
             yield batch_xs, batch_ys, dset_index

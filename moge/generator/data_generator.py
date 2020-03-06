@@ -1,13 +1,14 @@
 from collections import OrderedDict
 
+import keras
 import numpy as np
 import pandas as pd
-from tensorflow import keras
+import tensorflow
 
 from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
 
 
-class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
+class DataGenerator(tensorflow.keras.utils.Sequence, keras.utils.Sequence, SequenceTokenizer):
     def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
                  verbose=True, **kwargs):
         """
