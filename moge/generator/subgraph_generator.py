@@ -134,7 +134,7 @@ class SubgraphGenerator(SampledDataGenerator):
             node_list = self.network.node_list
 
         if dropna:
-            node_list = self.annotations.loc[node_list, self.variables + self.targets].dropna().index.tolist()
+            node_list = self.annotations.loc[node_list, self.targets].dropna().index.tolist()
         else:
             node_list = node_list
 
