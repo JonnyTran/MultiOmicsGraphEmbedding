@@ -2,11 +2,11 @@ import networkx as nx
 import scipy.sparse as sp
 
 from moge.evaluation.utils import sample_edges
-from moge.network.attributed import AttributedNetwork
+from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.semantic_similarity import *
 from moge.network.train_test_split import TrainTestSplit, mask_test_edges, mask_test_edges_by_nodes, \
     filter_y_multilabel, \
-    split_graph, stratify_train_test
+    split_network_by_nodes, stratify_train_test
 
 UNDIRECTED = False
 DIRECTED = True
@@ -367,13 +367,18 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         y_label, _ = filter_y_multilabel(annotations=self.annotations, y_label=stratify_label, min_count=n_splits,
                                          dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
-            y_omic = self.annotations.loc[y_label.index, "omic"].str.split("|")
+            y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("|")
             y_label = y_label + y_omic
 
         train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
 
-        network_train, network_test = split_graph(self, directed=directed, train_nodes=train_nodes,
-                                                  test_nodes=test_nodes)
+        if directed:
+            g = self.G.copy()
+        else:
+            g = self.G_u.copy()
+        network_train, network_test = split_network_by_nodes(g, train_nodes=train_nodes, test_nodes=test_nodes,
+                                                             verbose=verbose)
+
         self.set_training_annotations(train_nodes)
         if directed:
             self.training.G = network_train

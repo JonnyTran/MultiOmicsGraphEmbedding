@@ -3,8 +3,9 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-from moge.network.attributed import AttributedNetwork
-from moge.network.train_test_split import TrainTestSplit, filter_y_multilabel, stratify_train_test
+from moge.network.attributed import AttributedNetwork, MODALITY_COL
+from moge.network.train_test_split import TrainTestSplit, filter_y_multilabel, stratify_train_test, \
+    split_network_by_nodes
 
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
@@ -104,7 +105,24 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         y_label, _ = filter_y_multilabel(annotations=self.all_annotations, y_label=stratify_label, min_count=n_splits,
                                          dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
-            y_omic = self.all_annotations.loc[y_label.index, "omic"].str.split("|")
+            y_omic = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split(
+                "|")  # Need to return a Series of []'s
             y_label = y_label + y_omic
 
         train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
+
+        self.set_training_annotations(train_nodes)
+        self.set_testing_annotations(test_nodes)
+
+        self.training.networks = {}
+        self.testing.networks = {}
+        for layer, network in self.networks.items():
+            network_train, network_test = split_network_by_nodes(network, train_nodes=train_nodes,
+                                                                 test_nodes=test_nodes, verbose=verbose)
+            self.training.networks[layer] = network_train
+            self.testing.networks[layer] = network_test
+
+            print("{} layer train_network".format(layer), self.training.networks[layer].number_of_nodes(),
+                  self.training.networks[layer].number_of_edges()) if verbose else None
+            print("{} layer test_network".format(layer), self.testing.networks[layer].number_of_nodes(),
+                  self.testing.networks[layer].number_of_edges()) if verbose else None

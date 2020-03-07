@@ -8,7 +8,10 @@ from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 from moge.network.train_test_split import get_labels_filter
 
+MODALITY_COL = "omic"
+
 EPSILON = 1e-16
+
 
 class AttributedNetwork(Network):
     def __init__(self, multiomics: MultiOmics, annotations=True, **kwargs) -> None:
@@ -34,7 +37,7 @@ class AttributedNetwork(Network):
 
         for modality in self.modalities:
             annotation = self.multiomics[modality].get_annotations()
-            annotation["omic"] = modality
+            annotation[MODALITY_COL] = modality
             annotations_list.append(annotation)
 
         self.annotations = pd.concat(annotations_list, join="inner", copy=True)

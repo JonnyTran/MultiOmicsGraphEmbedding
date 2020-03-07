@@ -163,12 +163,7 @@ def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_f
     return g, test_edges, val_edges, test_nodes, val_nodes
 
 
-def split_graph(network, directed, train_nodes, test_nodes, verbose=False):
-    if directed:
-        g = network.G.copy()
-    else:
-        g = network.G_u.copy()
-
+def split_network_by_nodes(g, train_nodes, test_nodes, verbose=False):
     g.remove_nodes_from(list(nx.isolates(g)))
     no_of_edges_before = g.number_of_edges()
     no_of_nodes_before = g.number_of_nodes()
