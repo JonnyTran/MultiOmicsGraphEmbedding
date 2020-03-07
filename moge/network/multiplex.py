@@ -2,10 +2,9 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
-from sklearn import preprocessing
 
-from moge.network.attributed import AttributedNetwork, SEQUENCE_COL
-from moge.network.train_test_split import TrainTestSplit, get_labels_filter
+from moge.network.attributed import AttributedNetwork
+from moge.network.train_test_split import TrainTestSplit
 
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
@@ -21,7 +20,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.layers = layers
 
         networks = {}
-        for source_target, graph_class in self.layers.items():
+        for source_target, graph_class in layers.items():
             networks[source_target] = graph_class()
 
         super(MultiplexAttributedNetwork, self).__init__(networks=networks, multiomics=multiomics,
@@ -68,37 +67,13 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.all_annotations = self.all_annotations[~self.all_annotations.index.duplicated(keep='first')]
         print("Annotation columns:", self.all_annotations.columns.tolist())
 
-        self.feature_transformer = {}
-        for label in self.all_annotations.columns:
-            if label == SEQUENCE_COL:
-                continue
-
-            if self.all_annotations[label].dtypes == np.object and self.all_annotations[label].str.contains(delimiter,
-                                                                                                            regex=False).any():
-                print(
-                    "INFO: Label {} is split by delim '{}' transformed by MultiLabelBinarizer".format(label, delimiter))
-                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
-                features = self.all_annotations.loc[self.node_list, label].dropna(axis=0).str.split(delimiter)
-                if min_count:
-                    labels_filter = get_labels_filter(self, features.index, label, min_count=min_count)
-                    features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
-                self.feature_transformer[label].fit(features)
-
-            elif self.all_annotations[label].dtypes == int or self.all_annotations[label].dtypes == float:
-                print("INFO: Label {} is transformed by StandardScaler".format(label))
-                self.feature_transformer[label] = preprocessing.StandardScaler()
-                features = self.all_annotations.loc[self.node_list, label].dropna(axis=0)
-                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
-            else:
-                print("INFO: Label {} is transformed by MultiLabelBinarizer".format(label))
-                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
-                features = self.all_annotations.loc[self.node_list, label].dropna(axis=0)
-                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
+        self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
+                                                                 min_count)
 
     def add_edges(self, edgelist, source, target, database, **kwargs):
         self.networks[(source, target)].add_edges_from(edgelist, source=source, target=target, database=database,
                                                        **kwargs)
-        print(len(edgelist), "edges added to self.layers[({}, {})]".format(source, target))
+        print(len(edgelist), "edges added to self.networks[({}, {})]".format(source, target))
 
     def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, ):
         if node_list is None:
@@ -115,6 +90,8 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             for edge_type in edge_types[1:]:
                 adj = adj + nx.adjacency_matrix(self.networks[edge_type],
                                                 nodelist=node_list)  # TODO some edges may have weight > 1
+        else:
+            raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.layers))
 
         # Eliminate self-edges
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)

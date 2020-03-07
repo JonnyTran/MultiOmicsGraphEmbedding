@@ -1,15 +1,16 @@
 from collections import OrderedDict
 
-import keras
 import numpy as np
 import pandas as pd
-import tensorflow
+from tensorflow import keras
 
 from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
+from moge.network.attributed import AttributedNetwork
 
 
-class DataGenerator(tensorflow.keras.utils.Sequence, keras.utils.Sequence, SequenceTokenizer):
-    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1, replace=True, seed=0,
+class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
+    def __init__(self, network: AttributedNetwork, variables=None, targets=None, weighted=False, batch_size=1,
+                 replace=True, seed=0,
                  verbose=True, **kwargs):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
@@ -17,7 +18,7 @@ class DataGenerator(tensorflow.keras.utils.Sequence, keras.utils.Sequence, Seque
         positive edges have an edge of 1.0, and negative have edge weight of 0.0. The features (x) of each sample is a
         pair of nodes' RNA sequence input.
 
-        :param network: A HeterogeneousNetwork containing a MultiOmicsData
+        :param network: A AttributedNetwork containing a MultiOmics
         :param batch_size: Sample batch size at each iteration
         :param dim: Dimensionality of the sample input
         :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges

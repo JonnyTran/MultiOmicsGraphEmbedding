@@ -21,7 +21,10 @@ class AttributedNetwork(Network):
         """
         self.multiomics = multiomics
 
+        # Process network & node_list
         super(AttributedNetwork, self).__init__(**kwargs)
+
+        # Process node attributes
         if annotations:
             self.process_annotations()
             self.process_feature_tranformer()
@@ -40,40 +43,52 @@ class AttributedNetwork(Network):
         self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def process_feature_tranformer(self, delimiter="|", min_count=0):
+    def process_feature_tranformer(self, delimiter="\||;", min_count=0):
         """
         For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer
         is used to convert a list of labels into a vector.
         :param delimiter (str): default "|".
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
-        self.feature_transformer = {}
-        for label in self.annotations.columns:
+        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter, min_count)
+
+    @classmethod
+    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", min_count=0):
+        """
+        :param annotation: a pandas DataFrame
+        :param node_list: list of nodes. Indexes the annotation DataFrame
+        :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
+        :param min_count: minimum frequency of label to keep
+        :return: dict of feature transformers
+        """
+        feature_transformers = {}
+        for label in annotation.columns:
             if label == SEQUENCE_COL:
                 continue
 
-            if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains(delimiter,
-                                                                                                    regex=False).any():
+            if annotation[label].dtypes == np.object and annotation[label].str.contains(delimiter, regex=False).any():
                 print(
                     "INFO: Label {} is split by delim '{}' transformed by MultiLabelBinarizer".format(label, delimiter))
-                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
-                features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split(delimiter)
+                feature_transformers[label] = preprocessing.MultiLabelBinarizer()
+                features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
                 if min_count:
-                    labels_filter = get_labels_filter(self.annotations, features.index, label, min_count=min_count)
+                    labels_filter = get_labels_filter(annotation, features.index, label, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
-                self.feature_transformer[label].fit(features)
+                feature_transformers[label].fit(features)
 
-            elif self.annotations[label].dtypes == int or self.annotations[label].dtypes == float:
+            elif annotation[label].dtypes == int or annotation[label].dtypes == float:
                 print("INFO: Label {} is transformed by StandardScaler".format(label))
-                self.feature_transformer[label] = preprocessing.StandardScaler()
-                features = self.annotations.loc[self.node_list, label].dropna(axis=0)
-                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
+                feature_transformers[label] = preprocessing.StandardScaler()
+                features = annotation.loc[node_list, label].dropna(axis=0)
+                feature_transformers[label].fit(features.to_numpy().reshape(-1, 1))
 
             else:
                 print("INFO: Label {} is transformed by MultiLabelBinarizer".format(label))
-                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
-                features = self.annotations.loc[self.node_list, label].dropna(axis=0)
-                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
+                feature_transformers[label] = preprocessing.MultiLabelBinarizer()
+                features = annotation.loc[node_list, label].dropna(axis=0)
+                feature_transformers[label].fit(features.to_numpy().reshape(-1, 1))
+
+        return feature_transformers
 
     def add_undirected_edges_from_attibutes(self, modality, node_list, features=None, weights=None,
                                             nanmean=True,
