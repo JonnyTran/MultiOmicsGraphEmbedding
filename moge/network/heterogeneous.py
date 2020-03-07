@@ -42,7 +42,7 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             self.nodes[modality] = self.multiomics[modality].get_genes_list()
 
             for gene in self.multiomics[modality].get_genes_list():
-                if modality in self.node_to_modality[gene]:
+                if modality in self.node_to_modality:
                     self.node_to_modality[gene] = [self.node_to_modality[gene], ] + [modality]
                 else:
                     self.node_to_modality[gene] = modality
