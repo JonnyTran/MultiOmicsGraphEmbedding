@@ -55,7 +55,9 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         print("All annotation columns (union):",
               {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
 
-    def process_feature_tranformer(self, delimiter="|", min_count=0):
+    def process_feature_tranformer(self, delimiter="\||;", min_count=0):
+        self.delimiter = delimiter
+
         annotations_list = []
 
         for modality in self.modalities:

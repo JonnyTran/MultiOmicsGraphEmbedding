@@ -50,6 +50,7 @@ class AttributedNetwork(Network):
         :param delimiter (str): default "|".
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
+        self.delimiter = delimiter
         self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter, min_count)
 
     @classmethod

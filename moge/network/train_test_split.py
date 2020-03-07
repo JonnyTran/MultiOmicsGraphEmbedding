@@ -1,5 +1,6 @@
 import copy
 import random
+from abc import abstractmethod
 from collections import OrderedDict
 
 import networkx as nx
@@ -9,17 +10,20 @@ import scipy.sparse as sps
 from sklearn.preprocessing import MultiLabelBinarizer
 from skmultilearn.model_selection import IterativeStratification
 
+from moge.generator.sequences import SEQUENCE_COL
+from moge.network.attributed import AttributedNetwork
 
-def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False):
+
+def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
     if dropna:
-        nodes_index = annotations[["Transcript sequence"] + y_label].dropna().index
+        nodes_index = annotations[[SEQUENCE_COL] + y_label].dropna().index
     else:
-        nodes_index = annotations[["Transcript sequence"]].dropna().index
+        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
 
-    labels_filter = get_labels_filter(annotations, nodes_index, y_label, min_count)
+    labels_filter = get_labels_filter(annotations, nodes_index, y_label, min_count, delimiter)
     print("labels_filtered:", len(labels_filter))
 
-    y_labels = annotations.loc[nodes_index, y_label].str.split("|")
+    y_labels = annotations.loc[nodes_index, y_label].str.split(delimiter)
     y_labels = y_labels.map(
         lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
 
@@ -47,68 +51,20 @@ def stratify_train_test(y_label, n_splits=10, seed=42):
         return train_nodes, test_nodes
 
 class TrainTestSplit():
-    def __init__(self) -> None:
+    def __init__(self: AttributedNetwork) -> None:
         self.training = None
         self.testing = None
         self.validation = None
 
-    def split_train_test_edges(self, directed: bool,
+    @abstractmethod
+    def split_train_test_edges(self: AttributedNetwork,
                                node_list=None,
                                databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                                test_frac=.05, val_frac=.01, seed=0, verbose=False):
-        if directed:
-            print("full_network directed", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
-        else:
-            print("full_network undirected", self.G_u.number_of_nodes(),
-                  self.G_u.number_of_edges()) if verbose else None
+        raise NotImplementedError()
 
-        if directed:
-            network_train = self.G.copy()
-        else:
-            network_train = self.G_u.copy()
-
-        test_edges, val_edges = mask_test_edges(self,
-                                                node_list=node_list,
-                                                databases=databases,
-                                                test_frac=test_frac, val_frac=val_frac, seed=seed, verbose=verbose)
-        network_train.remove_edges_from(test_edges)
-        network_train.remove_edges_from(val_edges)
-
-        self.set_training_data(network_train.nodes())
-        if directed:
-            self.training.G = network_train
-        else:
-            self.training.G_u = network_train
-
-        self.set_testing_data(None)
-        if directed:
-            self.testing.G = nx.from_edgelist(edgelist=test_edges, create_using=nx.DiGraph)
-        else:
-            self.testing.G_u = nx.from_edgelist(edgelist=test_edges, create_using=nx.Graph)
-
-        if val_frac > 0:
-            self.set_val_data(None)
-            if directed:
-                self.validation.G = nx.from_edgelist(edgelist=val_edges, create_using=nx.DiGraph)
-            else:
-                self.validation.G_u = nx.from_edgelist(edgelist=val_edges, create_using=nx.Graph)
-
-        if directed:
-            print("train_network", self.training.G.number_of_nodes(),
-                  self.training.G.number_of_edges()) if verbose else None
-            print("test_network", self.testing.G.number_of_nodes(),
-                  self.testing.G.number_of_edges()) if verbose else None
-            print("val_network", self.validation.G.number_of_nodes(),
-                  self.validation.G.number_of_edges()) if verbose and val_frac > 0 else None
-        else:
-            print("train_network", self.training.G_u.number_of_nodes(),
-                  self.training.G_u.number_of_edges()) if verbose else None
-            print("test_network", self.testing.G.number_of_nodes(),
-                  self.testing.G_u.number_of_edges()) if verbose else None
-            print("val_network", self.validation.G.number_of_nodes(),
-                  self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
-
-    def split_train_test_nodes(self, directed: bool, node_list,
+    @abstractmethod
+    def split_train_test_nodes(self: AttributedNetwork, node_list,
                                test_frac=.05, val_frac=.01, seed=0, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
@@ -123,60 +79,11 @@ class TrainTestSplit():
         :param verbose:
         :return: network, val_edges_dict, test_edges_dict
         """
-        if directed:
-            print("full_network", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
-        else:
-            print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
+        raise NotImplementedError()
 
-        network_train, test_edges, val_edges, \
-        test_nodes, val_nodes = mask_test_edges_by_nodes(network=self, directed=directed, node_list=node_list,
-                                                         test_frac=test_frac, val_frac=val_frac, seed=seed,
-                                                         verbose=verbose)
-        self.set_training_data(network_train.nodes())
-        if directed:
-            self.training.G = network_train
-        else:
-            self.training.G_u = network_train
-
-        self.set_testing_data(test_nodes)
-        if directed:
-            self.testing.G = nx.DiGraph()
-            self.testing.G.add_nodes_from(test_nodes)
-            self.testing.G.add_edges_from(test_edges)
-        else:
-            self.testing.G_u = nx.Graph()
-            self.testing.G_u.add_nodes_from(test_nodes)
-            self.testing.G_u.add_edges_from(test_edges)
-
-        if val_frac > 0:
-            self.set_val_data(val_nodes)
-            if directed:
-                self.validation.G = nx.DiGraph()
-                self.validation.G.add_nodes_from(val_nodes)
-                self.validation.G.add_edges_from(val_edges)
-            else:
-                self.validation.G_u = nx.Graph()
-                self.validation.G_u.add_nodes_from(val_nodes)
-                self.validation.G_u.add_edges_from(val_edges)
-
-        if directed:
-            print("train_network", self.training.G.number_of_nodes(),
-                  self.training.G.number_of_edges()) if verbose else None
-            print("test_network", self.testing.G.number_of_nodes(),
-                  self.testing.G.number_of_edges()) if verbose else None
-            print("val_network", self.validation.G.number_of_nodes(),
-                  self.validation.G.number_of_edges()) if verbose and val_frac > 0 else None
-        else:
-            print("train_network", self.training.G_u.number_of_nodes(),
-                  self.training.G_u.number_of_edges()) if verbose else None
-            print("test_network", self.testing.G.number_of_nodes(),
-                  self.testing.G_u.number_of_edges()) if verbose else None
-            print("val_network", self.validation.G.number_of_nodes(),
-                  self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
-
-    def split_train_test_stratified(self, directed: bool, stratify_label: str, stratify_omic=True, n_splits=5,
-                                    dropna=False,
-                                    seed=42, verbose=False):
+    @abstractmethod
+    def split_train_test_stratified(self: AttributedNetwork, stratify_label: str, stratify_omic=True, n_splits=5,
+                                    dropna=False, seed=42, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
         into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
@@ -190,60 +97,23 @@ class TrainTestSplit():
         :param verbose:
         :return: network, val_edges_dict, test_edges_dict
         """
-        if directed:
-            print("full_network", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
-        else:
-            print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
+        raise NotImplementedError()
 
-        y_label, _ = filter_y_multilabel(annotations=self.annotations, y_label=stratify_label, min_count=n_splits,
-                                         dropna=dropna)
-        if stratify_omic:
-            y_omic = self.annotations.loc[y_label.index, "omic"].str.split("|")
-            y_label = y_label + y_omic
-
-        train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
-
-        network_train, network_test = split_graph(self, directed=directed, train_nodes=train_nodes,
-                                                  test_nodes=test_nodes)
-        self.set_training_data(train_nodes)
-        if directed:
-            self.training.G = network_train
-        else:
-            self.training.G_u = network_train
-
-        # Test network
-        self.set_testing_data(test_nodes)
-        if directed:
-            self.testing.G = network_test
-        else:
-            self.testing.G_u = network_test
-
-        if directed:
-            print("train_network", self.training.G.number_of_nodes(),
-                  self.training.G.number_of_edges()) if verbose else None
-            print("test_network", self.testing.G.number_of_nodes(),
-                  self.testing.G.number_of_edges()) if verbose else None
-        else:
-            print("train_network", self.training.G_u.number_of_nodes(),
-                  self.training.G_u.number_of_edges()) if verbose else None
-            print("test_network", self.testing.G.number_of_nodes(),
-                  self.testing.G_u.number_of_edges()) if verbose else None
-
-    def set_val_data(self, val_nodes=None):
+    def set_val_annotations(self, val_nodes=None):
         self.validation = copy.copy(self)
         self.validation.annotations = self.annotations
         if val_nodes:
             self.validation.node_list = list(OrderedDict.fromkeys(val_nodes))
         self.validation.feature_transformer = self.feature_transformer
 
-    def set_testing_data(self, test_nodes):
+    def set_testing_annotations(self, test_nodes):
         self.testing = copy.copy(self)
         self.testing.annotations = self.annotations
         if test_nodes:
             self.testing.node_list = list(OrderedDict.fromkeys(test_nodes))
         self.testing.feature_transformer = self.feature_transformer
 
-    def set_training_data(self, nodelist):
+    def set_training_annotations(self, nodelist):
         self.training = copy.copy(self)
         self.training.annotations = self.annotations
         if nodelist:
