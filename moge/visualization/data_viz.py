@@ -79,15 +79,14 @@ def plot_coo_matrix(m):
     return ax
 
 
-def heatmap(table, file_output=None, title=None, autosize=True, width=800, height=1000):
-    if ~hasattr(table, "columns"):
+def heatmap(table: pd.DataFrame, file_output=None, title=None, autosize=True, width=800, height=1000):
+    if not hasattr(table, "columns"):
         columns = None
     elif type(table.columns) == pd.MultiIndex:
         columns = table.columns.to_series().apply(lambda x: '{0}-{1}'.format(*x))
     else:
         columns = table.columns
 
-    print("columns", columns)
     fig = go.Figure(data=go.Heatmap(
         z=table,
         x=columns,
