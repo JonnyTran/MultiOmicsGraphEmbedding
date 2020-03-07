@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from openomics import MultiOmics
 from sklearn import preprocessing
 
 from moge.generator.sequences import SEQUENCE_COL
@@ -10,7 +11,7 @@ from moge.network.train_test_split import get_labels_filter
 EPSILON = 1e-16
 
 class AttributedNetwork(Network):
-    def __init__(self, multiomics, annotations=True, **kwargs) -> None:
+    def __init__(self, multiomics: MultiOmics, annotations=True, **kwargs) -> None:
         """
         Handles the MultiOmics attributes associated to the network(s).
 
