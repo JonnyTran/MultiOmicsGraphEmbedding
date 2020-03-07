@@ -86,11 +86,14 @@ def heatmap(table, file_output=None, title=None, autosize=True, width=800, heigh
         columns = table.columns.to_series().apply(lambda x: '{0}-{1}'.format(*x))
     else:
         columns = table.columns
+
+    print("columns", columns)
     fig = go.Figure(data=go.Heatmap(
         z=table,
         x=columns,
         y=table.index if hasattr(table, "index") else None,
         hoverongaps=False, ))
+
     fig.update_layout(
         title=title,
         autosize=autosize,
