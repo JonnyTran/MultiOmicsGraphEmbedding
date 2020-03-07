@@ -1,9 +1,11 @@
 import networkx as nx
 import numpy as np
+import pandas as pd
 import scipy.sparse as sp
+from sklearn import preprocessing
 
-from moge.network.attributed import AttributedNetwork
-from moge.network.train_test_split import TrainTestSplit
+from moge.network.attributed import AttributedNetwork, SEQUENCE_COL
+from moge.network.train_test_split import TrainTestSplit, get_labels_filter
 
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
@@ -51,8 +53,47 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             annotation = self.multiomics[modality].get_annotations()
             self.annotations[modality] = annotation
 
-        print("Annotation columns:",
-              {modality: annotations.columns.tolist() for modality, annotations in self.annotations.items()})
+        print("All annotation columns (union):",
+              {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
+
+    def process_feature_tranformer(self, delimiter="|", min_count=0):
+        annotations_list = []
+
+        for modality in self.modalities:
+            annotation = self.multiomics[modality].get_annotations()
+            annotation["omic"] = modality
+            annotations_list.append(annotation)
+
+        self.all_annotations = pd.concat(annotations_list, join="inner", copy=True)
+        self.all_annotations = self.all_annotations[~self.all_annotations.index.duplicated(keep='first')]
+        print("Annotation columns:", self.all_annotations.columns.tolist())
+
+        self.feature_transformer = {}
+        for label in self.all_annotations.columns:
+            if label == SEQUENCE_COL:
+                continue
+
+            if self.all_annotations[label].dtypes == np.object and self.all_annotations[label].str.contains(delimiter,
+                                                                                                            regex=False).any():
+                print(
+                    "INFO: Label {} is split by delim '{}' transformed by MultiLabelBinarizer".format(label, delimiter))
+                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
+                features = self.all_annotations.loc[self.node_list, label].dropna(axis=0).str.split(delimiter)
+                if min_count:
+                    labels_filter = get_labels_filter(self, features.index, label, min_count=min_count)
+                    features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
+                self.feature_transformer[label].fit(features)
+
+            elif self.all_annotations[label].dtypes == int or self.all_annotations[label].dtypes == float:
+                print("INFO: Label {} is transformed by StandardScaler".format(label))
+                self.feature_transformer[label] = preprocessing.StandardScaler()
+                features = self.all_annotations.loc[self.node_list, label].dropna(axis=0)
+                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
+            else:
+                print("INFO: Label {} is transformed by MultiLabelBinarizer".format(label))
+                self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
+                features = self.all_annotations.loc[self.node_list, label].dropna(axis=0)
+                self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
 
     def add_edges(self, edgelist, source, target, database, **kwargs):
         self.networks[(source, target)].add_edges_from(edgelist, source=source, target=target, database=database,

@@ -10,25 +10,25 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from skmultilearn.model_selection import IterativeStratification
 
 
-def filter_y_multilabel(network, y_label="go_id", min_count=2, dropna=False):
+def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False):
     if dropna:
-        nodes_index = network.annotations[["Transcript sequence"] + y_label].dropna().index
+        nodes_index = annotations[["Transcript sequence"] + y_label].dropna().index
     else:
-        nodes_index = network.annotations[["Transcript sequence"]].dropna().index
+        nodes_index = annotations[["Transcript sequence"]].dropna().index
 
-    labels_filter = get_labels_filter(network, nodes_index, y_label, min_count)
+    labels_filter = get_labels_filter(annotations, nodes_index, y_label, min_count)
     print("labels_filtered:", len(labels_filter))
 
-    y_labels = network.annotations.loc[nodes_index, y_label].str.split("|")
+    y_labels = annotations.loc[nodes_index, y_label].str.split("|")
     y_labels = y_labels.map(
         lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
 
     return y_labels, labels_filter
 
 
-def get_labels_filter(network, node_list, y_label, min_count):
+def get_labels_filter(annotations, node_list, y_label, min_count, delimiter="|"):
     label_counts = {}
-    for items in network.annotations.loc[node_list, y_label].str.split("|"):
+    for items in annotations.loc[node_list, y_label].str.split(delimiter):
         if type(items) != list: continue
         for item in items:
             label_counts[item] = label_counts.setdefault(item, 0) + 1
@@ -195,7 +195,8 @@ class TrainTestSplit():
         else:
             print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
 
-        y_label, _ = filter_y_multilabel(network=self, y_label=stratify_label, min_count=n_splits, dropna=dropna)
+        y_label, _ = filter_y_multilabel(annotations=self.annotations, y_label=stratify_label, min_count=n_splits,
+                                         dropna=dropna)
         if stratify_omic:
             y_omic = self.annotations.loc[y_label.index, "omic"].str.split("|")
             y_label = y_label + y_omic

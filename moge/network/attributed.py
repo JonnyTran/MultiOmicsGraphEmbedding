@@ -59,7 +59,7 @@ class AttributedNetwork(Network):
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split(delimiter)
                 if min_count:
-                    labels_filter = get_labels_filter(self, features.index, label, min_count=min_count)
+                    labels_filter = get_labels_filter(self.annotations, features.index, label, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 self.feature_transformer[label].fit(features)
 
