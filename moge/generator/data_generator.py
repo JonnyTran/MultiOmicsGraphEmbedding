@@ -5,11 +5,10 @@ import pandas as pd
 from tensorflow import keras
 
 from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
-from moge.network.attributed import AttributedNetwork
 
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
-    def __init__(self, network: AttributedNetwork, variables=None, targets=None, weighted=False, batch_size=1,
+    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1,
                  replace=True, seed=0,
                  verbose=True, **kwargs):
         """
