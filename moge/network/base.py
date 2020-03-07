@@ -30,7 +30,7 @@ class Network(object):
                      type(node) != str or \
                      node == ""]
 
-        for network in self.networks:
+        for network in self.networks.values() if isinstance(self.networks, dict) else self.networks:
             network.remove_nodes_from(bad_nodes)
 
     @abstractmethod

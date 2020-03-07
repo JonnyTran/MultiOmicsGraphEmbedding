@@ -53,6 +53,8 @@ class AttributedNetwork(Network):
 
             if self.annotations[label].dtypes == np.object and self.annotations[label].str.contains(delimiter,
                                                                                                     regex=False).any():
+                print(
+                    "INFO: Label {} is split by delim '{}' transformed by MultiLabelBinarizer".format(label, delimiter))
                 self.feature_transformer[label] = preprocessing.MultiLabelBinarizer()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0).str.split(delimiter)
                 if min_count:
@@ -61,6 +63,7 @@ class AttributedNetwork(Network):
                 self.feature_transformer[label].fit(features)
 
             elif self.annotations[label].dtypes == int or self.annotations[label].dtypes == float:
+                print("INFO: Label {} is transformed by StandardScaler".format(label))
                 self.feature_transformer[label] = preprocessing.StandardScaler()
                 features = self.annotations.loc[self.node_list, label].dropna(axis=0)
                 self.feature_transformer[label].fit(features.to_numpy().reshape(-1, 1))
