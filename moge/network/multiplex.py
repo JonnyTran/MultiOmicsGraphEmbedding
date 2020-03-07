@@ -8,6 +8,13 @@ from moge.network.train_test_split import TrainTestSplit
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
     def __init__(self, multiomics, modalities: list, layers: {(str, str): nx.Graph}, annotations=True, ) -> None:
+        """
+
+        :param multiomics:
+        :param modalities:
+        :param layers:
+        :param annotations:
+        """
         self.modalities = modalities
         self.layers = layers
 
@@ -16,7 +23,6 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             networks[source_target] = graph_class()
 
         super(MultiplexAttributedNetwork, self).__init__(networks=networks, multiomics=multiomics,
-                                                         modalities=modalities,
                                                          annotations=annotations)
 
     def process_network(self):
