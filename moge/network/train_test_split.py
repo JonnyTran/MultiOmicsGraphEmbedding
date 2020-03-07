@@ -11,7 +11,6 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from skmultilearn.model_selection import IterativeStratification
 
 from moge.generator.sequences import SEQUENCE_COL
-from moge.network.attributed import AttributedNetwork
 
 
 def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
@@ -51,20 +50,20 @@ def stratify_train_test(y_label, n_splits=10, seed=42):
         return train_nodes, test_nodes
 
 class TrainTestSplit():
-    def __init__(self: AttributedNetwork) -> None:
+    def __init__(self) -> None:
         self.training = None
         self.testing = None
         self.validation = None
 
     @abstractmethod
-    def split_train_test_edges(self: AttributedNetwork,
+    def split_train_test_edges(self,
                                node_list=None,
                                databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
                                test_frac=.05, val_frac=.01, seed=0, verbose=False):
         raise NotImplementedError()
 
     @abstractmethod
-    def split_train_test_nodes(self: AttributedNetwork, node_list,
+    def split_train_test_nodes(self, node_list,
                                test_frac=.05, val_frac=.01, seed=0, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
@@ -82,7 +81,7 @@ class TrainTestSplit():
         raise NotImplementedError()
 
     @abstractmethod
-    def split_train_test_stratified(self: AttributedNetwork, stratify_label: str, stratify_omic=True, n_splits=5,
+    def split_train_test_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
                                     dropna=False, seed=42, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
