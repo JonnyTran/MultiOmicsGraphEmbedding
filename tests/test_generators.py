@@ -34,7 +34,7 @@ def get_luad_data_network() -> HeterogeneousNetwork:
 
 @pytest.fixture
 def get_traintestsplit_network(get_luad_data_network):
-    get_luad_data_network.split_train_test_nodes(get_luad_data_network.node_list, verbose=False)
+    get_luad_data_network.split_nodes(get_luad_data_network.node_list, verbose=False)
     assert hasattr(get_luad_data_network, 'train_network')
     assert hasattr(get_luad_data_network, 'test_network')
     assert hasattr(get_luad_data_network, 'val_network')

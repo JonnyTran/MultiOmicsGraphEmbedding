@@ -56,15 +56,11 @@ class TrainTestSplit():
         self.validation = None
 
     @abstractmethod
-    def split_train_test_edges(self,
-                               node_list=None,
-                               databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
-                               test_frac=.05, val_frac=.01, seed=0, verbose=False):
+    def split_edges(self, node_list=None, test_frac=.05, val_frac=.01, seed=0, verbose=False):
         raise NotImplementedError()
 
     @abstractmethod
-    def split_train_test_nodes(self, node_list,
-                               test_frac=.05, val_frac=.01, seed=0, verbose=False):
+    def split_nodes(self, node_list, test_frac=.05, val_frac=.01, seed=0, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
         into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
@@ -81,8 +77,8 @@ class TrainTestSplit():
         raise NotImplementedError()
 
     @abstractmethod
-    def split_train_test_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
-                                    dropna=False, seed=42, verbose=False):
+    def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5, dropna=False, seed=42,
+                         verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
         into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.

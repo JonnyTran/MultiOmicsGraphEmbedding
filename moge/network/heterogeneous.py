@@ -222,10 +222,10 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         else:
             return [k for k, v in self.G_u.degree() if v > 0]
 
-    def split_train_test_edges(self: AttributedNetwork, directed: bool,
-                               node_list=None,
-                               databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
-                               test_frac=.05, val_frac=.01, seed=0, verbose=False):
+    def split_edges(self: AttributedNetwork, directed: bool,
+                    node_list=None,
+                    databases=["miRTarBase", "BioGRID", "lncRNome", "lncBase", "LncReg"],
+                    test_frac=.05, val_frac=.01, seed=0, verbose=False):
         if directed:
             print("full_network directed", self.G.number_of_nodes(), self.G.number_of_edges()) if verbose else None
         else:
@@ -278,8 +278,8 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             print("val_network", self.validation.G.number_of_nodes(),
                   self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
 
-    def split_train_test_nodes(self, directed: bool, node_list,
-                               test_frac=.05, val_frac=.01, seed=0, verbose=False):
+    def split_nodes(self, directed: bool, node_list,
+                    test_frac=.05, val_frac=.01, seed=0, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
         into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
@@ -344,9 +344,8 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             print("val_network", self.validation.G.number_of_nodes(),
                   self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
 
-    def split_train_test_stratified(self, directed: bool, stratify_label: str, stratify_omic=True, n_splits=5,
-                                    dropna=False,
-                                    seed=42, verbose=False):
+    def split_stratified(self, directed: bool, stratify_label: str, stratify_omic=True, n_splits=5,
+                         dropna=False, seed=42, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
         into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.

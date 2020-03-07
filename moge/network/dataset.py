@@ -12,9 +12,9 @@ def make_dataset(network, directed=False,
     if seed is None:
         seed = random.randint(0, 10000)
 
-    network.split_train_test_stratified(directed=directed, stratify_label=targets[0], stratify_omic=True,
-                                        n_splits=int(1 / test_frac),
-                                        dropna=False, seed=seed, verbose=verbose)
+    network.split_stratified(directed=directed, stratify_label=targets[0], stratify_omic=True,
+                             n_splits=int(1 / test_frac),
+                             dropna=False, seed=seed, verbose=verbose)
 
     generator_train = network.get_train_generator(
         SubgraphGenerator, variables=variables, targets=targets,

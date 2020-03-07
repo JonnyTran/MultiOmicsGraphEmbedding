@@ -67,7 +67,7 @@ class AttributedNetwork(Network):
             if label == SEQUENCE_COL:
                 continue
 
-            if annotation[label].dtypes == np.object and annotation[label].str.contains(delimiter, regex=False).any():
+            if annotation[label].dtypes == np.object and annotation[label].str.contains(delimiter, regex=True).any():
                 print(
                     "INFO: Label {} is split by delim '{}' transformed by MultiLabelBinarizer".format(label, delimiter))
                 feature_transformers[label] = preprocessing.MultiLabelBinarizer()

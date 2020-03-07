@@ -4,7 +4,7 @@ import pandas as pd
 import scipy.sparse as sp
 
 from moge.network.attributed import AttributedNetwork
-from moge.network.train_test_split import TrainTestSplit
+from moge.network.train_test_split import TrainTestSplit, filter_y_multilabel, stratify_train_test
 
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
@@ -98,3 +98,13 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         # Eliminate self-edges
         adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         return adj.astype(float)
+
+    def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
+                         dropna=False, seed=42, verbose=False):
+        y_label, _ = filter_y_multilabel(annotations=self.all_annotations, y_label=stratify_label, min_count=n_splits,
+                                         dropna=dropna, delimiter=self.delimiter)
+        if stratify_omic:
+            y_omic = self.all_annotations.loc[y_label.index, "omic"].str.split("|")
+            y_label = y_label + y_omic
+
+        train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
