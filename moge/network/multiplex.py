@@ -122,7 +122,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             self.training.networks[layer] = network_train
             self.testing.networks[layer] = network_test
 
-            print("{} layer train_network".format(layer), self.training.networks[layer].number_of_nodes(),
+            print("{} layer train_network".format(str(layer)), self.training.networks[layer].number_of_nodes(),
                   self.training.networks[layer].number_of_edges()) if verbose else None
-            print("{} layer test_network".format(layer), self.testing.networks[layer].number_of_nodes(),
+            print("{} layer test_network".format(str(layer)), self.testing.networks[layer].number_of_nodes(),
                   self.testing.networks[layer].number_of_edges()) if verbose else None
