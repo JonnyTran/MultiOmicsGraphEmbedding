@@ -169,9 +169,9 @@ def split_network_by_nodes(g, train_nodes, test_nodes, verbose=False):
     no_of_nodes_before = g.number_of_nodes()
 
     g_test = g.subgraph(test_nodes)
-    print("test nodes", g_test.number_of_nodes(), ", edges", g_test.number_of_edges())
+    print("test nodes", g_test.number_of_nodes(), ", edges", g_test.number_of_edges()) if verbose else None
     g_train = g.subgraph(train_nodes)
-    print("train nodes", g_train.number_of_nodes(), ", edges", g_train.number_of_edges())
+    print("train nodes", g_train.number_of_nodes(), ", edges", g_train.number_of_edges()) if verbose else None
 
     print('removed', no_of_edges_before - g_train.number_of_edges(), "edges, and ",
           no_of_nodes_before - g_train.number_of_nodes(), "nodes.") if verbose else None
