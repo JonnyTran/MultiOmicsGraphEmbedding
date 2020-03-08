@@ -173,27 +173,19 @@ def graph_viz3d(g: nx.Graph,
         raise Exception("Must provide pos as dict, i.e. {<node>:<3d coordinates>}")
 
     # Nodes data
-    if node_symbol is not None and type(node_symbol) is pd.Series:
-        if node_symbol.isna().any():
-            node_symbol.fillna("None", inplace=True)
-        if node_symbol.dtype == "object" and node_symbol.str.contains("|").any():
-            node_symbol = node_symbol.str.split("|", expand=True)[0].astype(str)
-    if node_color is not None and type(node_color) is pd.Series:
-        if node_color.isna().any():
-            node_color.fillna("None", inplace=True)
-        if node_color.dtype == "object" and node_color.str.contains("|").any():
-            node_color = node_color.str.split("|", expand=True)[0].astype(str)
+    node_symbol = process_labels(node_symbol)
+    node_color = process_labels(node_color)
 
     node_x, node_y, node_z = zip(*[(pos[node][0], pos[node][1], pos[node][2])
                                    for node in nodelist])
     fig = px.scatter_3d(x=node_x, y=node_y, z=node_z,
-                        hover_name=nodelist, size_max=10,
+                        hover_name=nodelist, opacity=0.8, size_max=10,
                         symbol=node_symbol if node_symbol is not None else None,
                         color=node_color if node_color is not None else None,
+                        color_continuous_scale='Viridis',
                         )
 
     # Edges data
-
     edges = list(g.subgraph(nodelist).edges(data=False))
     np.random.shuffle(edges)
 
@@ -212,7 +204,7 @@ def graph_viz3d(g: nx.Graph,
         for label in Xed_by_label:
             fig.add_scatter3d(x=Xed_by_label[label], y=Yed_by_label[label], z=Zed_by_label[label],
                               mode='lines',
-                              name=label + ", " + str(len(Xed_by_label[label])),
+                              name=label + ", size:" + str(len(edges)),
                               line=dict(
                                   color=hash_color([label])[0],
                                   # color='rgb(50,50,50)',
@@ -264,3 +256,12 @@ def graph_viz3d(g: nx.Graph,
     )
 
     return fig
+
+
+def process_labels(labels: pd.Series):
+    if labels is not None and type(labels) is pd.Series:
+        if labels.isna().any():
+            labels.fillna("None", inplace=True)
+        if labels.dtype == "object" and labels.str.contains("|").any():
+            labels = labels.str.split("|", expand=True)[0].astype(str)
+    return labels
