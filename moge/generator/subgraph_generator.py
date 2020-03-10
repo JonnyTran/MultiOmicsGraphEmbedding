@@ -36,26 +36,20 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def get_output_types(self):
-        return (tf.int8,  # input_seqs
-                tf.float64,  # subnetwork
-                ) + \
-               (tf.float32,) * len(self.variables)
+        return ({"input_seqs": tf.int8, "subnetwork": tf.float32},) + (tf.float32,) * len(self.variables) + \
+               (tf.int64,  # y
+                tf.bool)  # idx_weights
 
     def get_output_shapes(self):
-        return (tf.TensorShape([self.maxlen]),  # input_seqs
-                tf.TensorShape([None, ]),  # subnetwork
-                ) + \
-               (tf.TensorShape([None, ]),) * len(self.variables)
+        return ({"input_seqs": tf.TensorShape([self.maxlen]),
+                 "subnetwork": tf.TensorShape([None, ])},) + (tf.TensorShape([None, ]),) * len(self.variables) + \
+               (tf.TensorShape([None, ]), tf.TensorShape(()))
 
     def __getitem__(self, item=None):
         sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
         X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
-        if self.feed_mode == "dict":
-            return X, y, idx_weights
-        elif self.feed_mode == "list":
-            return [X[key] for key in ["input_seqs", "subnetwork"] + self.variables], y, idx_weights
-        else:
-            return X, y, idx_weights
+
+        return X, y, idx_weights
 
     def sample_node_list(self, batch_size):
         if self.sampling == "node":
