@@ -42,8 +42,8 @@ class SubgraphGenerator(SampledDataGenerator):
                (tf.float32,) * len(self.variables)
 
     def get_output_shapes(self):
-        return (tf.TensorShape([None, ]),  # input_seqs
-                tf.TensorShape([None, ]),  # subnetwork
+        return (tf.TensorShape([self.batch_size, self.maxlen]),  # input_seqs
+                tf.TensorShape([self.batch_size, self.batch_size]),  # subnetwork
                 ) + \
                (tf.TensorShape([None, ]),) * len(self.variables)
 
