@@ -4,7 +4,7 @@ from . import DataGenerator
 
 
 class Dataset(tf.data.Dataset):
-    def __new__(cls, generator: DataGenerator):
+    def __new__(cls, generator: DataGenerator, prefetch=2):
         """
         A tf.data wrapper for keras.utils.Sequence generator
         >>> generator = DataGenerator()
@@ -20,7 +20,7 @@ class Dataset(tf.data.Dataset):
             cls._generate,
             output_types=generator.get_output_types(),
             output_shapes=generator.get_output_shapes(),
-            args=(generator,)
+            args=(generator,).prefetch(prefetch)
         )
 
     def _generate(generator: DataGenerator):
