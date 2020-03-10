@@ -53,7 +53,9 @@ class SubgraphGenerator(SampledDataGenerator):
         if item == "dict":
             return X, y, idx_weights
         elif item == "list":
-            return X.values(), y, idx_weights
+            return list(X.values()), y, idx_weights
+        else:
+            return X, y, idx_weights
 
     def sample_node_list(self, batch_size):
         if self.sampling == "node":
