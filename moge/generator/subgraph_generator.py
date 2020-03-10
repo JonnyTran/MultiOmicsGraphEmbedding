@@ -44,7 +44,7 @@ class SubgraphGenerator(SampledDataGenerator):
         return ({"input_seqs": tf.TensorShape([None, self.maxlen]),
                  "subnetwork": tf.TensorShape([None, None])},) + \
                (tf.TensorShape([None, None]),) * len(self.variables) + \
-               (tf.TensorShape([None, None]),  # y
+               (tf.TensorShape([None, ]),  # y
                 tf.TensorShape(()))  # idx_weights
 
     def __getitem__(self, item=None):
