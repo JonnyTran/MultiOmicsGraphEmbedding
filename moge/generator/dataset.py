@@ -26,5 +26,5 @@ class Dataset(tf.data.Dataset):
     def _generate(generator: DataGenerator):
         generator.feed_mode = "list"
         while True:
-            batch_xs, batch_ys, dset_index = generator.__getitem__(None)
+            batch_xs, batch_ys, dset_index = generator.__getitem__(0)
             yield batch_xs, batch_ys, dset_index
