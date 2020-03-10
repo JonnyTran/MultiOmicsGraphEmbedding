@@ -14,8 +14,6 @@ class Dataset(tf.data.Dataset):
 
         :param generator: a keras.utils.Sequence generator.
         """
-        cls.generator = generator
-
         return tf.data.Dataset.from_generator(
             cls._generate,
             output_types=generator.get_output_types(),
