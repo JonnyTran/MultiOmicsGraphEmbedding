@@ -17,13 +17,13 @@ class Dataset(tf.data.Dataset):
         cls.generator = generator
 
         return tf.data.Dataset.from_generator(
-            cls.generate,
+            cls._generate,
             output_types=generator.get_output_types(),
             output_shapes=generator.get_output_shapes(),
-            args=(generator)
+            args=(generator,)
         )
 
-    def generate(generator: DataGenerator):
+    def _generate(generator: DataGenerator):
         while True:
             batch_xs, batch_ys, dset_index = generator.__getitem__(0)
             yield batch_xs, batch_ys, dset_index
