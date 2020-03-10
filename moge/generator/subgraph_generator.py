@@ -47,11 +47,13 @@ class SubgraphGenerator(SampledDataGenerator):
                 ) + \
                (tf.TensorShape([None, ]),) * len(self.variables)
 
-    def __getitem__(self, item=None):
+    def __getitem__(self, item="dict"):
         sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
         X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
-
-        return X, y, idx_weights
+        if item == "dict":
+            return X, y, idx_weights
+        elif item == "list":
+            return X.values(), y, idx_weights
 
     def sample_node_list(self, batch_size):
         if self.sampling == "node":
