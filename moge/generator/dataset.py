@@ -26,4 +26,4 @@ class Dataset(tf.data.Dataset):
     def _generate(generator: DataGenerator):
         while True:
             batch_xs, batch_ys, dset_index = generator.__getitem__(0)
-            yield batch_xs, batch_ys, dset_index
+            yield batch_xs.values(), batch_ys, dset_index
