@@ -22,51 +22,9 @@ forceatlas2 = ForceAtlas2(
     # Log
     verbose=False)
 
-color = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure",
-         "beige", "bisque", "black", "blanchedalmond", "blue",
-         "blueviolet", "brown", "burlywood", "cadetblue",
-         "chartreuse", "chocolate", "coral", "cornflowerblue",
-         "cornsilk", "crimson", "cyan", "darkblue", "darkcyan",
-         "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
-         "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange",
-         "darkorchid", "darkred", "darksalmon", "darkseagreen",
-         "darkslateblue", "darkslategray", "darkslategrey",
-         "darkturquoise", "darkviolet", "deeppink", "deepskyblue",
-         "dimgray", "dimgrey", "dodgerblue", "firebrick",
-          "floralwhite", "forestgreen", "fuchsia", "gainsboro",
-          "ghostwhite", "gold", "goldenrod", "gray", "grey", "green",
-          "greenyellow", "honeydew", "hotpink", "indianred", "indigo",
-          "ivory", "khaki", "lavender", "lavenderblush", "lawngreen",
-          "lemonchiffon", "lightblue", "lightcoral", "lightcyan",
-          "lightgoldenrodyellow", "lightgray", "lightgrey",
-          "lightgreen", "lightpink", "lightsalmon", "lightseagreen",
-          "lightskyblue", "lightslategray", "lightslategrey",
-          "lightsteelblue", "lightyellow", "lime", "limegreen",
-          "linen", "magenta", "maroon", "mediumaquamarine",
-         "mediumblue", "mediumorchid", "mediumpurple",
-         "mediumseagreen", "mediumslateblue", "mediumspringgreen",
-         "mediumturquoise", "mediumvioletred", "midnightblue",
-         "mintcream", "mistyrose", "moccasin", "navajowhite", "navy",
-         "oldlace", "olive", "olivedrab", "orange", "orangered",
-         "orchid", "palegoldenrod", "palegreen", "paleturquoise",
-         "palevioletred", "papayawhip", "peachpuff", "peru", "pink",
-         "plum", "powderblue", "purple", "red", "rosybrown",
-         "royalblue", "rebeccapurple", "saddlebrown", "salmon",
-         "sandybrown", "seagreen", "seashell", "sienna", "silver",
-         "skyblue", "slateblue", "slategray", "slategrey", "snow",
-         "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
-         "turquoise", "violet", "wheat", "white", "whitesmoke",
-         "yellow", "yellowgreen"]
-np.random.shuffle(color)
-
-def hash_color(labels):
-    sorted_labels = sorted(set(labels), reverse=True)
-    colormap = {item: color[sorted_labels.index(item) % len(color)] for item in set(labels)}
-    colors = [colormap[n] if n in colormap.keys() else None for n in labels]
-    return colors
 
 def graph_viz(g: nx.Graph,
-              nodelist: list, node_symbol=None, node_color=None,
+              nodelist: list, node_symbol: pd.Series = None, node_color: pd.Series = None,
               edge_label: str = None, max_edges=10000,
               title=None, width=1000, height=800,
               pos=None, iterations=100, showlegend=True):
@@ -74,16 +32,8 @@ def graph_viz(g: nx.Graph,
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
 
     # Nodes data
-    if node_symbol is not None and type(node_symbol) is pd.Series:
-        if node_symbol.isna().any():
-            node_symbol.fillna("None", inplace=True)
-        if node_symbol.dtype == "object" and node_symbol.str.contains("|").any():
-            node_symbol = node_symbol.str.split("|", expand=True)[0].astype(str)
-    if node_color is not None and type(node_color) is pd.Series:
-        if node_color.isna().any():
-            node_color.fillna("None", inplace=True)
-        if node_color.dtype == "object" and node_color.str.contains("|").any():
-            node_color = node_color.str.split("|", expand=True)[0].astype(str)
+    node_symbol = process_labels(node_symbol)
+    node_color = process_labels(node_color)
 
     node_x, node_y = zip(*[(pos[node][0], pos[node][1])
                            for node in nodelist])
@@ -94,72 +44,18 @@ def graph_viz(g: nx.Graph,
                      )
 
     # Edges data
-
     edges = list(g.subgraph(nodelist).edges(data=True if edge_label else False))
-    np.random.shuffle(edges)
-
     # Samples only certain edges
     if max_edges and len(edges) > max_edges:
+        np.random.shuffle(edges)
         edges = edges[:max_edges]
 
     if edge_label:
-        Xed_by_label = {}
-        Yed_by_label = {}
-        for edge in edges:
-            label = edge[2][edge_label]
-            Xed_by_label.setdefault(label, []).extend([pos[edge[0]][0], pos[edge[1]][0], None])
-            Yed_by_label.setdefault(label, []).extend([pos[edge[0]][1], pos[edge[1]][1], None])
-
-        for label in Xed_by_label:
-            fig.add_scatter(x=Xed_by_label[label], y=Yed_by_label[label],
-                            mode='lines',
-                            name=label + ", " + str(len(Xed_by_label[label])),
-                            line=dict(
-                                color=hash_color([label])[0],
-                                # color='rgb(50,50,50)',
-                                width=0.5, ),
-                            # showlegend=True,
-                            hoverinfo='none')
+        plot_edge_w_labels(fig, edges, edge_label, pos, plot3d=False)
     else:
-        Xed, Yed = [], []
-        for edge in edges:
-            Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
-            Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
+        plot_edges(fig, edges, pos, plot3d=False)
 
-        print("nodes", len(node_x), "edges", len(edges))
-        fig.add_scatter(x=Xed, y=Yed,
-                        mode='lines',
-                        name='edges, ' + str(len(Xed)),
-                        line=dict(
-                            # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
-                            color='rgb(50,50,50)',
-                            width=0.25, ),
-                        # showlegend=True,
-                        hoverinfo='none')
-
-    # Figure
-    axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
-                zeroline=False,
-                showgrid=False,
-                showticklabels=False,
-                title=''
-                )
-    fig.update_layout(
-        title=title,
-        showlegend=showlegend,
-        autosize=True,
-        width=width,
-        height=height,
-        margin=dict(
-            l=10,
-            r=10,
-            b=10,
-            t=10,
-            pad=4
-        ),
-        xaxis=axis,
-        yaxis=axis
-    )
+    configure_layout(fig, height, showlegend, title, width)
 
     return fig
 
@@ -179,56 +75,31 @@ def graph_viz3d(g: nx.Graph,
     node_x, node_y, node_z = zip(*[(pos[node][0], pos[node][1], pos[node][2])
                                    for node in nodelist])
     fig = px.scatter_3d(x=node_x, y=node_y, z=node_z,
-                        hover_name=nodelist, opacity=0.9, size_max=10,
+                        hover_name=nodelist, size_max=10,
                         symbol=node_symbol if node_symbol is not None else None,
                         color=node_color if node_color is not None else None,
                         color_continuous_scale='HSV',
                         )
-
     # Edges data
-    edges = list(g.subgraph(nodelist).edges(data=False))
-    np.random.shuffle(edges)
+    edges = list(g.subgraph(nodelist).edges(data=True if edge_label else False))
 
     # Samples only certain edges
     if max_edges and len(edges) > max_edges:
+        np.random.shuffle(edges)
         edges = edges[:max_edges]
+    print("nodes", len(node_x), "edges", len(edges))
 
     if edge_label:
-        Xed_by_label, Yed_by_label, Zed_by_label = {}, {}, {}
-        for edge in edges:
-            label = edge[2][edge_label]
-            Xed_by_label.setdefault(label, []).extend([pos[edge[0]][0], pos[edge[1]][0], None])
-            Yed_by_label.setdefault(label, []).extend([pos[edge[0]][1], pos[edge[1]][1], None])
-            Zed_by_label.setdefault(label, []).extend([pos[edge[0]][2], pos[edge[1]][3], None])
-
-        for label in Xed_by_label:
-            fig.add_scatter3d(x=Xed_by_label[label], y=Yed_by_label[label], z=Zed_by_label[label],
-                              mode='lines',
-                              name=label + ", size:" + str(len(edges)),
-                              line=dict(
-                                  color=hash_color([label])[0],
-                                  # color='rgb(50,50,50)',
-                                  width=0.5, ),
-                              # showlegend=True,
-                              hoverinfo='none')
+        plot_edge_w_labels(fig, edges, edge_label, pos, plot3d=True)
     else:
-        Xed, Yed, Zed = [], [], []
-        for edge in edges:
-            Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
-            Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
-            Zed += [pos[edge[0]][2], pos[edge[1]][2], None]
+        plot_edges(fig, edges, pos, plot3d=True)
 
-        print("nodes", len(node_x), "edges", len(edges))
-        fig.add_scatter3d(x=Xed, y=Yed, z=Zed,
-                          mode='lines',
-                          name='edges, ' + str(len(Xed)),
-                          line=dict(
-                              # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
-                              color='rgb(50,50,50)',
-                              width=0.25, ),
-                          # showlegend=True,
-                          hoverinfo='none')
+    configure_layout(fig, height, showlegend, title, width)
 
+    return fig
+
+
+def configure_layout(fig, height, showlegend, title, width):
     # Figure
     axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
                 zeroline=False,
@@ -255,7 +126,65 @@ def graph_viz3d(g: nx.Graph,
         yaxis=axis
     )
 
-    return fig
+
+def plot_edges(fig, edges, pos, plot3d=True):
+    Xed, Yed, Zed = [], [], []
+    for edge in edges:
+        Xed += [pos[edge[0]][0], pos[edge[1]][0], None]
+        Yed += [pos[edge[0]][1], pos[edge[1]][1], None]
+        if plot3d: Zed += [pos[edge[0]][2], pos[edge[1]][2], None]
+
+    if plot3d:
+        fig.add_scatter3d(x=Xed, y=Yed, z=Zed,
+                          mode='lines',
+                          name='edges, ' + str(len(Xed)),
+                          line=dict(
+                              # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+                              color='rgb(50,50,50)',
+                              width=0.25, ),
+                          # showlegend=True,
+                          hoverinfo='none')
+    else:
+        fig.add_scatter(x=Xed, y=Yed,
+                        mode='lines',
+                        name='edges, ' + str(len(Xed)),
+                        line=dict(
+                            # color=hash_color(edge_data[edge_label]) if edge_label else 'rgb(210,210,210)',
+                            color='rgb(50,50,50)',
+                            width=0.25, ),
+                        # showlegend=True,
+                        hoverinfo='none')
+
+
+def plot_edge_w_labels(fig, edges, edge_label, pos, plot3d=True):
+    Xed_by_label, Yed_by_label, Zed_by_label = {}, {}, {}
+    for edge in edges:
+        label = edge[2][edge_label]
+        Xed_by_label.setdefault(label, []).extend([pos[edge[0]][0], pos[edge[1]][0], None])
+        Yed_by_label.setdefault(label, []).extend([pos[edge[0]][1], pos[edge[1]][1], None])
+        if plot3d: Zed_by_label.setdefault(label, []).extend([pos[edge[0]][2], pos[edge[1]][3], None])
+
+    if plot3d:
+        for label in Xed_by_label:
+            fig.add_scatter3d(x=Xed_by_label[label], y=Yed_by_label[label], z=Zed_by_label[label],
+                              mode='lines',
+                              name=label + ", size:" + str(len(edges)),
+                              line=dict(
+                                  color=label,
+                                  colorscale="Viridis",
+                                  width=0.5, ),
+                              # showlegend=True,
+                              hoverinfo='none')
+    else:
+        for label in Xed_by_label:
+            fig.add_scatter(x=Xed_by_label[label], y=Yed_by_label[label],
+                            mode='lines',
+                            name=label + ", " + str(len(Xed_by_label[label])),
+                            line=dict(
+                                # color=hash_color([label])[0],
+                                width=0.5, ),
+                            # showlegend=True,
+                            hoverinfo='none')
 
 
 def process_labels(labels: pd.Series):

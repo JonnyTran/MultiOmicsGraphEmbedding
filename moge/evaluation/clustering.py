@@ -6,7 +6,7 @@ from sklearn.metrics import homogeneity_score, completeness_score, normalized_mu
 def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=None,
                         metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True):
     nodelist = embedding.node_list
-    genes_info = network.genes_info
+    genes_info = network.annotations
     nodes_with_label = genes_info[genes_info[node_label].notna()].index
     nodelist = [node for node in nodelist if node in nodes_with_label]
 
