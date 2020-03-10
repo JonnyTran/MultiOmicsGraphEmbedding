@@ -1,16 +1,19 @@
 import gseapy as gp
 import pandas as pd
-from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score
+from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score, \
+    adjusted_mutual_info_score
+
+from moge.model.static_graph_embedding import ImportedGraphEmbedding
 
 
-def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=None,
+def evaluate_clustering(embedding: ImportedGraphEmbedding, network, node_label="locus_type", n_clusters=None,
                         metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True):
     nodelist = embedding.node_list
-    genes_info = network.annotations
-    nodes_with_label = genes_info[genes_info[node_label].notna()].index
+    annotations = network.annotations
+    nodes_with_label = annotations[annotations[node_label].notna()].index
     nodelist = [node for node in nodelist if node in nodes_with_label]
 
-    y_true = genes_info.loc[nodelist, node_label].str.split("|", expand=True)[0]
+    y_true = annotations.loc[nodelist, node_label].str.split("|", expand=True)[0]
 
     if n_clusters is None:
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())
@@ -32,6 +35,8 @@ def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=
             results[metric] = completeness_score(y_true, y_pred)
         elif metric == "nmi":
             results[metric] = normalized_mutual_info_score(y_true, y_pred, average_method="arithmetic")
+        elif metric == "ami":
+            results[metric] = adjusted_mutual_info_score(y_true, y_pred)
 
     return results
 
