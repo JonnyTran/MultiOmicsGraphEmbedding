@@ -8,7 +8,7 @@ from .sampled_generator import SampledDataGenerator
 
 
 class SubgraphGenerator(SampledDataGenerator):
-    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
+    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500, feed_mode="dict",
                  sampling='neighborhood', compression_func="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
@@ -28,7 +28,7 @@ class SubgraphGenerator(SampledDataGenerator):
         :param verbose:
         """
         super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
-                                                batch_size=batch_size,
+                                                batch_size=batch_size, feed_mode=feed_mode,
                                                 sampling=sampling, compression_func=compression_func,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
@@ -47,12 +47,12 @@ class SubgraphGenerator(SampledDataGenerator):
                 ) + \
                (tf.TensorShape([None, ]),) * len(self.variables)
 
-    def __getitem__(self, item="dict"):
+    def __getitem__(self, item=None):
         sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
         X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
-        if item == "dict":
+        if self.feed_mode == "dict":
             return X, y, idx_weights
-        elif item == "list":
+        elif self.feed_mode == "list":
             return list(X.values()), y, idx_weights
         else:
             return X, y, idx_weights
