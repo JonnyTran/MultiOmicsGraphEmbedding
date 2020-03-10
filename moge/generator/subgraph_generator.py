@@ -8,7 +8,7 @@ from .sampled_generator import SampledDataGenerator
 
 
 class SubgraphGenerator(SampledDataGenerator):
-    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500, feed_mode="dict",
+    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
                  sampling='neighborhood', compression_func="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
@@ -28,7 +28,7 @@ class SubgraphGenerator(SampledDataGenerator):
         :param verbose:
         """
         super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
-                                                batch_size=batch_size, feed_mode=feed_mode,
+                                                batch_size=batch_size,
                                                 sampling=sampling, compression_func=compression_func,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
