@@ -3,10 +3,8 @@ import pandas as pd
 from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score, \
     adjusted_mutual_info_score
 
-from moge.model.static_graph_embedding import ImportedGraphEmbedding
 
-
-def evaluate_clustering(embedding: ImportedGraphEmbedding, network, node_label="locus_type", n_clusters=None,
+def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=None,
                         metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True):
     nodelist = embedding.node_list
     annotations = network.annotations
