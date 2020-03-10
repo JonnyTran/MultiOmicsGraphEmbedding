@@ -20,8 +20,8 @@ class Dataset(tf.data.Dataset):
             cls._generate,
             output_types=generator.get_output_types(),
             # output_shapes=generator.get_output_shapes(),
-            args=(generator,).prefetch(prefetch)
-        )
+            args=(generator,)
+        ).prefetch(prefetch)
 
     def _generate(generator: DataGenerator):
         while True:
