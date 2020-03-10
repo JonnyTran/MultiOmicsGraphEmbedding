@@ -27,4 +27,4 @@ class Dataset(tf.data.Dataset):
         generator.feed_mode = "list"
         while True:
             batch_xs, batch_ys, dset_index = generator.__getitem__(None)
-            yield batch_xs, batch_ys, dset_index
+            yield tf.ragged.constant(batch_xs), batch_ys, dset_index
