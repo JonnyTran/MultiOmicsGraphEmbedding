@@ -53,7 +53,7 @@ class SubgraphGenerator(SampledDataGenerator):
         if self.feed_mode == "dict":
             return X, y, idx_weights
         elif self.feed_mode == "list":
-            return list(X.values()), y, idx_weights
+            return [X[key] for key in ["input_seqs", "subnetwork"] + self.variables], y, idx_weights
         else:
             return X, y, idx_weights
 
