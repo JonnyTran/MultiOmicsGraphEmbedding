@@ -17,7 +17,7 @@ class Dataset(tf.data.Dataset):
         return tf.data.Dataset.from_generator(
             cls._generate,
             output_types=generator.get_output_types(),
-            # output_shapes=generator.get_output_shapes(),
+            output_shapes=generator.get_output_shapes(),
             args=(generator,)
         ).prefetch(prefetch)
 
