@@ -33,7 +33,10 @@ def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None):
 
     layout = go.Layout(title='Receiver operating characteristic example',
                        xaxis=dict(title='False Positive Rate'),
-                       yaxis=dict(title='True Positive Rate'))
+                       yaxis=dict(title='True Positive Rate'),
+                       width=700,
+                       height=700
+                       )
 
     fig = go.Figure(data=[trace1, trace2], layout=layout)
     return fig
@@ -101,7 +104,10 @@ def plot_roc_curve_multiclass(y_test, y_score, n_classes, sample_weight=None, ti
 
     layout = go.Layout(title=title,
                        xaxis=dict(title='False Positive Rate'),
-                       yaxis=dict(title='True Positive Rate'))
+                       yaxis=dict(title='True Positive Rate'),
+                       width=700,
+                       height=700
+                       )
 
     fig = go.Figure(data=data, layout=layout)
 
