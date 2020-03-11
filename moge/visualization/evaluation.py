@@ -5,17 +5,19 @@ from plotly import graph_objects as go
 from sklearn.metrics import roc_curve, auc
 
 
-def plot_roc_curve(y_test, y_score, n_classes):
+def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None):
     # Compute ROC curve and ROC area for each class
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
     for i in range(n_classes):
-        fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i])
+        fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
+                                      sample_weight=sample_weight if sample_weight != None else None)
         roc_auc[i] = auc(fpr[i], tpr[i])
 
     # Compute micro-average ROC curve and ROC area
-    fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
+    fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel(),
+                                              sample_weight=sample_weight if sample_weight != None else None)
     roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
 
     trace1 = go.Scatter(x=fpr[2], y=tpr[2],
@@ -37,18 +39,18 @@ def plot_roc_curve(y_test, y_score, n_classes):
     return fig
 
 
-def plot_roc_curve_multiclass(y_test, y_score, n_classes, sample_weights=None, title='ROC Curve (multi-class)'):
+def plot_roc_curve_multiclass(y_test, y_score, n_classes, sample_weight=None, title='ROC Curve (multi-class)'):
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
     for i in range(n_classes):
         fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
-                                      sample_weight=sample_weights if sample_weights else None)
+                                      sample_weight=sample_weight if sample_weight != None else None)
         roc_auc[i] = auc(fpr[i], tpr[i])
 
     # Compute micro-average ROC curve and ROC area
     fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel(),
-                                              sample_weight=sample_weights if sample_weights else None)
+                                              sample_weight=sample_weight if sample_weight != None else None)
     roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
     # Compute macro-average ROC curve and ROC area
 
