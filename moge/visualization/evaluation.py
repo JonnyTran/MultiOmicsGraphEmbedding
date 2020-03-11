@@ -45,17 +45,16 @@ def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, he
     return fig
 
 
-def plot_roc_curve_multiclass(y_test, y_score, classes: (list, pd.Index), sample_weight=None,
+def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.Index), sample_weight=None,
                               title='ROC Curve (multi-class)',
                               width=800, height=700):
-    if isinstance(y_test, pd.DataFrame):
-        if classes is not None:
-            class_indices = y_test.columns.get_indexer(classes)
-
-        y_test = y_test.values
-
-    if classes is None:
+    if classes is not None and isinstance(y_test, pd.DataFrame):
+        class_indices = y_test.columns.get_indexer(classes)
+    else:
         class_indices = range(y_test.shape[1])
+
+    if isinstance(y_test, pd.DataFrame):
+        y_test = y_test.values
 
     fpr = dict()
     tpr = dict()
