@@ -1,7 +1,11 @@
+from itertools import cycle
+
 import numpy as np
 import pandas as pd
 from plotly import graph_objects as go
 from sklearn.metrics import roc_curve, auc
+
+from .utils import colors
 
 
 def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, height=700):
@@ -89,11 +93,12 @@ def plot_roc_curve_multiclass(y_test, y_score, classes, sample_weight=None, titl
                         name='macro-average ROC curve (area = {0:0.2f})'
                              ''.format(roc_auc["macro"]))
     data.append(trace2)
+    color_cycle = cycle(colors)
 
-    for i, label in enumerate(classes):
+    for i, label, color in zip(range(len(classes)), classes, color_cycle):
         trace3 = go.Scatter(x=fpr[i], y=tpr[i],
                             mode='lines',
-                            line=dict(color=label, width=2, colorscale="HSV"),
+                            line=dict(color=color, width=2),
                             name='ROC curve of class {0} (area = {1:0.2f})'
                                  ''.format(label, roc_auc[i]))
         data.append(trace3)
