@@ -14,7 +14,21 @@ class AWX(Dense):
             kernel_regularizer=None, bias_regularizer=None, activity_regularizer=None, kernel_constraint=None,
             bias_constraint=None,
             **kwargs):
-
+        """
+        Code obtained from https://github.com/lucamasera/AWX
+        :param A:
+        :param n_norm:
+        :param activation:
+        :param use_bias:
+        :param kernel_initializer:
+        :param bias_initializer:
+        :param kernel_regularizer:
+        :param bias_regularizer:
+        :param activity_regularizer:
+        :param kernel_constraint:
+        :param bias_constraint:
+        :param kwargs:
+        """
         assert n_norm >= 0
 
         self.n = n_norm
