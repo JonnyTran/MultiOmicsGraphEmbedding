@@ -1,3 +1,5 @@
+import numpy as np
+
 colors = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond",
           "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral", "cornflowerblue",
           "cornsilk", "crimson", "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
@@ -17,3 +19,5 @@ colors = ["aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "
           "seashell", "sienna", "silver", "skyblue", "slateblue", "slategray", "slategrey", "snow", "springgreen",
           "steelblue", "tan", "teal", "thistle", "tomato", "turquoise", "violet", "wheat", "white", "whitesmoke",
           "yellow", "yellowgreen"]
+
+np.random.shuffle(colors)
