@@ -93,8 +93,7 @@ def plot_roc_curve_multiclass(y_test, y_score, classes, sample_weight=None, titl
     for i, label in enumerate(classes):
         trace3 = go.Scatter(x=fpr[i], y=tpr[i],
                             mode='lines',
-                            color=label,
-                            line=dict(width=2),
+                            line=dict(color=label, width=2, colorscale="HSV"),
                             name='ROC curve of class {0} (area = {1:0.2f})'
                                  ''.format(label, roc_auc[i]))
         data.append(trace3)
