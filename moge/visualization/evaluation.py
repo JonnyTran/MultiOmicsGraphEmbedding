@@ -1,11 +1,10 @@
-from itertools import cycle
-
 import numpy as np
+import pandas as pd
 from plotly import graph_objects as go
 from sklearn.metrics import roc_curve, auc
 
 
-def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None):
+def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, height=700):
     # Compute ROC curve and ROC area for each class
     fpr = dict()
     tpr = dict()
@@ -34,19 +33,22 @@ def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None):
     layout = go.Layout(title='Receiver operating characteristic example',
                        xaxis=dict(title='False Positive Rate'),
                        yaxis=dict(title='True Positive Rate'),
-                       width=700,
-                       height=700
+                       width=width,
+                       height=height
                        )
 
     fig = go.Figure(data=[trace1, trace2], layout=layout)
     return fig
 
 
-def plot_roc_curve_multiclass(y_test, y_score, n_classes, sample_weight=None, title='ROC Curve (multi-class)'):
+def plot_roc_curve_multiclass(y_test, y_score, classes, sample_weight=None, title='ROC Curve (multi-class)',
+                              width=800, height=700):
+    if isinstance(y_test, pd.DataFrame):
+        y_test = y_test.values
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
-    for i in range(n_classes):
+    for i in range(len(classes)):
         fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
                                       sample_weight=sample_weight if sample_weight != None else None)
         roc_auc[i] = auc(fpr[i], tpr[i])
@@ -58,15 +60,15 @@ def plot_roc_curve_multiclass(y_test, y_score, n_classes, sample_weight=None, ti
     # Compute macro-average ROC curve and ROC area
 
     # First aggregate all false positive rates
-    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(n_classes)]))
+    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(len(classes))]))
 
     # Then interpolate all ROC curves at this points
     mean_tpr = np.zeros_like(all_fpr)
-    for i in range(n_classes):
+    for i in range(len(classes)):
         mean_tpr += np.interp(all_fpr, fpr[i], tpr[i])
 
     # Finally average it and compute AUC
-    mean_tpr /= n_classes
+    mean_tpr /= len(classes)
 
     fpr["macro"] = all_fpr
     tpr["macro"] = mean_tpr
@@ -88,13 +90,13 @@ def plot_roc_curve_multiclass(y_test, y_score, n_classes, sample_weight=None, ti
                              ''.format(roc_auc["macro"]))
     data.append(trace2)
 
-    colors = cycle(['aqua', 'darkorange', 'cornflowerblue'])
-    for i, color in zip(range(n_classes), colors):
+    for i, label in enumerate(classes):
         trace3 = go.Scatter(x=fpr[i], y=tpr[i],
                             mode='lines',
-                            line=dict(color=color, width=2),
+                            color=label,
+                            line=dict(width=2),
                             name='ROC curve of class {0} (area = {1:0.2f})'
-                                 ''.format(i, roc_auc[i]))
+                                 ''.format(label, roc_auc[i]))
         data.append(trace3)
 
     trace4 = go.Scatter(x=[0, 1], y=[0, 1],
@@ -105,8 +107,8 @@ def plot_roc_curve_multiclass(y_test, y_score, n_classes, sample_weight=None, ti
     layout = go.Layout(title=title,
                        xaxis=dict(title='False Positive Rate'),
                        yaxis=dict(title='True Positive Rate'),
-                       width=700,
-                       height=700
+                       width=width,
+                       height=height
                        )
 
     fig = go.Figure(data=data, layout=layout)
