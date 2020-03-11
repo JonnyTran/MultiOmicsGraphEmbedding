@@ -28,6 +28,9 @@ class SubgraphGenerator(SampledDataGenerator):
         :param seed:
         :param verbose:
         """
+        if self.sampling == 'circle':
+            self.nodes_circle = cycle(self.network.node_list)
+            n_steps = int(np.ceil(len(self.network.node_list) / self.batch_size))
         super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
                                                 batch_size=batch_size,
                                                 sampling=sampling, compression_func=compression_func,
@@ -35,10 +38,6 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
                                                 sequence_to_matrix=sequence_to_matrix,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
-
-        if self.sampling == 'circle':
-            self.nodes_circle = cycle(self.network.node_list)
-            self.n_steps = int(np.ceil(len(self.network.node_list) / self.batch_size))
 
     def get_output_types(self):
         return ({"input_seqs": tf.int8, "subnetwork": tf.float32},) + (tf.float32,) * len(self.variables) + \
