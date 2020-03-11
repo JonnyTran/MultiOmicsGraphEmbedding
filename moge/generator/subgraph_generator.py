@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from itertools import cycle, islice
 
 import numpy as np
 import pandas as pd
@@ -35,6 +36,10 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 sequence_to_matrix=sequence_to_matrix,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
+        if self.sampling == 'circle':
+            self.nodes_circle = cycle(self.network.node_list)
+            self.n_steps = int(np.ceil(self.network.node_list / self.batch_size))
+
     def get_output_types(self):
         return ({"input_seqs": tf.int8, "subnetwork": tf.float32},) + (tf.float32,) * len(self.variables) + \
                (tf.int64,  # y
@@ -60,8 +65,13 @@ class SubgraphGenerator(SampledDataGenerator):
             return self.neighborhood_sampling(batch_size)
         elif self.sampling == "all":
             return self.network.node_list
+        elif self.sampling == 'circle':
+            return next(self.node_circle_sampling())
         else:
             raise Exception("self.sampling_method must be {'node', 'neighborhood', 'all'}")
+
+    def node_circle_sampling(self):
+        yield [node for node in islice(self.nodes_circle, self.batch_size)]
 
     def node_sampling(self, batch_size):
         sampled_nodes = self.sample_node(batch_size)
