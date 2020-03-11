@@ -28,9 +28,9 @@ class SubgraphGenerator(SampledDataGenerator):
         :param seed:
         :param verbose:
         """
-        if self.sampling == 'circle':
-            self.nodes_circle = cycle(self.network.node_list)
-            n_steps = int(np.ceil(len(self.network.node_list) / self.batch_size))
+        if sampling == 'circle':
+            self.nodes_circle = cycle(network.node_list)
+            n_steps = int(np.ceil(len(network.node_list) / batch_size))
         super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
                                                 batch_size=batch_size,
                                                 sampling=sampling, compression_func=compression_func,
