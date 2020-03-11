@@ -45,14 +45,22 @@ def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, he
     return fig
 
 
-def plot_roc_curve_multiclass(y_test, y_score, classes, sample_weight=None, title='ROC Curve (multi-class)',
+def plot_roc_curve_multiclass(y_test, y_score, classes: (list, pd.Index), sample_weight=None,
+                              title='ROC Curve (multi-class)',
                               width=800, height=700):
     if isinstance(y_test, pd.DataFrame):
+        if classes is not None:
+            class_indices = y_test.columns.get_indexer(classes)
+
         y_test = y_test.values
+
+    if classes is None:
+        class_indices = range(y_test.shape[1])
+
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
-    for i in range(len(classes)):
+    for i in class_indices:
         fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
                                       sample_weight=sample_weight if sample_weight != None else None)
         roc_auc[i] = auc(fpr[i], tpr[i])
@@ -64,11 +72,11 @@ def plot_roc_curve_multiclass(y_test, y_score, classes, sample_weight=None, titl
     # Compute macro-average ROC curve and ROC area
 
     # First aggregate all false positive rates
-    all_fpr = np.unique(np.concatenate([fpr[i] for i in range(len(classes))]))
+    all_fpr = np.unique(np.concatenate([fpr[i] for i in class_indices]))
 
     # Then interpolate all ROC curves at this points
     mean_tpr = np.zeros_like(all_fpr)
-    for i in range(len(classes)):
+    for i in class_indices:
         mean_tpr += np.interp(all_fpr, fpr[i], tpr[i])
 
     # Finally average it and compute AUC
@@ -95,7 +103,7 @@ def plot_roc_curve_multiclass(y_test, y_score, classes, sample_weight=None, titl
     data.append(trace2)
     color_cycle = cycle(colors)
 
-    for i, label, color in zip(range(len(classes)), classes, color_cycle):
+    for i, label, color in zip(class_indices, classes, color_cycle):
         trace3 = go.Scatter(x=fpr[i], y=tpr[i],
                             mode='lines',
                             line=dict(color=color, width=2),
@@ -107,6 +115,7 @@ def plot_roc_curve_multiclass(y_test, y_score, classes, sample_weight=None, titl
                         mode='lines',
                         line=dict(color='black', width=2, dash='dash'),
                         showlegend=False)
+    data.append(trace4)
 
     layout = go.Layout(title=title,
                        xaxis=dict(title='False Positive Rate'),
