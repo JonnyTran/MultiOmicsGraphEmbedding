@@ -1,44 +1,9 @@
 import tensorflow as tf
-from keras import backend as K
-
+import tensorflow.keras.backend as K
 from tensorflow_addons.metrics.utils import MeanMetricWrapper
 
 
 def hamming_loss_fn(y_true, y_pred, threshold=0.5, mode="multilabel"):
-    """Computes hamming loss.
-    Hamming loss is the fraction of wrong labels to the total number
-    of labels.
-    In multi-class classification, hamming loss is calculated as the
-    hamming distance between `actual` and `predictions`.
-    In multi-label classification, hamming loss penalizes only the
-    individual labels.
-    Args:
-        y_true: actual target value
-        y_pred: predicted target value
-        threshold: Elements of `y_pred` greater than threshold are
-            converted to be 1, and the rest 0. If threshold is
-            None, the argmax is converted to 1, and the rest 0.
-        mode: multi-class or multi-label
-    Returns:
-        hamming loss: float
-    Usage:
-    ```python
-    # multi-class hamming loss
-    hl = HammingLoss(mode='multiclass', threshold=0.6)
-    hl.update_state(actuals, predictions)
-    print('Hamming loss: ', hl.result().numpy()) # 0.25
-    # multi-label hamming loss
-    hl = HammingLoss(mode='multilabel', threshold=0.8)
-    actuals = tf.constant([[1, 0, 1, 0],[0, 1, 0, 1],
-                       [0, 0, 0,1]], dtype=tf.int32)
-    predictions = tf.constant([[0.82, 0.5, 0.90, 0],
-                               [0, 1, 0.4, 0.98],
-                               [0.89, 0.79, 0, 0.3]],
-                               dtype=tf.float32)
-    hl.update_state(actuals, predictions)
-    print('Hamming loss: ', hl.result().numpy()) # 0.16666667
-    ```
-    """
     if mode not in ['multiclass', 'multilabel']:
         raise TypeError('mode must be either multiclass or multilabel]')
 
@@ -50,28 +15,22 @@ def hamming_loss_fn(y_true, y_pred, threshold=0.5, mode="multilabel"):
     else:
         y_pred = y_pred > threshold
 
-    #     y_true = tf.cast(y_true, tf.int32)
-    #     y_pred = tf.cast(y_pred, tf.int32)
+    y_true = tf.cast(y_true, tf.int32)
+    y_pred = tf.cast(y_pred, tf.int32)
 
     if mode == 'multiclass':
         nonzero = tf.cast(
-            K.sum(K.abs(y_true * y_pred), axis=-1), tf.float32)
+            K.sum(tf.abs(y_true * y_pred), axis=-1), tf.float32)
         return 1.0 - nonzero
 
     else:
         nonzero = tf.cast(
-            K.sum(K.abs(y_true - y_pred), axis=-1), tf.float32)
-        return nonzero / tf.cast(y_pred.get_shape()[-1], tf.float32)
+            K.sum(tf.abs(y_true - y_pred), axis=-1), tf.float32)
+        return K.mean(nonzero / tf.cast(y_pred.get_shape()[-1], tf.float32))
 
 
 class HammingLoss(MeanMetricWrapper):
-    """Computes hamming loss."""
-
-    def __init__(self,
-                 mode,
-                 name='hamming_loss',
-                 threshold=None,
-                 dtype=tf.float32):
+    def __init__(self, mode, name='hamming_loss', threshold=None, dtype=tf.float32):
         super(HammingLoss, self).__init__(
             hamming_loss_fn, name, dtype=dtype, mode=mode, threshold=threshold)
 
@@ -80,3 +39,35 @@ def hamming_loss(y_true, y_pred):
     incorrects = K.cast(K.sum(K.abs(y_true - y_pred), axis=-1), dtype=tf.float32)
     means = K.mean(incorrects, axis=-1)
     return means
+
+
+def coverage_error(y_true, y_pred):
+    max_predicted = K.max(y_true * y_pred, axis=-1)
+    return K.mean(max_predicted - 1, axis=-1)
+
+
+def one_error(y_true, y_pred):
+    min_predicted = K.min(y_pred * y_true, axis=-1)
+    print("min_predicted", min_predicted)
+    max_nonlabels = K.max((1 - y_true) * y_pred, axis=-1)
+    print("max_nonlabels", max_nonlabels)
+    print("min_predicted + max_nonpredictions", min_predicted + max_nonlabels)
+    return K.mean(min_predicted + max_nonlabels, axis=-1)
+
+
+def focal_loss(y_true, y_pred, gamma=2, alpha=1.0):
+    cross_entropy_loss = K.binary_crossentropy(y_true, y_pred, from_logits=False)
+    print("cross_entropy_loss", cross_entropy_loss)
+    p_t = ((y_true * y_pred) +
+           ((1 - y_true) * (1 - y_pred)))
+    modulating_factor = 1.0
+    if gamma:
+        modulating_factor = tf.pow(1.0 - p_t, gamma)
+    alpha_weight_factor = 1.0
+    if alpha is not None:
+        alpha_weight_factor = (y_true * alpha +
+                               (1 - y_true) * (1 - alpha))
+    focal_cross_entropy_loss = (modulating_factor * alpha_weight_factor *
+                                cross_entropy_loss)
+    print("focal_cross_entropy_loss", focal_cross_entropy_loss)
+    return K.mean(focal_cross_entropy_loss, axis=-1)

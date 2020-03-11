@@ -4,16 +4,13 @@ import networkx as nx
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
-from keras.layers import Dense
+from tensorflow.keras.layers import Dense
 
 
 class AWX(Dense):
-    def __init__(
-            self, A, n_norm=5, activation=None, use_bias=True, kernel_initializer='glorot_uniform',
-            bias_initializer='zeros',
-            kernel_regularizer=None, bias_regularizer=None, activity_regularizer=None, kernel_constraint=None,
-            bias_constraint=None,
-            **kwargs):
+    def __init__(self, A, n_norm=5, activation=None, use_bias=True, kernel_initializer='glorot_uniform',
+                 bias_initializer='zeros', kernel_regularizer=None, bias_regularizer=None, activity_regularizer=None,
+                 kernel_constraint=None, bias_constraint=None, **kwargs):
         """
         Code obtained from https://github.com/lucamasera/AWX
         :param A:
@@ -78,8 +75,8 @@ class AWX(Dense):
         if self.n > 1:
             output = self.n_norm(tf.multiply(tf.expand_dims(output, 1), self.R_t))
         elif self.n > 0:
-            output = K.minimum(K.constant(1 - 1e-4), K.sum(tf.multiply(tf.expand_dims(output, 1), self.R_t), -1))
+            output = K.minimum(K.constant(1 - 1e-4), K.sum(tf.multiply(K.expand_dims(output, 1), self.R_t), -1))
         else:
-            output = K.max(tf.multiply(tf.expand_dims(output, 1), self.R_t), -1)
+            output = K.max(tf.multiply(K.expand_dims(output, 1), self.R_t), -1)
 
         return output
