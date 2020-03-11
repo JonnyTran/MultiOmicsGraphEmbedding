@@ -38,7 +38,7 @@ class SubgraphGenerator(SampledDataGenerator):
 
         if self.sampling == 'circle':
             self.nodes_circle = cycle(self.network.node_list)
-            self.n_steps = int(np.ceil(self.network.node_list / self.batch_size))
+            self.n_steps = int(np.ceil(len(self.network.node_list) / self.batch_size))
 
     def get_output_types(self):
         return ({"input_seqs": tf.int8, "subnetwork": tf.float32},) + (tf.float32,) * len(self.variables) + \
