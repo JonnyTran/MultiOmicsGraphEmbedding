@@ -34,7 +34,8 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         self.verbose = verbose
 
         self.annotations = network.annotations
-        self.transcripts_to_sample = network.annotations[SEQUENCE_COL].copy()
+        if isinstance(network.annotations, pd.DataFrame):
+            self.transcripts_to_sample = network.annotations[SEQUENCE_COL].copy()
 
         if variables or targets:
             self.variables = variables
