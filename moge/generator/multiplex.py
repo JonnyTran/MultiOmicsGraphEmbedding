@@ -9,7 +9,7 @@ from .subgraph_generator import SubgraphGenerator
 
 
 class MultiplexGenerator(SubgraphGenerator):
-    def __init__(self, network: MultiplexAttributedNetwork, node_list, variables: list = None, targets: list = None,
+    def __init__(self, network: MultiplexAttributedNetwork, variables: list = None, targets: list = None,
                  batch_size=500, sampling='neighborhood', compression_func="log", n_steps=100, directed=None,
                  maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
@@ -20,7 +20,7 @@ class MultiplexGenerator(SubgraphGenerator):
                                                  directed=directed, maxlen=maxlen,
                                                  padding=padding, truncating=truncating,
                                                  sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
-                                                 replace=replace, seed=seed, verbose=verbose, node_list=node_list,
+                                                 replace=replace, seed=seed, verbose=verbose,
                                                  **kwargs)
 
     def get_output_types(self):

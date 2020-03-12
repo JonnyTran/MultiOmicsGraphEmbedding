@@ -117,10 +117,12 @@ class TrainTestSplit():
 
     def get_train_generator(self, generator, **kwargs):
         kwargs['network'] = self.training
+        kwargs['node_list'] = self.training.node_list
         return generator(**kwargs)
 
     def get_test_generator(self, generator, **kwargs):
         kwargs['network'] = self.testing
+        kwargs['node_list'] = self.testing.node_list
         return generator(**kwargs)
 
 
