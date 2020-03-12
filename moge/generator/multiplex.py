@@ -92,7 +92,7 @@ class MultiplexGenerator(SubgraphGenerator):
                         labels_vector)
 
         for layer, network_layer in self.network.networks.items():
-            layer_key = "-".join(list(layer.keys())[0])
+            layer_key = "-".join(layer)
             X[layer_key] = self.network.get_adjacency_matrix(edge_types=layer, node_list=sampled_nodes).toarray()
             X[layer_key] = X[layer_key] + np.eye(X[layer_key].shape[0])  # Add self-loops
 
