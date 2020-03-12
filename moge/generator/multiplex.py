@@ -33,6 +33,20 @@ class MultiplexGenerator(SubgraphGenerator):
                (tf.TensorShape([None, None]),  # y
                 tf.TensorShape((None)))  # idx_weights
 
+    def process_sampling_table(self, network):
+        self.edge_dict = {}
+        self.edge_counts_dict = {}
+        for modality, network_layer in network.networks.items():
+            self.node_degrees = {node: degree for node, degree in network_layer.degree(self.node_list)}
+
+        self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
+                                  self.node_list]
+        self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
+                                                                  compression=self.compression_func)
+        print("# of nodes to sample from (non-zero degree):",
+              np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
+        assert len(self.node_sampling_freq) == len(self.node_list)
+
     def __getitem__(self, item=None):
         sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
         X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)

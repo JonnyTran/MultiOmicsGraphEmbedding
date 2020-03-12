@@ -36,7 +36,8 @@ class SequenceTokenizer():
                     self.tokenizer[modality] = Tokenizer(char_level=True, lower=False)
                     self.tokenizer[modality].fit_on_texts(
                         annotation.loc[annotation[SEQUENCE_COL].notnull(), SEQUENCE_COL])
-                    print("word index:", self.tokenizer[modality].word_index) if self.verbose else None
+                    print("{} word index: {}".format(modality,
+                                                     self.tokenizer[modality].word_index)) if self.verbose else None
 
     def sample_sequences(self, sequences):
         return sequences.apply(lambda x: random.choice(x) if isinstance(x, list) else x)

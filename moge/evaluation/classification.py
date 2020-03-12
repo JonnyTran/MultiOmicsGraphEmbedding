@@ -1,4 +1,7 @@
+import pandas as pd
+
 from sklearn import svm
+from sklearn.metrics import roc_curve, auc
 from sklearn.model_selection import cross_validate
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -45,3 +48,22 @@ def evaluate_classification(embedding, network, cv=5, node_label="Family", multi
                             return_train_score=False)
 
     return scores
+
+
+def compute_roc_auc_curve(y_test, y_score, class_indices, sample_weight=None):
+    if isinstance(y_score, pd.DataFrame):
+        y_score = y_score.values
+    if isinstance(y_test, pd.DataFrame):
+        y_score = y_test.values
+
+    fpr = dict()
+    tpr = dict()
+    roc_auc = dict()
+    for i in class_indices:
+        fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
+                                      sample_weight=sample_weight if sample_weight is not None else None)
+        roc_auc[i] = auc(fpr[i], tpr[i])
+    # Compute micro-average ROC curve and ROC area
+    fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
+    roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
+    return fpr, roc_auc, tpr

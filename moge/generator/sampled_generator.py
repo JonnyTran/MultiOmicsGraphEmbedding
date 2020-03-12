@@ -36,6 +36,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
                                                                   compression=self.compression_func)
         print("# of nodes to sample from (non-zero degree):",
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
+        assert len(self.node_sampling_freq) == len(self.node_list)
 
     def get_nonzero_nodelist(self):
         """

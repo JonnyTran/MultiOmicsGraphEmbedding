@@ -3,9 +3,10 @@ from itertools import cycle
 import numpy as np
 import pandas as pd
 from plotly import graph_objects as go
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import auc
 
 from .utils import colors
+from ..evaluation.classification import compute_roc_auc_curve
 
 
 def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, height=700,
@@ -90,20 +91,6 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
     fig = configure_figure(data, title, width, height)
 
     return fig
-
-
-def compute_roc_auc_curve(y_test, y_score, class_indices, sample_weight=None):
-    fpr = dict()
-    tpr = dict()
-    roc_auc = dict()
-    for i in class_indices:
-        fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
-                                      sample_weight=sample_weight if sample_weight is not None else None)
-        roc_auc[i] = auc(fpr[i], tpr[i])
-    # Compute micro-average ROC curve and ROC area
-    fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
-    roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
-    return fpr, roc_auc, tpr
 
 
 def configure_figure(data, title, width, height):
