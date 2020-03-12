@@ -97,7 +97,7 @@ class MultiplexGenerator(SubgraphGenerator):
             X[layer_key] = X[layer_key] + np.eye(X[layer_key].shape[0])  # Add self-loops
 
         # Labels
-        targets_vector = self.all_annotations.loc[sampled_nodes, self.targets[0]]
+        targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
         targets_vector = self.process_vector(targets_vector)
 
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
