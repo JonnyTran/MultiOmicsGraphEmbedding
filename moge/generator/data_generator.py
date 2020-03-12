@@ -36,6 +36,8 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         self.annotations = network.annotations
         if isinstance(network.annotations, pd.DataFrame):
             self.transcripts_to_sample = network.annotations[SEQUENCE_COL].copy()
+        else:
+            self.transcripts_to_sample = False
 
         if variables or targets:
             self.variables = variables
@@ -70,7 +72,8 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
         self.indexes = np.arange(self.n_steps)
-        self.annotations[SEQUENCE_COL] = self.sample_sequences(self.transcripts_to_sample)
+        if self.transcripts_to_sample is not None:
+            self.annotations[SEQUENCE_COL] = self.sample_sequences(self.transcripts_to_sample)
 
     def __len__(self):
         'Denotes the number of batches per epoch'
