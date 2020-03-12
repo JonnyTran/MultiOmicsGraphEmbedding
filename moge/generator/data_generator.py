@@ -45,20 +45,17 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             self.node_list = kwargs["node_list"]
             kwargs.pop("node_list")
         else:
-            # Get node_list from annotated nodes
-            if isinstance(self.annotations, pd.DataFrame):
-                self.node_list = self.annotations[self.annotations[SEQUENCE_COL].notnull()].index.tolist()
-            elif isinstance(self.annotations, dict):
-                self.node_list = list({node for annotations in self.annotations for node in
-                                       annotations[annotations[SEQUENCE_COL].notnull()].index.tolist()})
+            self.node_list = self.network.node_list
 
         # Ensure every node must have an associated sequence
         if isinstance(self.annotations, pd.DataFrame):
             self.node_list = [node for node in self.node_list if node in self.annotations[
                 self.annotations[SEQUENCE_COL].notnull()].index.tolist()]
-        elif isinstance(self.annotations, dict):
-            self.node_list = [node for node in self.node_list if node in self.annotations[
-                self.annotations[SEQUENCE_COL].notnull()]]
+        elif isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series):
+            # Check that each node must have a sequence in all modalities it's associated with
+            self.node_list = [node for node in self.node_list if \
+                              all(list(map(lambda modality: bool(self.annotations[modality].loc[node, SEQUENCE_COL]),
+                                           network.node_to_modality[node])))]
         else:
             raise Exception("Check that `annotations` must be a dict of DataFrame or a DataFrame", self.annotations)
 

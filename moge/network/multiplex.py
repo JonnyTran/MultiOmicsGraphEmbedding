@@ -41,6 +41,8 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
             print(modality, " nodes:", len(self.nodes[modality]))
         print("Total nodes:", len(self.get_node_list()))
+        self.nodes = pd.Series(self.nodes)
+        self.node_to_modality = pd.Series(self.node_to_modality)
 
     def process_annotations(self):
         self.annotations = {}
@@ -48,6 +50,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             annotation = self.multiomics[modality].get_annotations()
             self.annotations[modality] = annotation
 
+        self.annotations = pd.Series(self.annotations)
         print("All annotation columns (union):",
               {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
 
