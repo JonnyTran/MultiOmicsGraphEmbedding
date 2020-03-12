@@ -1,7 +1,5 @@
 import networkx as nx
-import numpy as np
 import pandas as pd
-import scipy.sparse as sp
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.train_test_split import TrainTestSplit, filter_y_multilabel, stratify_train_test, \
@@ -39,10 +37,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             self.nodes[modality] = self.multiomics[modality].get_genes_list()
 
             for gene in self.multiomics[modality].get_genes_list():
-                if modality in self.node_to_modality:
-                    self.node_to_modality[gene] = [self.node_to_modality[gene], ] + [modality]
-                else:
-                    self.node_to_modality[gene] = modality
+                self.node_to_modality[gene] = self.node_to_modality.setdefault(gene, []) + [modality, ]
 
             print(modality, " nodes:", len(self.nodes[modality]))
         print("Total nodes:", len(self.get_node_list()))
@@ -89,15 +84,15 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
         elif isinstance(edge_types, list) and isinstance(edge_types[0], tuple):
             assert self.networks.issuperset(edge_types)
-            adj = nx.adjacency_matrix(self.networks[edge_types[0]], nodelist=node_list)
-            for edge_type in edge_types[1:]:
-                adj = adj + nx.adjacency_matrix(self.networks[edge_type],
-                                                nodelist=node_list)  # TODO some edges may have weight > 1
+            adj = {}
+            for edge_type in edge_types:
+                adj[edge_type] = nx.adjacency_matrix(self.networks[edge_type],
+                                                     nodelist=node_list)  # TODO some edges may have weight > 1
         else:
             raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.layers))
 
         # Eliminate self-edges
-        adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
+        # adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         return adj.astype(float)
 
     def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,

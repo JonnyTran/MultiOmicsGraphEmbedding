@@ -18,6 +18,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         pair of nodes' RNA sequence input.
 
         :param network: A AttributedNetwork containing a MultiOmics
+        :param node_list: optional, default None. Pass if explicitly wants to limit processing to a set of nodes.
         :param batch_size: Sample batch size at each iteration
         :param dim: Dimensionality of the sample input
         :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
@@ -39,13 +40,27 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             self.variables = variables
             self.targets = targets
 
+        # Initialize node_list
         if "node_list" in kwargs:
             self.node_list = kwargs["node_list"]
-            self.node_list = [node for node in self.node_list if node in self.annotations[
-                self.annotations[SEQUENCE_COL].notnull()].index.tolist()]
             kwargs.pop("node_list")
         else:
-            self.node_list = self.annotations[self.annotations[SEQUENCE_COL].notnull()].index.tolist()
+            # Get node_list from annotated nodes
+            if isinstance(self.annotations, pd.DataFrame):
+                self.node_list = self.annotations[self.annotations[SEQUENCE_COL].notnull()].index.tolist()
+            elif isinstance(self.annotations, dict):
+                self.node_list = list({node for annotations in self.annotations for node in
+                                       annotations[annotations[SEQUENCE_COL].notnull()].index.tolist()})
+
+        # Ensure every node must have an associated sequence
+        if isinstance(self.annotations, pd.DataFrame):
+            self.node_list = [node for node in self.node_list if node in self.annotations[
+                self.annotations[SEQUENCE_COL].notnull()].index.tolist()]
+        elif isinstance(self.annotations, dict):
+            self.node_list = [node for node in self.node_list if node in self.annotations[
+                self.annotations[SEQUENCE_COL].notnull()]]
+        else:
+            raise Exception("Check that `annotations` must be a dict of DataFrame or a DataFrame", self.annotations)
 
         # Remove duplicates
         self.node_list = list(OrderedDict.fromkeys(self.node_list))
