@@ -3,7 +3,6 @@ from abc import ABCMeta
 import numpy as np
 
 from moge.generator import DataGenerator
-from moge.generator.sequences import SEQUENCE_COL
 
 
 class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
@@ -82,8 +81,3 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
                                          p=self.node_sampling_freq)
         return sampled_nodes
-
-    def on_epoch_end(self):
-        'Updates indexes after each epoch and shuffle'
-        self.indexes = np.arange(self.n_steps)
-        self.annotations[SEQUENCE_COL] = self.sample_sequences(self.transcripts_to_sample)
