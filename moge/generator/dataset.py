@@ -18,7 +18,7 @@ class Dataset(tf.data.Dataset):
             cls._generate,
             output_types=generator.get_output_types(),
             output_shapes=generator.get_output_shapes(),
-            args=(generator,)
+            args=generator,
         )
 
     def _generate(cls, generator: DataGenerator):
