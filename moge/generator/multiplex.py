@@ -80,15 +80,16 @@ class MultiplexGenerator(SubgraphGenerator):
         # Features
         X = {}
         for modality in self.network.modalities:
-            X[modality + "-seqs"] = self.get_sequences(sampled_nodes, modality=modality,
-                                                       variable_length=variable_length)
+            X["_".join(modality, "seqs")] = self.get_sequence_encodings(sampled_nodes, modality=modality,
+                                                                        variable_length=variable_length)
             for variable in self.variables:
                 if "expression" == variable:
-                    X[modality + "-" + variable] = self.get_expressions(sampled_nodes, modality=modality)
+                    X["_".join(modality, variable)] = self.get_expressions(sampled_nodes, modality=modality)
                 else:
                     labels_vector = self.annotations[modality].loc[sampled_nodes, variable]
                     labels_vector = self.process_vector(labels_vector)
-                    X[modality + "-" + variable] = self.network.feature_transformer[variable].transform(labels_vector)
+                    X["_".join(modality, variable)] = self.network.feature_transformer[variable].transform(
+                        labels_vector)
 
         for layer, network_layer in self.network.networks.items():
             layer_key = "-".join(list(layer.keys())[0])

@@ -83,9 +83,9 @@ class SampledTripletDataGenerator(SampledDataGenerator):
         X_list = np.array(X_list, dtype="O")
 
         X = {}
-        X["input_seq_i"] = self.get_sequences(X_list[:, 0].tolist(), variable_length=False)
-        X["input_seq_j"] = self.get_sequences(X_list[:, 1].tolist(), variable_length=False)
-        X["input_seq_k"] = self.get_sequences(X_list[:, 2].tolist(), variable_length=False)
+        X["input_seq_i"] = self.get_sequence_encodings(X_list[:, 0].tolist(), variable_length=False)
+        X["input_seq_j"] = self.get_sequence_encodings(X_list[:, 1].tolist(), variable_length=False)
+        X["input_seq_k"] = self.get_sequence_encodings(X_list[:, 2].tolist(), variable_length=False)
         X["is_directed"] = np.expand_dims(X_list[:, 3], axis=-1)
 
         y = np.zeros(X_list[:, 3].shape)
@@ -130,7 +130,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
 
     def __getdata__(self, sampled_nodes, return_node_name=False):
         X = {}
-        X["input_seqs"] = self.get_sequences(sampled_nodes, variable_length=False)
+        X["input_seqs"] = self.get_sequence_encodings(sampled_nodes, variable_length=False)
         sampled_directed_adj = self.sample_random_negative_edges(
             self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes),
             sampled_nodes,
@@ -203,7 +203,7 @@ class OnlineSoftmaxGenerator(OnlineTripletGenerator):
 
     def __getdata__(self, sampled_nodes):
         X = {}
-        X["input_seqs"] = self.get_sequences(sampled_nodes, variable_length=False)
+        X["input_seqs"] = self.get_sequence_encodings(sampled_nodes, variable_length=False)
         sampled_directed_adj = self.sample_directed_negative_edges(
             self.network.get_adjacency_matrix(edge_types=["d"], node_list=sampled_nodes), sampled_nodes)
         X["labels_directed"] = sampled_directed_adj

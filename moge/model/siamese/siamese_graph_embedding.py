@@ -480,7 +480,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             return self._X
 
     def process_embeddings(self, variable_length, batch_size=256, minlen=100):
-        seqs = self.generator_train.get_sequences(self.node_list, variable_length=variable_length, minlen=minlen)
+        seqs = self.generator_train.get_sequence_encodings(self.node_list, variable_length=variable_length,
+                                                           minlen=minlen)
 
         if variable_length:
             embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]

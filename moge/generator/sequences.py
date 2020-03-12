@@ -42,7 +42,7 @@ class SequenceTokenizer():
     def sample_sequences(self, sequences):
         return sequences.apply(lambda x: random.choice(x) if isinstance(x, list) else x)
 
-    def get_sequences(self, node_list, modality=None, variable_length=False, minlen=None):
+    def get_sequence_encodings(self, node_list: list, modality=None, variable_length=False, minlen=None):
         """
         Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
         (indexing from self.node_list)
@@ -55,15 +55,27 @@ class SequenceTokenizer():
         else:
             annotations = self.annotations[modality]
 
+        seqs = self.get_sequences(annotations, node_list)
+
         if not variable_length:
-            padded_encoded_seqs = self.encode_texts(annotations.loc[node_list, SEQUENCE_COL], maxlen=self.maxlen)
+            padded_encoded_seqs = self.encode_texts(seqs, maxlen=self.maxlen,
+                                                    modality=modality if modality else None)
         else:
             padded_encoded_seqs = [
-                self.encode_texts([annotations.loc[node, SEQUENCE_COL]], minlen=minlen)
-                for node in
-                node_list]
+                self.encode_texts([annotations.loc[node, SEQUENCE_COL]], minlen=minlen,
+                                  modality=modality if modality else None) \
+                for node in node_list]
 
         return padded_encoded_seqs
+
+    def get_sequences(self, annotation, node_list):
+        if set(annotation.index) > set(node_list):
+            seqs = annotation.loc[node_list, SEQUENCE_COL]
+        else:
+            seqs = pd.Series(node_list).map(lambda x: annotation[SEQUENCE_COL].get(x,
+                                                                                   " "))  # return dummy string if the annotation doesn't have index
+
+        return seqs
 
     def encode_texts(self, texts, modality: str = None, maxlen=None, minlen=None):
         """

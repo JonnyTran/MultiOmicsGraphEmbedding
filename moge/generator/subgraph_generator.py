@@ -95,7 +95,7 @@ class SubgraphGenerator(SampledDataGenerator):
     def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
-        X["input_seqs"] = self.get_sequences(sampled_nodes, variable_length=variable_length)
+        X["input_seqs"] = self.get_sequence_encodings(sampled_nodes, variable_length=variable_length)
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
                                                             node_list=sampled_nodes).toarray()
