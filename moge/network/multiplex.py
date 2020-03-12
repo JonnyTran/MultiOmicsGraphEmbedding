@@ -66,7 +66,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             annotations_list.append(annotation)
 
         self.all_annotations = pd.concat(annotations_list, join="inner", copy=True)
-        self.all_annotations.groupby(self.all_annotations.index).agg(
+        self.all_annotations = self.all_annotations.groupby(self.all_annotations.index).agg(
             {k: concat_uniques for k in self.all_annotations.columns})
 
         print("Annotation columns:", self.all_annotations.columns.tolist())
