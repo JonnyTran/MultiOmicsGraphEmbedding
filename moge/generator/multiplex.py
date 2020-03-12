@@ -59,6 +59,8 @@ class MultiplexGenerator(SubgraphGenerator):
             seed_node = self.sample_node(1)
             neighbors = []
             for modality, network_layer in self.network.networks.items():
+                if seed_node[0] not in network_layer.nodes:
+                    continue
                 neighbors.extend(list(network_layer.neighbors(seed_node[0])))
 
             sampled_nodes = sampled_nodes + list(seed_node) + neighbors
