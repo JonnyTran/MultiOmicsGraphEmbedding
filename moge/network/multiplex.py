@@ -1,5 +1,6 @@
 import networkx as nx
 import pandas as pd
+from openomics.utils.df import concat_uniques
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.train_test_split import TrainTestSplit, filter_y_multilabel, stratify_train_test, \
@@ -65,7 +66,10 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             annotations_list.append(annotation)
 
         self.all_annotations = pd.concat(annotations_list, join="inner", copy=True)
-        self.all_annotations = self.all_annotations[~self.all_annotations.index.duplicated(keep='first')]
+        # self.all_annotations = self.all_annotations[~self.all_annotations.index.duplicated(keep='first')]
+        self.all_annotations.groupby(self.all_annotations.index).agg(
+            {k: concat_uniques for k in self.all_annotations.columns})
+
         print("Annotation columns:", self.all_annotations.columns.tolist())
 
         self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,

@@ -120,3 +120,12 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
                 node_list = pd.Series(node_list)
             return node_list.map(
                 lambda node: self.multiomics[self.node_to_modality[node]].get_annotation_expressions().loc[node])
+
+    def process_vector(self, targets_vector, delim="\||;"):
+        if targets_vector.dtypes == np.object:
+            if targets_vector.str.contains(delim, regex=True).any():
+                targets_vector = targets_vector.str.split(delim)
+                targets_vector = targets_vector.map(lambda x: x if type(x) == list else [])
+        else:
+            targets_vector = targets_vector.to_numpy().reshape(-1, 1)
+        return targets_vector

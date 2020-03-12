@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from openomics import MultiOmics
+from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 
 from moge.generator.sequences import SEQUENCE_COL
@@ -43,7 +44,8 @@ class AttributedNetwork(Network):
         self.annotations = pd.concat(annotations_list, join="inner", copy=True)
         assert type(
             self.annotations.index) != pd.MultiIndex, "Annotation index must be a pandas.Index type and not a MultiIndex."
-        self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
+        # self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
+        self.annotations.groupby(self.annotations.index).agg({k: concat_uniques for k in self.annotations.columns})
         print("Annotation columns:", self.annotations.columns.tolist())
 
     def process_feature_tranformer(self, delimiter="\||;", min_count=0):
