@@ -66,12 +66,10 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             annotations_list.append(annotation)
 
         self.all_annotations = pd.concat(annotations_list, join="inner", copy=True)
-        # self.all_annotations = self.all_annotations[~self.all_annotations.index.duplicated(keep='first')]
         self.all_annotations.groupby(self.all_annotations.index).agg(
             {k: concat_uniques for k in self.all_annotations.columns})
 
         print("Annotation columns:", self.all_annotations.columns.tolist())
-
         self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
                                                                  min_count)
 

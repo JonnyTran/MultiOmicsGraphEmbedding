@@ -60,7 +60,7 @@ class MultiplexGenerator(SubgraphGenerator):
         while len(sampled_nodes) < batch_size:
             seed_node = self.sample_node(1)
             neighbors = []
-            for modality, network_layer in self.network.networks:
+            for modality, network_layer in self.network.networks.items():
                 neighbors.extend(list(network_layer.neighbors(seed_node[0])))
 
             sampled_nodes = sampled_nodes + list(seed_node) + neighbors
