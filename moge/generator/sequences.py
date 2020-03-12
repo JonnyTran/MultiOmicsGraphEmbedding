@@ -1,6 +1,7 @@
 import random
 
 import numpy as np
+import pandas as pd
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 
@@ -22,17 +23,25 @@ class SequenceTokenizer():
         self.truncating = truncating
         self.sequence_to_matrix = sequence_to_matrix
 
-        if tokenizer is None:
-            self.tokenizer = Tokenizer(char_level=True, lower=False)
-            self.tokenizer.fit_on_texts(self.annotations.loc[self.node_list, SEQUENCE_COL])
-            print("word index:", self.tokenizer.word_index) if self.verbose else None
-        else:
+        if tokenizer is not None:
             self.tokenizer = tokenizer
+        else:
+            if isinstance(self.annotations, pd.DataFrame):
+                self.tokenizer = Tokenizer(char_level=True, lower=False)
+                self.tokenizer.fit_on_texts(self.annotations.loc[self.node_list, SEQUENCE_COL])
+                print("word index:", self.tokenizer.word_index) if self.verbose else None
+            elif isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series):
+                self.tokenizer = {}
+                for modality, annotation in self.annotations.items():
+                    self.tokenizer[modality] = Tokenizer(char_level=True, lower=False)
+                    self.tokenizer[modality].fit_on_texts(
+                        annotation.loc[annotation[SEQUENCE_COL].notnull(), SEQUENCE_COL])
+                    print("word index:", self.tokenizer[modality].word_index) if self.verbose else None
 
     def sample_sequences(self, sequences):
         return sequences.apply(lambda x: random.choice(x) if isinstance(x, list) else x)
 
-    def get_sequences(self, node_list, variable_length=False, minlen=None):
+    def get_sequences(self, node_list, modality=None, variable_length=False, minlen=None):
         """
         Returns an ndarray of shape (batch_size, sequence length, n_words) given a list of node ids
         (indexing from self.node_list)
@@ -40,18 +49,22 @@ class SequenceTokenizer():
         :param variable_length: returns a list of sequences with different timestep length
         :param minlen: pad all sequences with length lower than this minlen
         """
-        if not variable_length:
-            padded_encoded_sequences = self.encode_texts(self.annotations.loc[node_list, SEQUENCE_COL],
-                                                         maxlen=self.maxlen)
+        if modality is None:
+            annotations = self.annotations
         else:
-            padded_encoded_sequences = [
-                self.encode_texts([self.annotations.loc[node, SEQUENCE_COL]], minlen=minlen)
+            annotations = self.annotations[modality]
+
+        if not variable_length:
+            padded_encoded_seqs = self.encode_texts(annotations.loc[node_list, SEQUENCE_COL], maxlen=self.maxlen)
+        else:
+            padded_encoded_seqs = [
+                self.encode_texts([annotations.loc[node, SEQUENCE_COL]], minlen=minlen)
                 for node in
                 node_list]
 
-        return padded_encoded_sequences
+        return padded_encoded_seqs
 
-    def encode_texts(self, texts, maxlen=None, minlen=None):
+    def encode_texts(self, texts, modality: str = None, maxlen=None, minlen=None):
         """
         Returns a one-hot-vector for a string of RNA transcript sequence
         :param texts: [str | list(str)]
@@ -60,7 +73,12 @@ class SequenceTokenizer():
         :return:
         """
         # integer encode
-        encoded = self.tokenizer.texts_to_sequences(texts)
+        if modality is None:
+            tokenizer = self.tokenizer
+        else:
+            tokenizer = self.tokenizer[modality]
+
+        encoded = tokenizer.texts_to_sequences(texts)
 
         batch_maxlen = max([len(x) for x in encoded])
         if batch_maxlen < self.maxlen:
@@ -75,9 +93,8 @@ class SequenceTokenizer():
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
                                 dtype="int8")
 
-        if self.sequence_to_matrix:
-            encoded_expanded = np.expand_dims(encoded, axis=-1)
-
-            return np.array([self.tokenizer.sequences_to_matrix(s) for s in encoded_expanded])
-        else:
+        if not self.sequence_to_matrix:
             return encoded
+        else:
+            encoded_expanded = np.expand_dims(encoded, axis=-1)
+            return np.array([tokenizer.sequences_to_matrix(s) for s in encoded_expanded])
