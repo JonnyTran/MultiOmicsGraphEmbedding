@@ -37,13 +37,11 @@ class MultiplexGenerator(SubgraphGenerator):
                 tf.TensorShape((None)))  # idx_weights
 
     def process_sampling_table(self, network):
-        self.edge_dict = {}
-        self.edge_counts_dict = {}
-
-        self.node_degrees = pd.Series(0, index=network.node_list)
+        self.node_degrees = pd.Series(0, index=self.node_list)
         for modality, network_layer in network.networks.items():
-            layer_node_degrees = pd.Series(dict(network_layer.degree(network.node_list)))
-            self.node_degrees += layer_node_degrees
+            layer_node_degrees = pd.Series(dict(network_layer.degree(self.node_list)))
+            self.node_degrees[layer_node_degrees.index] = self.node_degrees[
+                                                              layer_node_degrees.index] + layer_node_degrees
         self.node_degrees = self.node_degrees.to_dict()
 
         self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
