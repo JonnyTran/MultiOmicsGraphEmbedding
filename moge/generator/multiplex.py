@@ -103,7 +103,7 @@ class MultiplexGenerator(SubgraphGenerator):
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
         # Get a vector of nonnull indicators
-        idx_weights = self.all_annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
+        idx_weights = self.network.all_annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
 
         # Make sparse labels in y
         # y_df = pd.DataFrame(y, index=sampled_nodes)
