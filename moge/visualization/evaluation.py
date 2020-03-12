@@ -8,19 +8,20 @@ from sklearn.metrics import roc_curve, auc
 from .utils import colors
 
 
-def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, height=700):
+def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, height=700,
+                   title='Receiver operating characteristic example'):
     # Compute ROC curve and ROC area for each class
     fpr = dict()
     tpr = dict()
     roc_auc = dict()
     for i in range(n_classes):
         fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
-                                      sample_weight=sample_weight if sample_weight != None else None)
+                                      sample_weight=sample_weight if sample_weight is not None else None)
         roc_auc[i] = auc(fpr[i], tpr[i])
 
     # Compute micro-average ROC curve and ROC area
     fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel(),
-                                              sample_weight=sample_weight if sample_weight != None else None)
+                                              sample_weight=sample_weight if sample_weight is not None else None)
     roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
 
     trace1 = go.Scatter(x=fpr[2], y=tpr[2],
@@ -34,14 +35,7 @@ def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, he
                         line=dict(color='navy', width=2, dash='dash'),
                         showlegend=False)
 
-    layout = go.Layout(title='Receiver operating characteristic example',
-                       xaxis=dict(title='False Positive Rate'),
-                       yaxis=dict(title='True Positive Rate'),
-                       width=width,
-                       height=height
-                       )
-
-    fig = go.Figure(data=[trace1, trace2], layout=layout)
+    fig = configure_figure([trace1, trace2], title, width, height)
     return fig
 
 
@@ -61,12 +55,12 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
     roc_auc = dict()
     for i in class_indices:
         fpr[i], tpr[i], _ = roc_curve(y_test[:, i], y_score[:, i],
-                                      sample_weight=sample_weight if sample_weight != None else None)
+                                      sample_weight=sample_weight if sample_weight is not None else None)
         roc_auc[i] = auc(fpr[i], tpr[i])
 
     # Compute micro-average ROC curve and ROC area
     fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel(),
-                                              sample_weight=sample_weight if sample_weight != None else None)
+                                              sample_weight=sample_weight if sample_weight is not None else None)
     roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
     # Compute macro-average ROC curve and ROC area
 
@@ -90,14 +84,14 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
     trace1 = go.Scatter(x=fpr["micro"], y=tpr["micro"],
                         mode='lines',
                         line=dict(color='deeppink', width=2, dash='dot'),
-                        name='micro-average ROC curve (area = {0:0.2f})'
+                        name='micro-average ROC curve (area={0:0.2f})'
                              ''.format(roc_auc["micro"]))
     data.append(trace1)
 
     trace2 = go.Scatter(x=fpr["macro"], y=tpr["macro"],
                         mode='lines',
                         line=dict(color='navy', width=2, dash='dot'),
-                        name='macro-average ROC curve (area = {0:0.2f})'
+                        name='macro-average ROC curve (area={0:0.2f})'
                              ''.format(roc_auc["macro"]))
     data.append(trace2)
     color_cycle = cycle(colors)
@@ -106,7 +100,7 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
         trace3 = go.Scatter(x=fpr[i], y=tpr[i],
                             mode='lines',
                             line=dict(color=color, width=2),
-                            name='ROC curve of class {0} (area = {1:0.2f})'
+                            name='ROC curve of {0} (area={1:0.2f})'
                                  ''.format(label, roc_auc[i]))
         data.append(trace3)
 
@@ -116,13 +110,24 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
                         showlegend=False)
     data.append(trace4)
 
+    fig = configure_figure(data, title, width, height)
+
+    return fig
+
+
+def configure_figure(data, title, width, height):
     layout = go.Layout(title=title,
                        xaxis=dict(title='False Positive Rate'),
                        yaxis=dict(title='True Positive Rate'),
                        width=width,
-                       height=height
+                       height=height,
+                       margin=dict(
+                           l=5,
+                           r=5,
+                           b=5,
+                           t=5,
+                           pad=5
+                       ),
                        )
-
     fig = go.Figure(data=data, layout=layout)
-
     return fig
