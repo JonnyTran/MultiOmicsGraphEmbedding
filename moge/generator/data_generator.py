@@ -46,10 +46,9 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         # Initialize node_list
         if "node_list" in kwargs:
             self.node_list = kwargs["node_list"]
-            if self.node_list == None:
-                self.node_list = self.network.node_list
             kwargs.pop("node_list")
-        else:
+
+        if not hasattr(self, "node_list") or self.node_list is None:
             self.node_list = self.network.node_list
 
         # Ensure every node must have an associated sequence

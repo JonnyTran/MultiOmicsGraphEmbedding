@@ -63,7 +63,7 @@ class SequenceTokenizer():
                                                         modality=modality if modality else None, minlen=20)
             except Exception as e:
                 print("seqs", seqs.shape, seqs.notnull().sum())
-                raise e
+                return (seqs, node_list)
         else:
             padded_encoded_seqs = [
                 self.encode_texts([annotations.loc[node, SEQUENCE_COL]], minlen=minlen,
