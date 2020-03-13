@@ -64,6 +64,7 @@ class MultiplexGenerator(SubgraphGenerator):
                 neighbors.extend(list(network_layer.neighbors(seed_node[0])))
 
             sampled_nodes = sampled_nodes + list(seed_node) + neighbors
+            sampled_nodes = [node for node in sampled_nodes if node in self.node_list]
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:
