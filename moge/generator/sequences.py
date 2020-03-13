@@ -43,7 +43,7 @@ class SequenceTokenizer():
         :param minlen: pad all sequences with length lower than this minlen
         """
         annotations = self.annotations
-        seqs = self.get_sequences(annotations, node_list)
+        seqs = annotations.loc[node_list, SEQUENCE_COL]
 
         if variable_length:
             padded_encoded_seqs = [self.encode_texts([annotations.loc[node, SEQUENCE_COL]], minlen=minlen) for node in
@@ -57,15 +57,6 @@ class SequenceTokenizer():
             raise e
 
         return padded_encoded_seqs
-
-    def get_sequences(self, annotation: pd.DataFrame, node_list: list):
-        if set(annotation.index) > set(node_list):
-            seqs = annotation.loc[node_list, SEQUENCE_COL]
-        else:
-            # return dummy string if the annotation doesn't have index
-            seqs = pd.Series(node_list).map(lambda x: annotation[SEQUENCE_COL].get(x, None))
-
-        return seqs
 
     def encode_texts(self, texts, modality: str = None, maxlen=None, minlen=None):
         """
@@ -133,7 +124,7 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         """
         annotations = self.annotations[modality]
 
-        seqs = self.get_sequences(annotations, node_list)
+        seqs = self.fetch_sequences(annotations, node_list)
 
         if variable_length:
             padded_encoded_seqs = [
@@ -145,9 +136,18 @@ class MultiSequenceTokenizer(SequenceTokenizer):
             padded_encoded_seqs = self.encode_texts(seqs, modality=modality, maxlen=self.maxlen, minlen=20)
         except Exception as e:
             print("seqs", seqs.shape, seqs.notnull().sum())
-            return (seqs, node_list)
+            raise e
 
         return padded_encoded_seqs
+
+    def fetch_sequences(self, annotation: pd.DataFrame, node_list: list):
+        if set(annotation.index) > set(node_list):
+            seqs = annotation.loc[node_list, SEQUENCE_COL]
+        else:
+            # return dummy string if the annotation doesn't have index
+            seqs = pd.Series(node_list).map(lambda x: annotation[SEQUENCE_COL].get(x, ""))
+
+        return seqs
 
     def encode_texts(self, texts, modality, maxlen=None, minlen=None):
         """
