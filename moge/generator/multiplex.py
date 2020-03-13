@@ -111,8 +111,8 @@ class MultiplexGenerator(SubgraphGenerator):
 
         # Make a probability distribution
         # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
-        print("len(sampled_nodes)", len(sampled_nodes))
-        print("y", y.shape)
-        print("idx_weights", idx_weights.shape)
-        # assert len(sampled_nodes) == y.shape[0]
+        # print("len(sampled_nodes)", len(sampled_nodes))
+        # print("y", y.shape)
+        # print("idx_weights", idx_weights.shape)
+        assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights
