@@ -25,15 +25,19 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                                                  **kwargs)
 
     def get_output_types(self):
-        return ({"input_seqs": tf.int8, "subnetwork": tf.float32},) + \
-               (tf.float32,) * len(self.variables) + \
+        return (
+               {"MicroRNA_seqs": tf.int8, "MessengerRNA_seqs": tf.int8, "LncRNA_seqs": tf.int8, "Protein_seqs": tf.int8,
+                "MicroRNA-MessengerRNA": tf.float32, "MicroRNA-LncRNA": tf.float32, "LncRNA-MessengerRNA": tf.float32,
+                "Protein-Protein": tf.float32},) + \
                (tf.int64,  # y
                 tf.bool)  # idx_weights
 
     def get_output_shapes(self):
-        return ({"input_seqs": tf.TensorShape([None, None]),
-                 "subnetwork": tf.TensorShape([None, None])},) + \
-               (tf.TensorShape([None, None]),) * len(self.variables) + \
+        return ({"MicroRNA_seqs": tf.TensorShape([None, None]), "MessengerRNA_seqs": tf.TensorShape([None, None]),
+                 "LncRNA_seqs": tf.TensorShape([None, None]), "Protein_seqs": tf.TensorShape([None, None]),
+                 "MicroRNA-MessengerRNA": tf.TensorShape([None, None]), "MicroRNA-LncRNA": tf.TensorShape([None, None]),
+                 "LncRNA-MessengerRNA": tf.TensorShape([None, None]),
+                 "Protein-Protein": tf.TensorShape([None, None])}) + \
                (tf.TensorShape([None, None]),  # y
                 tf.TensorShape((None)))  # idx_weights
 
