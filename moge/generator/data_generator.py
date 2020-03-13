@@ -72,7 +72,9 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
-        self.indexes = np.arange(self.n_steps)
+        if self.n_steps:
+            self.indexes = np.arange(self.n_steps)
+
         if self.transcripts_to_sample is not None:
             self.annotations[SEQUENCE_COL] = self.sample_sequences(self.transcripts_to_sample)
 

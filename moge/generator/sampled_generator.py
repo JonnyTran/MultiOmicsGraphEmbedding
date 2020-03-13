@@ -20,11 +20,11 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         self.n_steps = n_steps
         self.directed = directed
 
+        super(SampledDataGenerator, self).__init__(network=network, **kwargs)
         if self.sampling == 'circle':
             self.nodes_circle = cycle(self.node_list)
             self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
 
-        super(SampledDataGenerator, self).__init__(network=network, **kwargs)
         self.process_sampling_table(network)
 
     def process_sampling_table(self, network):
