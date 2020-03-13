@@ -77,7 +77,7 @@ class SequenceTokenizer():
             seqs = annotation.loc[node_list, SEQUENCE_COL]
         else:
             # return dummy string if the annotation doesn't have index
-            seqs = pd.Series(node_list).map(lambda x: annotation[SEQUENCE_COL].get(x, "_"))
+            seqs = pd.Series(node_list).map(lambda x: annotation[SEQUENCE_COL].get(x, " "))
 
         return seqs
 
