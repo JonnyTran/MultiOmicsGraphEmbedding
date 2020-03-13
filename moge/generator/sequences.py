@@ -58,8 +58,11 @@ class SequenceTokenizer():
         seqs = self.get_sequences(annotations, node_list)
 
         if not variable_length:
-            padded_encoded_seqs = self.encode_texts(seqs, maxlen=self.maxlen,
-                                                    modality=modality if modality else None)
+            try:
+                padded_encoded_seqs = self.encode_texts(seqs, maxlen=self.maxlen,
+                                                        modality=modality if modality else None)
+            except:
+                print("seqs", seqs.shape, seqs.notnull().sum())
         else:
             padded_encoded_seqs = [
                 self.encode_texts([annotations.loc[node, SEQUENCE_COL]], minlen=minlen,
@@ -72,8 +75,8 @@ class SequenceTokenizer():
         if set(annotation.index) > set(node_list):
             seqs = annotation.loc[node_list, SEQUENCE_COL]
         else:
-            seqs = pd.Series(node_list).map(lambda x: annotation[SEQUENCE_COL].get(x,
-                                                                                   " "))  # return dummy string if the annotation doesn't have index
+            # return dummy string if the annotation doesn't have index
+            seqs = pd.Series(node_list).map(lambda x: annotation[SEQUENCE_COL].get(x, " "))
 
         return seqs
 
