@@ -99,7 +99,7 @@ class MultiplexGenerator(SubgraphGenerator):
         # Labels
         targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
         targets_vector = self.process_vector(targets_vector)
-
+        print("targets_vector", targets_vector.shape, targets_vector)
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
         # Get a vector of nonnull indicators
