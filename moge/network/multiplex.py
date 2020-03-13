@@ -105,8 +105,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         y_label, _ = filter_y_multilabel(annotations=self.all_annotations, y_label=stratify_label, min_count=n_splits,
                                          dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
-            y_omic = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split(
-                "|")  # Need to return a Series of []'s
+            y_omic = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
             y_label = y_label + y_omic
 
         train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
@@ -118,7 +117,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.testing.networks = {}
         for layer, network in self.networks.items():
             network_train, network_test = split_network_by_nodes(network, train_nodes=train_nodes,
-                                                                 test_nodes=test_nodes, verbose=verbose)
+                                                                 test_nodes=test_nodes, verbose=False)
             self.training.networks[layer] = network_train
             self.testing.networks[layer] = network_test
 
