@@ -122,6 +122,8 @@ class SubgraphGenerator(SampledDataGenerator):
             if targets_vector.str.contains("|", regex=False).any():
                 targets_vector = targets_vector.str.split("|")
                 targets_vector = targets_vector.map(lambda x: x if type(x) == list else [])
+            elif all(targets_vector.isnull()):
+                targets_vector = targets_vector.to_numpy().reshape(-1, 1)
         else:
             targets_vector = targets_vector.to_numpy().reshape(-1, 1)
 
