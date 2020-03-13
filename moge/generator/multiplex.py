@@ -100,8 +100,16 @@ class MultiplexGenerator(SubgraphGenerator):
         # Labels
         targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
         targets_vector = self.process_vector(targets_vector)
-        print("targets_vector", targets_vector.shape, targets_vector.notnull().sum())
-        y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
+
+        try:
+            y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
+        except Exception as e:
+            print("targets_vector", targets_vector.shape, targets_vector.notnull().sum(), targets_vector)
+            print("self.network.all_annotations.loc[sampled_nodes, self.targets[0]]",
+                  self.network.all_annotations.loc[sampled_nodes, self.targets[0]].shape,
+                  self.network.all_annotations.loc[sampled_nodes, self.targets[0]].notnull().sum())
+
+            print(e)
 
         # Get a vector of nonnull indicators
         idx_weights = self.network.all_annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
