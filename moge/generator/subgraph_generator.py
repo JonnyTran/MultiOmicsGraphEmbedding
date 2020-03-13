@@ -33,7 +33,7 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 sampling=sampling, compression_func=compression_func,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
-                                                sequence_to_matrix=seq2array,
+                                                seq2array=seq2array,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def get_output_types(self):
