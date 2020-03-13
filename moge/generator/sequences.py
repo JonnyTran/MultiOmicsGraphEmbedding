@@ -133,7 +133,7 @@ class MultiSequenceTokenizer(SequenceTokenizer):
             return padded_encoded_seqs
 
         try:
-            padded_encoded_seqs = self.encode_texts(seqs, modality=modality, maxlen=self.maxlen, minlen=20)
+            padded_encoded_seqs = self.encode_texts(seqs, modality=modality, maxlen=self.maxlen, minlen=minlen)
         except Exception as e:
             print("seqs", seqs.shape, seqs.notnull().sum())
             raise e
