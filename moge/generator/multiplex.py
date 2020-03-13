@@ -37,7 +37,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                  "LncRNA_seqs": tf.TensorShape([None, None]), "Protein_seqs": tf.TensorShape([None, None]),
                  "MicroRNA-MessengerRNA": tf.TensorShape([None, None]), "MicroRNA-LncRNA": tf.TensorShape([None, None]),
                  "LncRNA-MessengerRNA": tf.TensorShape([None, None]),
-                 "Protein-Protein": tf.TensorShape([None, None])}) + \
+                 "Protein-Protein": tf.TensorShape([None, None])},) + \
                (tf.TensorShape([None, None]),  # y
                 tf.TensorShape((None)))  # idx_weights
 
