@@ -1,4 +1,5 @@
 from abc import ABCMeta
+from itertools import cycle
 
 import numpy as np
 
@@ -23,8 +24,13 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
 
     def process_sampling_table(self, network):
         # graph = nx.compose(network.G, network.G_u)
-        self.edge_dict = {}
-        self.edge_counts_dict = {}
+        # self.edge_dict = {}
+        # self.edge_counts_dict = {}
+
+        if self.sampling == 'circle':
+            self.nodes_circle = cycle(self.node_list)
+            self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
+
         if self.directed:
             self.node_degrees = {node: degree for node, degree in network.G.degree(self.node_list)}
         else:
@@ -78,7 +84,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
     def sample_node_list(self, batch_size):
         raise NotImplementedError
 
-    def sample_node(self, batch_size):
+    def sample_node_by_freq(self, batch_size):
         sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
                                          p=self.node_sampling_freq)
         return sampled_nodes

@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from itertools import cycle, islice
+from itertools import islice
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,7 @@ from .sampled_generator import SampledDataGenerator
 class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
                  sampling='neighborhood', compression_func="log", n_steps=100, directed=True,
-                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None, replace=True,
+                 maxlen=1400, padding='post', truncating='post', seq2array=False, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
         """
         Samples a batch subnetwork for classification task.
@@ -28,15 +28,12 @@ class SubgraphGenerator(SampledDataGenerator):
         :param seed:
         :param verbose:
         """
-        if sampling == 'circle':
-            self.nodes_circle = cycle(network.node_list)
-            n_steps = int(np.ceil(len(network.node_list) / batch_size))
         super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
                                                 batch_size=batch_size,
                                                 sampling=sampling, compression_func=compression_func,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
-                                                sequence_to_matrix=sequence_to_matrix,
+                                                sequence_to_matrix=seq2array,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def get_output_types(self):
@@ -73,7 +70,7 @@ class SubgraphGenerator(SampledDataGenerator):
         yield [node for node in islice(self.nodes_circle, self.batch_size)]
 
     def node_sampling(self, batch_size):
-        sampled_nodes = self.sample_node(batch_size)
+        sampled_nodes = self.sample_node_by_freq(batch_size)
         while len(sampled_nodes) < batch_size:
             add_nodes = np.random.choice(self.node_list, size=batch_size - len(sampled_nodes), replace=False,
                                          p=self.node_sampling_freq).tolist()
@@ -84,7 +81,7 @@ class SubgraphGenerator(SampledDataGenerator):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:
-            seed_node = self.sample_node(1)
+            seed_node = self.sample_node_by_freq(1)
             sampled_nodes = sampled_nodes + list(seed_node) + list(self.network.G.neighbors(seed_node[0]))
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 

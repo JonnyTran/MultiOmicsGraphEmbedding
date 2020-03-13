@@ -5,13 +5,14 @@ import pandas as pd
 import tensorflow as tf
 
 from moge.network.multiplex import MultiplexAttributedNetwork
+from .sequences import MultiSequenceTokenizer
 from .subgraph_generator import SubgraphGenerator
 
 
-class MultiplexGenerator(SubgraphGenerator):
-    def __init__(self, network: MultiplexAttributedNetwork, variables: list = None, targets: list = None,
+class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
+    def __init__(self, network: MultiplexAttributedNetwork, variables: list = [], targets: list = None,
                  batch_size=500, sampling='neighborhood', compression_func="log", n_steps=100, directed=None,
-                 maxlen=1400, padding='post', truncating='post', sequence_to_matrix=False, tokenizer=None,
+                 maxlen=1400, padding='post', truncating='post', seq2array=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
 
         super(MultiplexGenerator, self).__init__(network=network, variables=variables, targets=targets,
@@ -19,7 +20,7 @@ class MultiplexGenerator(SubgraphGenerator):
                                                  sampling=sampling, compression_func=compression_func, n_steps=n_steps,
                                                  directed=directed, maxlen=maxlen,
                                                  padding=padding, truncating=truncating,
-                                                 sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer,
+                                                 seq2array=seq2array, tokenizer=tokenizer,
                                                  replace=replace, seed=seed, verbose=verbose,
                                                  **kwargs)
 
@@ -56,7 +57,7 @@ class MultiplexGenerator(SubgraphGenerator):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:
-            seed_node = self.sample_node(1)
+            seed_node = self.sample_node_by_freq(1)
             neighbors = []
             for modality, network_layer in self.network.networks.items():
                 if seed_node[0] not in network_layer.nodes:
