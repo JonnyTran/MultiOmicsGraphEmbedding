@@ -128,6 +128,8 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             if targets_vector.str.contains(delim, regex=True).any():
                 targets_vector = targets_vector.str.split(delim)
                 targets_vector = targets_vector.map(lambda x: x if type(x) == list else [])
+            elif all(targets_vector.isnull()):
+                targets_vector = targets_vector.to_numpy().reshape(-1, 1)
         else:
             targets_vector = targets_vector.to_numpy().reshape(-1, 1)
         return targets_vector
