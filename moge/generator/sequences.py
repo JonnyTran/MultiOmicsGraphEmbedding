@@ -101,7 +101,7 @@ class SequenceTokenizer():
         if batch_maxlen < self.maxlen:
             maxlen = batch_maxlen
 
-        if minlen and len(texts) == 1 and len(texts[0]) < minlen:
+        if minlen and len(texts[0]) < minlen:
             maxlen = minlen
 
         # pad encoded sequences
