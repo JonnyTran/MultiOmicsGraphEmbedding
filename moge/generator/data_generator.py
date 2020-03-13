@@ -57,9 +57,13 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
                 self.annotations[SEQUENCE_COL].notnull()].index.tolist()]
         elif isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series):
             # Check that each node must have a sequence in all modalities it's associated with
-            self.node_list = [node for node in self.node_list if \
-                              all(list(map(lambda modality: bool(self.annotations[modality].loc[node, SEQUENCE_COL]),
-                                           network.node_to_modality[node])))]
+            null_nodes = [network.annotations[modality].loc[network.nodes[modality], SEQUENCE_COL][
+                              network.annotations[modality].loc[
+                                  network.nodes[modality], SEQUENCE_COL].isnull()].index.tolist() for modality in
+                          network.modalities]
+            null_nodes = [node for nodes in null_nodes for node in nodes]
+
+            self.node_list = [node for node in self.node_list if node not in null_nodes]
         else:
             raise Exception("Check that `annotations` must be a dict of DataFrame or a DataFrame", self.annotations)
 
