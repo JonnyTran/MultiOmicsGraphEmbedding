@@ -5,13 +5,13 @@ from sklearn.metrics import homogeneity_score, completeness_score, normalized_mu
 
 
 def evaluate_clustering(embedding, network, node_label="locus_type", n_clusters=None,
-                        metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True):
+                        metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True, delim="\||;"):
     nodelist = embedding.node_list
     annotations = network.annotations
     nodes_with_label = annotations[annotations[node_label].notna()].index
     nodelist = [node for node in nodelist if node in nodes_with_label]
 
-    y_true = annotations.loc[nodelist, node_label].str.split("|", expand=True)[0]
+    y_true = annotations.loc[nodelist, node_label].str.split(delim, expand=True)[0]
 
     if n_clusters is None:
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())

@@ -129,3 +129,24 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         # print("idx_weights", idx_weights.shape)
         assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights
+
+    def load_data(self, connected_nodes_only=True, dropna=True, y_label=None, variable_length=False):
+        if connected_nodes_only:
+            node_list = self.get_nonzero_nodelist()
+        else:
+            node_list = self.network.node_list
+
+        if dropna:
+            node_list = self.network.all_annotations.loc[node_list, self.targets].dropna().index.tolist()
+        else:
+            node_list = node_list
+
+        X, y, idx_weights = self.__getdata__(node_list, variable_length=variable_length)
+
+        if y_label:
+            y_labels = self.get_node_labels(y_label, node_list=node_list)
+            return X, y_labels
+
+        y = pd.DataFrame(y, index=node_list,
+                         columns=self.network.feature_transformer[self.targets[0]].classes_)
+        return X, y, idx_weights
