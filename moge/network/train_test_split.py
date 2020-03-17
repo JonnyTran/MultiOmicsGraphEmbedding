@@ -118,11 +118,18 @@ class TrainTestSplit():
     def get_train_generator(self, generator, **kwargs):
         kwargs['network'] = self.training
         kwargs['node_list'] = self.training.node_list
-        return generator(**kwargs)
+
+        gen_inst = generator(**kwargs)
+        self.tokenizer = gen_inst.tokenizer
+        return gen_inst
 
     def get_test_generator(self, generator, **kwargs):
         kwargs['network'] = self.testing
         kwargs['node_list'] = self.testing.node_list
+
+        # A feature to ensure the test generator has the same tokenizer as the train generator
+        if hasattr(self, "tokenizer"):
+            kwargs["tokenizer"] = self.tokenizer
         return generator(**kwargs)
 
 
