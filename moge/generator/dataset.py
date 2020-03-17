@@ -22,7 +22,7 @@ class Dataset(tf.data.Dataset):
             output_shapes=generator.get_output_shapes(),
         )
 
-    def _generate(cls):
+    def _generate(self):
         while True:
-            batch_xs, batch_ys, dset_index = cls.generator.__getitem__(0)
+            batch_xs, batch_ys, dset_index = self.generator.__getitem__(0)
             yield batch_xs, batch_ys, dset_index
