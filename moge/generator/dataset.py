@@ -20,7 +20,7 @@ class Dataset(tf.data.Dataset):
             cls._generate,
             output_types=generator.get_output_types(),
             output_shapes=generator.get_output_shapes(),
-            args=(cls),
+            args=(cls,),
         )
 
     def _generate(cls):
