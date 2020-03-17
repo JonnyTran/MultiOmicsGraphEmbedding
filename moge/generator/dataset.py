@@ -15,7 +15,7 @@ class Dataset(tf.data.Dataset):
         :param generator: a keras.utils.Sequence generator.
         """
 
-        def generate(generator):
+        def generate():
             while True:
                 batch_xs, batch_ys, dset_index = generator.__getitem__(0)
                 yield batch_xs, batch_ys, dset_index
