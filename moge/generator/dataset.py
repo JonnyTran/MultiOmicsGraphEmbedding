@@ -14,16 +14,15 @@ class Dataset(tf.data.Dataset):
 
         :param generator: a keras.utils.Sequence generator.
         """
-        cls.generator = generator
+        Dataset.generator = generator
 
         return tf.data.Dataset.from_generator(
             cls._generate,
             output_types=generator.get_output_types(),
             output_shapes=generator.get_output_shapes(),
-            args=(cls,),
         )
 
     def _generate(cls):
         while True:
-            batch_xs, batch_ys, dset_index = cls.generator.__getitem__(0)
+            batch_xs, batch_ys, dset_index = Dataset.generator.__getitem__(0)
             yield batch_xs, batch_ys, dset_index
