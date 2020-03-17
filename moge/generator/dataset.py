@@ -20,10 +20,10 @@ class Dataset(tf.data.Dataset):
             cls._generate,
             output_types=generator.get_output_types(),
             output_shapes=generator.get_output_shapes(),
-            args=(),
+            args=(cls),
         )
 
-    def _generate(self):
+    def _generate(cls):
         while True:
-            batch_xs, batch_ys, dset_index = self.generator.__getitem__(0)
+            batch_xs, batch_ys, dset_index = cls.generator.__getitem__(0)
             yield batch_xs, batch_ys, dset_index
