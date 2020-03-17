@@ -11,14 +11,14 @@ from .subgraph_generator import SubgraphGenerator
 
 class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
     def __init__(self, network: MultiplexAttributedNetwork, variables: list = [], targets: list = None,
-                 batch_size=500, sampling='neighborhood', compression_func="log", n_steps=100, directed=None,
+                 batch_size=500, sampling='neighborhood', compression_func="log", n_steps=100,
                  maxlen=1400, padding='post', truncating='post', seq2array=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
 
         super(MultiplexGenerator, self).__init__(network=network, variables=variables, targets=targets,
                                                  batch_size=batch_size,
                                                  sampling=sampling, compression_func=compression_func, n_steps=n_steps,
-                                                 directed=directed, maxlen=maxlen,
+                                                 directed=None, maxlen=maxlen,
                                                  padding=padding, truncating=truncating,
                                                  seq2array=seq2array, tokenizer=tokenizer,
                                                  replace=replace, seed=seed, verbose=verbose,
@@ -33,13 +33,16 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                 tf.bool)  # idx_weights
 
     def get_output_shapes(self):
-        return ({"MicroRNA_seqs": tf.TensorShape([None, None]), "MessengerRNA_seqs": tf.TensorShape([None, None]),
-                 "LncRNA_seqs": tf.TensorShape([None, None]), "Protein_seqs": tf.TensorShape([None, None]),
-                 "MicroRNA-MessengerRNA": tf.TensorShape([None, None]), "MicroRNA-LncRNA": tf.TensorShape([None, None]),
-                 "LncRNA-MessengerRNA": tf.TensorShape([None, None]),
-                 "Protein-Protein": tf.TensorShape([None, None])},) + \
-               (tf.TensorShape([None, None]),  # y
-                tf.TensorShape((None)))  # idx_weights
+        return ({"MicroRNA_seqs": tf.TensorShape([self.batch_size, None]),
+                 "MessengerRNA_seqs": tf.TensorShape([self.batch_size, None]),
+                 "LncRNA_seqs": tf.TensorShape([self.batch_size, None]),
+                 "Protein_seqs": tf.TensorShape([self.batch_size, None]),
+                 "MicroRNA-MessengerRNA": tf.TensorShape([self.batch_size, self.batch_size]),
+                 "MicroRNA-LncRNA": tf.TensorShape([self.batch_size, self.batch_size]),
+                 "LncRNA-MessengerRNA": tf.TensorShape([self.batch_size, self.batch_size]),
+                 "Protein-Protein": tf.TensorShape([self.batch_size, self.batch_size])},) + \
+               (tf.TensorShape([self.batch_size, None]),  # y
+                tf.TensorShape((self.batch_size)))  # idx_weights
 
     def process_sampling_table(self, network):
         self.node_degrees = pd.Series(0, index=self.node_list)
