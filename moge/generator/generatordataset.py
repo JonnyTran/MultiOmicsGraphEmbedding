@@ -3,12 +3,12 @@ import tensorflow as tf
 from . import DataGenerator
 
 
-class Dataset(tf.data.Dataset):
+class GeneratorDataset(tf.data.Dataset):
     def __new__(cls, generator: DataGenerator):
         """
         A tf.data wrapper for keras.utils.Sequence generator
         >>> generator = DataGenerator()
-        >>> dataset = Dataset(generator)
+        >>> dataset = GeneratorDataset(generator)
         >>> strategy = tf.distribute.MirroredStrategy()
         >>> train_dist_dataset = strategy.experimental_distribute_dataset(dataset)
 

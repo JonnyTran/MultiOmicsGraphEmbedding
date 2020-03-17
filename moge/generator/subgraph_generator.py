@@ -42,11 +42,11 @@ class SubgraphGenerator(SampledDataGenerator):
                 tf.bool)  # idx_weights
 
     def get_output_shapes(self):
-        return ({"input_seqs": tf.TensorShape([None, None]),
-                 "subnetwork": tf.TensorShape([None, None])},) + \
-               (tf.TensorShape([None, None]),) * len(self.variables) + \
-               (tf.TensorShape([None, None]),  # y
-                tf.TensorShape((None)))  # idx_weights
+        return ({"input_seqs": tf.TensorShape([self.batch_size, None]),
+                 "subnetwork": tf.TensorShape([self.batch_size, self.batch_size])},) + \
+               (tf.TensorShape([self.batch_size, None]),) * len(self.variables) + \
+               (tf.TensorShape([self.batch_size, None]),  # y
+                tf.TensorShape((self.batch_size)))  # idx_weights
 
     def __getitem__(self, item=None):
         sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
