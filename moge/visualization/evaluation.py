@@ -72,6 +72,7 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
                         name='macro-average ROC curve (area={0:0.2f})'
                              ''.format(roc_auc["macro"]))
     data.append(trace2)
+    np.random.shuffle(colors)
     color_cycle = cycle(colors)
 
     for i, label, color in zip(class_indices, classes, color_cycle):

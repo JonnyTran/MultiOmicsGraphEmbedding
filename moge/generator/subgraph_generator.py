@@ -37,7 +37,8 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def get_output_types(self):
-        return ({"input_seqs": tf.int8, "subnetwork": tf.float32},) + (tf.float32,) * len(self.variables) + \
+        return ({"input_seqs": tf.int8, "subnetwork": tf.float32},) + \
+               (tf.float32,) * len(self.variables) + \
                (tf.int64,  # y
                 tf.bool)  # idx_weights
 
