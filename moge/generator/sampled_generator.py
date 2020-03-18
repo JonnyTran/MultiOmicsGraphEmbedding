@@ -21,8 +21,8 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         self.directed = directed
 
         super(SampledDataGenerator, self).__init__(network=network, **kwargs)
+
         if self.sampling == 'circle':
-            self.nodes_circle = cycle(self.node_list)
             self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
 
         self.process_sampling_table(network)
@@ -31,6 +31,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         # graph = nx.compose(network.G, network.G_u)
         # self.edge_dict = {}
         # self.edge_counts_dict = {}
+        self.nodes_circle = cycle(self.node_list)
 
         if self.directed:
             self.node_degrees = {node: degree for node, degree in network.G.degree(self.node_list)}
