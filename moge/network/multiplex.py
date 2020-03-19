@@ -77,7 +77,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         source = layer[0]
         target = layer[1]
         self.networks[layer].add_edges_from(edgelist, source=source, target=target, database=database, **kwargs)
-        print(len(edgelist), "edges added to self.networks[({}, {})]".format(source, target))
+        print(len(edgelist), "edges added to self.networks[{}]".format(layer))
 
     def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, ):
         if node_list is None:
