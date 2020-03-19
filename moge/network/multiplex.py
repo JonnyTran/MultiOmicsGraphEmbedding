@@ -73,9 +73,10 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
                                                                  min_count)
 
-    def add_edges(self, edgelist, source, target, database, **kwargs):
-        self.networks[tuple((source, target))].add_edges_from(edgelist, source=source, target=target, database=database,
-                                                              **kwargs)
+    def add_edges(self, edgelist, layer: (str, str, str), database, **kwargs):
+        source = layer[0]
+        target = layer[1]
+        self.networks[layer].add_edges_from(edgelist, source=source, target=target, database=database, **kwargs)
         print(len(edgelist), "edges added to self.networks[({}, {})]".format(source, target))
 
     def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, ):
