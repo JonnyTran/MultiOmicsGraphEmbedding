@@ -2,6 +2,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from fa2 import ForceAtlas2
 
 forceatlas2 = ForceAtlas2(
@@ -27,7 +28,7 @@ def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol: pd.Series = None, node_color: pd.Series = None,
               edge_label: str = None, max_edges=10000,
               title=None, width=1000, height=800,
-              pos=None, iterations=100, showlegend=True):
+              pos=None, iterations=100, showlegend=True, **kwargs):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
 
@@ -40,8 +41,7 @@ def graph_viz(g: nx.Graph,
     fig = px.scatter(x=node_x, y=node_y,
                      hover_name=nodelist,
                      symbol=node_symbol if node_symbol is not None else None,
-                     color=node_color if node_color is not None else None,
-                     )
+                     color=node_color if node_color is not None else None, **kwargs)
 
     # Edges data
     edges = list(g.subgraph(nodelist).edges(data=True if edge_label else False))
@@ -64,7 +64,7 @@ def graph_viz3d(g: nx.Graph,
                 nodelist: list, node_symbol=None, node_color=None,
                 edge_label: str = None, max_edges=10000,
                 title=None, width=1000, height=800,
-                pos=None, showlegend=True):
+                pos=None, showlegend=True, express_mode=True, **kwargs):
     if pos is None:
         raise Exception("Must provide pos as dict, i.e. {<node>:<3d coordinates>}")
 
@@ -74,12 +74,21 @@ def graph_viz3d(g: nx.Graph,
 
     node_x, node_y, node_z = zip(*[(pos[node][0], pos[node][1], pos[node][2])
                                    for node in nodelist])
-    fig = px.scatter_3d(x=node_x, y=node_y, z=node_z, size_max=10,
-                        hover_name=nodelist,
-                        symbol=node_symbol if node_symbol is not None else None,
-                        color=node_color if node_color is not None else None,
-                        color_continuous_scale='HSV',
-                        )
+
+    if express_mode:
+        fig = px.scatter_3d(x=node_x, y=node_y, z=node_z, size_max=10,
+                            hover_name=nodelist,
+                            symbol=node_symbol if node_symbol is not None else None,
+                            color=node_color if node_color is not None else None,
+                            color_continuous_scale='HSV',
+                            **kwargs)
+    else:
+        fig = go.Figure()
+        fig.add_scatter3d(x=node_x, y=node_y, z=node_z,
+                          mode='markers',
+                          name=nodelist,
+                          marker=dict(color=node_color, size=10), **kwargs)
+
     # Edges data
     edges = list(g.subgraph(nodelist).edges(data=True if edge_label else False))
 

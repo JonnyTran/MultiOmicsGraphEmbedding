@@ -60,19 +60,6 @@ class AttributedNetwork(Network):
         self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter, min_count)
 
     @classmethod
-    def add_predecessor_terms(self, annotations, graph, return_str=True):
-        annotations = annotations.str.split("|").map(
-            lambda terms: list(set(terms) | {parent for term in terms \
-                                             for parent in graph.predecessors(term)}) \
-                if isinstance(terms, list) else None)
-
-        if return_str:
-            annotations = annotations.map(
-                lambda x: "|".join(x) if isinstance(x, list) else None)
-
-        return annotations
-
-    @classmethod
     def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", min_count=0):
         """
         :param annotation: a pandas DataFrame
