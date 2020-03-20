@@ -138,3 +138,15 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         else:
             targets_vector = targets_vector.to_numpy().reshape(-1, 1)
         return targets_vector
+
+    def label_sparsify(self, y):
+        if not isinstance(y, pd.DataFrame):
+            y = pd.DataFrame(y)
+
+        y = y.apply(lambda x: x.values.nonzero()[0], axis=1)
+        return y
+
+    def label_probability(self, y):
+        # Make a probability distribution
+        y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
+        return y

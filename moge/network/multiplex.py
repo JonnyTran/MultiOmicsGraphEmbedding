@@ -1,4 +1,5 @@
 import networkx as nx
+import numpy as np
 import pandas as pd
 from openomics.utils.df import concat_uniques
 
@@ -18,6 +19,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         """
         self.modalities = modalities
         self.layers = layers
+        self.layers_adj = {}
 
         networks = {}
         for source_target, graph_class in layers.items():
@@ -80,26 +82,51 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         print(len(edgelist), "edges added to self.networks[{}]".format(layer))
 
     def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, ):
+        """
+
+        :param edge_types: either a tuple(str, ...) or [tuple(str, ...), tuple(str, ...)]
+        :param node_list (list):
+        :return:
+        """
         if node_list is None:
             node_list = self.node_list
 
         # edge_list = [(u, v) for u, v, d in self.networks[edge_types].edges(nbunch=node_list, data=True)]
         if isinstance(edge_types, tuple):
             assert edge_types in self.networks
-            adj = nx.adjacency_matrix(self.networks[edge_types], nodelist=node_list)
+            adj = self.get_layer_adjacency_matrix(edge_types, node_list)
 
         elif isinstance(edge_types, list) and isinstance(edge_types[0], tuple):
             assert self.networks.issuperset(edge_types)
             adj = {}
-            for edge_type in edge_types:
-                adj[edge_type] = nx.adjacency_matrix(self.networks[edge_type],
-                                                     nodelist=node_list)  # TODO some edges may have weight > 1
+            for layer in edge_types:
+                adj[layer] = self.get_layer_adjacency_matrix(layer, node_list)
         else:
             raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.layers))
 
         # Eliminate self-edges
         # adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         return adj.astype(float)
+
+    def get_layer_adjacency_matrix(self, edge_type, node_list=None):
+        if edge_type in self.layers_adj:
+            adjacency_matrix = self.layers_adj[edge_type]
+
+        # Get adjacency and caches the matrix
+        else:
+            adjacency_matrix = nx.adjacency_matrix(self.networks[edge_type],
+                                                   nodelist=self.node_list)
+            adjacency_matrix = adjacency_matrix + np.eye(adjacency_matrix.shape[0])  # Add self-loops
+            self.layers_adj[edge_type] = adjacency_matrix
+
+        if node_list is None or node_list == self.node_list:
+            return adjacency_matrix
+        elif set(node_list) < set(self.node_list):
+            return self.slice_adj(adjacency_matrix, node_list, None)
+        elif not (set(node_list) < set(self.node_list)):
+            raise Exception("A node in node_l is not in self.node_list.")
+
+        return adjacency_matrix
 
     def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
                          dropna=False, seed=42, verbose=False):

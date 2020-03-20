@@ -108,7 +108,6 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         for layer, network_layer in self.network.networks.items():
             layer_key = "-".join(layer)
             X[layer_key] = self.network.get_adjacency_matrix(edge_types=layer, node_list=sampled_nodes).toarray()
-            X[layer_key] = X[layer_key] + np.eye(X[layer_key].shape[0])  # Add self-loops
 
         # Labels
         targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
@@ -126,15 +125,6 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         # Get a vector of nonnull indicators
         idx_weights = self.network.all_annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
 
-        # Make sparse labels in y
-        # y_df = pd.DataFrame(y, index=sampled_nodes)
-        # y = y_df.apply(lambda x: x.values.nonzero()[0], axis=1)
-
-        # Make a probability distribution
-        # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
-        # print("len(sampled_nodes)", len(sampled_nodes))
-        # print("y", y.shape)
-        # print("idx_weights", idx_weights.shape)
         assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights
 
