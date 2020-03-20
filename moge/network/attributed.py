@@ -7,11 +7,37 @@ from sklearn import preprocessing
 from moge.generator.sequences import SEQUENCE_COL
 from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
-from moge.network.train_test_split import get_labels_filter
 
 MODALITY_COL = "omic"
 
 EPSILON = 1e-16
+
+
+def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
+    if dropna:
+        nodes_index = annotations[[SEQUENCE_COL] + y_label].dropna().index
+    else:
+        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
+
+    labels_filter = get_label_min_count_filter(annotations, nodes_index, y_label, min_count, delimiter)
+    print("label {} filtered:".format(y_label, len(labels_filter)))
+
+    y_labels = annotations.loc[nodes_index, y_label].str.split(delimiter)
+    y_labels = y_labels.map(
+        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
+
+    return y_labels
+
+
+def get_label_min_count_filter(annotations, node_list, y_label, min_count, delimiter="|"):
+    label_counts = {}
+    for items in annotations.loc[node_list, y_label].str.split(delimiter):
+        if type(items) != list: continue
+        for item in items:
+            label_counts[item] = label_counts.setdefault(item, 0) + 1
+    label_counts = pd.Series(label_counts)
+    labels_filter = label_counts[label_counts < min_count].index
+    return labels_filter
 
 
 class AttributedNetwork(Network):
@@ -79,7 +105,7 @@ class AttributedNetwork(Network):
                 feature_transformers[label] = preprocessing.MultiLabelBinarizer()
                 features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
                 if min_count:
-                    labels_filter = get_labels_filter(annotation, features.index, label, min_count=min_count)
+                    labels_filter = get_label_min_count_filter(annotation, features.index, label, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 feature_transformers[label].fit(features)
 
@@ -167,5 +193,4 @@ network if the similarity measures passes the threshold
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
         return annotation_affinities_df
-
 

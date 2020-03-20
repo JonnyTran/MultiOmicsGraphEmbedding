@@ -5,39 +5,9 @@ from collections import OrderedDict
 
 import networkx as nx
 import numpy as np
-import pandas as pd
 import scipy.sparse as sps
 from sklearn.preprocessing import MultiLabelBinarizer
 from skmultilearn.model_selection import IterativeStratification
-
-from moge.generator.sequences import SEQUENCE_COL
-
-
-def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
-    if dropna:
-        nodes_index = annotations[[SEQUENCE_COL] + y_label].dropna().index
-    else:
-        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
-
-    labels_filter = get_labels_filter(annotations, nodes_index, y_label, min_count, delimiter)
-    print("labels_filtered:", len(labels_filter))
-
-    y_labels = annotations.loc[nodes_index, y_label].str.split(delimiter)
-    y_labels = y_labels.map(
-        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
-
-    return y_labels, labels_filter
-
-
-def get_labels_filter(annotations, node_list, y_label, min_count, delimiter="|"):
-    label_counts = {}
-    for items in annotations.loc[node_list, y_label].str.split(delimiter):
-        if type(items) != list: continue
-        for item in items:
-            label_counts[item] = label_counts.setdefault(item, 0) + 1
-    label_counts = pd.Series(label_counts)
-    labels_filter = label_counts[label_counts < min_count].index
-    return labels_filter
 
 
 def stratify_train_test(y_label, n_splits=10, seed=42):

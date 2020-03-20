@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 from openomics.utils.df import concat_uniques
 
-from moge.network.attributed import AttributedNetwork, MODALITY_COL
-from moge.network.train_test_split import TrainTestSplit, filter_y_multilabel, stratify_train_test, \
+from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
+from moge.network.train_test_split import TrainTestSplit, stratify_train_test, \
     split_network_by_nodes
 
 
@@ -130,8 +130,8 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
     def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
                          dropna=False, seed=42, verbose=False):
-        y_label, _ = filter_y_multilabel(annotations=self.all_annotations, y_label=stratify_label, min_count=n_splits,
-                                         dropna=dropna, delimiter=self.delimiter)
+        y_label = filter_y_multilabel(annotations=self.all_annotations, y_label=stratify_label, min_count=n_splits,
+                                      dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
             y_omic = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
             y_label = y_label + y_omic
