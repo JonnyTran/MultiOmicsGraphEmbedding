@@ -61,7 +61,7 @@ def graph_viz(g: nx.Graph,
 
 
 def graph_viz3d(g: nx.Graph,
-                nodelist: list, node_symbol=None, node_color=None,
+                nodelist: list, node_symbol=None, node_color=None, node_text=None,
                 edge_label: str = None, max_edges=10000,
                 title=None, width=1000, height=800,
                 pos=None, showlegend=True, express_mode=True, **kwargs):
@@ -80,13 +80,14 @@ def graph_viz3d(g: nx.Graph,
                             hover_name=nodelist,
                             symbol=node_symbol if node_symbol is not None else None,
                             color=node_color if node_color is not None else None,
+                            text=node_text,
                             color_continuous_scale='HSV',
                             **kwargs)
     else:
         fig = go.Figure()
         fig.add_scatter3d(x=node_x, y=node_y, z=node_z,
                           mode='markers',
-                          text=nodelist,
+                          text=node_text,
                           marker=dict(color=node_color, size=10), **kwargs)
 
     # Edges data
