@@ -86,7 +86,8 @@ def graph_viz3d(g: nx.Graph,
         fig = go.Figure()
         fig.add_scatter3d(x=node_x, y=node_y, z=node_z,
                           mode='markers',
-                          marker=dict(color=node_color, name=nodelist, size=10), **kwargs)
+                          text=nodelist,
+                          marker=dict(color=node_color, size=10), **kwargs)
 
     # Edges data
     edges = list(g.subgraph(nodelist).edges(data=True if edge_label else False))
