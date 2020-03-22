@@ -7,18 +7,17 @@ from moge.generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
-    def __init__(self, network, sampling=None, compression="log", cycle_sampling=True, n_steps=100, directed=True,
+    def __init__(self, network, sampling=None, compression="log", n_steps=100, directed=True,
                  **kwargs):
         """
 
         Args:
-            compression: {"log", "linear", "sqrt", "sqrt3", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
+            compression: {"log", "linear", "sqrt", "sqrt3", "cycle", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
             n_steps: Number of sampling steps each iteration
             replace: Whether to sample with or without replacement
         """
         self.sampling = sampling
         self.compression = compression
-        self.cycle_sampling = cycle_sampling
         self.n_steps = n_steps
         self.directed = directed
 
@@ -90,7 +89,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         raise NotImplementedError
 
     def sample_node_by_freq(self, batch_size):
-        if self.cycle_sampling:
+        if self.compression == "cycle":
             return next(self.generate_random_node_cycle(batch_size))
         else:
             sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
