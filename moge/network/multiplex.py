@@ -59,17 +59,17 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
     def process_feature_tranformer(self, delimiter="\||;", min_count=0):
         self.delimiter = delimiter
+        if not hasattr(self, "all_annotations"):
+            annotations_list = []
 
-        annotations_list = []
+            for modality in self.modalities:
+                annotation = self.multiomics[modality].get_annotations()
+                annotation["omic"] = modality
+                annotations_list.append(annotation)
 
-        for modality in self.modalities:
-            annotation = self.multiomics[modality].get_annotations()
-            annotation["omic"] = modality
-            annotations_list.append(annotation)
-
-        self.all_annotations = pd.concat(annotations_list, join="inner", copy=True)
-        self.all_annotations = self.all_annotations.groupby(self.all_annotations.index).agg(
-            {k: concat_uniques for k in self.all_annotations.columns})
+            self.all_annotations = pd.concat(annotations_list, join="inner", copy=True)
+            self.all_annotations = self.all_annotations.groupby(self.all_annotations.index).agg(
+                {k: concat_uniques for k in self.all_annotations.columns})
 
         print("Annotation columns:", self.all_annotations.columns.tolist())
         self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
