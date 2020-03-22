@@ -28,9 +28,9 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
 
             self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
 
-        self.process_sampling_table(network)
+        self.process_normalized_node_degree(network)
 
-    def process_sampling_table(self, network):
+    def process_normalized_node_degree(self, network):
         # graph = nx.compose(network.G, network.G_u)
         # self.edge_dict = {}
         # self.edge_counts_dict = {}
@@ -42,8 +42,8 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
 
         self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
                                   self.node_list]
-        self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
-                                                                  compression=self.compression)
+        self.node_sampling_freq = self.normalize_node_degrees(self.node_degrees_list,
+                                                              compression=self.compression)
         print("# of nodes to sample from (non-zero degree):",
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)
@@ -55,7 +55,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         """
         return [self.node_list[id] for id in self.node_sampling_freq.nonzero()[0]]
 
-    def compute_node_sampling_freq(self, node_degrees, compression):
+    def normalize_node_degrees(self, node_degrees, compression):
         if compression == "sqrt":
             compression_func = np.sqrt
         elif compression == "sqrt3":
@@ -97,8 +97,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
             return sampled_nodes
 
     def generate_random_node_cycle(self, batch_size):
-        random_node_list = np.random.choice(self.node_list, size=self.node_list, replace=False,
-                                            p=self.node_sampling_freq)
+        random_node_list = np.random.choice(self.node_list, size=self.node_list, replace=False)
         while True:
             if len(random_node_list) <= batch_size:
                 yield random_node_list[:batch_size]

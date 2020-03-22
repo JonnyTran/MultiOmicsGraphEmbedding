@@ -44,7 +44,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                (tf.TensorShape([self.batch_size, None]),  # y
                 tf.TensorShape((self.batch_size)))  # idx_weights
 
-    def process_sampling_table(self, network):
+    def process_normalized_node_degree(self, network):
         self.node_degrees = pd.Series(0, index=self.node_list)
         for modality, network_layer in network.networks.items():
             layer_node_degrees = pd.Series(dict(network_layer.degree(self.node_list)))
@@ -56,8 +56,8 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
                                   self.node_list]
-        self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
-                                                                  compression=self.compression)
+        self.node_sampling_freq = self.normalize_node_degrees(self.node_degrees_list,
+                                                              compression=self.compression)
         print("# of nodes to sample from (non-zero degree):",
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)

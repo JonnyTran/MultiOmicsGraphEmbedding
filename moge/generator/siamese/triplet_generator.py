@@ -101,7 +101,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
                                                      padding=padding, truncating=truncating,
                                                      sequence_to_matrix=sequence_to_matrix, tokenizer=tokenizer)
 
-    def process_sampling_table(self, network):
+    def process_normalized_node_degree(self, network):
         graph = nx.compose(network.G, network.G_u)
         self.node_degrees = dict(zip(self.node_list, [0] * len(self.node_list)))
 
@@ -110,8 +110,8 @@ class OnlineTripletGenerator(SampledDataGenerator):
             self.node_degrees[node] = len(edgelist_bunch)
 
         self.node_degrees_list = [self.node_degrees[node] for node in self.node_list]
-        self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
-                                                                  compression=self.compression)
+        self.node_sampling_freq = self.normalize_node_degrees(self.node_degrees_list,
+                                                              compression=self.compression)
         print("# of nodes to sample from (non-zero degree):",
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
 
@@ -163,8 +163,8 @@ class OnlineTripletGenerator(SampledDataGenerator):
                 node_degrees = [degree if (id not in pos_nodes and id != idx) else 0 for id, degree in
                                 enumerate(node_degrees_list)]  # Prevent accidental candidate sampling
                 sample_neg_indices = np.random.choice(range(len(sampled_nodes)), node_neg_sample_count, replace=False,
-                                                      p=self.compute_node_sampling_freq(node_degrees,
-                                                                                        compression="linear"))
+                                                      p=self.normalize_node_degrees(node_degrees,
+                                                                                    compression="linear"))
                 sampled_adj[idx, sample_neg_indices] = EPSILON
         assert sampled_adj.count_nonzero() > pos_adj.count_nonzero(), "Did not add any sampled negative edges {} > {}".format(
             sampled_adj.count_nonzero(),
