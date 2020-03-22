@@ -7,16 +7,18 @@ from moge.generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
-    def __init__(self, network, sampling=None, compression_func="log", n_steps=100, directed=True, **kwargs):
+    def __init__(self, network, sampling=None, compression="log", cycle_sampling=True, n_steps=100, directed=True,
+                 **kwargs):
         """
 
         Args:
-            compression_func: {"log", "linear", "sqrt", "sqrt3", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
+            compression: {"log", "linear", "sqrt", "sqrt3", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
             n_steps: Number of sampling steps each iteration
             replace: Whether to sample with or without replacement
         """
-        self.compression_func = compression_func
         self.sampling = sampling
+        self.compression = compression
+        self.cycle_sampling = cycle_sampling
         self.n_steps = n_steps
         self.directed = directed
 
@@ -42,7 +44,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
                                   self.node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
-                                                                  compression=self.compression_func)
+                                                                  compression=self.compression)
         print("# of nodes to sample from (non-zero degree):",
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)
@@ -88,6 +90,19 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         raise NotImplementedError
 
     def sample_node_by_freq(self, batch_size):
-        sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
-                                         p=self.node_sampling_freq)
-        return sampled_nodes
+        if self.cycle_sampling:
+            return next(self.generate_random_node_cycle(batch_size))
+        else:
+            sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
+                                             p=self.node_sampling_freq)
+            return sampled_nodes
+
+    def generate_random_node_cycle(self, batch_size):
+        random_node_list = []
+        while True:
+            if len(random_node_list) <= batch_size:
+                yield random_node_list[:batch_size]
+                random_node_list = random_node_list[batch_size:]
+            else:
+                random_node_list = np.random.choice(self.node_list, size=self.node_list, replace=False,
+                                                    p=self.node_sampling_freq)

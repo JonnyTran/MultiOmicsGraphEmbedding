@@ -11,13 +11,13 @@ from .subgraph_generator import SubgraphGenerator
 
 class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
     def __init__(self, network: MultiplexAttributedNetwork, variables: list = [], targets: list = None,
-                 batch_size=500, sampling='neighborhood', compression_func="log", n_steps=100,
+                 batch_size=500, sampling='neighborhood', compression="log", n_steps=100,
                  maxlen=1400, padding='post', truncating='post', seq2array=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
 
         super(MultiplexGenerator, self).__init__(network=network, variables=variables, targets=targets,
                                                  batch_size=batch_size,
-                                                 sampling=sampling, compression_func=compression_func, n_steps=n_steps,
+                                                 sampling=sampling, compression=compression, n_steps=n_steps,
                                                  directed=None, maxlen=maxlen,
                                                  padding=padding, truncating=truncating,
                                                  seq2array=seq2array, tokenizer=tokenizer,
@@ -57,7 +57,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
                                   self.node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
-                                                                  compression=self.compression_func)
+                                                                  compression=self.compression)
         print("# of nodes to sample from (non-zero degree):",
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)

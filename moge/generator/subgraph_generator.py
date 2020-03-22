@@ -11,7 +11,7 @@ from .sampled_generator import SampledDataGenerator
 
 class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
-                 sampling='neighborhood', compression_func="log", n_steps=100, directed=True,
+                 sampling='neighborhood', compression="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', seq2array=False, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
         """
@@ -22,7 +22,7 @@ class SubgraphGenerator(SampledDataGenerator):
         :param targets (list): list of annotation column names to prediction target
         :param batch_size: number of nodes to sample each batch
         :param sampling: {'node', 'neighborhood', 'all'}. If 'all', overrides batch_size and returns the
-        :param compression_func: {"log", "sqrt", "linear"}
+        :param compression: {"log", "sqrt", "linear"}
         :param n_steps:
         :param directed:
         :param maxlen:
@@ -31,7 +31,7 @@ class SubgraphGenerator(SampledDataGenerator):
         """
         super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
                                                 batch_size=batch_size,
-                                                sampling=sampling, compression_func=compression_func,
+                                                sampling=sampling, compression=compression,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
                                                 seq2array=seq2array,

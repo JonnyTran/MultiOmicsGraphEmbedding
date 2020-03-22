@@ -17,7 +17,7 @@ def sparse_matrix_to_sparse_tensor(X):
 class SampledTripletDataGenerator(SampledDataGenerator):
     def __init__(self, network: HeterogeneousNetwork, variables=None, targets=None, weighted=False, batch_size=1,
                  replace=True, seed=0, verbose=True, **kwargs):
-        super(SampledTripletDataGenerator, self).__init__(network=network, compression_func=compression_func,
+        super(SampledTripletDataGenerator, self).__init__(network=network, compression=compression_func,
                                                           n_steps=n_steps, directed=directed_proba, weighted=weighted,
                                                           batch_size=batch_size, replace=replace, seed=seed,
                                                           verbose=verbose, maxlen=maxlen, padding=padding,
@@ -111,7 +111,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
 
         self.node_degrees_list = [self.node_degrees[node] for node in self.node_list]
         self.node_sampling_freq = self.compute_node_sampling_freq(self.node_degrees_list,
-                                                                  compression=self.compression_func)
+                                                                  compression=self.compression)
         print("# of nodes to sample from (non-zero degree):",
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
 
