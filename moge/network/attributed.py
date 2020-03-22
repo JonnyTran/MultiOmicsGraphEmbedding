@@ -20,7 +20,7 @@ def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False,
         nodes_index = annotations[[SEQUENCE_COL]].dropna().index
 
     labels_filter = get_label_min_count_filter(annotations, nodes_index, y_label, min_count, delimiter)
-    print("label {} filtered:".format(y_label, len(labels_filter)))
+    print("label {} filtered: {}".format(y_label, len(labels_filter)))
 
     y_labels = annotations.loc[nodes_index, y_label].str.split(delimiter)
     y_labels = y_labels.map(

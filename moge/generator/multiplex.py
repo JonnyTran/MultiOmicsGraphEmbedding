@@ -62,7 +62,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)
 
-    def neighborhood_sampling(self, batch_size):
+    def bfs_traversal(self, batch_size):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:

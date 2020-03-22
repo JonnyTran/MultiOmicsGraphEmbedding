@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from itertools import islice
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -58,8 +59,10 @@ class SubgraphGenerator(SampledDataGenerator):
     def sample_node_list(self, batch_size):
         if self.sampling == "node":
             return self.node_sampling(batch_size)
-        elif self.sampling == "neighborhood":
-            return self.neighborhood_sampling(batch_size)
+        elif self.sampling == "neighborhood" or self.sampling == "bfs":
+            return self.bfs_traversal(batch_size)
+        elif self.sampling == "dfs":
+            return self.dfs_traversal(batch_size)
         elif self.sampling == "all":
             return self.network.node_list
         elif self.sampling == 'circle':
@@ -70,20 +73,43 @@ class SubgraphGenerator(SampledDataGenerator):
     def node_circle_sampling(self):
         yield [node for node in islice(self.nodes_circle, self.batch_size)]
 
+        yield [node for node in islice(self.nodes_circle, self.batch_size)]
+
     def node_sampling(self, batch_size):
         sampled_nodes = self.sample_node_by_freq(batch_size)
+
         while len(sampled_nodes) < batch_size:
             add_nodes = np.random.choice(self.node_list, size=batch_size - len(sampled_nodes), replace=False,
                                          p=self.node_sampling_freq).tolist()
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
         return sampled_nodes
 
-    def neighborhood_sampling(self, batch_size):
+    def bfs_traversal(self, batch_size):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:
             seed_node = self.sample_node_by_freq(1)
-            sampled_nodes = sampled_nodes + list(seed_node) + list(self.network.G.neighbors(seed_node[0]))
+            successor_nodes = [node for source, successors in
+                               islice(nx.traversal.bfs_successors(self.network.G if self.directed else self.network.G_u,
+                                                                  source=seed_node[0]), batch_size) for node in
+                               successors]
+
+            sampled_nodes.append(seed_node + successor_nodes)
+            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+
+        if len(sampled_nodes) > batch_size:
+            sampled_nodes = sampled_nodes[:batch_size]
+        return sampled_nodes
+
+    def dfs_traversal(self, batch_size):
+        sampled_nodes = []
+
+        while len(sampled_nodes) < batch_size:
+            seed_node = self.sample_node_by_freq(1)
+            successor_nodes = list(
+                islice(nx.traversal.dfs_successors(self.network.G if self.directed else self.network.G_u,
+                                                   source=seed_node[0]), batch_size))
+            sampled_nodes.append(seed_node + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:
