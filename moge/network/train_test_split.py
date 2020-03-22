@@ -88,6 +88,7 @@ class TrainTestSplit():
     def get_train_generator(self, generator, **kwargs):
         if not hasattr(self, "training"):
             raise Exception("Must run split_train_test on the network first.")
+
         kwargs['network'] = self.training
         kwargs['node_list'] = self.training.node_list
 
@@ -98,6 +99,7 @@ class TrainTestSplit():
     def get_test_generator(self, generator, **kwargs):
         if not hasattr(self, "testing"):
             raise Exception("Must run split_train_test on the network first.")
+
         kwargs['network'] = self.testing
         kwargs['node_list'] = self.testing.node_list
 
