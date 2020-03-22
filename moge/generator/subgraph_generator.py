@@ -51,12 +51,12 @@ class SubgraphGenerator(SampledDataGenerator):
                 tf.TensorShape((self.batch_size)))  # idx_weights
 
     def __getitem__(self, item=None):
-        sampled_nodes = self.sample_node_list(batch_size=self.batch_size)
+        sampled_nodes = self.traverse_network(batch_size=self.batch_size)
         X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
 
         return X, y, idx_weights
 
-    def sample_node_list(self, batch_size):
+    def traverse_network(self, batch_size):
         if self.sampling == "node":
             return self.node_sampling(batch_size)
         elif self.sampling == "neighborhood" or self.sampling == "bfs":

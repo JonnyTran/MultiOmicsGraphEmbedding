@@ -44,8 +44,8 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
                                   self.node_list]
         self.node_sampling_freq = self.normalize_node_degrees(self.node_degrees_list,
                                                               compression=self.compression)
-        print("# of nodes to sample from (non-zero degree):",
-              np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
+        print("# of non-zero degree nodes: {}".format(
+            np.count_nonzero(self.node_sampling_freq))) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)
 
     def get_nonzero_nodelist(self):
@@ -74,6 +74,11 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         return self.n_steps
 
     def __getitem__(self, item):
+        """
+        Returns tuple of X, y and sample_weights (optional) as feed inputs to a Keras Model.
+        :param item: Not used.
+        :return: X, y, sample_weights(optional)
+        """
         sampled_nodes = np.random.choice(self.node_list, size=self.batch_size, replace=False,
                                          p=self.node_sampling_freq)
 
@@ -85,10 +90,21 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         raise NotImplementedError
 
-    def sample_node_list(self, batch_size):
+    def traverse_network(self, batch_size):
+        """
+        Sample a traversal on the network.
+        :param batch_size (int):
+        :return: list of nodes in the traversal.
+        """
         raise NotImplementedError
 
     def sample_node_by_freq(self, batch_size):
+        """
+        Samples a list of nodes of size `batch_size`, with prior probabilities from `self.node_sampling_freq`.
+
+        :param batch_size (int):
+        :return: list of nodes names
+        """
         if self.compression == "cycle":
             return next(self.generate_random_node_cycle(batch_size))
         else:
