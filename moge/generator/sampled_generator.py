@@ -99,7 +99,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
     def generate_random_node_cycle(self, batch_size):
         random_node_list = np.random.choice(self.node_list, size=len(self.node_list), replace=False)
         while True:
-            if len(random_node_list) <= batch_size:
+            if len(random_node_list) >= batch_size:
                 yield random_node_list[:batch_size]
                 random_node_list = random_node_list[batch_size:]
             else:
