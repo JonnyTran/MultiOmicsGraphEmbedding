@@ -73,8 +73,6 @@ class SubgraphGenerator(SampledDataGenerator):
     def node_circle_sampling(self):
         yield [node for node in islice(self.nodes_circle, self.batch_size)]
 
-        yield [node for node in islice(self.nodes_circle, self.batch_size)]
-
     def node_sampling(self, batch_size):
         sampled_nodes = self.sample_node_by_freq(batch_size)
 
