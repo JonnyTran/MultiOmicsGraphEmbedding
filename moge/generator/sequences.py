@@ -8,7 +8,7 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 SEQUENCE_COL = "Transcript sequence"
 
 class SequenceTokenizer():
-    def __init__(self, padding='post', maxlen=2000, truncating='post', seq2array=None, tokenizer=None) -> None:
+    def __init__(self, padding='post', maxlen=2000, truncating='post', agg_mode=None, tokenizer=None) -> None:
         """
         Handles text tokenizing for DNA/RNA/Protein sequences.
 
@@ -16,13 +16,14 @@ class SequenceTokenizer():
             padding: ['post', 'pre', None]
             maxlen (int): pad all RNA sequence strings to this length
             truncating: ['post', 'pre', 'random']. If 'random', then 'post' or 'pre' truncating is chosen randomly for each sequence at each iteration
-            seq2array: a dict(<word in sequence>: <integer code>)
+            agg_mode: one of {"count", "tfidf", "binary", "freq"}, default None. If not None, instead of returning sequence
+                encoding, get_sequence_encoding will return an aggregated numpy vector.
             tokenizer: pass an existing tokenizer instead of creating one
         """
         self.maxlen = maxlen
         self.padding = padding
         self.truncating = truncating
-        self.seq2array = seq2array
+        self.agg_mode = agg_mode
 
         if tokenizer is not None:
             self.tokenizer = tokenizer
@@ -46,8 +47,7 @@ class SequenceTokenizer():
         seqs = annotations.loc[node_list, SEQUENCE_COL]
 
         if variable_length:
-            padded_encoded_seqs = [self.encode_texts([annotations.loc[node, SEQUENCE_COL]], minlen=minlen) for node in
-                                   node_list]
+            padded_encoded_seqs = self.encode_texts(seqs, variable_length=True)
             return padded_encoded_seqs
 
         try:
@@ -58,7 +58,7 @@ class SequenceTokenizer():
 
         return padded_encoded_seqs
 
-    def encode_texts(self, texts, modality: str = None, maxlen=None, minlen=None):
+    def encode_texts(self, texts, maxlen=None, minlen=None, variable_length=False):
         """
         Returns a one-hot-vector for a string of RNA transcript sequence
         :param texts: [str | list(str)]
@@ -67,13 +67,12 @@ class SequenceTokenizer():
         :return:
         """
         # integer encode
-        if modality is None:
-            tokenizer = self.tokenizer
-        else:
-            tokenizer = self.tokenizer[modality]
+        encoded = self.tokenizer.texts_to_sequences(texts)
 
-        encoded = tokenizer.texts_to_sequences(texts)
+        if variable_length:
+            return encoded
 
+        # Pad sequences to the same length
         batch_maxlen = max([len(x) for x in encoded])
         if batch_maxlen < self.maxlen:
             maxlen = batch_maxlen
@@ -87,19 +86,18 @@ class SequenceTokenizer():
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
                                 dtype="int8")
 
-        if not self.seq2array:
-            return encoded
+        if self.agg_mode is not None:
+            return self.tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode),
         else:
-            encoded_expanded = np.expand_dims(encoded, axis=-1)
-            return np.array([tokenizer.sequences_to_matrix(s) for s in encoded_expanded])
+            return encoded
 
 
 class MultiSequenceTokenizer(SequenceTokenizer):
-    def __init__(self, padding='post', maxlen=2000, truncating='post', seq2array=None, tokenizer=None) -> None:
+    def __init__(self, padding='post', maxlen=2000, truncating='post', agg_mode=None, tokenizer=None) -> None:
         self.padding = padding
         self.maxlen = maxlen
         self.truncating = truncating
-        self.seq2array = seq2array
+        self.seq2array = agg_mode
 
         assert isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series)
 

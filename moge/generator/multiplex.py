@@ -14,7 +14,7 @@ from .subgraph_generator import SubgraphGenerator
 class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
     def __init__(self, network: MultiplexAttributedNetwork, variables: list = [], targets: list = None,
                  batch_size=500, sampling='neighborhood', compression="log", n_steps=100,
-                 maxlen=1400, padding='post', truncating='post', seq2array=False, tokenizer=None,
+                 maxlen=1400, padding='post', truncating='post', agg_mode=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
 
         super(MultiplexGenerator, self).__init__(network=network, variables=variables, targets=targets,
@@ -22,7 +22,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                                                  sampling=sampling, compression=compression, n_steps=n_steps,
                                                  directed=None, maxlen=maxlen,
                                                  padding=padding, truncating=truncating,
-                                                 seq2array=seq2array, tokenizer=tokenizer,
+                                                 agg_mode=agg_mode, tokenizer=tokenizer,
                                                  replace=replace, seed=seed, verbose=verbose,
                                                  **kwargs)
 
