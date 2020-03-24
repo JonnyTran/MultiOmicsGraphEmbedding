@@ -132,25 +132,11 @@ class SubgraphGenerator(SampledDataGenerator):
                 X[variable] = self.get_expressions(sampled_nodes, modality="Protein")
 
             else:
-                labels_vector = self.annotations.loc[sampled_nodes, variable]
-                if labels_vector.dtypes == np.object:
-                    if labels_vector.str.contains("|", regex=False).any():
-                        labels_vector = labels_vector.str.split("|")
-                        labels_vector = labels_vector.map(lambda x: x if isinstance(x, list) else [])
-                else:
-                    labels_vector = labels_vector.to_numpy().reshape(-1, 1)
+                labels_vector = self.process_vector(self.annotations.loc[sampled_nodes, variable])
                 X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
 
         # Labels
-        targets_vector = self.annotations.loc[sampled_nodes, self.targets[0]]
-        if targets_vector.dtypes == np.object:
-            if targets_vector.str.contains("|", regex=False).any():
-                targets_vector = targets_vector.str.split("|")
-                targets_vector = targets_vector.map(lambda x: x if type(x) == list else [])
-            elif all(targets_vector.isnull()):
-                targets_vector = targets_vector.to_numpy().reshape(-1, 1)
-        else:
-            targets_vector = targets_vector.to_numpy().reshape(-1, 1)
+        targets_vector = self.process_vector(self.annotations.loc[sampled_nodes, self.targets[0]])
 
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
