@@ -122,11 +122,8 @@ class SubgraphGenerator(SampledDataGenerator):
         X = {}
         X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
                                                       variable_length=variable_length or self.variable_length)
-        # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
                                                             node_list=sampled_nodes).toarray()
-        X["subnetwork"] = X["subnetwork"] + np.eye(X["subnetwork"].shape[0])  # Add self-loops
-
         # Features
         for variable in self.variables:
             if "expression" == variable:

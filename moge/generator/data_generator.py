@@ -95,7 +95,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
     def info(self):
         X, y, idx_train = self.__getitem__(0)
         print({k: v.shape if not isinstance(v, list) else (len(v), len(v[0])) for k, v in X.items()},
-              {"y": y.shape})
+              {"y_train": y.shape}, idx_train.index[:5])
 
     def load_data(self, return_sequence_data=False, batch_size=None):
         """
