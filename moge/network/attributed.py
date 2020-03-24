@@ -114,7 +114,7 @@ class AttributedNetwork(Network):
                                                                                                             delimiter)) if verbose else None
                     features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
                 else:
-                    print("INFO: Label {} (of lists) is transformed by MultiLabelBinarizer".format(
+                    print("INFO: Label {} (of str) is transformed by MultiLabelBinarizer".format(
                         label)) if verbose else None
                     features = annotation.loc[node_list, label].dropna(axis=0)
 
