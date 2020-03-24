@@ -111,7 +111,7 @@ class AttributedNetwork(Network):
                 feature_transformers[label] = preprocessing.MultiLabelBinarizer()
                 features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
                 if min_count:
-                    labels_filter = get_label_min_count_filter(annotation, features.index, label, min_count=min_count)
+                    labels_filter = get_label_min_count_filter(features, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 feature_transformers[label].fit(features)
 
