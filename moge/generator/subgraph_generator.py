@@ -13,6 +13,7 @@ class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
                  sampling='neighborhood', compression="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', agg_mode=None, tokenizer=None, replace=True,
+                 variable_length=False,
                  seed=0, verbose=True, **kwargs):
         """
         Samples a subnetwork batch along with variables for classification tasks.
@@ -29,6 +30,8 @@ class SubgraphGenerator(SampledDataGenerator):
         :param seed:
         :param verbose:
         """
+        self.variable_length = variable_length
+
         super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
                                                 batch_size=batch_size,
                                                 sampling=sampling, compression=compression,
@@ -117,7 +120,8 @@ class SubgraphGenerator(SampledDataGenerator):
     def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
-        X["input_seqs"] = self.get_sequence_encodings(sampled_nodes, variable_length=variable_length)
+        X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
+                                                      variable_length=variable_length or self.variable_length)
         # X["subnetwork"] = self.network.get_graph_laplacian(edge_types=["d"], node_list=sampled_nodes)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
                                                             node_list=sampled_nodes).toarray()

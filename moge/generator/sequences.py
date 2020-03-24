@@ -46,15 +46,8 @@ class SequenceTokenizer():
         annotations = self.annotations
         seqs = annotations.loc[node_list, SEQUENCE_COL]
 
-        if variable_length:
-            padded_encoded_seqs = self.encode_texts(seqs, variable_length=True)
-            return padded_encoded_seqs
-
-        try:
-            padded_encoded_seqs = self.encode_texts(seqs, maxlen=self.maxlen, minlen=minlen)
-        except Exception as e:
-            print("seqs", seqs.shape, seqs.notnull().sum())
-            raise e
+        padded_encoded_seqs = self.encode_texts(seqs, maxlen=self.maxlen, minlen=minlen,
+                                                variable_length=variable_length)
 
         return padded_encoded_seqs
 
@@ -97,7 +90,7 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         self.padding = padding
         self.maxlen = maxlen
         self.truncating = truncating
-        self.seq2array = agg_mode
+        self.agg_mode = agg_mode
 
         assert isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series)
 
@@ -124,14 +117,9 @@ class MultiSequenceTokenizer(SequenceTokenizer):
 
         seqs = self.fetch_sequences(annotations, node_list)
 
-        if variable_length:
-            padded_encoded_seqs = [
-                self.encode_texts([annotations.loc[node, SEQUENCE_COL]], minlen=minlen, modality=modality) for node in
-                node_list]
-            return padded_encoded_seqs
-
         try:
-            padded_encoded_seqs = self.encode_texts(seqs, modality=modality, maxlen=self.maxlen, minlen=minlen)
+            padded_encoded_seqs = self.encode_texts(seqs, modality=modality, maxlen=self.maxlen, minlen=minlen,
+                                                    variable_length=variable_length)
         except Exception as e:
             print("seqs", seqs.shape, seqs.notnull().sum())
             raise e
@@ -147,7 +135,7 @@ class MultiSequenceTokenizer(SequenceTokenizer):
 
         return seqs
 
-    def encode_texts(self, texts, modality, maxlen=None, minlen=None):
+    def encode_texts(self, texts, modality, maxlen=None, minlen=None, variable_length=False):
         """
         Returns a one-hot-vector for a string of RNA transcript sequence
         :param texts: [str | list(str)]
@@ -160,6 +148,10 @@ class MultiSequenceTokenizer(SequenceTokenizer):
 
         encoded = tokenizer.texts_to_sequences(texts)
 
+        if variable_length:
+            return encoded
+
+        # Pad sequences to the same length
         batch_maxlen = max([len(x) for x in encoded])
         if batch_maxlen < self.maxlen:
             maxlen = batch_maxlen
@@ -173,8 +165,7 @@ class MultiSequenceTokenizer(SequenceTokenizer):
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
                                 dtype="int8")
 
-        if not self.seq2array:
-            return encoded
+        if self.agg_mode:
+            return tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode),
         else:
-            encoded_expanded = np.expand_dims(encoded, axis=-1)
-            return np.array([tokenizer.sequences_to_matrix(s) for s in encoded_expanded])
+            return encoded
