@@ -39,6 +39,9 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
     if isinstance(y_test, pd.DataFrame):
         y_test = y_test.values
 
+    if isinstance(y_score, pd.DataFrame):
+        y_score = y_score.values
+
     fpr, roc_auc, tpr = compute_roc_auc_curve(y_test, y_score, class_indices, sample_weight)
     # Compute macro-average ROC curve and ROC area
 
