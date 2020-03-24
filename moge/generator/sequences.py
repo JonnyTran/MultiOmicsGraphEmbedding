@@ -86,7 +86,7 @@ class SequenceTokenizer():
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
                                 dtype="int8")
 
-        if self.agg_mode is not None:
+        if self.agg_mode:
             return self.tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode),
         else:
             return encoded

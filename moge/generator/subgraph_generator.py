@@ -12,7 +12,7 @@ from .sampled_generator import SampledDataGenerator
 class SubgraphGenerator(SampledDataGenerator):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
                  sampling='neighborhood', compression="log", n_steps=100, directed=True,
-                 maxlen=1400, padding='post', truncating='post', agg_mode=False, tokenizer=None, replace=True,
+                 maxlen=1400, padding='post', truncating='post', agg_mode=None, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
         """
         Samples a subnetwork batch along with variables for classification tasks.
