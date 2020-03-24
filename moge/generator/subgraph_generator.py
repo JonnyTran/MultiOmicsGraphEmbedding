@@ -15,7 +15,7 @@ class SubgraphGenerator(SampledDataGenerator):
                  maxlen=1400, padding='post', truncating='post', agg_mode=False, tokenizer=None, replace=True,
                  seed=0, verbose=True, **kwargs):
         """
-        Samples a batch subnetwork for classification task.
+        Samples a subnetwork batch along with variables for classification tasks.
 
         :param network: a HeterogeneousNetwork object
         :param variables (list): list of annotation column names as features
@@ -34,7 +34,7 @@ class SubgraphGenerator(SampledDataGenerator):
                                                 sampling=sampling, compression=compression,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
-                                                seq2array=agg_mode,
+                                                agg_mode=agg_mode,
                                                 tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
     def get_output_types(self):
