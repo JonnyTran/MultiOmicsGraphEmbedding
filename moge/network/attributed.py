@@ -81,7 +81,7 @@ class AttributedNetwork(Network):
             {k: concat_uniques for k in self.annotations.columns})
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def process_feature_tranformer(self, delimiter="\||;", min_count=0):
+    def process_feature_tranformer(self, delimiter="\||;", min_count=0, verbose=False):
         """
         For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer
         is used to convert a list of labels into a vector.
@@ -89,10 +89,11 @@ class AttributedNetwork(Network):
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
         self.delimiter = delimiter
-        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter, min_count)
+        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter, min_count,
+                                                                 verbose=verbose)
 
     @classmethod
-    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", min_count=0):
+    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", min_count=0, verbose=False):
         """
         :param annotation: a pandas DataFrame
         :param node_list: list of nodes. Indexes the annotation DataFrame
@@ -105,24 +106,32 @@ class AttributedNetwork(Network):
             if label == SEQUENCE_COL:
                 continue
 
-            if annotation[label].dtypes == np.object and annotation[label].str.contains(delimiter, regex=True).any():
-                print(
-                    "INFO: Label {} is split by delim '{}' transformed by MultiLabelBinarizer".format(label, delimiter))
+            if annotation[label].dtypes == np.object:
                 feature_transformers[label] = preprocessing.MultiLabelBinarizer()
-                features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
+
+                if annotation[label].str.contains(delimiter, regex=True).any():
+                    print("INFO: Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(label,
+                                                                                                            delimiter)) if verbose else None
+                    features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
+                else:
+                    print("INFO: Label {} (of lists) is transformed by MultiLabelBinarizer".format(
+                        label)) if verbose else None
+                    features = annotation.loc[node_list, label].dropna(axis=0)
+
                 if min_count:
                     labels_filter = get_label_min_count_filter(features, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 feature_transformers[label].fit(features)
 
             elif annotation[label].dtypes == int or annotation[label].dtypes == float:
-                print("INFO: Label {} is transformed by StandardScaler".format(label))
+                print(
+                    "INFO: Label {} (of int/float) is transformed by StandardScaler".format(label)) if verbose else None
                 feature_transformers[label] = preprocessing.StandardScaler()
                 features = annotation.loc[node_list, label].dropna(axis=0)
                 feature_transformers[label].fit(features.to_numpy().reshape(-1, 1))
 
             else:
-                print("INFO: Label {} is transformed by MultiLabelBinarizer".format(label))
+                print("INFO: Label {} is transformed by MultiLabelBinarizer".format(label)) if verbose else None
                 feature_transformers[label] = preprocessing.MultiLabelBinarizer()
                 features = annotation.loc[node_list, label].dropna(axis=0)
                 feature_transformers[label].fit(features.to_numpy().reshape(-1, 1))
