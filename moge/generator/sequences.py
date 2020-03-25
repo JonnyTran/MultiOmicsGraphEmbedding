@@ -8,7 +8,8 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 SEQUENCE_COL = "Transcript sequence"
 
 class SequenceTokenizer():
-    def __init__(self, padding='post', maxlen=2000, truncating='post', agg_mode=None, tokenizer=None) -> None:
+    def __init__(self, annotations, node_list, padding='post', maxlen=2000, truncating='post', agg_mode=None,
+                 tokenizer=None, verbose=False) -> None:
         """
         Handles text tokenizing for DNA/RNA/Protein sequences.
 
@@ -24,6 +25,9 @@ class SequenceTokenizer():
         self.padding = padding
         self.truncating = truncating
         self.agg_mode = agg_mode
+        self.annotations = annotations
+        self.node_list = node_list
+        self.verbose = verbose
 
         if tokenizer is not None:
             self.tokenizer = tokenizer
