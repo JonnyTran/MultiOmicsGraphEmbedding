@@ -14,7 +14,8 @@ def evaluate_clustering(embedding, annotations, node_label="locus_type", n_clust
     if annotations[node_label].dtypes == np.object and annotations[node_label].str.contains(delim, regex=True).any():
         y_true = annotations.loc[nodelist, node_label].str.split(delim, expand=True)[0]
     else:
-        y_true = annotations.loc[nodelist, node_label].map(lambda x: sorted(x)[-1] if isinstance(x, list) else None)
+        y_true = annotations.loc[nodelist, node_label].map(
+            lambda x: sorted(x)[-1] if isinstance(x, list) and len(x) >= 1 else None)
 
     if n_clusters is None:
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())
