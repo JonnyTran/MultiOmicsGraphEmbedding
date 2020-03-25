@@ -56,7 +56,6 @@ class SubgraphGenerator(SampledDataGenerator):
     def __getitem__(self, item=None):
         sampled_nodes = self.traverse_network(batch_size=self.batch_size)
         X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
-
         return X, y, idx_weights
 
     def traverse_network(self, batch_size):
@@ -142,13 +141,6 @@ class SubgraphGenerator(SampledDataGenerator):
 
         # Get a vector of nonnull indicators
         idx_weights = self.annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
-
-        # Make sparse labels in y
-        # y_df = pd.DataFrame(y, index=sampled_nodes)
-        # y = y_df.apply(lambda x: x.values.nonzero()[0], axis=1)
-
-        # Make a probability distribution
-        # y = (1 / y.sum(axis=1)).reshape(-1, 1) * y
 
         assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights

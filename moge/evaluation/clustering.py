@@ -1,4 +1,5 @@
 import gseapy as gp
+import numpy as np
 import pandas as pd
 from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score, \
     adjusted_mutual_info_score
@@ -10,7 +11,10 @@ def evaluate_clustering(embedding, annotations, node_label="locus_type", n_clust
     nodes_with_label = annotations[annotations[node_label].notna()].index
     nodelist = [node for node in nodelist if node in nodes_with_label]
 
-    y_true = annotations.loc[nodelist, node_label].str.split(delim, expand=True)[0]
+    if annotations[node_label].dtypes == np.object and annotations[node_label].str.contains(delim, regex=True).any():
+        y_true = annotations.loc[nodelist, node_label].str.split(delim, expand=True)[0]
+    else:
+        y_true = annotations.loc[nodelist, node_label]
 
     if n_clusters is None:
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())

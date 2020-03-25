@@ -14,13 +14,16 @@ class GeneratorDataset(tf.data.Dataset):
 
         :param generator: a keras.utils.Sequence generator.
         """
+
         def generate():
             while True:
                 batch_xs, batch_ys, dset_index = generator.__getitem__(0)
                 yield batch_xs, batch_ys, dset_index
 
+        queue = tf.keras.utils.GeneratorEnqueuer(generate, use_multiprocessing=True)
+
         return tf.data.Dataset.from_generator(
-            generate,
+            queue.sequence,
             output_types=generator.get_output_types() if output_types is None else output_types,
             output_shapes=generator.get_output_shapes() if output_shapes is None else output_shapes,
         )
