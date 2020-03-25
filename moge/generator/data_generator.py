@@ -97,6 +97,12 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         print({k: v.shape if not isinstance(v, list) else (len(v), len(v[0])) for k, v in X.items()},
               {"y_train": y.shape}, idx_train.index[:5])
 
+    @classmethod
+    def edges(self, network, data=False):
+        edges_list = pd.DataFrame.from_dict(network.edges(data=data), orient='columns', )
+        edges_list.rename(columns={0: "source", 1: "target"}, inplace=True)
+        return edges_list
+
     def load_data(self, return_sequence_data=False, batch_size=None):
         """
         Returns X, y
