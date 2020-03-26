@@ -24,7 +24,8 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
     except AttributeError as e:
         return e
 
-    assert len(y_pred) == len(y_true)
+    print(len(y_pred), len(y_true))
+    print(y_pred.shape, y_true.shape)
 
     results = {}
     for metric in metrics:
