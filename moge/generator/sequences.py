@@ -68,6 +68,8 @@ class SequenceTokenizer():
 
         if variable_length:
             return encoded
+        elif self.agg_mode:
+            return self.tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode),
 
         # Pad sequences to the same length
         batch_maxlen = max([len(x) for x in encoded])
@@ -83,10 +85,7 @@ class SequenceTokenizer():
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
                                 dtype="int8")
 
-        if self.agg_mode:
-            return self.tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode),
-        else:
-            return encoded
+        return encoded
 
 
 class MultiSequenceTokenizer(SequenceTokenizer):
