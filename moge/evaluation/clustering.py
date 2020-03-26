@@ -9,7 +9,9 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
                         metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True, delim="\||;"):
     if annotations.loc[nodelist, node_label].dtypes == np.object \
             and annotations.loc[nodelist, node_label].str.contains(delim, regex=True).any():
-        y_true = annotations.loc[nodelist, node_label].str.split(delim, expand=True)[0]
+
+        y_true = annotations.loc[nodelist, node_label].str.split(delim, expand=True).map(
+            lambda x: sorted(x)[-1] if x and len(x) >= 1 else None)
     else:
         y_true = annotations.loc[nodelist, node_label].map(
             lambda x: sorted(x)[-1] if x and len(x) >= 1 else None)

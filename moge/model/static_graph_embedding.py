@@ -398,9 +398,11 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         if save_kmeans:
             self.kmeans = kmeans
 
-        if node_list is not None and set(node_list) <= set(self.node_list) and node_list != self.node_list:
+        if node_list is not None and set(node_list) <= set(self.node_list):
             idx = [self.node_list.index(node) for node in node_list]
             y_pred = np.array(y_pred)[idx]
+        else:
+            assert node_list == self.node_list
 
         return y_pred
 
