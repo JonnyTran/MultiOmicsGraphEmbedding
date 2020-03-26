@@ -69,7 +69,7 @@ class SequenceTokenizer():
         if variable_length:
             return encoded
         elif self.agg_mode:
-            return self.tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode),
+            return self.tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode)
 
         # Pad sequences to the same length
         batch_maxlen = max([len(x) for x in encoded])
