@@ -15,7 +15,7 @@ EPSILON = 1e-16
 
 def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
     if dropna:
-        nodes_index = annotations[[SEQUENCE_COL] + y_label].dropna().index
+        nodes_index = annotations[[SEQUENCE_COL] + [y_label]].dropna().index
     else:
         nodes_index = annotations[[SEQUENCE_COL]].dropna().index
 
