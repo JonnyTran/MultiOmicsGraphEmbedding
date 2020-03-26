@@ -7,10 +7,8 @@ from sklearn.metrics import homogeneity_score, completeness_score, normalized_mu
 
 def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters=None,
                         metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True, delim="\||;"):
-    nodes_with_label = annotations[annotations[node_label].notnull()].index
-    nodelist = [node for node in nodelist if node in nodes_with_label]
-
-    if annotations[node_label].dtypes == np.object and annotations[node_label].str.contains(delim, regex=True).any():
+    if annotations.loc[nodelist, node_label].dtypes == np.object \
+            and annotations.loc[nodelist, node_label].str.contains(delim, regex=True).any():
         y_true = annotations.loc[nodelist, node_label].str.split(delim, expand=True)[0]
     else:
         y_true = annotations.loc[nodelist, node_label].map(
