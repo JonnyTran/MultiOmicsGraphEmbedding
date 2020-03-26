@@ -89,11 +89,14 @@ class SequenceTokenizer():
 
 
 class MultiSequenceTokenizer(SequenceTokenizer):
-    def __init__(self, padding='post', maxlen=2000, truncating='post', agg_mode=None, tokenizer=None) -> None:
+    def __init__(self, annotations, node_list, padding='post', maxlen=2000, truncating='post', agg_mode=None,
+                 tokenizer=None) -> None:
         self.padding = padding
         self.maxlen = maxlen
         self.truncating = truncating
         self.agg_mode = agg_mode
+        self.annotations = annotations
+        self.node_list = node_list
 
         assert isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series)
 
@@ -153,6 +156,8 @@ class MultiSequenceTokenizer(SequenceTokenizer):
 
         if variable_length:
             return encoded
+        elif self.agg_mode:
+            return tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode)
 
         # Pad sequences to the same length
         batch_maxlen = max([len(x) for x in encoded])
@@ -168,7 +173,4 @@ class MultiSequenceTokenizer(SequenceTokenizer):
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
                                 dtype="int8")
 
-        if self.agg_mode:
-            return tokenizer.sequences_to_matrix(encoded, mode=self.agg_mode),
-        else:
-            return encoded
+        return encoded
