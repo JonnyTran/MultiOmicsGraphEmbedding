@@ -5,10 +5,9 @@ from sklearn.metrics import homogeneity_score, completeness_score, normalized_mu
     adjusted_mutual_info_score
 
 
-def evaluate_clustering(embedding, annotations, node_label="locus_type", n_clusters=None,
+def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters=None,
                         metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True, delim="\||;"):
-    nodelist = embedding.node_list
-    nodes_with_label = annotations[annotations[node_label].notna()].index
+    nodes_with_label = annotations[annotations[node_label].notnull()].index
     nodelist = [node for node in nodelist if node in nodes_with_label]
 
     if annotations[node_label].dtypes == np.object and annotations[node_label].str.contains(delim, regex=True).any():
