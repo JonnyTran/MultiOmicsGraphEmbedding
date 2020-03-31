@@ -106,13 +106,13 @@ def configure_figure(data, title, width, height):
                        yaxis=dict(title='True Positive Rate'),
                        width=width,
                        height=height,
-                       margin=dict(
-                           l=5,
-                           r=5,
-                           b=5,
-                           t=5,
-                           pad=5
-                       ),
+                       # margin=dict(
+                       #     l=5,
+                       #     r=5,
+                       #     b=5,
+                       #     t=5,
+                       #     pad=5
+                       # ),
                        legend=dict(x=1.0, y=0.0)
                        )
     fig = go.Figure(data=data, layout=layout)
