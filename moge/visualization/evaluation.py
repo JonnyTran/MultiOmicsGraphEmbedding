@@ -113,7 +113,7 @@ def configure_figure(data, title, width, height):
                        #     t=5,
                        #     pad=5
                        # ),
-                       legend=dict(x=1.0, y=0.0)
+                       legend=dict(x=0.4, y=0.0)
                        )
     fig = go.Figure(data=data, layout=layout)
 
