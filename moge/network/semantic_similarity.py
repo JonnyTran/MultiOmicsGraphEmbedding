@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 from Bio import pairwise2
@@ -6,6 +5,36 @@ from openomics import MultiOmics
 from scipy.spatial.distance import pdist as scipy_pdist
 from scipy.spatial.distance import squareform as squareform_
 from sklearn.metrics.pairwise import pairwise_distances
+
+
+def compute_annotation_affinities(genes_info, node_list, modality=None, correlation_dist=None, features=None,
+                                  weights=None,
+                                  squareform=True, nanmean=True,
+                                  multiprocessing=True):
+    if features is None:
+        if modality == "MessengerRNA":
+            features = ["locus_type", "gene_family_id", "GO Terms", "location", "Disease association",
+                        "Transcript sequence"]
+        elif modality == "MicroRNA":
+            features = ["Family", "location", "GO Terms", "Rfams", "Disease association", "Transcript sequence"]
+        elif modality == "LncRNA":
+            features = ["Transcript type", "Strand", "tag", "GO Terms", "Rfams", "Disease association",
+                        "Transcript sequence"]
+
+    if nanmean:
+        agg_func = lambda x: np.nanmean(x, axis=0)
+    else:
+        agg_func = lambda x: np.average(x, axis=0, weights=weights)
+
+    gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=agg_func,
+                                 correlation_dist=correlation_dist,
+                                 multiprocessing=multiprocessing)  # Returns a condensed distance matrix
+
+    if squareform:
+        return squareform_(np.subtract(1, gower_dists))
+    else:
+        return np.subtract(1, gower_dists)  # Turns distance to similarity measure
+    # return np.exp(-beta * gower_dists)
 
 
 def compute_expression_correlation_dists(multi_omics_data: MultiOmics, modalities, node_list, absolute_corr=True,
@@ -57,33 +86,7 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmics, modalitie
         return squareform_(X_multiomics_corr_df, checks=False) # Returns condensed distance matrix
 
 
-def compute_annotation_affinities(genes_info, node_list, modality=None, correlation_dist=None, features=None, weights=None,
-                                  squareform=True, nanmean=True,
-                                  multiprocessing=True):
-    if features is None:
-        if modality == "GE":
-            features = ["locus_type", "gene_family_id", "GO Terms", "location", "Disease association", "Transcript sequence"]
-        elif modality == "MIR":
-            features = ["Family", "location", "GO Terms", "Rfams", "Disease association", "Transcript sequence"]
-        elif modality == "LNC":
-            features = ["Transcript type", "Strand", "tag", "GO Terms", "Rfams", "Disease association", "Transcript sequence"]
-
-    if nanmean:
-        agg_func = lambda x: np.nanmean(x, axis=0)
-    else:
-        agg_func = lambda x: np.average(x, axis=0, weights=weights)
-
-    gower_dists = gower_distance(genes_info.loc[node_list, features], agg_func=agg_func, correlation_dist=correlation_dist,
-                                 multiprocessing=multiprocessing)  # Returns a condensed distance matrix
-
-    if squareform:
-        return squareform_(np.subtract(1, gower_dists))
-    else:
-        return np.subtract(1, gower_dists) # Turns distance to similarity measure
-    # return np.exp(-beta * gower_dists)
-
-
-def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True, n_jobs=-2):
+def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multiprocessing=True, n_jobs=-2):
     """
     This function expects a pandas dataframe as input
     The data frame is to contain the features along the columns. Based on these features a
@@ -120,11 +123,11 @@ def gower_distance(X, agg_func=None, correlation_dist=None, multiprocessing=True
             print("Dice distance")
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
-        elif column in ["Mature sequence", "Transcript sequence"]:
+        elif "sequence" in column:
             print("Global alignment seq score")
             # Note: If doesn't work, modify _pairwise_callable Line 1083  # X, Y = check_pairwise_arrays(X, Y)
             feature_dist = pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
-            feature_dist = 1-feature_dist # Convert from similarity to dissimilarity
+            feature_dist = 1 - feature_dist  # Convert from similarity to dissimilarity
 
         elif column == "Location": # LNC Locations
             print("Location split to Chromosome, start, end")
@@ -186,12 +189,10 @@ def hierarchical_distance_aggregate_score(X):
     return np.nanmean(X, axis=0)
 
 
-def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=600):
+def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=1000):
     if (type(u[0]) is str and type(v[0]) is str):
         if ~truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
             return np.nan
         return pairwise2.align.globalxx(u[0], v[0], score_only=True) / min(len(u[0]), len(v[0]))
     else:
         return np.nan
-
-
