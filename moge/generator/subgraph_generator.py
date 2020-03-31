@@ -22,7 +22,7 @@ class SubgraphGenerator(SampledDataGenerator):
         :param variables (list): list of annotation column names as features
         :param targets (list): list of annotation column names to prediction target
         :param batch_size: number of nodes to sample each batch
-        :param sampling: {'node', 'neighborhood', 'all'}. If 'all', overrides batch_size and returns the
+        :param sampling: {'node', 'neighborhood', 'all'}. If 'all', overrides batch_size and returns the whole `node_list`
         :param compression: {"log", "sqrt", "linear"}
         :param n_steps:
         :param directed:
@@ -70,7 +70,7 @@ class SubgraphGenerator(SampledDataGenerator):
         elif self.sampling == 'circle':
             return next(self.node_circle_sampling())
         else:
-            raise Exception("self.sampling_method must be {'node', 'neighborhood', 'all'}")
+            raise Exception("self.sampling_method must be {'node', 'bfs', 'dfs', 'all', or 'circle'}")
 
     def node_circle_sampling(self):
         yield [node for node in islice(self.nodes_circle, self.batch_size)]
