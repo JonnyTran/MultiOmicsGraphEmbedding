@@ -40,9 +40,9 @@ def graph_viz(g: nx.Graph,
                            for node in nodelist])
 
     if node_color.str.contains("#f").any():
-        express_mode = True
-    else:
         express_mode = False
+    else:
+        express_mode = True
 
     if express_mode:
         fig = px.scatter(x=node_x, y=node_y,
@@ -92,9 +92,9 @@ def graph_viz3d(g: nx.Graph,
                                    for node in nodelist])
 
     if node_color.str.contains("#f").any():
-        express_mode = True
-    else:
         express_mode = False
+    else:
+        express_mode = True
 
     if express_mode:
         fig = px.scatter_3d(x=node_x, y=node_y, z=node_z, size_max=5,
