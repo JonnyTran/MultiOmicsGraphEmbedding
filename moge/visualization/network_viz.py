@@ -61,7 +61,7 @@ def graph_viz(g: nx.Graph,
 
 
 def graph_viz3d(g: nx.Graph,
-                nodelist: list, node_symbol=None, node_color=None, node_text=None,
+                nodelist: list, node_symbol=None, node_color=None, node_color2=None, node_text=None,
                 edge_label: str = None, max_edges=10000,
                 title=None, width=1000, height=800,
                 pos=None, showlegend=True, express_mode=True, **kwargs):
@@ -88,7 +88,13 @@ def graph_viz3d(g: nx.Graph,
         fig.add_scatter3d(x=node_x, y=node_y, z=node_z,
                           mode='markers',
                           text=node_text,
-                          marker=dict(color=node_color, size=10), **kwargs)
+                          marker=dict(color=node_color,
+                                      size=10,
+                                      line=dict(
+                                          color=node_color2,
+                                          width=2)
+                                      ) if node_color2 else None,
+                          **kwargs)
 
     # Edges data
     edges = list(g.subgraph(nodelist).edges(data=True if edge_label else False))
