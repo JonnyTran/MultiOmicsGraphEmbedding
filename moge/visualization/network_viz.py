@@ -89,7 +89,7 @@ def graph_viz3d(g: nx.Graph,
                           mode='markers',
                           text=node_text,
                           marker=dict(color=node_color,
-                                      size=7,
+                                      size=5,
                                       line=dict(
                                           color=node_color2,
                                           width=5)
