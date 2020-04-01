@@ -99,7 +99,9 @@ def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multip
     """
     individual_variable_dists = []
     if multiprocessing:
-        pdist = lambda X, metric: squareform_(pairwise_distances(X=X, metric=metric, n_jobs=n_jobs), checks=False)
+        pdist = lambda X, metric: squareform_(pairwise_distances(X=X, metric=metric, n_jobs=n_jobs,
+                                                                 force_all_finite='allow-nan'),
+                                              checks=False)
     else:
         pdist = scipy_pdist # returns condensed dist matrix
 
