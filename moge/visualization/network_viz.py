@@ -93,7 +93,7 @@ def graph_viz3d(g: nx.Graph,
                                       line=dict(
                                           color=node_color2,
                                           width=2)
-                                      ) if node_color2 else None,
+                                      ) if node_color2 is not None else None,
                           **kwargs)
 
     # Edges data
