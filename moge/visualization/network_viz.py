@@ -91,7 +91,7 @@ def graph_viz3d(g: nx.Graph,
     node_x, node_y, node_z = zip(*[(pos[node][0], pos[node][1], pos[node][2])
                                    for node in nodelist])
 
-    if node_color.str.contains("#f").any():
+    if node_color.str.contains("#").any():
         express_mode = False
     else:
         express_mode = True
