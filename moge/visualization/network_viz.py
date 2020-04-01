@@ -80,7 +80,7 @@ def graph_viz3d(g: nx.Graph,
                             hover_name=nodelist,
                             symbol=node_symbol if node_symbol is not None else None,
                             color=node_color if node_color is not None else None,
-                            text=node_text,
+                            # text=node_text,
                             color_continuous_scale='HSV',
                             **kwargs)
     else:
