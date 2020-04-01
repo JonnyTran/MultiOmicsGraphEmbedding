@@ -38,10 +38,24 @@ def graph_viz(g: nx.Graph,
 
     node_x, node_y = zip(*[(pos[node][0], pos[node][1])
                            for node in nodelist])
-    fig = px.scatter(x=node_x, y=node_y,
-                     hover_name=nodelist,
-                     symbol=node_symbol if node_symbol is not None else None,
-                     color=node_color if node_color is not None else None, **kwargs)
+
+    if node_color.str.contains("#f").any():
+        express_mode = True
+
+    if express_mode:
+        fig = px.scatter(x=node_x, y=node_y,
+                         hover_name=nodelist,
+                         symbol=node_symbol if node_symbol is not None else None,
+                         color=node_color if node_color is not None else None, **kwargs)
+    else:
+        fig = go.Figure()
+        fig.add_scatter3d(x=node_x, y=node_y,
+                          mode='markers',
+                          text=nodelist,
+                          marker=dict(color=node_color,
+                                      size=5,
+                                      ),
+                          **kwargs)
 
     # Edges data
     edges = list(g.subgraph(nodelist).edges(data=True if edge_label else False))
