@@ -64,7 +64,7 @@ def graph_viz3d(g: nx.Graph,
                 nodelist: list, node_symbol=None, node_color=None, node_color2=None, node_text=None,
                 edge_label: str = None, max_edges=10000,
                 title=None, width=1000, height=800,
-                pos=None, showlegend=True, express_mode=True, **kwargs):
+                pos=None, showlegend=True, **kwargs):
     if pos is None:
         raise Exception("Must provide pos as dict, i.e. {<node>:<3d coordinates>}")
 
@@ -75,8 +75,11 @@ def graph_viz3d(g: nx.Graph,
     node_x, node_y, node_z = zip(*[(pos[node][0], pos[node][1], pos[node][2])
                                    for node in nodelist])
 
+    if node_color.str.contains("#f").any():
+        express_mode = True
+
     if express_mode:
-        fig = px.scatter_3d(x=node_x, y=node_y, z=node_z, size_max=10,
+        fig = px.scatter_3d(x=node_x, y=node_y, z=node_z, size_max=5,
                             hover_name=nodelist,
                             symbol=node_symbol if node_symbol is not None else None,
                             color=node_color if node_color is not None else None,
