@@ -41,6 +41,8 @@ def graph_viz(g: nx.Graph,
 
     if node_color.str.contains("#f").any():
         express_mode = True
+    else:
+        express_mode = False
 
     if express_mode:
         fig = px.scatter(x=node_x, y=node_y,
