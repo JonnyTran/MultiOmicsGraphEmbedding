@@ -126,7 +126,7 @@ def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multip
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
         elif "sequence" in column:
-            print("Global alignment seq score")
+            print(f"Global alignment seq score (maxlen={100})")
             # Note: If doesn't work, modify _pairwise_callable Line 1083  # X, Y = check_pairwise_arrays(X, Y)
             feature_dist = pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
             feature_dist = 1 - feature_dist  # Convert from similarity to dissimilarity
@@ -192,7 +192,7 @@ def hierarchical_distance_aggregate_score(X):
 
 
 def seq_global_alignment_pairwise_score(u, v, truncate=True, min_length=1000):
-    if (type(u[0]) is str and type(v[0]) is str):
+    if isinstance(u[0], str) and isinstance(v[0], str):
         if ~truncate and (len(u[0]) > min_length or len(v[0]) > min_length):
             return np.nan
         return pairwise2.align.globalxx(u[0], v[0], score_only=True) / min(len(u[0]), len(v[0]))

@@ -11,10 +11,10 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
             and annotations.loc[nodelist, node_label].str.contains(delim, regex=True).any():
 
         y_true = annotations.loc[nodelist, node_label].str.split(delim, expand=True).map(
-            lambda x: sorted(x)[-1] if x and len(x) >= 1 else None)
+            lambda x: sorted(x)[0] if x and len(x) >= 1 else None)
     else:
         y_true = annotations.loc[nodelist, node_label].map(
-            lambda x: sorted(x)[-1] if x and len(x) >= 1 else None)
+            lambda x: sorted(x)[0] if x and len(x) >= 1 else None)
 
     if n_clusters is None:
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())
