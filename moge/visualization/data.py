@@ -58,7 +58,7 @@ def heatmap_compare(y_true, y_pred, file_output=None, title=None, autosize=True,
     else:
         columns = y_true.columns
 
-    fig = make_subplots(rows=1, cols=2)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("True Labels", "Predicted"))
 
     fig.append_trace(go.Heatmap(
         z=y_true,
