@@ -176,3 +176,15 @@ def mask_test_edges_old(adj, is_directed=True, test_frac=.1, val_frac=.05,
     # Return final edge lists (edges can go either direction!)
     return adj_train, train_edges, \
            val_edges, test_edges
+
+
+def largest_indices(array, k, smallest=False):
+    """Returns the k largest indices from a numpy array using partition O(n + k lg k) """
+    order = "C"
+    flat = np.ravel(array, order=order)
+    indices = np.argpartition(flat, -k)[-k:]
+    if smallest:
+        indices = indices[np.argsort(flat[indices])]
+    else:
+        indices = indices[np.argsort(-flat[indices])]
+    return np.unravel_index(indices, array.shape, order=order)

@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import average_precision_score, precision_recall_curve
 
+from moge.evaluation.utils import largest_indices
+
 
 def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=["d"],
                                             tests=[("LNC", "GE", "lncrna2target", "LncRNA2Target"),
@@ -113,13 +115,3 @@ def select_random_link_predictions(top_k, estimated_adj, excluding_edges, seed=0
     return top_k_indices
 
 
-def largest_indices(array, k, smallest=False):
-    """Returns the k largest indices from a numpy array using partition O(n + k lg k) """
-    order = "C"
-    flat = np.ravel(array, order=order)
-    indices = np.argpartition(flat, -k)[-k:]
-    if smallest:
-        indices = indices[np.argsort(flat[indices])]
-    else:
-        indices = indices[np.argsort(-flat[indices])]
-    return np.unravel_index(indices, array.shape, order=order)

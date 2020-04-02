@@ -9,8 +9,7 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import pairwise_distances
 
 from moge.evaluation.clustering import _get_top_enrichr_term, chunkIt
-from moge.evaluation.link_prediction import largest_indices
-from moge.evaluation.utils import get_scalefree_fit_score
+from moge.evaluation.utils import get_scalefree_fit_score, largest_indices
 
 
 class BaseGraphEmbedding:

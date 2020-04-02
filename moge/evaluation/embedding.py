@@ -3,7 +3,7 @@ import pandas as pd
 from scipy.spatial.distance import squareform
 from scipy.stats import pearsonr
 
-from ..evaluation.link_prediction import largest_indices
+from .utils import largest_indices
 from ..network.semantic_similarity import pairwise_distances, gower_distance
 
 
@@ -22,4 +22,5 @@ def distances_correlation(embeddings, sequences: pd.DataFrame, index: pd.Index, 
     seq_distances = gower_distance(sequences.loc[nodelist], verbose=verbose)
 
     print(f"embedding dists {embedding_distances.shape}, seq dists {seq_distances.shape}") if verbose else None
-    return pearsonr(x=embedding_distances, y=seq_distances)
+    r, p_val = pearsonr(x=embedding_distances[~np.isnan(seq_distances)], y=seq_distances[~np.isnan(seq_distances)])
+    return r, p_val
