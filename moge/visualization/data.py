@@ -47,13 +47,16 @@ def heatmap_compare(y_true, y_pred, file_output=None, title=None, autosize=True,
         z=y_true,
         x=columns,
         y=y_true.index if hasattr(y_true, "index") else None,
-        hoverongaps=False, )))
+        hoverongaps=False, )),
+        row=1, col=1)
 
-    fig.append_trace(go.Figure(data=go.Heatmap(
-        z=y_pred,
-        x=columns,
-        y=y_pred.index if hasattr(y_pred, "index") else None,
-        hoverongaps=False, )))
+    fig.append_trace(go.Figure(
+        data=go.Heatmap(
+            z=y_pred,
+            x=columns,
+            y=y_pred.index if hasattr(y_pred, "index") else None,
+            hoverongaps=False, )),
+        row=1, col=2)
 
     fig.update_layout(
         title=title,
