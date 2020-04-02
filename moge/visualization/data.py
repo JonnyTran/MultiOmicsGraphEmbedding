@@ -2,8 +2,69 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from scipy.sparse import coo_matrix
 from scipy.sparse import issparse
+
+
+def heatmap(table: pd.DataFrame, file_output=None, title=None, autosize=True, width=800, height=1000):
+    if not hasattr(table, "columns"):
+        columns = None
+    elif type(table.columns) == pd.MultiIndex:
+        columns = table.columns.to_series().apply(lambda x: '{0}-{1}'.format(*x))
+    else:
+        columns = table.columns
+
+    fig = go.Figure(data=go.Heatmap(
+        z=table,
+        x=columns,
+        y=table.index if hasattr(table, "index") else None,
+        hoverongaps=False, ))
+
+    fig.update_layout(
+        title=title,
+        autosize=autosize,
+        width=width,
+        height=height,
+    )
+    if file_output:
+        fig.write_image(file_output)
+
+    return fig
+
+
+def heatmap_compare(y_true, y_pred, file_output=None, title=None, autosize=True, width=1400, height=700):
+    if not hasattr(y_true, "columns"):
+        columns = None
+    elif type(y_true.columns) == pd.MultiIndex:
+        columns = y_true.columns.to_series().apply(lambda x: '{0}-{1}'.format(*x))
+    else:
+        columns = y_true.columns
+
+    fig = make_subplots(rows=1, cols=2)
+
+    fig.append_trace(go.Figure(data=go.Heatmap(
+        z=y_true,
+        x=columns,
+        y=y_true.index if hasattr(y_true, "index") else None,
+        hoverongaps=False, )))
+
+    fig.append_trace(go.Figure(data=go.Heatmap(
+        z=y_pred,
+        x=columns,
+        y=y_pred.index if hasattr(y_pred, "index") else None,
+        hoverongaps=False, )))
+
+    fig.update_layout(
+        title=title,
+        autosize=autosize,
+        width=width,
+        height=height,
+    )
+    if file_output:
+        fig.write_image(file_output)
+
+    return fig
 
 
 def bar_chart(results: dict, measures, title=None, bar_width=0.08, loc="best"):
@@ -47,8 +108,21 @@ def bar_chart(results: dict, measures, title=None, bar_width=0.08, loc="best"):
     plt.title(title)
     plt.show()
 
+def plot_training_history(history, title=""):
+    fig = go.Figure()
+    for metric in history.history.keys():
+        fig.add_trace(go.Scatter(x=np.arange(len(history.history["loss"])),
+                                 y=history.history[metric], name=metric,
+                                 mode='lines+markers'))
+    fig.update_layout(
+        title=title,
+        xaxis_title="Iteration",
+        yaxis_title="Percentage",
+    )
+    fig.show()
 
-def matrix_heatmap(matrix, figsize=(12,12), cmap='gray', **kwargs):
+
+def matrix_heatmap(matrix, figsize=(12, 12), cmap='gray', **kwargs):
     # Scatter plot of the graph adjacency matrix
 
     fig = plt.figure(figsize=figsize)
@@ -63,10 +137,11 @@ def matrix_heatmap(matrix, figsize=(12,12), cmap='gray', **kwargs):
     cax = ax.matshow(matrix, cmap=cmap, **kwargs)
     fig.colorbar(cax)
 
+
 def plot_coo_matrix(m):
     if not isinstance(m, coo_matrix):
         m = coo_matrix(m)
-    fig = plt.figure(figsize=(15,15))
+    fig = plt.figure(figsize=(15, 15))
     ax = fig.add_subplot(111)
     ax.plot(m.col, m.row, 's', ms=1)
     ax.set_aspect('equal')
@@ -77,42 +152,3 @@ def plot_coo_matrix(m):
     ax.set_xticks([])
     ax.set_yticks([])
     return ax
-
-
-def heatmap(table: pd.DataFrame, file_output=None, title=None, autosize=True, width=800, height=1000):
-    if not hasattr(table, "columns"):
-        columns = None
-    elif type(table.columns) == pd.MultiIndex:
-        columns = table.columns.to_series().apply(lambda x: '{0}-{1}'.format(*x))
-    else:
-        columns = table.columns
-
-    fig = go.Figure(data=go.Heatmap(
-        z=table,
-        x=columns,
-        y=table.index if hasattr(table, "index") else None,
-        hoverongaps=False, ))
-
-    fig.update_layout(
-        title=title,
-        autosize=autosize,
-        width=width,
-        height=height,
-    )
-    if file_output:
-        fig.write_image(file_output)
-
-    return fig
-
-def plot_training_history(history, title=""):
-    fig = go.Figure()
-    for metric in history.history.keys():
-        fig.add_trace(go.Scatter(x=np.arange(len(history.history["loss"])),
-                                 y=history.history[metric], name=metric,
-                                 mode='lines+markers'))
-    fig.update_layout(
-        title=title,
-        xaxis_title="Iteration",
-        yaxis_title="Percentage",
-    )
-    fig.show()
