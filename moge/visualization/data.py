@@ -82,7 +82,7 @@ def heatmap_compare(y_true, y_pred, file_output=None, title=None, autosize=True,
         margin=dict(
             l=5,
             r=5,
-            b=20,
+            b=5,
             t=40,
         ),
     )
