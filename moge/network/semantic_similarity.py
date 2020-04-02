@@ -86,7 +86,8 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmics, modalitie
         return squareform_(X_multiomics_corr_df, checks=False) # Returns condensed distance matrix
 
 
-def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multiprocessing=True, n_jobs=-2):
+def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multiprocessing=True, n_jobs=-2,
+                   verbose=False):
     """
     This function expects a pandas dataframe as input
     The data frame is to contain the features along the columns. Based on these features a
@@ -107,32 +108,33 @@ def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multip
 
     for column in X.columns:
         feature = X.loc[:, column]
-        print("Gower's dissimilarity: Computing", column, ", dtype:", feature.dtypes, ", shape:", feature.shape)
+        print("Gower's dissimilarity: Computing", column, ", dtype:", feature.dtypes, ", shape:",
+              feature.shape) if verbose else None
 
         if column in ["gene_family_id", "gene_family", "locus_type", "Transcript type", "tag"]:
-            print("Dice distance")
+            print("Dice distance") if verbose else None
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
         elif column == "miR family" or column == "Family":
-            print("Dice distance")
+            print("Dice distance") if verbose else None
             feature_dist = pdist(feature.str.get_dummies("/"), 'dice')
 
         elif column == "GO terms" or column == "Rfams":
-            print("Dice distance")
+            print("Dice distance") if verbose else None
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
         elif column == "Disease association":
-            print("Dice distance")
+            print("Dice distance") if verbose else None
             feature_dist = pdist(feature.str.get_dummies("|"), 'dice')
 
         elif "sequence" in column:
-            print(f"Global alignment seq score (maxlen={100})")
+            print(f"Global alignment seq score (maxlen={100})") if verbose else None
             # Note: If doesn't work, modify _pairwise_callable Line 1083  # X, Y = check_pairwise_arrays(X, Y)
             feature_dist = pdist(feature.values.reshape((X.shape[0], -1)), seq_global_alignment_pairwise_score)
             feature_dist = 1 - feature_dist  # Convert from similarity to dissimilarity
 
         elif column == "Location": # LNC Locations
-            print("Location split to Chromosome, start, end")
+            print("Location split to Chromosome, start, end") if verbose else None
             location_features = feature.str.split("[:-]", expand=True).filter(items=[0, 1])
             hierarchical_columns = ["Chromosome", "start"]
             location_features.columns = hierarchical_columns
@@ -143,7 +145,7 @@ def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multip
                                           multiprocessing=True)
 
         elif column == "location": # GE Locations
-            print("Location split to Chromosome, arm, region")
+            print("Location split to Chromosome, arm, region") if verbose else None
             location_features = feature.str.split("[pq.]", expand=True).filter(items=[0, 1])
             location_features.columns = ["Chromosome", "region"]
             location_features["arm"] = feature.str.extract(r'(?P<arm>[pq])', expand=True)
@@ -154,15 +156,15 @@ def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multip
                                           multiprocessing=True)
 
         elif feature.dtypes == np.object: # TODO Use Categorical dtypes later
-            print("Dice distance")
+            print("Dice distance") if verbose else None
             feature_dist = pdist(pd.get_dummies(feature), 'dice')
 
         elif feature.dtypes == int:
-            print("Manhattan distance (normalized ptp)")
+            print("Manhattan distance (normalized ptp)") if verbose else None
             feature_dist = scipy_pdist(feature.values.reshape((X.shape[0],-1)), "manhattan") / \
                            (np.nanmax(feature.values) - np.nanmin(feature.values))
         elif feature.dtypes == float:
-            print("Euclidean distance (normalized ptp)")
+            print("Euclidean distance (normalized ptp)") if verbose else None
             feature_dist = scipy_pdist(feature.values.reshape((X.shape[0],-1)), "euclidean") / \
                            (np.nanmax(feature.values) - np.nanmin(feature.values))
         else:
@@ -171,7 +173,7 @@ def gower_distance(X: pd.DataFrame, agg_func=None, correlation_dist=None, multip
         individual_variable_dists.append(feature_dist)
 
     if correlation_dist is not None:
-        print("Correlation distance", correlation_dist.shape)
+        print("Correlation distance", correlation_dist.shape) if verbose else None
         individual_variable_dists.append(correlation_dist)
 
     if agg_func is None:

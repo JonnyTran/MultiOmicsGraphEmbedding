@@ -7,7 +7,7 @@ from ..evaluation.link_prediction import largest_indices
 from ..network.semantic_similarity import pairwise_distances, gower_distance
 
 
-def distances_correlation(embeddings, sequences: pd.DataFrame, index: pd.Index, n_nodes=200):
+def distances_correlation(embeddings, sequences: pd.DataFrame, index: pd.Index, n_nodes=200, verbose=False):
     embedding_cov = pairwise_distances(embeddings, metric="euclidean", n_jobs=-2)
     assert embeddings.shape[0] == index.shape[0]
 
@@ -19,6 +19,7 @@ def distances_correlation(embeddings, sequences: pd.DataFrame, index: pd.Index, 
                                              metric="euclidean", n_jobs=-2)
     embedding_distances = squareform(embedding_distances, checks=False)
 
-    seq_distances = gower_distance(sequences.loc[nodelist], )
-    print(f"embedding dists {embedding_distances.shape}, seq dists {seq_distances.shape}")
+    seq_distances = gower_distance(sequences.loc[nodelist], verbose=verbose)
+
+    print(f"embedding dists {embedding_distances.shape}, seq dists {seq_distances.shape}") if verbose else None
     return pearsonr(x=embedding_distances, y=seq_distances)
