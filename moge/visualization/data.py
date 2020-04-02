@@ -8,12 +8,22 @@ from scipy.sparse import issparse
 from sklearn.metrics import classification_report
 
 
-def clf_report(y_true, y_pred, classes, threshold=0.5):
+def clf_report(y_true, y_pred, classes, threshold=0.5, top_k=20):
     results = pd.DataFrame(classification_report(y_true=y_true,
                                                  y_pred=(y_pred >= threshold),
                                                  target_names=classes,
                                                  output_dict=True)).T
-    return results.sort_values(by="support", ascending=False)[:50]
+    return results.sort_values(by="support", ascending=False)[:top_k]
+
+
+def clf_report_compare(y_train, y_train_pred, y_test, y_test_pred, classes, threshold=0.5):
+    train = clf_report(y_train, y_train_pred, classes, threshold=threshold)
+    test = clf_report(y_test, y_test_pred, classes, threshold=threshold)
+
+    train.columns = pd.MultiIndex.from_product([train.columns, ["train"]])
+    test.columns = pd.MultiIndex.from_product([test.columns, ["test"]])
+    return pd.concat([train, test], axis=1)
+
 
 def heatmap(table: pd.DataFrame, file_output=None, title=None, autosize=True, width=800, height=1000):
     if not hasattr(table, "columns"):
