@@ -342,7 +342,7 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             print("val_network", self.validation.G.number_of_nodes(),
                   self.validation.G_u.number_of_edges()) if verbose and val_frac > 0 else None
 
-    def split_stratified(self, directed: bool, stratify_label: str, stratify_label_2=True, n_splits=5,
+    def split_stratified(self, directed: bool, stratify_label: str, stratify_omic=True, n_splits=5,
                          dropna=False, seed=42, verbose=False):
         """
         Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
@@ -364,7 +364,7 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
 
         y_label = filter_y_multilabel(annotations=self.annotations_dict, y_label=stratify_label, min_count=n_splits,
                                       dropna=dropna, delimiter=self.delimiter)
-        if stratify_label_2:
+        if stratify_omic:
             y_omic = self.annotations_dict.loc[y_label.index, MODALITY_COL].str.split("|")
             y_label = y_label + y_omic
 

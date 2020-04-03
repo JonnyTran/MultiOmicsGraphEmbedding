@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from openomics.utils.df import concat_uniques
 
-from moge.network.attributed import AttributedNetwork, filter_y_multilabel
+from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test, \
     split_network_by_nodes
 
@@ -128,12 +128,12 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
         return adjacency_matrix
 
-    def split_stratified(self, stratify_label: str, stratify_label_2=None, n_splits=5,
+    def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
                          dropna=False, seed=42, verbose=False):
         y_label = filter_y_multilabel(annotations=self.annotations, y_label=stratify_label, min_count=n_splits,
                                       dropna=dropna, delimiter=self.delimiter)
-        if stratify_label_2:
-            y_omic = self.annotations.loc[y_label.index, stratify_label_2].str.split(self.delimiter)
+        if stratify_omic:
+            y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
             y_label = y_label + y_omic
 
         train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
@@ -153,7 +153,3 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
                   self.training.networks[layer].number_of_edges()) if verbose else None
             print("Layer {} test_network".format(str(layer)), self.testing.networks[layer].number_of_nodes(),
                   self.testing.networks[layer].number_of_edges()) if verbose else None
-
-    def get_aggregated_network(self):
-        G = nx.compose_all(list(self.networks.values()))
-        return G
