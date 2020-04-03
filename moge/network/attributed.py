@@ -13,7 +13,17 @@ MODALITY_COL = "omic"
 EPSILON = 1e-16
 
 
-def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
+def filter_y_multilabel(annotations: pd.DataFrame, y_label="go_id", min_count=2, dropna=False, delimiter="\||;"):
+    """
+    Preprocesses the `y_label` annotation for each node by filtering out labels that have frequency less than `min_count`.
+
+    :param annotations (pandas DataFrame): a DataFrame where index are node names and columns are annotations.
+    :param y_label (str): the column name in `annotations` DataFrame
+    :param min_count (int): the minimum frequency of labels to keep. Should be at least
+    :param dropna (bool): whether to drop nodes with None values in the `y_label` column.
+    :param delimiter (str): default "\||;", i.e. '|' or ';'
+    :return (pd.Series): a `y_label` column Series with each items having a list of terms.
+    """
     if dropna:
         nodes_index = annotations[[SEQUENCE_COL] + [y_label]].dropna().index
     else:
@@ -29,7 +39,7 @@ def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False,
     print("label {} filtered: {}".format(y_label, len(labels_filter)))
 
     y_labels = annotations_list.map(
-        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
+        lambda labels: [item for item in labels if item not in labels_filter] if type(labels) == list else [])
 
     return y_labels
 

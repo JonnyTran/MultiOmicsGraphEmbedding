@@ -47,20 +47,17 @@ class TrainTestSplit():
         raise NotImplementedError()
 
     @abstractmethod
-    def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5, dropna=False, seed=42,
+    def split_stratified(self, stratify_label: str, stratify_label_2=True, n_splits=5, dropna=False, seed=42,
                          verbose=False):
         """
-        Randomly remove nodes from node_list with test_frac  and val_frac. Then, collect the edges with types in edge_types
-        into the val_edges_dict and test_edges_dict. Edges not in the edge_types will be added back to the graph.
+        Split nodes from node_list with a train/test split stratified by the multilabel `stratify_label` column.
 
         :param self: HeterogeneousNetwork
-        :param node_list: a list of nodes to split from
-        :param edge_types: edges types to remove
-        :param test_frac: fraction of edges to remove from training set to add to test set
-        :param val_frac: fraction of edges to remove from training set to add to validation set
+        :param stratify_label (str): the label to stratify by
+        :param stratify_label_2 (str): the second label to stratify by
+        :param n_splits (int): number of K-Fold splits - however, this function doesn't perform K-fold split, but only performs a single split.
+        :param dropna (bool): whether to drop nodes with a missing label. Default False.
         :param seed:
-        :param verbose:
-        :return: network, val_edges_dict, test_edges_dict
         """
         raise NotImplementedError()
 
