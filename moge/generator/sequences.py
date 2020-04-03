@@ -96,7 +96,8 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         self.agg_mode = agg_mode
         self.node_list = node_list
 
-        assert isinstance(self.annotations_dict, dict) or isinstance(self.annotations_dict, pd.Series)
+        assert hasattr(self, "annotations_dict") and (
+                    isinstance(self.annotations_dict, dict) or isinstance(self.annotations_dict, pd.Series))
 
         if tokenizer is not None:
             self.tokenizer = tokenizer
@@ -117,9 +118,7 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         :param variable_length: returns a list of sequences with different timestep length
         :param minlen: pad all sequences with length lower than this minlen
         """
-        annotations = self.annotations_dict[modality]
-
-        seqs = self.fetch_sequences(annotations, node_list)
+        seqs = self.fetch_sequences(self.annotations_dict[modality], node_list)
 
         try:
             padded_encoded_seqs = self.encode_texts(seqs, modality=modality, maxlen=self.maxlen, minlen=minlen,
