@@ -17,7 +17,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                  maxlen=1400, padding='post', truncating='post', agg_mode=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
 
-        super(MultiplexGenerator, self).__init__(network=network, annotations=network.annotations,
+        super(MultiplexGenerator, self).__init__(network=network,
                                                  variables=variables, targets=targets,
                                                  batch_size=batch_size,
                                                  sampling=sampling, compression=compression, n_steps=n_steps,
