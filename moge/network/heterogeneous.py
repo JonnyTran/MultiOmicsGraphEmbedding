@@ -362,10 +362,10 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         else:
             print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
 
-        y_label = filter_y_multilabel(annotations=self.annotations, y_label=stratify_label, min_count=n_splits,
+        y_label = filter_y_multilabel(annotations=self.annotations_dict, y_label=stratify_label, min_count=n_splits,
                                       dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
-            y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("|")
+            y_omic = self.annotations_dict.loc[y_label.index, MODALITY_COL].str.split("|")
             y_label = y_label + y_omic
 
         train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)

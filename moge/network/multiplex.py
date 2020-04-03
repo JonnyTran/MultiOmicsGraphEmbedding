@@ -48,14 +48,14 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.node_to_modality = pd.Series(self.node_to_modality)
 
     def process_annotations(self):
-        self.annotations = {}
+        self.annotations_dict = {}
         for modality in self.modalities:
             annotation = self.multiomics[modality].get_annotations()
-            self.annotations[modality] = annotation
+            self.annotations_dict[modality] = annotation
 
-        self.annotations = pd.Series(self.annotations)
+        self.annotations_dict = pd.Series(self.annotations_dict)
         print("All annotation columns (union):",
-              {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
+              {col for _, annotations in self.annotations_dict.items() for col in annotations.columns.tolist()})
 
     def process_feature_tranformer(self, delimiter="\||;", min_count=0):
         self.delimiter = delimiter
@@ -67,12 +67,12 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
                 annotation["omic"] = modality
                 annotations_list.append(annotation)
 
-            self.all_annotations = pd.concat(annotations_list, join="inner", copy=True)
-            self.all_annotations = self.all_annotations.groupby(self.all_annotations.index).agg(
-                {k: concat_uniques for k in self.all_annotations.columns})
+            self.annotations = pd.concat(annotations_list, join="inner", copy=True)
+            self.annotations = self.annotations.groupby(self.annotations.index).agg(
+                {k: concat_uniques for k in self.annotations.columns})
 
-        print("Annotation columns:", self.all_annotations.columns.tolist())
-        self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
+        print("Annotation columns:", self.annotations.columns.tolist())
+        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter,
                                                                  min_count)
 
     def add_edges(self, edgelist, layer: (str, str, str), database, **kwargs):
@@ -130,10 +130,10 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
     def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
                          dropna=False, seed=42, verbose=False):
-        y_label = filter_y_multilabel(annotations=self.all_annotations, y_label=stratify_label, min_count=n_splits,
+        y_label = filter_y_multilabel(annotations=self.annotations, y_label=stratify_label, min_count=n_splits,
                                       dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
-            y_omic = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
+            y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
             y_label = y_label + y_omic
 
         train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)

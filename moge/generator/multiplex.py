@@ -107,7 +107,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                 if "expression" == variable:
                     X["_".join([modality, variable])] = self.get_expressions(sampled_nodes, modality=modality)
                 else:
-                    labels_vector = self.annotations[modality].loc[sampled_nodes, variable]
+                    labels_vector = self.annotations_dict[modality].loc[sampled_nodes, variable]
                     labels_vector = self.process_vector(labels_vector)
                     X["_".join([modality, variable])] = self.network.feature_transformer[variable].transform(
                         labels_vector)
@@ -117,20 +117,20 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
             X[layer_key] = self.network.get_adjacency_matrix(edge_types=layer, node_list=sampled_nodes)
 
         # Labels
-        targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
+        targets_vector = self.network.annotations.loc[sampled_nodes, self.targets[0]]
         targets_vector = self.process_vector(targets_vector)
 
         try:
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
         except Exception as e:
             print("targets_vector", targets_vector.shape, targets_vector.notnull().sum(), targets_vector)
-            print("self.network.all_annotations.loc[sampled_nodes, self.targets[0]]",
-                  self.network.all_annotations.loc[sampled_nodes, self.targets[0]].shape,
-                  self.network.all_annotations.loc[sampled_nodes, self.targets[0]].notnull().sum())
+            print("self.network.annotations.loc[sampled_nodes, self.targets[0]]",
+                  self.network.annotations.loc[sampled_nodes, self.targets[0]].shape,
+                  self.network.annotations.loc[sampled_nodes, self.targets[0]].notnull().sum())
             raise e
 
         # Get a vector of nonnull indicators
-        idx_weights = self.network.all_annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
+        idx_weights = self.network.annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
 
         assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights
@@ -142,7 +142,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
             node_list = self.network.node_list
 
         if dropna:
-            node_list = self.network.all_annotations.loc[node_list, self.targets].dropna().index.tolist()
+            node_list = self.network.annotations.loc[node_list, self.targets].dropna().index.tolist()
         else:
             node_list = node_list
 
