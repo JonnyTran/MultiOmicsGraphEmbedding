@@ -17,15 +17,15 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                  maxlen=1400, padding='post', truncating='post', agg_mode=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
 
-        super(SubgraphGenerator, self).__init__(network=network, annotations=network.annotations,
-                                                variables=variables, targets=targets,
-                                                batch_size=batch_size,
-                                                sampling=sampling, compression=compression, n_steps=n_steps,
-                                                directed=None, maxlen=maxlen,
-                                                padding=padding, truncating=truncating,
-                                                agg_mode=agg_mode, tokenizer=tokenizer,
-                                                replace=replace, seed=seed, verbose=verbose,
-                                                **kwargs)
+        super(MultiplexGenerator, self).__init__(network=network, annotations=network.annotations,
+                                                 variables=variables, targets=targets,
+                                                 batch_size=batch_size,
+                                                 sampling=sampling, compression=compression, n_steps=n_steps,
+                                                 directed=None, maxlen=maxlen,
+                                                 padding=padding, truncating=truncating,
+                                                 agg_mode=agg_mode, tokenizer=tokenizer,
+                                                 replace=replace, seed=seed, verbose=verbose,
+                                                 **kwargs)
 
     def get_output_types(self):
         return (
