@@ -8,7 +8,7 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 SEQUENCE_COL = "Transcript sequence"
 
 class SequenceTokenizer():
-    def __init__(self, node_list, padding='post', maxlen=2000, truncating='post', agg_mode=None,
+    def __init__(self, annotations, node_list, padding='post', maxlen=2000, truncating='post', agg_mode=None,
                  tokenizer=None, verbose=False) -> None:
         """
         Handles text tokenizing for DNA/RNA/Protein sequences.
@@ -25,6 +25,7 @@ class SequenceTokenizer():
         self.padding = padding
         self.truncating = truncating
         self.agg_mode = agg_mode
+        self.annotations = annotations
         self.node_list = node_list
         self.verbose = verbose
 
@@ -88,16 +89,16 @@ class SequenceTokenizer():
 
 
 class MultiSequenceTokenizer(SequenceTokenizer):
-    def __init__(self, node_list, padding='post', maxlen=2000, truncating='post', agg_mode=None,
+    def __init__(self, annotations, node_list, padding='post', maxlen=2000, truncating='post', agg_mode=None,
                  tokenizer=None) -> None:
         self.padding = padding
         self.maxlen = maxlen
         self.truncating = truncating
         self.agg_mode = agg_mode
+        self.annotations_dict = annotations
         self.node_list = node_list
 
-        assert hasattr(self, "annotations_dict") and (
-                    isinstance(self.annotations_dict, dict) or isinstance(self.annotations_dict, pd.Series))
+        assert isinstance(self.annotations_dict, dict) or isinstance(self.annotations_dict, pd.Series)
 
         if tokenizer is not None:
             self.tokenizer = tokenizer
@@ -118,7 +119,9 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         :param variable_length: returns a list of sequences with different timestep length
         :param minlen: pad all sequences with length lower than this minlen
         """
-        seqs = self.fetch_sequences(self.annotations_dict[modality], node_list)
+        annotations = self.annotations_dict[modality]
+
+        seqs = self.fetch_sequences(annotations, node_list)
 
         try:
             padded_encoded_seqs = self.encode_texts(seqs, modality=modality, maxlen=self.maxlen, minlen=minlen,

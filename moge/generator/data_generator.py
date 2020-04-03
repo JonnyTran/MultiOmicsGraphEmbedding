@@ -8,7 +8,7 @@ from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
 
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
-    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1,
+    def __init__(self, network, annotations, variables=None, targets=None, weighted=False, batch_size=1,
                  replace=True, seed=0,
                  verbose=True, **kwargs):
         """
@@ -33,7 +33,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         self.seed = seed
         self.verbose = verbose
 
-        self.annotations = network.annotations
+        self.annotations = annotations
         if isinstance(network.annotations, pd.DataFrame):
             self.transcripts_to_sample = network.annotations[SEQUENCE_COL].copy()
         else:
@@ -72,7 +72,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
         np.random.seed(seed)
         self.on_epoch_end()
-        super(DataGenerator, self).__init__(node_list=self.node_list, **kwargs)
+        super(DataGenerator, self).__init__(annotations=annotations, node_list=self.node_list, **kwargs)
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'

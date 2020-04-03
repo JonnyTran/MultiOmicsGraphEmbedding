@@ -32,7 +32,8 @@ class SubgraphGenerator(SampledDataGenerator):
         """
         self.variable_length = variable_length
 
-        super(SubgraphGenerator, self).__init__(network=network, variables=variables, targets=targets,
+        super(SubgraphGenerator, self).__init__(network=network, annotations=network.annotations,
+                                                variables=variables, targets=targets,
                                                 batch_size=batch_size,
                                                 sampling=sampling, compression=compression,
                                                 n_steps=n_steps, directed=directed, replace=replace,
