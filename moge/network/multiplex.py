@@ -121,9 +121,9 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
         if node_list is None or node_list == self.node_list:
             return adjacency_matrix
-        elif set(node_list) < set(self.node_list):
+        elif set(node_list) <= set(self.node_list):
             return self.slice_adj(adjacency_matrix, node_list, None)
-        elif not (set(node_list) < set(self.node_list)):
+        elif set(node_list) > set(self.node_list):
             raise Exception(f"A node in node_l is not in self.node_list : {set(node_list) - set(self.node_list)}")
 
         return adjacency_matrix
