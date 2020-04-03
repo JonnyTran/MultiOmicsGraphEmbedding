@@ -72,7 +72,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
         np.random.seed(seed)
         self.on_epoch_end()
-        super(DataGenerator, self).__init__(annotations=network.annotations, node_list=self.node_list, **kwargs)
+        super(DataGenerator, self).__init__(node_list=self.node_list, **kwargs)
 
     def on_epoch_end(self):
         'Updates indexes after each epoch and shuffle'
