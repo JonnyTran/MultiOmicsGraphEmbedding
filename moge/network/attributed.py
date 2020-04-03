@@ -73,15 +73,13 @@ class AttributedNetwork(Network):
             annotation[MODALITY_COL] = modality
             annotations_list.append(annotation)
 
-        self.annotations_dict = pd.concat(annotations_list, join="inner", copy=True)
+        self.annotations = pd.concat(annotations_list, join="inner", copy=True)
         assert type(
-            self.annotations_dict.index) != pd.MultiIndex, "Annotation index must be a pandas.Index type and not a MultiIndex."
+            self.annotations.index) != pd.MultiIndex, "Annotation index must be a pandas.Index type and not a MultiIndex."
         # self.annotations = self.annotations[~self.annotations.index.duplicated(keep='first')]
-
-        # Groupby indexes of duplicate nodes from multi-omics & aggregate by concatenating unique values on each columns
-        self.annotations_dict = self.annotations_dict.groupby(self.annotations_dict.index).agg(
-            {k: concat_uniques for k in self.annotations_dict.columns})
-        print("Annotation columns:", self.annotations_dict.columns.tolist())
+        self.annotations = self.annotations.groupby(self.annotations.index).agg(
+            {k: concat_uniques for k in self.annotations.columns})
+        print("Annotation columns:", self.annotations.columns.tolist())
 
     def process_feature_tranformer(self, delimiter="\||;", min_count=0, verbose=False):
         """
@@ -91,8 +89,7 @@ class AttributedNetwork(Network):
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
         self.delimiter = delimiter
-        self.feature_transformer = self.get_feature_transformers(self.annotations_dict, self.node_list, delimiter,
-                                                                 min_count,
+        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter, min_count,
                                                                  verbose=verbose)
 
     @classmethod
