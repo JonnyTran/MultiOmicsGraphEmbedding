@@ -147,7 +147,7 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
 
         if node_list is None or node_list == self.node_list:
             return laplacian_adj
-        elif set(node_list) < set(self.node_list):
+        elif set(node_list) <= set(self.node_list):
             return self.slice_adj(laplacian_adj, node_list, None)
         elif not (set(node_list) < set(self.node_list)):
             raise Exception("A node in node_l is not in self.node_list.")
