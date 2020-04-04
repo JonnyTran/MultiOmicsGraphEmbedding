@@ -153,3 +153,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
                   self.training.networks[layer].number_of_edges()) if verbose else None
             print("Layer {} test_network".format(str(layer)), self.testing.networks[layer].number_of_nodes(),
                   self.testing.networks[layer].number_of_edges()) if verbose else None
+
+    def get_aggregated_network(self):
+        G = nx.compose_all(list(self.networks.values()))
+        return G
