@@ -15,6 +15,7 @@ def distances_correlation(embeddings, labels, index: pd.Index, n_nodes=200, verb
     top_farthest_pairs = index[np.concatenate(largest_indices(embedding_cov, k=int(n_nodes / 4), smallest=False))]
     top_closest_pairs = index[np.concatenate(largest_indices(embedding_cov, k=int(n_nodes / 4), smallest=True))]
     nodelist = top_farthest_pairs | top_closest_pairs
+    print("nodelist", len(nodelist)) if verbose else None
 
     embedding_distances = pairwise_distances(pd.DataFrame(embeddings, index=index).loc[nodelist],
                                              metric="euclidean", n_jobs=-2)
