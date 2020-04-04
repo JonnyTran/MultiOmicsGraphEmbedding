@@ -10,7 +10,6 @@ from ..network.semantic_similarity import pairwise_distances, gower_distance
 def distances_correlation(embeddings, labels, index: pd.Index, n_nodes=200, verbose=False):
     embedding_cov = pairwise_distances(embeddings, metric="euclidean", n_jobs=-2)
     assert embeddings.shape[0] == index.shape[0]
-    assert labels.shape[0] == index.shape[0]
 
     top_farthest_pairs = index[np.concatenate(largest_indices(embedding_cov, k=int(n_nodes / 4), smallest=False))]
     top_closest_pairs = index[np.concatenate(largest_indices(embedding_cov, k=int(n_nodes / 4), smallest=True))]
@@ -31,9 +30,6 @@ def distances_correlation(embeddings, labels, index: pd.Index, n_nodes=200, verb
     print("label_distances", label_distances) if verbose else None
 
     assert label_distances.shape[0] == embedding_distances.shape[0]
-
-    print(f"embedding dists {embedding_distances.shape}, seq dists {label_distances.shape}") if verbose else None
-
     r, p_val = pearsonr(x=embedding_distances[~np.isnan(label_distances)],
                         y=label_distances[~np.isnan(label_distances)])
     return r, p_val
