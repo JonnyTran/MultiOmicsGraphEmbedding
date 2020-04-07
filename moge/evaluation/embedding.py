@@ -32,4 +32,6 @@ def distances_correlation(embeddings, labels, index: pd.Index, n_nodes=200, verb
     assert label_distances.shape[0] == embedding_distances.shape[0]
     r, p_val = pearsonr(x=embedding_distances[~np.isnan(label_distances)],
                         y=label_distances[~np.isnan(label_distances)])
-    return r, p_val
+
+    print("p_val", p_val) if verbose else None
+    return r
