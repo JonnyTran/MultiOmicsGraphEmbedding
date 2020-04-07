@@ -29,7 +29,7 @@ class AWX(Dense):
         assert n_norm >= 0
 
         self.n = n_norm
-        self.leaves = A.sum(1) == 0
+        self.leaves = A.sum(0) == 0
         units = sum(self.leaves)
         self.A = deepcopy(A)
 
