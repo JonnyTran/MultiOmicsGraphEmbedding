@@ -191,4 +191,4 @@ class SubgraphDataset(SubgraphGenerator, data.Dataset):
         sampled_node = self.node_list[item]
         nodelist = self.traverse_network(self.batch_size, seed_node=sampled_node)
         X, y, idx_weights = self.__getdata__(nodelist, variable_length=False)
-        return X, y.values, idx_weights.values
+        return X, y, idx_weights.values
