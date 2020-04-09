@@ -98,7 +98,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
                                                                   source=start_node[0]),
                                       batch_size) for node in successors]
 
-            sampled_nodes.extend(seed_node.tolist() + successor_nodes)
+            sampled_nodes.extend(start_node.tolist() + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:
@@ -115,7 +115,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
             successor_nodes = list(
                 islice(nx.traversal.dfs_successors(self.network.G if self.directed else self.network.G_u,
                                                    source=start_node[0]), batch_size))
-            sampled_nodes.extend(seed_node.tolist() + successor_nodes)
+            sampled_nodes.extend(start_node.tolist() + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:
