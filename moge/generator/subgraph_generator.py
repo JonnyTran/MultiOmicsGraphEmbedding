@@ -92,6 +92,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         while len(sampled_nodes) < batch_size:
             if seed_node is None:
                 start_node = self.sample_node_by_freq(1)
+                print("start_node", start_node)
 
             successor_nodes = [node for source, successors in
                                islice(nx.traversal.bfs_successors(self.network.G if self.directed else self.network.G_u,
@@ -111,6 +112,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         while len(sampled_nodes) < batch_size:
             if seed_node is None:
                 start_node = self.sample_node_by_freq(1)
+                print("start_node", start_node)
 
             successor_nodes = list(
                 islice(nx.traversal.dfs_successors(self.network.G if self.directed else self.network.G_u,
