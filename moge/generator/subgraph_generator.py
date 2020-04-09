@@ -5,6 +5,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from torch.utils import data
 
 from .sampled_generator import SampledDataGenerator
 
@@ -59,13 +60,13 @@ class SubgraphGenerator(SampledDataGenerator):
         X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
         return X, y, idx_weights
 
-    def traverse_network(self, batch_size):
+    def traverse_network(self, batch_size, seed_node=None):
         if self.sampling == "node":
             return self.node_sampling(batch_size)
         elif self.sampling == "neighborhood" or self.sampling == "bfs":
-            return self.bfs_traversal(batch_size)
+            return self.bfs_traversal(batch_size, seed_node=seed_node)
         elif self.sampling == "dfs":
-            return self.dfs_traversal(batch_size)
+            return self.dfs_traversal(batch_size, seed_node=seed_node)
         elif self.sampling == "all":
             return self.network.node_list
         elif self.sampling == 'circle':
@@ -85,11 +86,13 @@ class SubgraphGenerator(SampledDataGenerator):
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
         return sampled_nodes
 
-    def bfs_traversal(self, batch_size):
+    def bfs_traversal(self, batch_size, seed_node=None):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:
-            seed_node = self.sample_node_by_freq(1)
+            if seed_node is None:
+                seed_node = self.sample_node_by_freq(1)
+
             successor_nodes = [node for source, successors in
                                islice(nx.traversal.bfs_successors(self.network.G if self.directed else self.network.G_u,
                                                                   source=seed_node[0]),
@@ -97,21 +100,25 @@ class SubgraphGenerator(SampledDataGenerator):
 
             sampled_nodes.extend(seed_node.tolist() + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+            seed_node = None
 
         if len(sampled_nodes) > batch_size:
             sampled_nodes = sampled_nodes[:batch_size]
         return sampled_nodes
 
-    def dfs_traversal(self, batch_size):
+    def dfs_traversal(self, batch_size, seed_node=None):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:
-            seed_node = self.sample_node_by_freq(1)
+            if seed_node is None:
+                seed_node = self.sample_node_by_freq(1)
+
             successor_nodes = list(
                 islice(nx.traversal.dfs_successors(self.network.G if self.directed else self.network.G_u,
                                                    source=seed_node[0]), batch_size))
             sampled_nodes.extend(seed_node.tolist() + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+            seed_node = None
 
         if len(sampled_nodes) > batch_size:
             sampled_nodes = sampled_nodes[:batch_size]
@@ -165,4 +172,23 @@ class SubgraphGenerator(SampledDataGenerator):
 
         y = pd.DataFrame(y, index=node_list,
                          columns=self.network.feature_transformer[self.targets[0]].classes_)
+        return X, y, idx_weights
+
+
+class SubgraphDataset(SubgraphGenerator, data.Dataset):
+    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500, sampling='neighborhood',
+                 compression="log", n_steps=100, directed=True, maxlen=1400, padding='post', truncating='post',
+                 agg_mode=None, tokenizer=None, replace=True, variable_length=False, seed=0, verbose=True, **kwargs):
+        super(SubgraphDataset, self).__init__(network, variables, targets, batch_size, sampling, compression, n_steps,
+                                              directed, maxlen,
+                                              padding, truncating, agg_mode, tokenizer, replace, variable_length, seed,
+                                              verbose, **kwargs)
+
+    def __len__(self):
+        return len(self.node_list)
+
+    def __getitem__(self, item=None):
+        sampled_node = self.node_list[item]
+        nodelist = self.traverse_network(self.batch_size, seed_node=sampled_node)
+        X, y, idx_weights = self.__getdata__(nodelist, variable_length=False)
         return X, y, idx_weights

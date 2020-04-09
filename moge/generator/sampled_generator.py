@@ -90,10 +90,11 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         'Returns the training data (X, y) tuples given a list of tuple(source_id, target_id, is_directed, edge_weight)'
         raise NotImplementedError
 
-    def traverse_network(self, batch_size):
+    def traverse_network(self, batch_size, seed_node=None):
         """
         Sample a traversal on the network.
-        :param batch_size (int):
+        :param batch_size (int): size of random walk
+        :param seed_node (str): starting node
         :return: list of nodes in the traversal.
         """
         raise NotImplementedError
