@@ -184,6 +184,8 @@ class SubgraphDataset(SubgraphGenerator, data.Dataset):
                                               padding, truncating, agg_mode, tokenizer, replace, variable_length, seed,
                                               verbose, **kwargs)
 
+        self.node_list = pd.Series(self.node_list)
+
     def __len__(self):
         return len(self.node_list)
 
@@ -191,4 +193,5 @@ class SubgraphDataset(SubgraphGenerator, data.Dataset):
         sampled_node = self.node_list[item]
         nodelist = self.traverse_network(self.batch_size, seed_node=sampled_node)
         X, y, idx_weights = self.__getdata__(nodelist, variable_length=False)
+        print(sampled_node, idx_weights.index[:5])
         return X, y, idx_weights.values
