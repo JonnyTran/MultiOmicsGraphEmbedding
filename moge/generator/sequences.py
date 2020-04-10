@@ -83,7 +83,7 @@ class SequenceTokenizer():
         encoded = pad_sequences(encoded, maxlen=maxlen, padding=self.padding,
                                 truncating=np.random.choice(
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
-                                dtype="int8")
+                                dtype="long")
 
         return encoded
 
