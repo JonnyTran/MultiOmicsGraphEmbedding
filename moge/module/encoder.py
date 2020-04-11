@@ -14,18 +14,23 @@ class EncoderLSTM(nn.Module):
         self.vocab = vocab
         self.n_classes = n_classes
 
-        self.__build_model()
+        self.nb_max_pool_size = 2
+        self.nb_conv1d_filters = 192
+        self.nb_conv1d_kernel_size = 5
 
-    def __build_model(self):
         self.word_embedding = nn.Embedding(
             num_embeddings=len(self.vocab) + 1,
             embedding_dim=len(self.vocab),
             padding_idx=0
         )
-        self.conv1 = nn.Conv1d(len(self.vocab), 192, kernel_size=5)
+
+        self.conv1 = nn.Conv1d(
+            len(self.vocab),
+            self.nb_conv1d_filters,
+            kernel_size=self.nb_conv1d_kernel_size)
 
         self.lstm = nn.LSTM(
-            input_size=192,
+            input_size=self.nb_conv1d_kernel_size,
             hidden_size=self.nb_lstm_units,
             num_layers=self.nb_lstm_layers,
             batch_first=True,
@@ -47,63 +52,33 @@ class EncoderLSTM(nn.Module):
 
         return (hidden_a, hidden_b)
 
-    def forward(self, X, X_lengths):
+    def forward(self, X):
         # reset the LSTM hidden state. Must be done before you run a new batch. Otherwise the LSTM will treat
         # a new batch as a continuation of a sequence
         self.hidden = self.init_hidden()
+        X_lengths = (X > 0).sum(1)
 
-        batch_size, seq_len = X.size()
-
-        # ---------------------
-        # 1. embed the input
-        # Dim transformation: (batch_size, seq_len, 1) -> (batch_size, seq_len, embedding_dim)
         X = self.word_embedding(X)
+        X = X.permute(0, 2, 1)
+        X = F.relu(F.max_pool1d(self.conv1(X), self.nb_max_pool_size))
 
-        X = F.relu(F.max_pool2d(self.conv1(X), 2))
+        X = X.permute(0, 2, 1)
+        X_lengths = (X_lengths - self.nb_conv1d_kernel_size) / self.nb_max_pool_size
+        X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
 
-        # ---------------------
-        # 2. Run through RNN
-        # TRICK 2 ********************************
-        # Dim transformation: (batch_size, seq_len, embedding_dim) -> (batch_size, seq_len, nb_lstm_units)
-
-        # pack_padded_sequence so that padded items in the sequence won't be shown to the LSTM
-        X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True)
-
-        # now run through LSTM
         X, self.hidden = self.lstm(X, self.hidden)
 
-        # undo the packing operation
-        X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
+        return self.hidden[0]
 
-        # ---------------------
-        # 3. Project to tag space
-        # Dim transformation: (batch_size, seq_len, nb_lstm_units) -> (batch_size * seq_len, nb_lstm_units)
-
-        # this one is a bit tricky as well. First we need to reshape the data so it goes into the linear layer
-        X = X.contiguous()
-        X = X.view(-1, X.shape[2])
+        # X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
 
         # run through actual linear layer
-        X = self.hidden_to_tag(X)
-
-        # ---------------------
-        # 4. Create softmax activations bc we're doing classification
-        # Dim transformation: (batch_size * seq_len, nb_lstm_units) -> (batch_size, seq_len, nb_tags)
-        X = F.log_softmax(X, dim=1)
-
-        # I like to reshape for mental sanity so we're back to (batch_size, seq_len, nb_tags)
-        Y_hat = X.view(batch_size, self.n_classes)
-
-        return Y_hat
+        # X = self.hidden_to_tag(X)
+        # X = F.log_softmax(X, dim=1)
+        # Y_hat = X.view(batch_size, self.n_classes)
+        # return Y_hat
 
     def loss(self, Y_hat, Y):
-        # TRICK 3 ********************************
-        # before we calculate the negative log likelihood, we need to mask out the activations
-        # this means we don't want to take into account padded items in the output vector
-        # simplest way to think about this is to flatten ALL sequences into a REALLY long sequence
-        # and calculate the loss on that.
-
-        # flatten all the labels
         Y = Y.view(-1)
 
         # flatten all predictions
