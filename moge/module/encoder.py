@@ -25,8 +25,7 @@ class EncoderLSTM(nn.Module):
         self.word_embedding = nn.Embedding(
             num_embeddings=len(self.vocab) + 1,
             embedding_dim=len(self.vocab),
-            padding_idx=0
-        )
+            padding_idx=0)
 
         self.conv1 = nn.Conv1d(
             len(self.vocab),
@@ -37,8 +36,8 @@ class EncoderLSTM(nn.Module):
             input_size=self.nb_conv1d_kernel_size,
             hidden_size=self.nb_lstm_units,
             num_layers=self.nb_lstm_layers,
-            batch_first=True,
-        )
+            batch_first=True, )
+
         self.hidden_to_tag = nn.Linear(self.nb_lstm_units, self.n_classes)
 
     def init_hidden(self):
