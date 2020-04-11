@@ -5,6 +5,7 @@ import pandas as pd
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 
+SEQ_DTYPE = "long"
 SEQUENCE_COL = "Transcript sequence"
 
 class SequenceTokenizer():
@@ -83,7 +84,7 @@ class SequenceTokenizer():
         encoded = pad_sequences(encoded, maxlen=maxlen, padding=self.padding,
                                 truncating=np.random.choice(
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
-                                dtype="long")
+                                dtype=SEQ_DTYPE)
 
         return encoded
 
@@ -171,6 +172,6 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         encoded = pad_sequences(encoded, maxlen=maxlen, padding=self.padding,
                                 truncating=np.random.choice(
                                     ["post", "pre"]) if self.truncating == "random" else self.truncating,
-                                dtype="long")
+                                dtype=SEQ_DTYPE)
 
         return encoded
