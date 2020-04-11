@@ -18,6 +18,9 @@ class EncoderLSTM(nn.Module):
         self.nb_conv1d_filters = 192
         self.nb_conv1d_kernel_size = 5
 
+        self.__build_model()
+
+    def __build_model(self):
         self.word_embedding = nn.Embedding(
             num_embeddings=len(self.vocab) + 1,
             embedding_dim=len(self.vocab),
