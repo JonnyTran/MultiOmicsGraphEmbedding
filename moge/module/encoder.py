@@ -34,7 +34,6 @@ class EncoderLSTM(nn.Module):
             hidden_size=self.nb_lstm_units,
             num_layers=self.nb_lstm_layers,
             batch_first=True,
-
         )
         self.hidden_to_tag = nn.Linear(self.nb_lstm_units, self.n_classes)
 
@@ -53,8 +52,6 @@ class EncoderLSTM(nn.Module):
         return (hidden_a, hidden_b)
 
     def forward(self, X):
-        # reset the LSTM hidden state. Must be done before you run a new batch. Otherwise the LSTM will treat
-        # a new batch as a continuation of a sequence
         self.hidden = self.init_hidden()
         X_lengths = (X > 0).sum(1)
 
@@ -69,7 +66,6 @@ class EncoderLSTM(nn.Module):
         X, self.hidden = self.lstm(X, self.hidden)
 
         return self.hidden[0]
-
         # X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
 
         # run through actual linear layer
