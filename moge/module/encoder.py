@@ -6,9 +6,10 @@ from torch.nn import functional as F
 
 class EncoderLSTM(nn.Module):
     def __init__(self, nb_layers, nb_lstm_units=100, embedding_dim=128, batch_size=100, vocab=None, n_classes=None):
-        self.nb_layers = nb_layers
-        self.nb_lstm_units = nb_lstm_units
+        super(EncoderLSTM, self).__init__()
 
+        self.nb_lstm_layers = nb_layers
+        self.nb_lstm_units = nb_lstm_units
 
         self.batch_size = batch_size
         self.vocab = vocab
@@ -37,8 +38,6 @@ class EncoderLSTM(nn.Module):
             batch_first=True, )
 
         self.hidden_to_tag = nn.Linear(self.nb_lstm_units, self.n_classes)
-
-        super(EncoderLSTM, self).__init__()
 
     def init_hidden(self):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
