@@ -9,7 +9,7 @@ class EncoderLSTM(nn.Module):
         super().__init__()
         self.nb_layers = nb_layers
         self.nb_lstm_units = nb_lstm_units
-        self.embedding_dim = embedding_dim
+
 
         self.batch_size = batch_size
         self.vocab = vocab
@@ -19,9 +19,8 @@ class EncoderLSTM(nn.Module):
         self.nb_conv1d_filters = 192
         self.nb_conv1d_kernel_size = 5
 
-        self.__build_model()
+        self.embedding_dim = embedding_dim
 
-    def __build_model(self):
         self.word_embedding = nn.Embedding(
             num_embeddings=len(self.vocab) + 1,
             embedding_dim=len(self.vocab),
