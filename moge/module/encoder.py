@@ -6,6 +6,7 @@ from torch.nn import functional as F
 
 class EncoderLSTM(nn.Module):
     def __init__(self, nb_layers, nb_lstm_units=100, embedding_dim=128, batch_size=100, vocab=None, n_classes=None):
+        super().__init__()
         self.nb_layers = nb_layers
         self.nb_lstm_units = nb_lstm_units
         self.embedding_dim = embedding_dim
