@@ -5,8 +5,9 @@ from torch.nn import functional as F
 
 
 class EncoderLSTM(nn.Module):
-    def __init__(self, encoding_dim=128, vocab=None,
-                 nb_lstm_layers=1, nb_lstm_units=100, nb_lstm_dropout=0.2,
+    def __init__(self, encoding_dim: str, vocab: dict,
+                 nb_lstm_layers=1, nb_lstm_units=100, nb_lstm_dropout=0.2, nb_lstm_hidden_dropout=0.2,
+                 nb_lstm_batchnorm=True,
                  nb_conv1d_filters=192, nb_conv1d_kernel_size=26, nb_max_pool_size=2, nb_conv1d_dropout=0.2,
                  nb_conv1d_batchnorm=True):
         super(EncoderLSTM, self).__init__()
@@ -22,6 +23,9 @@ class EncoderLSTM(nn.Module):
         self.nb_lstm_layers = nb_lstm_layers
         self.nb_lstm_units = nb_lstm_units
         self.nb_lstm_dropout = nb_lstm_dropout
+        self.nb_lstm_batchnorm = nb_lstm_batchnorm
+
+        self.nb_lstm_hidden_dropout = nb_lstm_hidden_dropout
 
         self.encoding_size = encoding_dim
 
@@ -36,6 +40,7 @@ class EncoderLSTM(nn.Module):
             kernel_size=self.nb_conv1d_kernel_size)
 
         self.conv1_dropout = nn.Dropout(p=self.nb_conv1d_dropout)
+        self.conv_batchnorm = nn.BatchNorm1d(num_features=self.nb_conv1d_filters)
 
         self.lstm = nn.LSTM(
             input_size=self.nb_conv1d_filters,
@@ -44,7 +49,8 @@ class EncoderLSTM(nn.Module):
             dropout=self.nb_lstm_dropout,
             batch_first=True, )
 
-        self.batchnorm = nn.BatchNorm1d(num_features=self.nb_lstm_units)
+        self.lstm_hidden_dropout = nn.Dropout(p=self.nb_lstm_hidden_dropout)
+        self.lstm_batchnorm = nn.BatchNorm1d(num_features=self.nb_lstm_units)
 
         self.encoder = nn.Linear(self.nb_lstm_units, self.encoding_size)
 
@@ -68,6 +74,8 @@ class EncoderLSTM(nn.Module):
         X = X.permute(0, 2, 1)
         X = F.relu(F.max_pool1d(self.conv1(X), self.nb_max_pool_size))
         X = self.conv1_dropout(X)
+        if self.nb_conv1d_batchnorm:
+            X = self.conv_batchnorm(X)
 
         X = X.permute(0, 2, 1)
         X_lengths = (X_lengths - self.nb_conv1d_kernel_size) / self.nb_max_pool_size + 1
@@ -76,13 +84,11 @@ class EncoderLSTM(nn.Module):
         _, self.hidden = self.lstm(X, self.hidden)
 
         X = self.hidden[0].view(self.nb_lstm_layers * batch_size, self.nb_lstm_units)
+        X = self.lstm_hidden_dropout(X)
+        if self.nb_lstm_batchnorm:
+            X = self.lstm_batchnorm(X)
 
-        if self.nb_conv1d_batchnorm:
-            X = self.batchnorm(X)
-
-        X = self.encoder(X)
-
-        X = F.sigmoid(X)
+        X = F.sigmoid(self.encoder(X))
 
         return X
 

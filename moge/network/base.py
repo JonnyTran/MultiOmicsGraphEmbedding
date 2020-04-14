@@ -50,7 +50,17 @@ class Network(object):
         raise NotImplementedError
 
     @abstractmethod
-    def get_adjacency_matrix(self, edge_types: list, node_list=None, output="csr", **kwargs):
+    def get_adjacency_matrix(self, edge_types: list, node_list=None, method="GAT", output="csr", **kwargs):
+        """
+        Retrieves the adjacency matrix of a subnetwork with `edge_types` edge types  and `node_list` nodes. The adjacency
+        matrix is preprocessed for `method`, e.g. adding self-loops in GAT, and is converted to a sparse matrix of `output` type.
+
+        :param edge_types: a list of edge types to retrieve.
+        :param node_list: list of nodes.
+        :param method: one of {"GAT", "GCN"}, default: "GAT".
+        :param output: one of {"csr", "coo", "dense"}, default "csr":
+        :param kwargs:
+        """
         raise NotImplementedError
 
     @abstractmethod

@@ -1,6 +1,7 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
+import scipy.sparse as sps
 from openomics.utils.df import concat_uniques
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
@@ -115,7 +116,18 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             adjacency_matrix = nx.adjacency_matrix(self.networks[edge_type],
                                                    nodelist=self.node_list)
             if method == "GAT":
-                adjacency_matrix = adjacency_matrix + np.eye(adjacency_matrix.shape[0])  # Add self-loops
+                adjacency_matrix = adjacency_matrix + sps.csr_matrix(
+                    np.eye(adjacency_matrix.shape[0]))  # Add self-loops
+
+            if output == "csr":
+                adjacency_matrix = adjacency_matrix.astype(float)
+            elif output == "coo":
+                adjacency_matrix = adjacency_matrix.tocoo(copy=False)
+            elif output == "dense":
+                adjacency_matrix = adjacency_matrix.todense()
+            else:
+                raise Exception("Output must be one of {csr, coo, dense}")
+
             self.layers_adj[edge_type] = adjacency_matrix
 
         if node_list is None or node_list == self.node_list:
@@ -125,14 +137,6 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         elif set(node_list) > set(self.node_list):
             raise Exception(f"A node in node_l is not in self.node_list : {set(node_list) - set(self.node_list)}")
 
-        if output == "csr":
-            return adjacency_matrix.astype(float)
-        elif output == "coo":
-            return adjacency_matrix.tocoo(copy=False)
-        elif output == "dense":
-            return adjacency_matrix.toarray()
-        else:
-            raise Exception("Output must be one of {csr, coo, dense}")
 
         return adjacency_matrix
 

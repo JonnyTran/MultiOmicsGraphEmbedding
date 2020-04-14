@@ -1,4 +1,5 @@
 import networkx as nx
+import scipy.sparse as sps
 
 from moge.evaluation.utils import sample_edges
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
@@ -103,14 +104,14 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             adj = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
 
         if method == "GAT":
-            adj = adj + np.eye(adj.shape[0])  # Add self-loops
+            adj = adj + sps.csr_matrix(np.eye(adj.shape[0]))  # Add self-loops
 
         if output == "csr":
             return adj.astype(float)
         elif output == "coo":
             return adj.tocoo(copy=False)
         elif output == "dense":
-            return adj.toarray()
+            return adj.todense()
         else:
             raise Exception("Output must be one of {csr, coo, dense}")
 
