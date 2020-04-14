@@ -128,14 +128,12 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
                                                       variable_length=variable_length or self.variable_length)
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
-                                                            node_list=sampled_nodes, output="dense")
-        X["subnetwork"] = X["subnetwork"] + np.eye(X["subnetwork"].shape[0])  # Add self-loops for GAT model
+                                                            node_list=sampled_nodes, method="GAT", output="dense")
 
         # Features
         for variable in self.variables:
             if "expression" == variable:
                 X[variable] = self.get_expressions(sampled_nodes, modality="Protein")
-
             else:
                 labels_vector = self.process_vector(self.annotations.loc[sampled_nodes, variable])
                 X[variable] = self.network.feature_transformer[variable].transform(labels_vector)

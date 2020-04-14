@@ -65,7 +65,8 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         else:
             self.G_u.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=0.0, output="csr"):
+    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=0.0, method="GAT",
+                             output="csr"):
         """
         Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
         :param edge_types: A list of edge types letter codes in ["d", "u", "u_n"]
@@ -100,6 +101,9 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             edge_list = [(u, v) for u, v, d in self.G_u.edges(nbunch=node_list, data=True) if
                          d['type'] in edge_types]
             adj = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
+
+        if method == "GAT":
+            adj = adj + np.eye(adj.shape[0])  # Add self-loops
 
         if output == "csr":
             return adj.astype(float)

@@ -81,7 +81,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.networks[layer].add_edges_from(edgelist, source=source, target=target, database=database, **kwargs)
         print(len(edgelist), "edges added to self.networks[{}]".format(layer))
 
-    def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, output="dense"):
+    def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, method="GAT", output="dense"):
         """
 
         :param edge_types: either a tuple(str, ...) or [tuple(str, ...), tuple(str, ...)]
@@ -94,7 +94,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         # edge_list = [(u, v) for u, v, d in self.networks[edge_types].edges(nbunch=node_list, data=True)]
         if isinstance(edge_types, tuple):
             assert edge_types in self.networks
-            adj = self.get_layer_adjacency_matrix(edge_types, node_list, output=output)
+            adj = self.get_layer_adjacency_matrix(edge_types, node_list, method=method, output=output)
 
         elif isinstance(edge_types, list) and isinstance(edge_types[0], tuple):
             assert self.networks.issuperset(edge_types)
@@ -106,7 +106,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
         return adj.astype(float)
 
-    def get_layer_adjacency_matrix(self, edge_type, node_list=None, output="csr"):
+    def get_layer_adjacency_matrix(self, edge_type, node_list=None, method="GAT", output="csr"):
         if edge_type in self.layers_adj:
             adjacency_matrix = self.layers_adj[edge_type]
 
@@ -114,7 +114,8 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         else:
             adjacency_matrix = nx.adjacency_matrix(self.networks[edge_type],
                                                    nodelist=self.node_list)
-            adjacency_matrix = adjacency_matrix + np.eye(adjacency_matrix.shape[0])  # Add self-loops
+            if method == "GAT":
+                adjacency_matrix = adjacency_matrix + np.eye(adjacency_matrix.shape[0])  # Add self-loops
             self.layers_adj[edge_type] = adjacency_matrix
 
         if node_list is None or node_list == self.node_list:
