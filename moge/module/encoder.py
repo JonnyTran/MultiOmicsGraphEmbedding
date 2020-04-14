@@ -50,8 +50,8 @@ class EncoderLSTM(nn.Module):
 
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-        hidden_a = torch.zeros(self.nb_lstm_layers, batch_size, self.nb_lstm_units).cuda()
-        hidden_b = torch.zeros(self.nb_lstm_layers, batch_size, self.nb_lstm_units).cuda()
+        hidden_a = torch.randn(self.nb_lstm_layers, batch_size, self.nb_lstm_units).cuda()
+        hidden_b = torch.randn(self.nb_lstm_layers, batch_size, self.nb_lstm_units).cuda()
 
         hidden_a = Variable(hidden_a)
         hidden_b = Variable(hidden_b)

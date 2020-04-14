@@ -50,7 +50,7 @@ class Network(object):
         raise NotImplementedError
 
     @abstractmethod
-    def get_adjacency_matrix(self, edge_types: list, node_list=None, **kwargs):
+    def get_adjacency_matrix(self, edge_types: list, node_list=None, output="csr", **kwargs):
         raise NotImplementedError
 
     @abstractmethod

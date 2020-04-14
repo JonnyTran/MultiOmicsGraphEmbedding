@@ -1,11 +1,11 @@
 import pandas as pd
 import tensorflow as tf
-from torch.utils import data
+import torch
 
 from . import DataGenerator, SubgraphGenerator
 
 
-class SubgraphDataset(SubgraphGenerator, data.Dataset):
+class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500, sampling='neighborhood',
                  compression="log", n_steps=100, directed=True, maxlen=1400, padding='post', truncating='post',
                  agg_mode=None, tokenizer=None, replace=True, variable_length=False, seed=0, verbose=True, **kwargs):

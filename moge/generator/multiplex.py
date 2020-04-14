@@ -115,7 +115,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         for layer, network_layer in self.network.networks.items():
             layer_key = "-".join(layer)
-            X[layer_key] = self.network.get_adjacency_matrix(edge_types=layer, node_list=sampled_nodes)
+            X[layer_key] = self.network.get_adjacency_matrix(edge_types=layer, node_list=sampled_nodes, output="csr")
 
         # Labels
         targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]

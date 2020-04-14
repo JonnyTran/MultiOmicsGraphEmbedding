@@ -1,5 +1,4 @@
 import networkx as nx
-import scipy.sparse as sp
 
 from moge.evaluation.utils import sample_edges
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
@@ -66,7 +65,7 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         else:
             self.G_u.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
 
-    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=0.0):
+    def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=0.0, output="csr"):
         """
         Returns an adjacency matrix from edges with type specified in :param edge_types: and nodes specified in
         :param edge_types: A list of edge types letter codes in ["d", "u", "u_n"]
@@ -102,9 +101,14 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
                          d['type'] in edge_types]
             adj = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
 
-        # Eliminate self-edges
-        adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
-        return adj.astype(float)
+        if output == "csr":
+            return adj.astype(float)
+        elif output == "coo":
+            return adj.tocoo(copy=False)
+        elif output == "dense":
+            return adj.toarray()
+        else:
+            raise Exception("Output must be one of {csr, coo, dense}")
 
     def get_graph_laplacian(self, edge_types: list, node_list=None, databases=None):
         """

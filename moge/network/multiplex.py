@@ -81,7 +81,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.networks[layer].add_edges_from(edgelist, source=source, target=target, database=database, **kwargs)
         print(len(edgelist), "edges added to self.networks[{}]".format(layer))
 
-    def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, ):
+    def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, output="dense"):
         """
 
         :param edge_types: either a tuple(str, ...) or [tuple(str, ...), tuple(str, ...)]
@@ -94,7 +94,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         # edge_list = [(u, v) for u, v, d in self.networks[edge_types].edges(nbunch=node_list, data=True)]
         if isinstance(edge_types, tuple):
             assert edge_types in self.networks
-            adj = self.get_layer_adjacency_matrix(edge_types, node_list)
+            adj = self.get_layer_adjacency_matrix(edge_types, node_list, output=output)
 
         elif isinstance(edge_types, list) and isinstance(edge_types[0], tuple):
             assert self.networks.issuperset(edge_types)
@@ -104,11 +104,9 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         else:
             raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.layers))
 
-        # Eliminate self-edges
-        # adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
         return adj.astype(float)
 
-    def get_layer_adjacency_matrix(self, edge_type, node_list=None):
+    def get_layer_adjacency_matrix(self, edge_type, node_list=None, output="csr"):
         if edge_type in self.layers_adj:
             adjacency_matrix = self.layers_adj[edge_type]
 
@@ -125,6 +123,15 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             return self.slice_adj(adjacency_matrix, node_list, None)
         elif set(node_list) > set(self.node_list):
             raise Exception(f"A node in node_l is not in self.node_list : {set(node_list) - set(self.node_list)}")
+
+        if output == "csr":
+            return adjacency_matrix.astype(float)
+        elif output == "coo":
+            return adjacency_matrix.tocoo(copy=False)
+        elif output == "dense":
+            return adjacency_matrix.toarray()
+        else:
+            raise Exception("Output must be one of {csr, coo, dense}")
 
         return adjacency_matrix
 
