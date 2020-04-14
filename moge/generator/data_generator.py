@@ -8,7 +8,8 @@ from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
 
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
-    def __init__(self, network, variables=None, targets=None, weighted=False, batch_size=1,
+    def __init__(self, network, variables=None, targets=None, method="GAT", adj_output="dense", weighted=False,
+                 batch_size=1,
                  replace=True, seed=0,
                  verbose=True, **kwargs):
         """
@@ -29,6 +30,9 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         self.weighted = weighted
         self.network = network
         self.replace = replace
+
+        self.method = method
+        self.adj_output = adj_output
 
         self.seed = seed
         self.verbose = verbose

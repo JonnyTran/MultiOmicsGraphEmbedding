@@ -127,8 +127,10 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         X = {}
         X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
                                                       variable_length=variable_length or self.variable_length)
+
         X["subnetwork"] = self.network.get_adjacency_matrix(edge_types=["d"] if self.directed else ["u"],
-                                                            node_list=sampled_nodes, method="GAT", output="dense")
+                                                            node_list=sampled_nodes, method=self.method,
+                                                            output=self.adj_output)
 
         # Features
         for variable in self.variables:
