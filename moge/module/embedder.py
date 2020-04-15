@@ -13,6 +13,7 @@ class GAT(nn.Module):
             in_channels=encoding_dim,
             out_channels=embedding_dim,
             heads=self.nb_attn_heads,
+            concat=True,
             dropout=self.nb_attn_dropout
         )
 

@@ -109,7 +109,8 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         if output == "csr":
             return adj.astype(float)
         elif output == "coo":
-            return adj.tocoo(copy=False)
+            adj = adj.tocoo(copy=False)
+            return np.vstack((adj.row, adj.col)).astype("long")
         elif output == "dense":
             return adj.todense()
         else:
