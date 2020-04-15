@@ -1,11 +1,13 @@
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
+from ignite.metrics import Precision, Recall
 from torch.autograd import Variable
 from torch.nn import functional as F
 from torch_geometric.nn import GATConv
 
 
-class EncoderLSTM(nn.Module):
+class EncoderLSTM(pl.LightningModule):
     def __init__(self, encoding_dim: int, embedding_dim: int, n_classes: int, vocab: dict, word_embedding_size=None,
                  nb_lstm_layers=1, nb_lstm_units=100, nb_lstm_dropout=0.2, nb_lstm_hidden_dropout=0.2,
                  nb_lstm_batchnorm=True,
@@ -13,6 +15,7 @@ class EncoderLSTM(nn.Module):
                  nb_conv1d_batchnorm=True,
                  nb_attn_heads=4, nb_attn_dropout=0.5,
                  nb_cls_dense_size=512, nb_cls_dropout=0.2,
+                 verbose=False,
                  ):
         super(EncoderLSTM, self).__init__()
         self.vocab = vocab
@@ -48,7 +51,7 @@ class EncoderLSTM(nn.Module):
             kernel_size=self.nb_conv1d_kernel_size)
 
         self.conv1_dropout = nn.Dropout(p=self.nb_conv1d_dropout)
-        self.conv_batchnorm = nn.BatchNorm1d(num_features=self.nb_conv1d_filters)
+        # self.conv_batchnorm = nn.LayerNorm([self.nb_conv1d_filters, ])
 
         self.lstm = nn.LSTM(
             input_size=self.nb_conv1d_filters,
@@ -58,9 +61,9 @@ class EncoderLSTM(nn.Module):
             batch_first=True, )
 
         self.lstm_hidden_dropout = nn.Dropout(p=self.nb_lstm_hidden_dropout)
-        self.lstm_batchnorm = nn.BatchNorm1d(num_features=self.nb_lstm_units)
+        self.lstm_batchnorm = nn.LayerNorm(self.nb_lstm_units * self.nb_lstm_layers)
 
-        self.encoder = nn.Linear(self.nb_lstm_units, self.encoding_dim)
+        self.encoder = nn.Linear(self.nb_lstm_units * self.nb_lstm_layers, self.encoding_dim)
 
         # Embedder
         self.nb_attn_heads = nb_attn_heads
@@ -87,6 +90,8 @@ class EncoderLSTM(nn.Module):
             nn.Linear(self.nb_cls_dense_size, self.n_classes),
             nn.Sigmoid()
         )
+
+        self.init_metrics()
 
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
@@ -116,7 +121,8 @@ class EncoderLSTM(nn.Module):
         X = F.relu(F.max_pool1d(self.conv1(X), self.nb_max_pool_size))
         X = self.conv1_dropout(X)
         if self.nb_conv1d_batchnorm:
-            X = self.conv_batchnorm(X)
+            X = F.layer_norm(X, X.shape[1:])
+            # X = self.conv_batchnorm(X)
         X = X.permute(0, 2, 1)
         X_lengths = (X_lengths - self.nb_conv1d_kernel_size) / self.nb_max_pool_size + 1
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
@@ -127,6 +133,11 @@ class EncoderLSTM(nn.Module):
             X = self.lstm_batchnorm(X)
         X = self.encoder(X)
         return X
+
+    def get_embeddings(self, X):
+        encodings = self.get_encodings(X["input_seqs"])
+        embeddings = self.embedder(encodings, X["subnetwork"])
+        return embeddings
 
     def loss(self, Y_hat, Y, weights=None):
         Y = Y.type_as(Y_hat)
@@ -151,3 +162,49 @@ class EncoderLSTM(nn.Module):
         # ce_loss = -torch.sum(Y_hat) / nb_tokens
         #
         # return ce_loss
+
+    def training_step(self, batch, batch_nb):
+        train_X, train_y, train_weights = batch
+        input_seqs, subnetwork = train_X["input_seqs"], train_X["subnetwork"]
+
+        Y_hat = self.forward(input_seqs, subnetwork)
+        loss = self.loss(Y_hat, train_y, None)
+        return {"loss": loss}
+
+    def validation_step(self, batch, batch_nb):
+        X, y, train_weights = batch
+        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+        Y_hat = self.forward(input_seqs, subnetwork)
+        loss = self.loss(Y_hat, y, None)
+
+        self.update_metrics(Y_hat, y)
+        return {"val_loss": loss,
+                "val_precision": self.precision.compute(),
+                "val_recall": self.recall.compute()}
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        tensorboard_logs = {"val_loss": avg_loss}
+
+        results = {"avg_val_loss": avg_loss,
+                   "avg_val_precision": self.precision.compute(),
+                   "log": tensorboard_logs}
+        self.reset_metrics()
+
+        return results
+
+    def init_metrics(self):
+        self.precision = Precision(average=True, is_multilabel=True)
+        self.recall = Recall(average=True, is_multilabel=True)
+
+    def update_metrics(self, y_pred, y_true):
+        self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
+        self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
+
+    def reset_metrics(self):
+        self.precision.reset()
+        self.recall.reset()
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
