@@ -177,19 +177,20 @@ class EncoderLSTM(pl.LightningModule):
         Y_hat = self.forward(input_seqs, subnetwork)
         loss = self.loss(Y_hat, y, None)
 
-        self.update_metrics(Y_hat, y)
+        # self.update_metrics(Y_hat, y)
         return {"val_loss": loss,
-                "val_precision": self.precision.compute(),
-                "val_recall": self.recall.compute()}
+                # "val_precision": self.precision.compute(),
+                # "val_recall": self.recall.compute()
+                }
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         tensorboard_logs = {"val_loss": avg_loss}
 
         results = {"avg_val_loss": avg_loss,
-                   "avg_val_precision": self.precision.compute(),
+                   # "avg_val_precision": self.precision.compute(),
                    "log": tensorboard_logs}
-        self.reset_metrics()
+        # self.reset_metrics()
 
         return results
 
