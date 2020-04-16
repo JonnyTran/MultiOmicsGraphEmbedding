@@ -1,8 +1,22 @@
 import pandas as pd
 import tensorflow as tf
 import torch
+from torch.utils import data
+from torch.utils.data import BatchSampler
 
 from . import DataGenerator, SubgraphGenerator
+
+
+class NeighborSampler(BatchSampler):
+    def __init__(self, dataset: SubgraphGenerator, batch_size: int, drop_last: bool) -> None:
+        self.dataset = dataset
+        self.batch_size = self.dataset.batch_size
+
+    def __iter__(self):
+        return self.dataset.traverse_network(self.batch_size)
+
+    def __len__(self) -> int:
+        return self.dataset.n_steps
 
 
 class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
