@@ -86,36 +86,40 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
         return sampled_nodes
 
-    def bfs_traversal(self, batch_size, seed_node=None):
+    def bfs_traversal(self, batch_size, seed_node: str = None):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:
-            if seed_node is None:
-                start_node = self.sample_node_by_freq(1)
+            if seed_node is None or seed_node not in self.node_list:
+                start_node = self.sample_node_by_freq(1)[0]
+            else:
+                start_node = seed_node
 
             successor_nodes = [node for source, successors in
                                islice(nx.traversal.bfs_successors(self.network.G if self.directed else self.network.G_u,
-                                                                  source=start_node[0]),
+                                                                  source=start_node),
                                       batch_size) for node in successors]
 
-            sampled_nodes.extend(start_node.tolist() + successor_nodes)
+            sampled_nodes.extend([start_node] + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:
             sampled_nodes = sampled_nodes[:batch_size]
         return sampled_nodes
 
-    def dfs_traversal(self, batch_size, seed_node=None):
+    def dfs_traversal(self, batch_size, seed_node: str = None):
         sampled_nodes = []
 
         while len(sampled_nodes) < batch_size:
-            if seed_node is None:
-                start_node = self.sample_node_by_freq(1)
+            if seed_node is None or seed_node not in self.node_list:
+                start_node = self.sample_node_by_freq(1)[0]
+            else:
+                start_node = seed_node
 
             successor_nodes = list(
                 islice(nx.traversal.dfs_successors(self.network.G if self.directed else self.network.G_u,
-                                                   source=start_node[0]), batch_size))
-            sampled_nodes.extend(start_node.tolist() + successor_nodes)
+                                                   source=start_node), batch_size))
+            sampled_nodes.extend([start_node] + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:

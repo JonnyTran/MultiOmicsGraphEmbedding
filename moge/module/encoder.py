@@ -167,20 +167,31 @@ class EncoderLSTM(pl.LightningModule):
         train_X, train_y, train_weights = batch
         input_seqs, subnetwork = train_X["input_seqs"], train_X["subnetwork"]
 
+        input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
+        y = y.view(y.shape[1:])
+
         Y_hat = self.forward(input_seqs, subnetwork)
-        loss = self.loss(Y_hat, train_y, None)
-        return {"loss": loss}
+        loss = self.loss(Y_hat, y, None)
+
+        self.update_metrics(Y_hat, y)
+        return {"loss": loss,
+                "val_precision": self.precision.compute(),
+                "val_recall": self.recall.compute()
+                }
 
     def validation_step(self, batch, batch_nb):
         X, y, train_weights = batch
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+        input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
+        y = y.view(y.shape[1:])
+
         Y_hat = self.forward(input_seqs, subnetwork)
         loss = self.loss(Y_hat, y, None)
 
-        # self.update_metrics(Y_hat, y)
+        self.update_metrics(Y_hat, y)
         return {"val_loss": loss,
-                # "val_precision": self.precision.compute(),
-                # "val_recall": self.recall.compute()
+                "val_precision": self.precision.compute(),
+                "val_recall": self.recall.compute()
                 }
 
     def validation_epoch_end(self, outputs):

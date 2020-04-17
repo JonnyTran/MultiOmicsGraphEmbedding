@@ -2,20 +2,33 @@ import pandas as pd
 import tensorflow as tf
 import torch
 from torch.utils import data
-from torch.utils.data import BatchSampler
+from torch.utils.data import BatchSampler, Sampler
 
 from . import DataGenerator, SubgraphGenerator
 
 
-class NeighborSampler(BatchSampler):
-    def __init__(self, dataset: SubgraphGenerator, batch_size: int, drop_last: bool) -> None:
+class GraphSampler(Sampler):
+    def __init__(self, dataset: SubgraphGenerator) -> None:
         self.dataset = dataset
         self.batch_size = self.dataset.batch_size
 
     def __iter__(self):
-        return self.dataset.traverse_network(self.batch_size)
+        return iter(self.dataset.traverse_network(self.batch_size))
 
-    def __len__(self) -> int:
+    def __len__(self):
+        return self.dataset.n_steps
+
+
+class NeighborSampler(BatchSampler):
+    def __init__(self, sampler, batch_size: int, drop_last: bool) -> None:
+        self.dataset = sampler.dataset
+        self.batch_size = self.dataset.batch_size
+        super(NeighborSampler, self).__init__(sampler, batch_size, drop_last)
+
+    def __iter__(self):
+        return iter(self.dataset.traverse_network(self.batch_size))
+
+    def __len__(self):
         return self.dataset.n_steps
 
 
@@ -34,10 +47,10 @@ class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
         return len(self.node_list)
 
     def __getitem__(self, item=None):
-        sampled_nodes = self.node_list[item]
-        print("sampled_node", sampled_nodes.shape, sampled_nodes)
-        X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
-        return X, y, idx_weights.values
+        sampled_nodes = self.node_list.loc[item]
+        nodelist = self.traverse_network(self.batch_size, seed_node=sampled_nodes)
+        X, y, idx_weights = self.__getdata__(nodelist, variable_length=False)
+        return X, y, idx_weights
 
 
 class GeneratorDataset(tf.data.Dataset):
