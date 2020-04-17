@@ -5,99 +5,65 @@ from ignite.metrics import Precision, Recall
 from torch.autograd import Variable
 from torch.nn import functional as F
 from torch_geometric.nn import GATConv
+from argparse import ArgumentParser
 
 
 class EncoderLSTM(pl.LightningModule):
-    def __init__(self, encoding_dim: int, embedding_dim: int, n_classes: int, vocab: dict, word_embedding_size=None,
-                 nb_lstm_layers=1, nb_lstm_units=100, nb_lstm_dropout=0.2, nb_lstm_hidden_dropout=0.2,
-                 nb_lstm_batchnorm=True,
-                 nb_conv1d_filters=192, nb_conv1d_kernel_size=26, nb_max_pool_size=2, nb_conv1d_dropout=0.2,
-                 nb_conv1d_batchnorm=True,
-                 nb_attn_heads=4, nb_attn_dropout=0.5, nb_weight_decay=1e-2,
-                 nb_cls_dense_size=512, nb_cls_dropout=0.2,
-                 verbose=False,
-                 ):
+    def __init__(self, hparams):
         super(EncoderLSTM, self).__init__()
-        self.vocab = vocab
-        if word_embedding_size is None:
-            self.word_embedding_size = len(self.vocab)
-        else:
-            self.word_embedding_size = word_embedding_size
+        self.hparams = hparams
 
-        self.nb_conv1d_filters = nb_conv1d_filters
-        self.nb_conv1d_kernel_size = nb_conv1d_kernel_size
-        self.nb_max_pool_size = nb_max_pool_size
-        self.nb_conv1d_dropout = nb_conv1d_dropout
-        self.nb_conv1d_batchnorm = nb_conv1d_batchnorm
-
-        self.nb_lstm_layers = nb_lstm_layers
-        self.nb_lstm_units = nb_lstm_units
-        self.nb_lstm_dropout = nb_lstm_dropout
-        self.nb_lstm_batchnorm = nb_lstm_batchnorm
-
-        self.nb_lstm_hidden_dropout = nb_lstm_hidden_dropout
-
-        self.encoding_dim = encoding_dim
-
-        self.nb_attn_heads = nb_attn_heads
-        self.nb_attn_dropout = nb_attn_dropout
-        self.embedding_dim = embedding_dim
-
-        self.nb_weight_decay = nb_weight_decay
-
-        self.n_classes = n_classes
-        self.nb_cls_dense_size = nb_cls_dense_size
-        self.nb_cls_dropout = nb_cls_dropout
+        if self.hparams.word_embedding_size is None:
+            self.hparams.word_embedding_size = self.hparams.vocab_size
 
         self.__build_model()
-
         self.init_metrics()
 
     def __build_model(self):
         # Encoder
         self.word_embedding = nn.Embedding(
-            num_embeddings=len(self.vocab) + 1,
-            embedding_dim=self.word_embedding_size,
+            num_embeddings=self.hparams.vocab_size + 1,
+            embedding_dim=self.hparams.word_embedding_size,
             padding_idx=0)
         self.conv1 = nn.Conv1d(
-            in_channels=self.word_embedding_size,
-            out_channels=self.nb_conv1d_filters,
-            kernel_size=self.nb_conv1d_kernel_size)
-        self.conv1_dropout = nn.Dropout(p=self.nb_conv1d_dropout)
-        # self.conv_batchnorm = nn.LayerNorm([self.nb_conv1d_filters, ])
+            in_channels=self.hparams.word_embedding_size,
+            out_channels=self.hparams.nb_conv1d_filters,
+            kernel_size=self.hparams.nb_conv1d_kernel_size)
+        self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1d_dropout)
+        # self.conv_layernorm = nn.LayerNorm([self.nb_conv1d_filters, ])
 
         self.lstm = nn.LSTM(
-            input_size=self.nb_conv1d_filters,
-            hidden_size=self.nb_lstm_units,
-            num_layers=self.nb_lstm_layers,
-            dropout=self.nb_lstm_dropout,
+            input_size=self.hparams.nb_conv1d_filters,
+            hidden_size=self.hparams.nb_lstm_units,
+            num_layers=self.hparams.nb_lstm_layers,
+            dropout=self.hparams.nb_lstm_dropout,
             batch_first=True, )
-        self.lstm_hidden_dropout = nn.Dropout(p=self.nb_lstm_hidden_dropout)
-        self.lstm_batchnorm = nn.LayerNorm(self.nb_lstm_units * self.nb_lstm_layers)
-        self.encoder = nn.Linear(self.nb_lstm_units * self.nb_lstm_layers, self.encoding_dim)
+        self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
+        self.lstm_layernorm = nn.LayerNorm(self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
+        self.fc_encoder = nn.Linear(self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers, self.hparams.encoding_dim)
 
         # Embedder
         self.embedder = GATConv(
-            in_channels=self.encoding_dim,
-            out_channels=int(self.embedding_dim / self.nb_attn_heads),
-            heads=self.nb_attn_heads,
+            in_channels=self.hparams.encoding_dim,
+            out_channels=int(self.hparams.embedding_dim / self.hparams.nb_attn_heads),
+            heads=self.hparams.nb_attn_heads,
             concat=True,
-            dropout=self.nb_attn_dropout
+            dropout=self.hparams.nb_attn_dropout
         )
 
         # Classifier
-        self.classifier = nn.Sequential(
-            nn.Linear(self.embedding_dim, self.nb_cls_dense_size),
+        self.fc_classifier = nn.Sequential(
+            nn.Linear(self.hparams.embedding_dim, self.hparams.nb_cls_dense_size),
             nn.ReLU(),
-            nn.Dropout(p=self.nb_cls_dropout),
-            nn.Linear(self.nb_cls_dense_size, self.n_classes),
+            nn.Dropout(p=self.hparams.nb_cls_dropout),
+            nn.Linear(self.hparams.nb_cls_dense_size, self.hparams.n_classes),
             nn.Sigmoid()
         )
 
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-        hidden_a = torch.randn(self.nb_lstm_layers, batch_size, self.nb_lstm_units).cuda()
-        hidden_b = torch.randn(self.nb_lstm_layers, batch_size, self.nb_lstm_units).cuda()
+        hidden_a = torch.randn(self.hparams.nb_lstm_layers, batch_size, self.hparams.nb_lstm_units).cuda()
+        hidden_b = torch.randn(self.hparams.nb_lstm_layers, batch_size, self.hparams.nb_lstm_units).cuda()
 
         hidden_a = Variable(hidden_a)
         hidden_b = Variable(hidden_b)
@@ -119,20 +85,20 @@ class EncoderLSTM(pl.LightningModule):
         self.hidden = self.init_hidden(batch_size)
         X = self.word_embedding(input_seqs)
         X = X.permute(0, 2, 1)
-        X = F.relu(F.max_pool1d(self.conv1(X), self.nb_max_pool_size))
+        X = F.relu(F.max_pool1d(self.conv1(X), self.hparams.nb_max_pool_size))
         X = self.conv1_dropout(X)
-        if self.nb_conv1d_batchnorm:
+        if self.hparams.nb_conv1d_layernorm:
             X = F.layer_norm(X, X.shape[1:])
-            # X = self.conv_batchnorm(X)
+            # X = self.conv_layernorm(X)
         X = X.permute(0, 2, 1)
-        X_lengths = (X_lengths - self.nb_conv1d_kernel_size) / self.nb_max_pool_size + 1
+        X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size) / self.hparams.nb_max_pool_size + 1
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
-        X = self.hidden[0].view(self.nb_lstm_layers * batch_size, self.nb_lstm_units)
+        X = self.hidden[0].view(self.hparams.nb_lstm_layers * batch_size, self.hparams.nb_lstm_units)
         X = self.lstm_hidden_dropout(X)
-        if self.nb_lstm_batchnorm:
-            X = self.lstm_batchnorm(X)
-        X = self.encoder(X)
+        if self.hparams.nb_lstm_layernorm:
+            X = self.lstm_layernorm(X)
+        X = self.fc_encoder(X)
         return X
 
     def get_embeddings(self, X):
@@ -168,9 +134,6 @@ class EncoderLSTM(pl.LightningModule):
         X, y, train_weights = batch
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
 
-        input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
-        y = y.view(y.shape[1:])
-
         Y_hat = self.forward(input_seqs, subnetwork)
         loss = self.loss(Y_hat, y, None)
 
@@ -195,9 +158,6 @@ class EncoderLSTM(pl.LightningModule):
     def validation_step(self, batch, batch_nb):
         X, y, train_weights = batch
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
-
-        input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
-        y = y.view(y.shape[1:])
 
         Y_hat = self.forward(input_seqs, subnetwork)
         loss = self.loss(Y_hat, y, None)
@@ -241,5 +201,53 @@ class EncoderLSTM(pl.LightningModule):
         self.recall_val.reset()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=self.nb_weight_decay)
+        optimizer = torch.optim.Adam(self.parameters(),
+                                     lr=self.hparams.lr,
+                                     weight_decay=self.hparams.nb_weight_decay)
         return optimizer
+
+
+def main(hparams):
+    # init model
+    model = EncoderLSTM(hparams)
+
+    trainer = pl.Trainer()
+    trainer.fit(model)
+
+
+if __name__ == '__main__':
+    parser = ArgumentParser()
+
+    # parametrize the network
+    parser.add_argument('--encoding_dim', type=int, default=128)
+    parser.add_argument('--embedding_dim', type=int, default=256)
+    parser.add_argument('--n_classes', type=int, default=2000)
+    parser.add_argument('--vocab', type=int, default=22)
+    parser.add_argument('--word_embedding_size', type=int, default=None)
+
+    parser.add_argument('--nb_conv1d_filters', type=int, default=192)
+    parser.add_argument('--nb_conv1d_kernel_size', type=int, default=26)
+    parser.add_argument('--nb_max_pool_size', type=int, default=13)
+    parser.add_argument('--nb_conv1d_dropout', type=float, default=0.2)
+    parser.add_argument('--nb_conv1d_layernorm', type=bool, default=True)
+
+    parser.add_argument('--nb_lstm_layers', type=int, default=1)
+    parser.add_argument('--nb_lstm_units', type=int, default=100)
+    parser.add_argument('--nb_lstm_dropout', type=float, default=0.0)
+    parser.add_argument('--nb_lstm_hidden_dropout', type=float, default=0.0)
+    parser.add_argument('--nb_lstm_layernorm', type=bool, default=False)
+
+    parser.add_argument('--nb_attn_heads', type=int, default=4)
+    parser.add_argument('--nb_attn_dropout', type=float, default=0.5)
+
+    parser.add_argument('--nb_cls_dense_size', type=int, default=512)
+    parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
+
+    parser.add_argument('--nb_weight_decay', type=float, default=0.0)
+    parser.add_argument('--lr', type=float, default=1e-3)
+
+    # add all the available options to the trainer
+    parser = pl.Trainer.add_argparse_args(parser)
+
+    args = parser.parse_args()
+    main(args)
