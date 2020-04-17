@@ -197,8 +197,8 @@ class EncoderLSTM(pl.LightningModule):
         self.update_metrics(Y_hat, y)
         progress_bar = {
             "val_precision": self.precision.compute(),
-            "val_recall": self.recall.compute()
-        }
+            "val_recall": self.recall.compute()}
+
         return {"val_loss": loss,
                 'progress_bar': progress_bar,
                 'log': progress_bar,
