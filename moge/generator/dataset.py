@@ -47,8 +47,8 @@ class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
         return len(self.node_list)
 
     def __getitem__(self, item=None):
-        sampled_nodes = self.node_list.loc[item]
-        nodelist = self.traverse_network(self.batch_size, seed_node=sampled_nodes)
+        sampled_node = self.node_list.loc[item]
+        nodelist = self.traverse_network(self.batch_size, seed_node=sampled_node)
         X, y, idx_weights = self.__getdata__(nodelist, variable_length=False)
         return X, y, idx_weights
 

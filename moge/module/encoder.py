@@ -30,7 +30,6 @@ class EncoderLSTM(pl.LightningModule):
             out_channels=self.hparams.nb_conv1d_filters,
             kernel_size=self.hparams.nb_conv1d_kernel_size)
         self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1d_dropout)
-        # self.conv_layernorm = nn.LayerNorm([self.nb_conv1d_filters, ])
 
         self.lstm = nn.LSTM(
             input_size=self.hparams.nb_conv1d_filters,
@@ -71,12 +70,11 @@ class EncoderLSTM(pl.LightningModule):
         return (hidden_a, hidden_b)
 
     def forward(self, input_seqs, subnetwork):
-        X = F.sigmoid(self.get_encodings(input_seqs))
-
+        encodings = self.get_encodings(input_seqs)
         # Embedder
-        # X = self.embedder(X, subnetwork)
+        X = self.embedder(encodings, subnetwork)
         # Classifier
-        # X = self.classifier(X)
+        X = self.fc_classifier(X)
         return X
 
     def get_encodings(self, input_seqs):
@@ -90,10 +88,12 @@ class EncoderLSTM(pl.LightningModule):
         if self.hparams.nb_conv1d_layernorm:
             X = F.layer_norm(X, X.shape[1:])
             # X = self.conv_layernorm(X)
+
         X = X.permute(0, 2, 1)
         X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size) / self.hparams.nb_max_pool_size + 1
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
+
         X = self.hidden[0].view(self.hparams.nb_lstm_layers * batch_size, self.hparams.nb_lstm_units)
         X = self.lstm_hidden_dropout(X)
         if self.hparams.nb_lstm_layernorm:
@@ -134,6 +134,9 @@ class EncoderLSTM(pl.LightningModule):
         X, y, train_weights = batch
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
 
+        # input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
+        # y = y.view(y.shape[1:])
+
         Y_hat = self.forward(input_seqs, subnetwork)
         loss = self.loss(Y_hat, y, None)
 
@@ -145,19 +148,28 @@ class EncoderLSTM(pl.LightningModule):
 
         return {"loss": loss,
                 'progress_bar': progress_bar,
-                'log': progress_bar,
                 }
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
 
-        results = {"avg_loss": avg_loss}
-        self.reset_metrics()
-        return results
+        tensorboard_logs = {
+            "loss": avg_loss,
+            "precision": self.precision.compute(),
+            "recall": self.recall.compute(),
+        }
+        self.reset_metrics(training=True)
+        return {"avg_loss": avg_loss,
+                "progress_bar": tensorboard_logs,
+                "log": tensorboard_logs,
+                }
 
     def validation_step(self, batch, batch_nb):
         X, y, train_weights = batch
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+
+        # input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
+        # y = y.view(y.shape[1:])
 
         Y_hat = self.forward(input_seqs, subnetwork)
         loss = self.loss(Y_hat, y, None)
@@ -176,7 +188,7 @@ class EncoderLSTM(pl.LightningModule):
         results = {"avg_val_loss": avg_loss,
                    "progress_bar": tensorboard_logs,
                    "log": tensorboard_logs}
-        self.reset_metrics()
+        self.reset_metrics(training=False)
 
         return results
 
@@ -194,11 +206,13 @@ class EncoderLSTM(pl.LightningModule):
             self.precision_val.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
 
-    def reset_metrics(self):
-        self.precision.reset()
-        self.recall.reset()
-        self.precision_val.reset()
-        self.recall_val.reset()
+    def reset_metrics(self, training):
+        if training:
+            self.precision.reset()
+            self.recall.reset()
+        else:
+            self.precision_val.reset()
+            self.recall_val.reset()
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
