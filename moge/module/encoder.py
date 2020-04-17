@@ -39,17 +39,29 @@ class EncoderLSTM(pl.LightningModule):
 
         self.encoding_dim = encoding_dim
 
+        self.nb_attn_heads = nb_attn_heads
+        self.nb_attn_dropout = nb_attn_dropout
+        self.embedding_dim = embedding_dim
+
+        self.n_classes = n_classes
+        self.nb_cls_dense_size = nb_cls_dense_size
+        self.nb_cls_dropout = nb_cls_dropout
+
+        self.__build_model()
+
+        self.init_metrics()
+
+    def __build_model(self, embedding_dim, n_classes, nb_attn_dropout, nb_attn_heads, nb_cls_dense_size,
+                      nb_cls_dropout):
         # Encoder
         self.word_embedding = nn.Embedding(
             num_embeddings=len(self.vocab) + 1,
             embedding_dim=self.word_embedding_size,
             padding_idx=0)
-
         self.conv1 = nn.Conv1d(
             in_channels=self.word_embedding_size,
             out_channels=self.nb_conv1d_filters,
             kernel_size=self.nb_conv1d_kernel_size)
-
         self.conv1_dropout = nn.Dropout(p=self.nb_conv1d_dropout)
         # self.conv_batchnorm = nn.LayerNorm([self.nb_conv1d_filters, ])
 
@@ -59,17 +71,11 @@ class EncoderLSTM(pl.LightningModule):
             num_layers=self.nb_lstm_layers,
             dropout=self.nb_lstm_dropout,
             batch_first=True, )
-
         self.lstm_hidden_dropout = nn.Dropout(p=self.nb_lstm_hidden_dropout)
         self.lstm_batchnorm = nn.LayerNorm(self.nb_lstm_units * self.nb_lstm_layers)
-
         self.encoder = nn.Linear(self.nb_lstm_units * self.nb_lstm_layers, self.encoding_dim)
 
         # Embedder
-        self.nb_attn_heads = nb_attn_heads
-        self.nb_attn_dropout = nb_attn_dropout
-        self.embedding_dim = embedding_dim
-
         self.embedder = GATConv(
             in_channels=self.encoding_dim,
             out_channels=int(self.embedding_dim / self.nb_attn_heads),
@@ -79,10 +85,6 @@ class EncoderLSTM(pl.LightningModule):
         )
 
         # Classifier
-        self.n_classes = n_classes
-        self.nb_cls_dense_size = nb_cls_dense_size
-        self.nb_cls_dropout = nb_cls_dropout
-
         self.classifier = nn.Sequential(
             nn.Linear(self.embedding_dim, self.nb_cls_dense_size),
             nn.ReLU(),
@@ -90,8 +92,6 @@ class EncoderLSTM(pl.LightningModule):
             nn.Linear(self.nb_cls_dense_size, self.n_classes),
             nn.Sigmoid()
         )
-
-        self.init_metrics()
 
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
@@ -164,8 +164,8 @@ class EncoderLSTM(pl.LightningModule):
         # return ce_loss
 
     def training_step(self, batch, batch_nb):
-        train_X, train_y, train_weights = batch
-        input_seqs, subnetwork = train_X["input_seqs"], train_X["subnetwork"]
+        X, y, train_weights = batch
+        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
 
         input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
         y = y.view(y.shape[1:])
@@ -174,14 +174,20 @@ class EncoderLSTM(pl.LightningModule):
         loss = self.loss(Y_hat, y, None)
 
         self.update_metrics(Y_hat, y)
+        progress_bar = {
+            "precision": self.precision.compute(),
+            "recall": self.recall.compute()
+        }
+
         return {"loss": loss,
-                "val_precision": self.precision.compute(),
-                "val_recall": self.recall.compute()
+                'progress_bar': progress_bar,
+                'log': progress_bar,
                 }
 
     def validation_step(self, batch, batch_nb):
         X, y, train_weights = batch
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+
         input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
         y = y.view(y.shape[1:])
 
@@ -189,9 +195,13 @@ class EncoderLSTM(pl.LightningModule):
         loss = self.loss(Y_hat, y, None)
 
         self.update_metrics(Y_hat, y)
+        progress_bar = {
+            "val_precision": self.precision.compute(),
+            "val_recall": self.recall.compute()
+        }
         return {"val_loss": loss,
-                "val_precision": self.precision.compute(),
-                "val_recall": self.recall.compute()
+                'progress_bar': progress_bar,
+                'log': progress_bar,
                 }
 
     def validation_epoch_end(self, outputs):
@@ -199,9 +209,9 @@ class EncoderLSTM(pl.LightningModule):
         tensorboard_logs = {"val_loss": avg_loss}
 
         results = {"avg_val_loss": avg_loss,
-                   # "avg_val_precision": self.precision.compute(),
+                   "avg_val_precision": self.precision.compute(),
                    "log": tensorboard_logs}
-        # self.reset_metrics()
+        self.reset_metrics()
 
         return results
 
