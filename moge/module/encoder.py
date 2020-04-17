@@ -13,7 +13,7 @@ class EncoderLSTM(pl.LightningModule):
                  nb_lstm_batchnorm=True,
                  nb_conv1d_filters=192, nb_conv1d_kernel_size=26, nb_max_pool_size=2, nb_conv1d_dropout=0.2,
                  nb_conv1d_batchnorm=True,
-                 nb_attn_heads=4, nb_attn_dropout=0.5,
+                 nb_attn_heads=4, nb_attn_dropout=0.5, nb_weight_decay=1e-2,
                  nb_cls_dense_size=512, nb_cls_dropout=0.2,
                  verbose=False,
                  ):
@@ -42,6 +42,8 @@ class EncoderLSTM(pl.LightningModule):
         self.nb_attn_heads = nb_attn_heads
         self.nb_attn_dropout = nb_attn_dropout
         self.embedding_dim = embedding_dim
+
+        self.nb_weight_decay = nb_weight_decay
 
         self.n_classes = n_classes
         self.nb_cls_dense_size = nb_cls_dense_size
@@ -172,7 +174,7 @@ class EncoderLSTM(pl.LightningModule):
         Y_hat = self.forward(input_seqs, subnetwork)
         loss = self.loss(Y_hat, y, None)
 
-        self.update_metrics(Y_hat, y)
+        self.update_metrics(Y_hat, y, training=True)
         progress_bar = {
             "precision": self.precision.compute(),
             "recall": self.recall.compute()
@@ -188,7 +190,6 @@ class EncoderLSTM(pl.LightningModule):
 
         results = {"avg_loss": avg_loss}
         self.reset_metrics()
-
         return results
 
     def validation_step(self, batch, batch_nb):
@@ -201,15 +202,15 @@ class EncoderLSTM(pl.LightningModule):
         Y_hat = self.forward(input_seqs, subnetwork)
         loss = self.loss(Y_hat, y, None)
 
-        self.update_metrics(Y_hat, y)
+        self.update_metrics(Y_hat, y, training=False)
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         tensorboard_logs = {
             "val_loss": avg_loss,
-            "val_precision": self.precision.compute(),
-            "val_recall": self.recall.compute(),
+            "val_precision": self.precision_val.compute(),
+            "val_recall": self.recall_val.compute(),
         }
 
         results = {"avg_val_loss": avg_loss,
@@ -222,15 +223,23 @@ class EncoderLSTM(pl.LightningModule):
     def init_metrics(self):
         self.precision = Precision(average=True, is_multilabel=True)
         self.recall = Recall(average=True, is_multilabel=True)
+        self.precision_val = Precision(average=True, is_multilabel=True)
+        self.recall_val = Recall(average=True, is_multilabel=True)
 
-    def update_metrics(self, y_pred, y_true):
-        self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
-        self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
+    def update_metrics(self, y_pred, y_true, training):
+        if training:
+            self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
+            self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
+        else:
+            self.precision_val.update(((y_pred > 0.5).type_as(y_true), y_true))
+            self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
 
     def reset_metrics(self):
         self.precision.reset()
         self.recall.reset()
+        self.precision_val.reset()
+        self.recall_val.reset()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=self.nb_weight_decay)
         return optimizer
