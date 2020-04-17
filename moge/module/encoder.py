@@ -51,8 +51,7 @@ class EncoderLSTM(pl.LightningModule):
 
         self.init_metrics()
 
-    def __build_model(self, embedding_dim, n_classes, nb_attn_dropout, nb_attn_heads, nb_cls_dense_size,
-                      nb_cls_dropout):
+    def __build_model(self):
         # Encoder
         self.word_embedding = nn.Embedding(
             num_embeddings=len(self.vocab) + 1,
@@ -184,6 +183,14 @@ class EncoderLSTM(pl.LightningModule):
                 'log': progress_bar,
                 }
 
+    def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
+
+        results = {"avg_loss": avg_loss}
+        self.reset_metrics()
+
+        return results
+
     def validation_step(self, batch, batch_nb):
         X, y, train_weights = batch
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
@@ -195,21 +202,18 @@ class EncoderLSTM(pl.LightningModule):
         loss = self.loss(Y_hat, y, None)
 
         self.update_metrics(Y_hat, y)
-        progress_bar = {
-            "val_precision": self.precision.compute(),
-            "val_recall": self.recall.compute()}
-
-        return {"val_loss": loss,
-                'progress_bar': progress_bar,
-                'log': progress_bar,
-                }
+        return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        tensorboard_logs = {"val_loss": avg_loss}
+        tensorboard_logs = {
+            "val_loss": avg_loss,
+            "val_precision": self.precision.compute(),
+            "val_recall": self.recall.compute(),
+        }
 
         results = {"avg_val_loss": avg_loss,
-                   "avg_val_precision": self.precision.compute(),
+                   "progress_bar": tensorboard_logs,
                    "log": tensorboard_logs}
         self.reset_metrics()
 
