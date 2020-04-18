@@ -81,6 +81,19 @@ class AttributedNetwork(Network):
             {k: concat_uniques for k in self.annotations.columns})
         print("Annotation columns:", self.annotations.columns.tolist())
 
+    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6"):
+        labels = self.annotations[label]
+        if labels.str.contains("\||;", regex=True).any():
+            labels = labels.str.split("\||;")
+
+        labels = labels.map(lambda x: [node for node in x if node in go_id_colors.index] if x and len(x) > 0 else None)
+        labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
+        label_color = labels.map(go_id_colors)
+        if fillna:
+            label_color.fillna("#e5ecf6", inplace=True)
+
+        return label_color
+
     def process_feature_tranformer(self, delimiter="\||;", min_count=0, verbose=False):
         """
         For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer

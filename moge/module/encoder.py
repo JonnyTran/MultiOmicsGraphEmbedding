@@ -1,3 +1,5 @@
+import numpy as np
+
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
@@ -61,8 +63,10 @@ class EncoderLSTM(pl.LightningModule):
 
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-        hidden_a = torch.randn(self.hparams.nb_lstm_layers, batch_size, self.hparams.nb_lstm_units).cuda()
-        hidden_b = torch.randn(self.hparams.nb_lstm_layers, batch_size, self.hparams.nb_lstm_units).cuda()
+        hidden_a = torch.randn(self.hparams.nb_lstm_layers, batch_size, self.hparams.nb_lstm_units).type_as(
+            self.fc_encoder.weight)
+        hidden_b = torch.randn(self.hparams.nb_lstm_layers, batch_size, self.hparams.nb_lstm_units).type_as(
+            self.fc_encoder.weight)
 
         hidden_a = Variable(hidden_a)
         hidden_b = Variable(hidden_b)
@@ -100,11 +104,6 @@ class EncoderLSTM(pl.LightningModule):
             X = self.lstm_layernorm(X)
         X = self.fc_encoder(X)
         return X
-
-    def get_embeddings(self, X):
-        encodings = self.get_encodings(X["input_seqs"])
-        embeddings = self.embedder(encodings, X["subnetwork"])
-        return embeddings
 
     def loss(self, Y_hat, Y, weights=None):
         Y = Y.type_as(Y_hat)
@@ -159,7 +158,7 @@ class EncoderLSTM(pl.LightningModule):
             "recall": self.recall.compute(),
         }
         self.reset_metrics(training=True)
-        return {"avg_loss": avg_loss,
+        return {"loss": avg_loss,
                 "progress_bar": tensorboard_logs,
                 "log": tensorboard_logs,
                 }
@@ -185,12 +184,38 @@ class EncoderLSTM(pl.LightningModule):
             "val_recall": self.recall_val.compute(),
         }
 
-        results = {"avg_val_loss": avg_loss,
+        results = {"val_loss": avg_loss,
                    "progress_bar": tensorboard_logs,
                    "log": tensorboard_logs}
         self.reset_metrics(training=False)
 
         return results
+
+    def get_embeddings(self, X, cuda=True):
+        if not isinstance(X["input_seqs"], torch.Tensor):
+            X = {k: torch.tensor(v).cuda() for k, v in X.items()}
+
+        if cuda:
+            X = {k: v.cuda() for k, v in X.items()}
+        else:
+            X = {k: v.cpu() for k, v in X.items()}
+
+        encodings = self.get_encodings(X["input_seqs"])
+        embeddings = self.embedder(encodings, X["subnetwork"])
+
+        return embeddings.detach().cpu().numpy()
+
+    def predict(self, embeddings, cuda=True):
+        if not isinstance(embeddings, torch.Tensor):
+            embeddings = torch.tensor(embeddings)
+
+        if cuda:
+            embeddings = embeddings.cuda()
+        else:
+            embeddings = embeddings.cpu()
+
+        y_pred = self.fc_classifier(embeddings)
+        return y_pred.detach().cpu().numpy()
 
     def init_metrics(self):
         self.precision = Precision(average=True, is_multilabel=True)
