@@ -38,10 +38,13 @@ class EncoderLSTM(pl.LightningModule):
             hidden_size=self.hparams.nb_lstm_units,
             num_layers=self.hparams.nb_lstm_layers,
             dropout=self.hparams.nb_lstm_dropout,
+            bidirectional=self.hparams.nb_lstm_bidirectional,
             batch_first=True, )
         self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
         self.lstm_layernorm = nn.LayerNorm(self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
-        self.fc_encoder = nn.Linear(self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers, self.hparams.encoding_dim)
+        self.fc_encoder = nn.Linear(
+            self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers * (2 if self.hparams.nb_lstm_bidirectional else 1),
+            self.hparams.encoding_dim)
 
         # Embedder
         self.embedder = GATConv(
@@ -63,9 +66,11 @@ class EncoderLSTM(pl.LightningModule):
 
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-        hidden_a = torch.randn(self.hparams.nb_lstm_layers, batch_size, self.hparams.nb_lstm_units).type_as(
+        hidden_a = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers,
+                               batch_size, self.hparams.nb_lstm_units).type_as(
             self.fc_encoder.weight)
-        hidden_b = torch.randn(self.hparams.nb_lstm_layers, batch_size, self.hparams.nb_lstm_units).type_as(
+        hidden_b = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers,
+                               batch_size, self.hparams.nb_lstm_units).type_as(
             self.fc_encoder.weight)
 
         hidden_a = Variable(hidden_a)
@@ -75,10 +80,11 @@ class EncoderLSTM(pl.LightningModule):
 
     def forward(self, input_seqs, subnetwork):
         encodings = self.get_encodings(input_seqs)
+        X = F.sigmoid(encodings)
         # Embedder
-        X = self.embedder(encodings, subnetwork)
+        # X = self.embedder(encodings, subnetwork)
         # Classifier
-        X = self.fc_classifier(X)
+        # X = self.fc_classifier(X)
         return X
 
     def get_encodings(self, input_seqs):
@@ -91,14 +97,17 @@ class EncoderLSTM(pl.LightningModule):
         X = self.conv1_dropout(X)
         if self.hparams.nb_conv1d_layernorm:
             X = F.layer_norm(X, X.shape[1:])
-            # X = self.conv_layernorm(X)
 
         X = X.permute(0, 2, 1)
-        X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size) / self.hparams.nb_max_pool_size + 1
+        X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size) / self.hparams.nb_max_pool_size
+
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
 
-        X = self.hidden[0].view(self.hparams.nb_lstm_layers * batch_size, self.hparams.nb_lstm_units)
+        X = self.hidden[0].permute(1, 0, 2)
+        X = X.reshape(batch_size, (
+            2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers * self.hparams.nb_lstm_units)
+
         X = self.lstm_hidden_dropout(X)
         if self.hparams.nb_lstm_layernorm:
             X = self.lstm_layernorm(X)
@@ -242,7 +251,8 @@ class EncoderLSTM(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
                                      lr=self.hparams.lr,
-                                     weight_decay=self.hparams.nb_weight_decay)
+                                     # weight_decay=self.hparams.nb_weight_decay
+                                     )
         return optimizer
 
 
