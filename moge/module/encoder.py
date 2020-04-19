@@ -1,13 +1,17 @@
-import numpy as np
+import pickle
+import random
+from argparse import ArgumentParser
 
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 from ignite.metrics import Precision, Recall
+from pytorch_lightning.callbacks import EarlyStopping
 from torch.autograd import Variable
 from torch.nn import functional as F
 from torch_geometric.nn import GATConv
-from argparse import ArgumentParser
+
+from ..generator.subgraph_generator import SubgraphGenerator
 
 
 class EncoderLSTM(pl.LightningModule):
@@ -255,12 +259,77 @@ class EncoderLSTM(pl.LightningModule):
                                      )
         return optimizer
 
+    @pl.data_loader
+    def train_dataloader(self):
+        return torch.utils.data.DataLoader(
+            dataset_train,
+            batch_size=None,
+            num_workers=10
+        )
+
+    @pl.data_loader
+    def val_dataloader(self):
+        return torch.utils.data.DataLoader(
+            dataset_test,
+            batch_size=None,
+            num_workers=10
+        )
+
+
+with open('../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle', 'rb') as file:
+    network = pickle.load(file)
+
+# INPUT PARAMETERS
+variables = []
+# variables = ['chromosome_name', 'transcript_start', 'transcript_end']
+targets = ['go_id']
+
+network.process_feature_tranformer(min_count=100, verbose=True)
+classes = network.feature_transformer[targets[0]].classes_
+n_classes = len(classes)
+
+test_frac = 0.05
+max_length = 1000
+input_shape = (None,)
+batch_size = 2000
+n_steps = int(400000 / batch_size)
+
+directed = False
+
+seed = random.randint(0, 1000)
+
+network.split_stratified(directed=directed, stratify_label=targets[0], stratify_omic=False,
+                         n_splits=int(1 / test_frac), dropna=True, seed=seed)
+
+dataset_train = network.get_train_generator(
+    SubgraphGenerator, variables=variables, targets=targets,
+    sampling="bfs", batch_size=batch_size, agg_mode=None,
+    method="GAT", adj_output="coo",
+    compression="log", n_steps=n_steps, directed=directed,
+    maxlen=max_length, padding='post', truncating='post', variable_length=False,
+    seed=seed, verbose=True)
+
+dataset_test = network.get_test_generator(
+    SubgraphGenerator, variables=variables, targets=targets,
+    sampling='all', batch_size=batch_size, agg_mode=None,
+    method="GAT", adj_output="coo",
+    compression="log", n_steps=1, directed=directed,
+    maxlen=max_length, padding='post', truncating='post', variable_length=False,
+    seed=seed, verbose=True)
+
 
 def main(hparams):
     # init model
     model = EncoderLSTM(hparams)
 
-    trainer = pl.Trainer()
+    callbacks = [EarlyStopping(patience=10)]
+
+    trainer = pl.Trainer(gpus=1,
+                         #     distributed_backend='dp',
+                         min_epochs=20,
+                         max_epochs=50,
+                         callbacks=callbacks,
+                         weights_summary='top', )
     trainer.fit(model)
 
 
