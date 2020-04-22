@@ -1,13 +1,15 @@
-import os, random, argparse, pickle, pkg_resources, shutil
-
-import pytorch_lightning as pl
-from pytorch_lightning.loggers import LightningLoggerBase
-import torch
-
-from ignite.metrics import Precision, Recall
+import argparse
+import os
+import pickle
+import random
+import shutil
 
 import optuna
+import pytorch_lightning as pl
+import torch
+from ignite.metrics import Precision, Recall
 from optuna.integration import PyTorchLightningPruningCallback
+from pytorch_lightning.loggers import LightningLoggerBase
 
 from .encoder import EncoderLSTM
 from ..generator.subgraph_generator import SubgraphGenerator
