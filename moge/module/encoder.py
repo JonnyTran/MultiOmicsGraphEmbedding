@@ -1,5 +1,3 @@
-import pickle
-import random
 from argparse import ArgumentParser
 
 import pytorch_lightning as pl
@@ -9,8 +7,6 @@ from pytorch_lightning.callbacks import EarlyStopping
 from torch.autograd import Variable
 from torch.nn import functional as F
 from torch_geometric.nn import GATConv
-
-from ..generator.subgraph_generator import SubgraphGenerator
 
 
 class EncoderLSTM(nn.Module):
@@ -149,7 +145,7 @@ class EncoderLSTM(nn.Module):
         return y_pred.detach().cpu().numpy()
 
 
-def main(hparams):
+def train(hparams):
     # init model
     model = EncoderLSTM(hparams)
 
@@ -199,4 +195,4 @@ if __name__ == '__main__':
     parser = pl.Trainer.add_argparse_args(parser)
 
     args = parser.parse_args()
-    main(args)
+    train(args)
