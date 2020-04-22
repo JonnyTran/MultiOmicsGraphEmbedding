@@ -18,7 +18,6 @@ class EncoderLSTM(nn.Module):
             self.hparams.word_embedding_size = self.hparams.vocab_size
 
         self.__build_model()
-        self.init_metrics()
 
     def __build_model(self):
         # Encoder

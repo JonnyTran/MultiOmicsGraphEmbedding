@@ -10,6 +10,7 @@ class LightningEncoderLSTM(pl.LightningModule):
         super(LightningEncoderLSTM, self).__init__()
 
         self._model = EncoderLSTM(trial)
+        self.init_metrics()
 
     def forward(self, X):
         return self._model(X)
