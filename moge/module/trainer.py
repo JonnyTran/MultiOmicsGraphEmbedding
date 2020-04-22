@@ -93,8 +93,8 @@ class LightningEncoderLSTM(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self.hparams.lr,
-                                     # weight_decay=self.hparams.nb_weight_decay
+                                     lr=self._model.hparams.lr,
+                                     # weight_decay=self._model.hparams.nb_weight_decay
                                      )
         return optimizer
 

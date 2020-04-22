@@ -4,6 +4,10 @@ import pickle
 import random
 import shutil
 
+import sys
+
+sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
+
 import optuna
 import pytorch_lightning as pl
 import torch
@@ -12,6 +16,7 @@ from pytorch_lightning.loggers import LightningLoggerBase
 
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import LightningEncoderLSTM
+
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 EPOCHS = 10
@@ -86,7 +91,7 @@ def objective(trial):
     model = LightningEncoderLSTM(trial)
     trainer.fit(model, train_dataloader, test_dataloader)
 
-    return logger.metrics[-1]["precision"]
+    return logger.metrics[-1]["val_precision"]
 
 
 class DictLogger(LightningLoggerBase):
