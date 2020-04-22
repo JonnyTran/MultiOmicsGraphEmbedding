@@ -5,7 +5,6 @@ from argparse import ArgumentParser
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from ignite.metrics import Precision, Recall
 from pytorch_lightning.callbacks import EarlyStopping
 from torch.autograd import Variable
 from torch.nn import functional as F
@@ -14,7 +13,7 @@ from torch_geometric.nn import GATConv
 from ..generator.subgraph_generator import SubgraphGenerator
 
 
-class EncoderLSTM(pl.LightningModule):
+class EncoderLSTM(nn.Module):
     def __init__(self, hparams):
         super(EncoderLSTM, self).__init__()
         self.hparams = hparams
@@ -82,14 +81,15 @@ class EncoderLSTM(pl.LightningModule):
 
         return (hidden_a, hidden_b)
 
-    def forward(self, input_seqs, subnetwork):
+    def forward(self, X):
+        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+        # input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
+
         encodings = self.get_encodings(input_seqs)
-        X = F.sigmoid(encodings)
-        # Embedder
-        # X = self.embedder(encodings, subnetwork)
-        # Classifier
-        # X = self.fc_classifier(X)
-        return X
+        y_pred = F.sigmoid(encodings)
+        # embeddings = self.embedder(encodings, subnetwork)
+        # y_pred = self.fc_classifier(embeddings)
+        return y_pred
 
     def get_encodings(self, input_seqs):
         batch_size, seq_len = input_seqs.size()
@@ -122,88 +122,6 @@ class EncoderLSTM(pl.LightningModule):
         Y = Y.type_as(Y_hat)
         return F.binary_cross_entropy(Y_hat, Y, weights, reduction="mean")
 
-        # Y = Y.view(-1)
-        #
-        # # flatten all predictions
-        # Y_hat = Y_hat.view(-1, self.n_classes)
-        #
-        # # create a mask by filtering out all tokens that ARE NOT the padding token
-        # tag_pad_token = 0
-        # mask = (Y > tag_pad_token).float()
-        #
-        # # count how many tokens we have
-        #
-        # nb_tokens = int(torch.sum(mask).data[0])
-        # # pick the values for the label and zero out the rest with the mask
-        # Y_hat = Y_hat[range(Y_hat.shape[0]), Y] * mask
-        #
-        # # compute cross entropy loss which ignores all <PAD> tokens
-        # ce_loss = -torch.sum(Y_hat) / nb_tokens
-        #
-        # return ce_loss
-
-    def training_step(self, batch, batch_nb):
-        X, y, train_weights = batch
-        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
-
-        # input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
-        # y = y.view(y.shape[1:])
-
-        Y_hat = self.forward(input_seqs, subnetwork)
-        loss = self.loss(Y_hat, y, None)
-
-        self.update_metrics(Y_hat, y, training=True)
-        progress_bar = {
-            "precision": self.precision.compute(),
-            "recall": self.recall.compute()
-        }
-
-        return {"loss": loss,
-                'progress_bar': progress_bar,
-                }
-
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-
-        tensorboard_logs = {
-            "loss": avg_loss,
-            "precision": self.precision.compute(),
-            "recall": self.recall.compute(),
-        }
-        self.reset_metrics(training=True)
-        return {"loss": avg_loss,
-                "progress_bar": tensorboard_logs,
-                "log": tensorboard_logs,
-                }
-
-    def validation_step(self, batch, batch_nb):
-        X, y, train_weights = batch
-        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
-
-        # input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
-        # y = y.view(y.shape[1:])
-
-        Y_hat = self.forward(input_seqs, subnetwork)
-        loss = self.loss(Y_hat, y, None)
-
-        self.update_metrics(Y_hat, y, training=False)
-        return {"val_loss": loss}
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        tensorboard_logs = {
-            "val_loss": avg_loss,
-            "val_precision": self.precision_val.compute(),
-            "val_recall": self.recall_val.compute(),
-        }
-
-        results = {"val_loss": avg_loss,
-                   "progress_bar": tensorboard_logs,
-                   "log": tensorboard_logs}
-        self.reset_metrics(training=False)
-
-        return results
-
     def get_embeddings(self, X, cuda=True):
         if not isinstance(X["input_seqs"], torch.Tensor):
             X = {k: torch.tensor(v).cuda() for k, v in X.items()}
@@ -229,93 +147,6 @@ class EncoderLSTM(pl.LightningModule):
 
         y_pred = self.fc_classifier(embeddings)
         return y_pred.detach().cpu().numpy()
-
-    def init_metrics(self):
-        self.precision = Precision(average=True, is_multilabel=True)
-        self.recall = Recall(average=True, is_multilabel=True)
-        self.precision_val = Precision(average=True, is_multilabel=True)
-        self.recall_val = Recall(average=True, is_multilabel=True)
-
-    def update_metrics(self, y_pred, y_true, training):
-        if training:
-            self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
-        else:
-            self.precision_val.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
-
-    def reset_metrics(self, training):
-        if training:
-            self.precision.reset()
-            self.recall.reset()
-        else:
-            self.precision_val.reset()
-            self.recall_val.reset()
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self.hparams.lr,
-                                     # weight_decay=self.hparams.nb_weight_decay
-                                     )
-        return optimizer
-
-    @pl.data_loader
-    def train_dataloader(self):
-        return torch.utils.data.DataLoader(
-            dataset_train,
-            batch_size=None,
-            num_workers=10
-        )
-
-    @pl.data_loader
-    def val_dataloader(self):
-        return torch.utils.data.DataLoader(
-            dataset_test,
-            batch_size=None,
-            num_workers=10
-        )
-
-
-with open('../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle', 'rb') as file:
-    network = pickle.load(file)
-
-# INPUT PARAMETERS
-variables = []
-# variables = ['chromosome_name', 'transcript_start', 'transcript_end']
-targets = ['go_id']
-
-network.process_feature_tranformer(min_count=100, verbose=True)
-classes = network.feature_transformer[targets[0]].classes_
-n_classes = len(classes)
-
-test_frac = 0.05
-max_length = 1000
-input_shape = (None,)
-batch_size = 2000
-n_steps = int(400000 / batch_size)
-
-directed = False
-
-seed = random.randint(0, 1000)
-
-network.split_stratified(directed=directed, stratify_label=targets[0], stratify_omic=False,
-                         n_splits=int(1 / test_frac), dropna=True, seed=seed)
-
-dataset_train = network.get_train_generator(
-    SubgraphGenerator, variables=variables, targets=targets,
-    sampling="bfs", batch_size=batch_size, agg_mode=None,
-    method="GAT", adj_output="coo",
-    compression="log", n_steps=n_steps, directed=directed,
-    maxlen=max_length, padding='post', truncating='post', variable_length=False,
-    seed=seed, verbose=True)
-
-dataset_test = network.get_test_generator(
-    SubgraphGenerator, variables=variables, targets=targets,
-    sampling='all', batch_size=batch_size, agg_mode=None,
-    method="GAT", adj_output="coo",
-    compression="log", n_steps=1, directed=directed,
-    maxlen=max_length, padding='post', truncating='post', variable_length=False,
-    seed=seed, verbose=True)
 
 
 def main(hparams):
