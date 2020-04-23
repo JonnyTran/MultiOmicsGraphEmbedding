@@ -5,6 +5,7 @@ import random
 import shutil
 
 import sys
+from typing import Any
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
@@ -27,7 +28,7 @@ with open(DATASET, 'rb') as file:
     network = pickle.load(file)
 variables = []
 targets = ['go_id']
-network.process_feature_tranformer(min_count=100, verbose=True)
+network.process_feature_tranformer(min_count=100, verbose=False)
 classes = network.feature_transformer[targets[0]].classes_
 batch_size = 2000
 max_length = 1000
@@ -97,13 +98,23 @@ def objective(trial):
 class DictLogger(LightningLoggerBase):
     """PyTorch Lightning `dict` logger."""
 
-    def __init__(self, version):
+    def __init__(self, name):
         super(DictLogger, self).__init__()
         self.metrics = []
-        self._version = version
+        self.hparams_logged = None
+        self._version = name
+
+    def log_hyperparams(self, params):
+        self.hparams_logged = params
 
     def log_metrics(self, metric, step=None):
         self.metrics.append(metric)
+
+    def experiment(self) -> Any:
+        pass
+
+    def name(self) -> str:
+        return self._version
 
     @property
     def version(self):
