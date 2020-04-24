@@ -2,14 +2,12 @@ import pytorch_lightning as pl
 import torch
 from ignite.metrics import Precision, Recall
 
-from .encoder import EncoderLSTM
 
+class LightningModel(pl.LightningModule):
+    def __init__(self, model):
+        super(LightningModel, self).__init__()
 
-class LightningEncoderLSTM(pl.LightningModule):
-    def __init__(self, trial):
-        super(LightningEncoderLSTM, self).__init__()
-
-        self._model = EncoderLSTM(trial)
+        self._model = model
         self.init_metrics()
 
     def forward(self, X):

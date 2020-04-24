@@ -16,7 +16,7 @@ from optuna.integration import PyTorchLightningPruningCallback
 from pytorch_lightning.loggers import LightningLoggerBase
 
 from moge.generator.subgraph_generator import SubgraphGenerator
-from moge.module.trainer import LightningEncoderLSTM
+from moge.module.trainer import LightningModel
 
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
@@ -89,7 +89,7 @@ def objective(trial):
         early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="accuracy"),
     )
 
-    model = LightningEncoderLSTM(trial)
+    model = LightningModel(trial)
     trainer.fit(model, train_dataloader, test_dataloader)
 
     return logger.metrics[-1]["val_precision"]
