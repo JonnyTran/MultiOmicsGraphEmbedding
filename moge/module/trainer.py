@@ -15,7 +15,6 @@ class LightningEncoderLSTM(pl.LightningModule):
     def forward(self, X):
         return self._model(X)
 
-
     def training_step(self, batch, batch_nb):
         X, y, train_weights = batch
 
@@ -94,7 +93,7 @@ class LightningEncoderLSTM(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
                                      lr=self._model.hparams.lr,
-                                     # weight_decay=self._model.hparams.nb_weight_decay
+                                     weight_decay=self._model.hparams.nb_weight_decay
                                      )
         return optimizer
 
