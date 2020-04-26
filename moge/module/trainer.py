@@ -14,10 +14,10 @@ class LightningModel(pl.LightningModule):
         return self._model(X)
 
     def training_step(self, batch, batch_nb):
-        X, y, train_weights = batch
+        X, y, weights = batch
 
         Y_hat = self.forward(X)
-        loss = self._model.loss(Y_hat, y, None)
+        loss = self._model.loss(Y_hat, y, weights)
 
         self.update_metrics(Y_hat, y, training=True)
         progress_bar = {
@@ -44,7 +44,7 @@ class LightningModel(pl.LightningModule):
                 }
 
     def validation_step(self, batch, batch_nb):
-        X, y, train_weights = batch
+        X, y, weights = batch
 
         Y_hat = self._model.forward(X)
         loss = self._model.loss(Y_hat, y, None)

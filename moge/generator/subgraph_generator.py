@@ -150,7 +150,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 
         # Get a vector of nonnull indicators
-        idx_weights = self.annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1).values
+        idx_weights = self.annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1).values * 1
 
         assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights
