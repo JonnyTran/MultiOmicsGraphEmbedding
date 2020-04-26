@@ -30,6 +30,7 @@ class EncoderLSTM(nn.Module):
             out_channels=self.hparams.nb_conv1d_filters,
             kernel_size=self.hparams.nb_conv1d_kernel_size)
         self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1d_dropout)
+        self.conv_layernorm = nn.BatchNorm1d(self.hparams.nb_conv1d_filters)
 
         self.lstm = nn.LSTM(
             input_size=self.hparams.nb_conv1d_filters,
@@ -39,7 +40,9 @@ class EncoderLSTM(nn.Module):
             bidirectional=self.hparams.nb_lstm_bidirectional,
             batch_first=True, )
         self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
-        self.lstm_layernorm = nn.LayerNorm(self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
+        self.lstm_layernorm = nn.BatchNorm1d(
+            (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
+        # self.lstm_layernorm = nn.LayerNorm(self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
         self.fc_encoder = nn.Linear(
             self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers * (2 if self.hparams.nb_lstm_bidirectional else 1),
             self.hparams.encoding_dim)
@@ -95,10 +98,10 @@ class EncoderLSTM(nn.Module):
         X = F.relu(F.max_pool1d(self.conv1(X), self.hparams.nb_max_pool_size))
         X = self.conv1_dropout(X)
         if self.hparams.nb_conv1d_layernorm:
-            X = F.layer_norm(X, X.shape[1:])
+            X = self.conv_layernorm(X)
 
         X = X.permute(0, 2, 1)
-        X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size) / self.hparams.nb_max_pool_size
+        X_lengths = 1 + (X_lengths - self.hparams.nb_conv1d_kernel_size) / self.hparams.nb_max_pool_size
 
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
@@ -115,10 +118,7 @@ class EncoderLSTM(nn.Module):
 
     def loss(self, Y_hat, Y, weights=None):
         Y = Y.type_as(Y_hat)
-        print("Y_hat", Y_hat.shape)
-        print("Y", Y.shape)
-        print("weights", weights.shape)
-        return F.binary_cross_entropy(Y_hat, Y, weights)
+        return F.binary_cross_entropy(Y_hat, Y, None)
         # return F.multilabel_soft_margin_loss(Y_hat, Y)
 
     def get_embeddings(self, X, cuda=True):
