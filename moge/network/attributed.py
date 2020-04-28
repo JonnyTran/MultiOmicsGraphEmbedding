@@ -94,7 +94,7 @@ class AttributedNetwork(Network):
 
         return label_color
 
-    def process_feature_tranformer(self, delimiter="\||;", min_count=0, verbose=False):
+    def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0, verbose=False):
         """
         For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer
         is used to convert a list of labels into a vector.
@@ -102,15 +102,18 @@ class AttributedNetwork(Network):
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
         self.delimiter = delimiter
-        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter, min_count,
+        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter,
+                                                                 filter_label, min_count,
                                                                  verbose=verbose)
 
     @classmethod
-    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", min_count=0, verbose=False):
+    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", filter_label=None, min_count=0,
+                                 verbose=False):
         """
         :param annotation: a pandas DataFrame
         :param node_list: list of nodes. Indexes the annotation DataFrame
         :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
+        :param filter_label: str or list of str for the labels to filter by min_count
         :param min_count: minimum frequency of label to keep
         :return: dict of feature transformers
         """
@@ -131,7 +134,7 @@ class AttributedNetwork(Network):
                         label)) if verbose else None
                     features = annotation.loc[node_list, label].dropna(axis=0)
 
-                if min_count:
+                if label in filter_label and min_count:
                     labels_filter = get_label_min_count_filter(features, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 feature_transformers[label].fit(features)

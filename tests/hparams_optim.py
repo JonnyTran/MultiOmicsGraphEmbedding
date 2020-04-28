@@ -148,10 +148,11 @@ class DictLogger(LightningLoggerBase):
 
     @property
     def name(self) -> str:
-        return self._version
+        return "Encoder-Embedder"
 
-    def experiment(self):
-        return self._version
+    @property
+    def experiment(self) -> Any:
+        return self.hparams_logged
 
 
 if __name__ == "__main__":

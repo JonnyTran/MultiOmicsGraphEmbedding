@@ -58,7 +58,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         print("All annotation columns (union):",
               {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
 
-    def process_feature_tranformer(self, delimiter="\||;", min_count=0):
+    def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0):
         self.delimiter = delimiter
         if not hasattr(self, "all_annotations"):
             annotations_list = []
@@ -74,6 +74,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
         print("Annotation columns:", self.all_annotations.columns.tolist())
         self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
+                                                                 filter_label,
                                                                  min_count)
 
     def add_edges(self, edgelist, layer: (str, str, str), database, **kwargs):
