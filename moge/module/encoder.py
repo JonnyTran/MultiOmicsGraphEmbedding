@@ -28,7 +28,8 @@ class EncoderLSTM(nn.Module):
         self.conv1 = nn.Conv1d(
             in_channels=self.hparams.word_embedding_size,
             out_channels=self.hparams.nb_conv1d_filters,
-            kernel_size=self.hparams.nb_conv1d_kernel_size)
+            kernel_size=self.hparams.nb_conv1d_kernel_size,
+            stride=int(self.hparams.nb_conv1d_kernel_size / 3))
         self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1d_dropout)
         self.conv_layernorm = nn.BatchNorm1d(self.hparams.nb_conv1d_filters)
 

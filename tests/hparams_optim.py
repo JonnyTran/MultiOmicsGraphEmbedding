@@ -13,10 +13,11 @@ import optuna
 import pytorch_lightning as pl
 import torch
 from optuna.integration import PyTorchLightningPruningCallback
-from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.logging import LightningLoggerBase, rank_zero_warn
 
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import LightningModel
+from moge.module.encoder import EncoderLSTM
 
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
@@ -30,6 +31,7 @@ variables = []
 targets = ['go_id']
 network.process_feature_tranformer(min_count=100, verbose=False)
 classes = network.feature_transformer[targets[0]].classes_
+n_classes = len(classes)
 batch_size = 2000
 max_length = 1000
 test_frac = 0.05
@@ -66,9 +68,37 @@ test_dataloader = torch.utils.data.DataLoader(
     batch_size=None,
     num_workers=10
 )
+vocab = dataset_train.tokenizer.word_index
 
 
 def objective(trial):
+    trial.encoding_dim = trial.suggest_categorical("encoding_dim", [64, 128, 256])
+    trial.embedding_dim = trial.suggest_categorical("embedding_dim", [128, 256, 386])
+    trial.n_classes = n_classes
+    trial.vocab = len(vocab)
+    trial.word_embedding_size = None
+
+    trial.nb_conv1d_filters = trial.suggest_int("nb_conv1d_filters", 100, 320)
+    trial.nb_conv1d_kernel_size = trial.suggest_int("nb_conv1d_kernel_size", 6, 26)
+    trial.nb_max_pool_size = trial.suggest_int("nb_max_pool_size", 5, 16)
+    trial.nb_conv1d_dropout = trial.suggest_float("nb_conv1d_dropout", 0.0, 0.5)
+    trial.nb_conv1d_layernorm = trial.suggest_categorical("nb_conv1d_layernorm", [True, False])
+
+    trial.nb_lstm_layers = trial.suggest_int("nb_lstm_layers", 1, 2)
+    trial.nb_lstm_units = trial.suggest_int("nb_lstm_units", 100, 320)
+    trial.nb_lstm_dropout = trial.suggest_float("nb_lstm_dropout", 0.0, 0.5)
+    trial.nb_lstm_hidden_dropout = trial.suggest_float("nb_lstm_hidden_dropout", 0.0, 0.5)
+    trial.nb_lstm_layernorm = trial.suggest_categorical("nb_lstm_layernorm", [True, False])
+
+    trial.nb_attn_heads = trial.suggest_categorical("nb_attn_heads", [1, 2, 4, 8])
+    trial.nb_attn_dropout = trial.suggest_float("nb_attn_dropout", 0.0, 0.8)
+
+    trial.nb_cls_dense_size = trial.suggest_categorical("nb_cls_dense_size", [128, 256, 512, 768])
+    trial.nb_cls_dropout = trial.suggest_float("nb_cls_dropout", 0.0, 0.5)
+
+    trial.nb_weight_decay = trial.suggest_float("nb_weight_decay", 1e-5, 1e-2)
+    trial.lr = trial.suggest_float("lr", 1e-4, 5e-2)
+
     # PyTorch Lightning will try to restore model parameters from previous trials if checkpoint
     # filenames match. Therefore, the filenames for each trial must be made unique.
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -86,10 +116,11 @@ def objective(trial):
         checkpoint_callback=checkpoint_callback,
         max_epochs=EPOCHS,
         gpus=0 if torch.cuda.is_available() else None,
-        early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="accuracy"),
+        early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="precision"),
     )
 
-    model = LightningModel(trial)
+    encoder = EncoderLSTM(trial)
+    model = LightningModel(encoder)
     trainer.fit(model, train_dataloader, test_dataloader)
 
     return logger.metrics[-1]["val_precision"]
@@ -109,12 +140,6 @@ class DictLogger(LightningLoggerBase):
 
     def log_metrics(self, metric, step=None):
         self.metrics.append(metric)
-
-    def experiment(self) -> Any:
-        pass
-
-    def name(self) -> str:
-        return self._version
 
     @property
     def version(self):
