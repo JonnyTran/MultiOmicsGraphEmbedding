@@ -102,7 +102,7 @@ class EncoderLSTM(nn.Module):
             X = self.conv_layernorm(X)
 
         X = X.permute(0, 2, 1)
-        X_lengths = (X_lengths - (self.hparams.nb_conv1d_kernel_size - 1)) / self.hparams.nb_max_pool_size
+        X_lengths = 1 + (X_lengths - (self.hparams.nb_conv1d_kernel_size - 1)) / self.hparams.nb_max_pool_size
 
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
@@ -171,7 +171,7 @@ if __name__ == '__main__':
     parser.add_argument('--encoding_dim', type=int, default=128)
     parser.add_argument('--embedding_dim', type=int, default=256)
     parser.add_argument('--n_classes', type=int, default=2000)
-    parser.add_argument('--vocab', type=int, default=22)
+    parser.add_argument('--vocab_size', type=int, default=22)
     parser.add_argument('--word_embedding_size', type=int, default=None)
 
     parser.add_argument('--nb_conv1d_filters', type=int, default=192)
@@ -184,6 +184,7 @@ if __name__ == '__main__':
     parser.add_argument('--nb_lstm_units', type=int, default=100)
     parser.add_argument('--nb_lstm_dropout', type=float, default=0.0)
     parser.add_argument('--nb_lstm_hidden_dropout', type=float, default=0.0)
+    parser.add_argument('--nb_lstm_bidirectional', type=bool, default=False)
     parser.add_argument('--nb_lstm_layernorm', type=bool, default=False)
 
     parser.add_argument('--nb_attn_heads', type=int, default=4)

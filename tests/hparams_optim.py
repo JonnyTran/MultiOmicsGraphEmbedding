@@ -75,7 +75,7 @@ def objective(trial):
     trial.encoding_dim = trial.suggest_categorical("encoding_dim", [64, 128, 256])
     trial.embedding_dim = trial.suggest_categorical("embedding_dim", [128, 256, 386])
     trial.n_classes = n_classes
-    trial.vocab = len(vocab)
+    trial.vocab_size = len(vocab)
     trial.word_embedding_size = None
 
     trial.nb_conv1d_filters = trial.suggest_int("nb_conv1d_filters", 100, 320)
@@ -88,6 +88,7 @@ def objective(trial):
     trial.nb_lstm_units = trial.suggest_int("nb_lstm_units", 100, 320)
     trial.nb_lstm_dropout = trial.suggest_float("nb_lstm_dropout", 0.0, 0.5)
     trial.nb_lstm_hidden_dropout = trial.suggest_float("nb_lstm_hidden_dropout", 0.0, 0.5)
+    trial.nb_lstm_bidirectional = trial.suggest_categorical("nb_lstm_bidirectional", [True, False])
     trial.nb_lstm_layernorm = trial.suggest_categorical("nb_lstm_layernorm", [True, False])
 
     trial.nb_attn_heads = trial.suggest_categorical("nb_attn_heads", [1, 2, 4, 8])
@@ -143,6 +144,13 @@ class DictLogger(LightningLoggerBase):
 
     @property
     def version(self):
+        return self._version
+
+    @property
+    def name(self) -> str:
+        return self._version
+
+    def experiment(self):
         return self._version
 
 
