@@ -29,7 +29,7 @@ with open(DATASET, 'rb') as file:
     network = pickle.load(file)
 variables = []
 targets = ['go_id']
-network.process_feature_tranformer(min_count=100, verbose=False)
+network.process_feature_tranformer(filter_label=targets[0], min_count=100, verbose=False)
 classes = network.feature_transformer[targets[0]].classes_
 n_classes = len(classes)
 batch_size = 2000

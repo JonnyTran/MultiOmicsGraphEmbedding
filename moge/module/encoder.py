@@ -29,23 +29,22 @@ class EncoderLSTM(nn.Module):
             in_channels=self.hparams.word_embedding_size,
             out_channels=self.hparams.nb_conv1d_filters,
             kernel_size=self.hparams.nb_conv1d_kernel_size,
-            stride=int(self.hparams.nb_conv1d_kernel_size / 3))
+        )
         self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1d_dropout)
         self.conv_layernorm = nn.BatchNorm1d(self.hparams.nb_conv1d_filters)
 
         self.lstm = nn.LSTM(
             input_size=self.hparams.nb_conv1d_filters,
             hidden_size=self.hparams.nb_lstm_units,
+            bidirectional=self.hparams.nb_lstm_bidirectional,
             num_layers=self.hparams.nb_lstm_layers,
             dropout=self.hparams.nb_lstm_dropout,
-            bidirectional=self.hparams.nb_lstm_bidirectional,
             batch_first=True, )
         self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
         self.lstm_layernorm = nn.LayerNorm(
             (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
-        # self.lstm_layernorm = nn.LayerNorm(self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
         self.fc_encoder = nn.Linear(
-            self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers * (2 if self.hparams.nb_lstm_bidirectional else 1),
+            (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers,
             self.hparams.encoding_dim)
 
         # Embedder
@@ -69,12 +68,9 @@ class EncoderLSTM(nn.Module):
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
         hidden_a = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers,
-                               batch_size, self.hparams.nb_lstm_units).type_as(
-            self.fc_encoder.weight)
+                               batch_size, self.hparams.nb_lstm_units).type_as(self.fc_encoder.weight)
         hidden_b = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers,
-                               batch_size, self.hparams.nb_lstm_units).type_as(
-            self.fc_encoder.weight)
-
+                               batch_size, self.hparams.nb_lstm_units).type_as(self.fc_encoder.weight)
         hidden_a = Variable(hidden_a)
         hidden_b = Variable(hidden_b)
 
@@ -94,16 +90,16 @@ class EncoderLSTM(nn.Module):
         batch_size, seq_len = input_seqs.size()
         X_lengths = (input_seqs > 0).sum(1)
         self.hidden = self.init_hidden(batch_size)
+
         X = self.word_embedding(input_seqs)
         X = X.permute(0, 2, 1)
         X = F.relu(F.max_pool1d(self.conv1(X), self.hparams.nb_max_pool_size))
         X = self.conv1_dropout(X)
         if self.hparams.nb_conv1d_layernorm:
             X = self.conv_layernorm(X)
-
         X = X.permute(0, 2, 1)
-        X_lengths = 1 + (X_lengths - (self.hparams.nb_conv1d_kernel_size - 1)) / self.hparams.nb_max_pool_size
 
+        X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size + 1) / self.hparams.nb_max_pool_size
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
 
