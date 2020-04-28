@@ -101,7 +101,7 @@ class EncoderLSTM(nn.Module):
             X = self.conv_layernorm(X)
 
         X = X.permute(0, 2, 1)
-        X_lengths = 1 + (X_lengths - (self.hparams.nb_conv1d_kernel_size - 1)) / self.hparams.nb_max_pool_size
+        X_lengths = 2 + (X_lengths - (self.hparams.nb_conv1d_kernel_size - 1)) / self.hparams.nb_max_pool_size
 
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
