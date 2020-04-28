@@ -40,7 +40,7 @@ class EncoderLSTM(nn.Module):
             bidirectional=self.hparams.nb_lstm_bidirectional,
             batch_first=True, )
         self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
-        self.lstm_layernorm = nn.BatchNorm1d(
+        self.lstm_layernorm = nn.LayerNorm(
             (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
         # self.lstm_layernorm = nn.LayerNorm(self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
         self.fc_encoder = nn.Linear(

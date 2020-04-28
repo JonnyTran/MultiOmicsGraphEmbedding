@@ -95,6 +95,3 @@ class LightningModel(pl.LightningModule):
                                      )
         return optimizer
 
-class LightningModel(pl.LightningModule):
-    def __init__(self, model):
-        super(LightningModel, self).__init__()
