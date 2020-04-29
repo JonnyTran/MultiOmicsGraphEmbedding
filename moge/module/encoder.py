@@ -99,7 +99,9 @@ class EncoderLSTM(nn.Module):
             X = self.conv_layernorm(X)
         X = X.permute(0, 2, 1)
 
-        X_lengths = 1 + (X_lengths - self.hparams.nb_conv1d_kernel_size + 1) / self.hparams.nb_max_pool_size
+        X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size + 1) / self.hparams.nb_max_pool_size
+        X_lengths = torch.max(X_lengths, torch.ones_like(X_lengths))
+
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
 

@@ -83,8 +83,8 @@ def objective(trial):
     trial.word_embedding_size = None
 
     trial.nb_conv1d_filters = trial.suggest_int("nb_conv1d_filters", 100, 320)
-    trial.nb_conv1d_kernel_size = trial.suggest_int("nb_conv1d_kernel_size", 6, 26)
-    trial.nb_max_pool_size = trial.suggest_int("nb_max_pool_size", 5, 16)
+    trial.nb_conv1d_kernel_size = trial.suggest_int("nb_conv1d_kernel_size", 5, 20)
+    trial.nb_max_pool_size = trial.suggest_int("nb_max_pool_size", 5, 20)
     trial.nb_conv1d_dropout = trial.suggest_float("nb_conv1d_dropout", 0.0, 0.5)
     trial.nb_conv1d_layernorm = trial.suggest_categorical("nb_conv1d_layernorm", [True, False])
 
