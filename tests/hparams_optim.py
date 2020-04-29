@@ -14,11 +14,15 @@ import pytorch_lightning as pl
 import torch
 from optuna.integration import PyTorchLightningPruningCallback
 from pytorch_lightning.logging import LightningLoggerBase, rank_zero_warn
+from pytorch_lightning.loggers import WandbLogger
 
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import LightningModel
 from moge.module.encoder import EncoderLSTM
 
+import wandb
+
+wandb.init(project="multiplex-rna-embedding")
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 EPOCHS = 10
@@ -32,7 +36,7 @@ targets = ['go_id']
 network.process_feature_tranformer(filter_label=targets[0], min_count=100, verbose=False)
 classes = network.feature_transformer[targets[0]].classes_
 n_classes = len(classes)
-batch_size = 2000
+batch_size = 1000
 max_length = 1000
 test_frac = 0.05
 n_steps = int(400000 / batch_size)
@@ -84,11 +88,11 @@ def objective(trial):
     trial.nb_conv1d_dropout = trial.suggest_float("nb_conv1d_dropout", 0.0, 0.5)
     trial.nb_conv1d_layernorm = trial.suggest_categorical("nb_conv1d_layernorm", [True, False])
 
-    trial.nb_lstm_layers = trial.suggest_int("nb_lstm_layers", 1, 2)
+    trial.nb_lstm_layers = 1  # trial.suggest_int("nb_lstm_layers", 1, 2)
     trial.nb_lstm_units = trial.suggest_int("nb_lstm_units", 100, 320)
     trial.nb_lstm_dropout = trial.suggest_float("nb_lstm_dropout", 0.0, 0.5)
     trial.nb_lstm_hidden_dropout = trial.suggest_float("nb_lstm_hidden_dropout", 0.0, 0.5)
-    trial.nb_lstm_bidirectional = trial.suggest_categorical("nb_lstm_bidirectional", [True, False])
+    trial.nb_lstm_bidirectional = trial.suggest_categorical("nb_lstm_bidirectional", [False])
     trial.nb_lstm_layernorm = trial.suggest_categorical("nb_lstm_layernorm", [True, False])
 
     trial.nb_attn_heads = trial.suggest_categorical("nb_attn_heads", [1, 2, 4, 8])
@@ -110,22 +114,25 @@ def objective(trial):
     # TensorBoard. We create a simple logger instead that holds the log in memory so that the
     # final accuracy can be obtained after optimization. When using the default logger, the
     # final accuracy could be stored in an attribute of the `Trainer` instead.
-    logger = DictLogger(trial.number)
+    # logger = DictLogger(trial.number)
+    logger = WandbLogger()
 
     trainer = pl.Trainer(
         logger=logger,
         checkpoint_callback=checkpoint_callback,
         max_epochs=EPOCHS,
-        gpus=2 if torch.cuda.is_available() else None,
+        gpus=1 if torch.cuda.is_available() else None,
         early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="precision"),
     )
 
     encoder = EncoderLSTM(trial)
     model = LightningModel(encoder)
-    trainer.fit(model, train_dataloader, test_dataloader)
-    print("logger.metrics", logger.metrics)
+    logger.watch(model, log='parameters', log_freq=100)
 
-    return logger.metrics[-1]["val_precision"]
+    trainer.fit(model, train_dataloader, test_dataloader)
+    print("logger.metrics", logger.log_metrics)
+
+    return logger.log_metrics[-1]["val_precision"]
 
 
 class DictLogger(LightningLoggerBase):
