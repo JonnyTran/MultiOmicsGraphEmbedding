@@ -5,7 +5,7 @@ import random
 import shutil
 
 import sys
-from typing import Any
+from typing import Any, Dict, Optional
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
@@ -116,13 +116,14 @@ def objective(trial):
         logger=logger,
         checkpoint_callback=checkpoint_callback,
         max_epochs=EPOCHS,
-        gpus=0 if torch.cuda.is_available() else None,
+        gpus=2 if torch.cuda.is_available() else None,
         early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="precision"),
     )
 
     encoder = EncoderLSTM(trial)
     model = LightningModel(encoder)
     trainer.fit(model, train_dataloader, test_dataloader)
+    print("logger.metrics", logger.metrics)
 
     return logger.metrics[-1]["val_precision"]
 
@@ -139,8 +140,9 @@ class DictLogger(LightningLoggerBase):
     def log_hyperparams(self, params):
         self.hparams_logged = params
 
-    def log_metrics(self, metric, step=None):
-        self.metrics.append(metric)
+    def log_metrics(self, metrics: Dict[str, float], step: Optional[int] = None):
+        self.metrics.append(metrics)
+        super(DictLogger, self).log_metrics(metrics, step)
 
     @property
     def version(self):
@@ -148,7 +150,7 @@ class DictLogger(LightningLoggerBase):
 
     @property
     def name(self) -> str:
-        return "Encoder-Embedder"
+        return "trial_{}".format(self._version)
 
     @property
     def experiment(self) -> Any:
