@@ -37,8 +37,7 @@ class EncoderLSTM(nn.Module):
             input_size=self.hparams.nb_conv1d_filters,
             hidden_size=self.hparams.nb_lstm_units,
             bidirectional=self.hparams.nb_lstm_bidirectional,
-            num_layers=self.hparams.nb_lstm_layers,
-            dropout=self.hparams.nb_lstm_dropout,
+            num_layers=1,
             batch_first=True, )
         self.lstm_layernorm = nn.LayerNorm(
             (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)

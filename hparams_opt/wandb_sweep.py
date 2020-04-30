@@ -81,10 +81,8 @@ def objective():
         "nb_conv1d_dropout": 0.2,
         "nb_conv1d_layernorm": True,
 
-        "nb_lstm_layers": 1,
         "nb_lstm_bidirectional": True,
         "nb_lstm_units": 192,
-        "nb_lstm_dropout": 0.0,
         "nb_lstm_hidden_dropout": 0.2,
         "nb_lstm_layernorm": False,
 

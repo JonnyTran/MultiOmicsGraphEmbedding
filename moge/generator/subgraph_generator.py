@@ -1,3 +1,7 @@
+import warnings
+
+warnings.filterwarnings("ignore")
+
 from collections import OrderedDict
 from itertools import islice
 

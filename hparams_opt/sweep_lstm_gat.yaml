@@ -10,7 +10,7 @@ parameters:
   encoding_dim:
     values: [64, 128, 256]
   embedding_dim:
-    values: [128, 256, 386]
+    values: [128, 256, 512]
 
   word_embedding_size:
     min: 4
@@ -34,9 +34,6 @@ parameters:
   nb_lstm_units:
     min: 100
     max: 320
-  nb_lstm_dropout:
-    min: 0.0
-    max: 0.5
   nb_lstm_hidden_dropout:
     min: 0.0
     max: 0.5
