@@ -96,12 +96,12 @@ def objective():
         "nb_weight_decay": 1e-5,
         "lr": 1e-3,
     }
-    logger = WandbLogger(project="multiplex-rna-embedding")
+    # logger = WandbLogger(project="multiplex-rna-embedding")
     wandb.init(config=hparams_defaults, project="multiplex-rna-embedding")
     config = wandb.config
 
     trainer = pl.Trainer(
-        logger=logger,
+        # logger=logger,
         callbacks=[EarlyStopping(patience=3)],
         min_epochs=3, max_epochs=EPOCHS,
         gpus=1 if torch.cuda.is_available() else None,
@@ -111,8 +111,11 @@ def objective():
     encoder = EncoderLSTM(config)
     model = LightningModel(encoder, data_path='../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle')
 
+    wandb.watch(model)
+
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
-    wandb.log(logger.experiment._summary)
+    # trainer.run_evaluation(test_mode=False)
+    # wandb.log(logger.experiment._summary)
 
 if __name__ == "__main__":
     # wandb.agent('jonnytran/multiplex-rna-embedding/z8yke4u0', function=objective)
