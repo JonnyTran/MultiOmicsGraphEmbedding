@@ -35,9 +35,8 @@ class EncoderLSTM(nn.Module):
         #     out_channels=self.hparams.nb_conv2_filters,
         #     kernel_size=self.hparams.nb_conv2_kernel_size,
         # )
-        self.conv_batchnorm = nn.BatchNorm1d(self.hparams.nb_conv1_filters)
-
-        self.conv_dropout = nn.Dropout(p=self.hparams.nb_conv_dropout)
+        self.conv1_batchnorm = nn.BatchNorm1d(self.hparams.nb_conv1_filters)
+        self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1_dropout)
 
         self.lstm = nn.LSTM(
             input_size=self.hparams.nb_conv1_filters,
@@ -99,10 +98,10 @@ class EncoderLSTM(nn.Module):
         X = self.word_embedding(input_seqs)
         X = X.permute(0, 2, 1)
         X = F.relu(self.conv1(X))
-        # X = F.relu(self.conv2(X))
         if self.hparams.nb_conv1d_batchnorm:
-            X = self.conv_batchnorm(X)
-        X = self.conv_dropout(X)
+            X = self.conv1_batchnorm(X)
+        X = self.conv1_dropout(X)
+        # X = F.relu(self.conv2(X))
         X = F.max_pool1d(X, self.hparams.nb_max_pool_size)
         X = X.permute(0, 2, 1)
 
