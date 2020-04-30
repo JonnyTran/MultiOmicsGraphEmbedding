@@ -378,7 +378,7 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("|")
             y_label = y_label + y_omic
 
-        train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
+        train_nodes, test_nodes = stratify_train_test(y_label=y_label, test_percent=1.0 / n_splits, seed=seed)
 
         if directed:
             g = self.G.copy()
