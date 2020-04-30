@@ -76,11 +76,11 @@ def objective():
         "vocab_size": len(vocab),
         "word_embedding_size": None,
 
-        "nb_conv1d_filters": 256,
-        "nb_conv1d_kernel_size": 6,
+        "nb_conv1_filters": 256,
+        "nb_conv1_kernel_size": 6,
+        "nb_conv1_dropout": 0.2,
+        "nb_conv1_batchnorm": True,
         "nb_max_pool_size": 20,
-        "nb_conv1d_dropout": 0.2,
-        "nb_conv1d_batchnorm": True,
 
         "nb_lstm_bidirectional": True,
         "nb_lstm_units": 192,

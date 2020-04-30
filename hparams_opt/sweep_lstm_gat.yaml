@@ -16,20 +16,21 @@ parameters:
     min: 4
     max: 20
 
-  nb_conv1d_filters:
+  nb_conv1_filters:
     min: 100
     max: 320
-  nb_conv1d_kernel_size:
+  nb_conv1_kernel_size:
     min: 5
     max: 20
+  nb_conv1_dropout:
+    min: 0.0
+    max: 0.5
+  nb_conv1_batchnorm:
+    values: [True, False]
+
   nb_max_pool_size:
     min: 5
     max: 20
-  nb_conv1d_dropout:
-    min: 0.0
-    max: 0.5
-  nb_conv1d_batchnorm:
-    values: [True, False]
 
   nb_lstm_units:
     min: 100

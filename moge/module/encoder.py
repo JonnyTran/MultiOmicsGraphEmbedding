@@ -27,14 +27,20 @@ class EncoderLSTM(nn.Module):
             padding_idx=0)
         self.conv1 = nn.Conv1d(
             in_channels=self.hparams.word_embedding_size,
-            out_channels=self.hparams.nb_conv1d_filters,
-            kernel_size=self.hparams.nb_conv1d_kernel_size,
+            out_channels=self.hparams.nb_conv1_filters,
+            kernel_size=self.hparams.nb_conv1_kernel_size,
         )
-        self.conv_batchnorm = nn.BatchNorm1d(self.hparams.nb_conv1d_filters)
-        self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1d_dropout)
+        # self.conv2 = nn.Conv1d(
+        #     in_channels=self.hparams.nb_conv1_filters,
+        #     out_channels=self.hparams.nb_conv2_filters,
+        #     kernel_size=self.hparams.nb_conv2_kernel_size,
+        # )
+        self.conv_batchnorm = nn.BatchNorm1d(self.hparams.nb_conv1_filters)
+
+        self.conv_dropout = nn.Dropout(p=self.hparams.nb_conv_dropout)
 
         self.lstm = nn.LSTM(
-            input_size=self.hparams.nb_conv1d_filters,
+            input_size=self.hparams.nb_conv1_filters,
             hidden_size=self.hparams.nb_lstm_units,
             bidirectional=self.hparams.nb_lstm_bidirectional,
             num_layers=1,
@@ -92,13 +98,15 @@ class EncoderLSTM(nn.Module):
 
         X = self.word_embedding(input_seqs)
         X = X.permute(0, 2, 1)
-        X = F.relu(F.max_pool1d(self.conv1(X), self.hparams.nb_max_pool_size))
+        X = F.relu(self.conv1(X))
+        # X = F.relu(self.conv2(X))
         if self.hparams.nb_conv1d_batchnorm:
             X = self.conv_batchnorm(X)
-        X = self.conv1_dropout(X)
+        X = self.conv_dropout(X)
+        X = F.max_pool1d(X, self.hparams.nb_max_pool_size)
         X = X.permute(0, 2, 1)
 
-        X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size + 1) / self.hparams.nb_max_pool_size
+        X_lengths = (X_lengths - self.hparams.nb_conv1_kernel_size + 1) / self.hparams.nb_max_pool_size
         X_lengths = torch.max(X_lengths, torch.ones_like(X_lengths))
 
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
@@ -171,10 +179,10 @@ if __name__ == '__main__':
     parser.add_argument('--vocab_size', type=int, default=22)
     parser.add_argument('--word_embedding_size', type=int, default=None)
 
-    parser.add_argument('--nb_conv1d_filters', type=int, default=192)
-    parser.add_argument('--nb_conv1d_kernel_size', type=int, default=26)
+    parser.add_argument('--nb_conv1_filters', type=int, default=192)
+    parser.add_argument('--nb_conv1_kernel_size', type=int, default=26)
     parser.add_argument('--nb_max_pool_size', type=int, default=13)
-    parser.add_argument('--nb_conv1d_dropout', type=float, default=0.2)
+    parser.add_argument('--nb_conv_dropout', type=float, default=0.2)
     parser.add_argument('--nb_conv1d_layernorm', type=bool, default=True)
 
     parser.add_argument('--nb_lstm_units', type=int, default=100)
