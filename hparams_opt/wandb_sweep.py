@@ -28,9 +28,9 @@ targets = ['go_id']
 network.process_feature_tranformer(filter_label=targets[0], min_count=100, verbose=False)
 classes = network.feature_transformer[targets[0]].classes_
 n_classes = len(classes)
-batch_size = 1800
+batch_size = 1000
 max_length = 1000
-test_frac = 0.20
+test_frac = 0.10
 n_steps = int(400000 / batch_size)
 directed = False
 seed = random.randint(0, 1000)
