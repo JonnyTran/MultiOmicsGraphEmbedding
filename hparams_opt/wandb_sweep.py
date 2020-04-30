@@ -9,6 +9,7 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 import pytorch_lightning as pl
 import torch
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import LightningModel
@@ -77,7 +78,7 @@ def objective():
 
         "nb_conv1d_filters": 256,
         "nb_conv1d_kernel_size": 6,
-        "nb_max_pool_size": 14,
+        "nb_max_pool_size": 20,
         "nb_conv1d_dropout": 0.2,
         "nb_conv1d_batchnorm": True,
 
@@ -95,30 +96,23 @@ def objective():
         "nb_weight_decay": 1e-5,
         "lr": 1e-3,
     }
-
+    logger = WandbLogger(project="multiplex-rna-embedding")
     wandb.init(config=hparams_defaults, project="multiplex-rna-embedding")
     config = wandb.config
-    config.n_classes = n_classes
-    config.vocab_size = len(vocab)
 
-    logger = WandbLogger(project="multiplex-rna-embedding")
     trainer = pl.Trainer(
         logger=logger,
-        max_epochs=EPOCHS,
-        min_epochs=5,
+        callbacks=[EarlyStopping(patience=3)],
+        min_epochs=3, max_epochs=EPOCHS,
         gpus=1 if torch.cuda.is_available() else None,
+        weights_summary='top',
     )
 
     encoder = EncoderLSTM(config)
     model = LightningModel(encoder, data_path='../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle')
 
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
-
     wandb.log(logger.experiment._summary)
-    # print("logger.metrics", logger.log_metrics)
-
-    # return logger.log_metrics[-1]["val_precision"]
-
 
 if __name__ == "__main__":
     # wandb.agent('jonnytran/multiplex-rna-embedding/z8yke4u0', function=objective)

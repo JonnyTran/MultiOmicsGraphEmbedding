@@ -40,10 +40,10 @@ class EncoderLSTM(nn.Module):
             num_layers=1,
             batch_first=True, )
         self.lstm_layernorm = nn.LayerNorm(
-            (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
+            (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units)
         self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
         self.fc_encoder = nn.Linear(
-            (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers,
+            (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units,
             self.hparams.encoding_dim)
 
         # Embedder
@@ -66,9 +66,9 @@ class EncoderLSTM(nn.Module):
 
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
-        hidden_a = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers,
+        hidden_a = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1),
                                batch_size, self.hparams.nb_lstm_units).type_as(self.fc_encoder.weight)
-        hidden_b = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers,
+        hidden_b = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1),
                                batch_size, self.hparams.nb_lstm_units).type_as(self.fc_encoder.weight)
         hidden_a = Variable(hidden_a)
         hidden_b = Variable(hidden_b)
@@ -106,7 +106,7 @@ class EncoderLSTM(nn.Module):
 
         X = self.hidden[0].permute(1, 0, 2)
         X = X.reshape(batch_size, (
-            2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers * self.hparams.nb_lstm_units)
+            2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units)
 
         if self.hparams.nb_lstm_layernorm:
             X = self.lstm_layernorm(X)
@@ -177,9 +177,7 @@ if __name__ == '__main__':
     parser.add_argument('--nb_conv1d_dropout', type=float, default=0.2)
     parser.add_argument('--nb_conv1d_layernorm', type=bool, default=True)
 
-    parser.add_argument('--nb_lstm_layers', type=int, default=1)
     parser.add_argument('--nb_lstm_units', type=int, default=100)
-    parser.add_argument('--nb_lstm_dropout', type=float, default=0.0)
     parser.add_argument('--nb_lstm_hidden_dropout', type=float, default=0.0)
     parser.add_argument('--nb_lstm_bidirectional', type=bool, default=False)
     parser.add_argument('--nb_lstm_layernorm', type=bool, default=False)
