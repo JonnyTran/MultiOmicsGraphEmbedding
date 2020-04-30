@@ -98,7 +98,7 @@ class EncoderLSTM(nn.Module):
         X = self.word_embedding(input_seqs)
         X = X.permute(0, 2, 1)
         X = F.relu(self.conv1(X))
-        if self.hparams.nb_conv1d_batchnorm:
+        if self.hparams.nb_conv1_batchnorm:
             X = self.conv1_batchnorm(X)
         X = self.conv1_dropout(X)
         # X = F.relu(self.conv2(X))
