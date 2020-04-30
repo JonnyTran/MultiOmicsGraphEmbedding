@@ -102,9 +102,8 @@ def objective():
     config = wandb.config
     config.n_classes = n_classes
     config.vocab_size = len(vocab)
-    print("config", config)
 
-    logger = WandbLogger(project="multiplex-rna-embedding")
+    logger = WandbLogger()
     trainer = pl.Trainer(
         logger=logger,
         max_epochs=EPOCHS,
@@ -116,10 +115,13 @@ def objective():
     model = LightningModel(encoder, data_path='../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle')
 
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
-    print("logger.metrics", logger.log_metrics, logger.log_metrics[-1]["val_precision"])
 
-    return logger.log_metrics[-1]["val_precision"]
+    wandb.log(logger.experiment._summary)
+    # print("logger.metrics", logger.log_metrics)
+
+    # return logger.log_metrics[-1]["val_precision"]
 
 
 if __name__ == "__main__":
-    wandb.agent('jonnytran/multiplex-rna-embedding/z8yke4u0', function=objective)
+    # wandb.agent('jonnytran/multiplex-rna-embedding/z8yke4u0', function=objective)
+    objective()
