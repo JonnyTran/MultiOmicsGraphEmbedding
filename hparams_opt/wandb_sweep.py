@@ -68,8 +68,40 @@ vocab = dataset_train.tokenizer.word_index
 
 
 def objective():
-    wandb.init()
+    hparams_defaults = {
+        "encoding_dim": 128,
+        "embedding_dim": 256,
+        "n_classes": n_classes,
+        "vocab_size": len(vocab),
+        "word_embedding_size": None,
+
+        "nb_conv1d_filters": 256,
+        "nb_conv1d_kernel_size": 6,
+        "nb_max_pool_size": 14,
+        "nb_conv1d_dropout": 0.2,
+        "nb_conv1d_layernorm": True,
+
+        "nb_lstm_layers": 1,
+        "nb_lstm_bidirectional": True,
+        "nb_lstm_units": 192,
+        "nb_lstm_dropout": 0.0,
+        "nb_lstm_hidden_dropout": 0.2,
+        "nb_lstm_layernorm": False,
+
+        "nb_attn_heads": 4,
+        "nb_attn_dropout": 0.6,
+
+        "nb_cls_dense_size": 512,
+        "nb_cls_dropout": 0.5,
+
+        "nb_weight_decay": 1e-5,
+        "lr": 1e-3,
+    }
+
+    wandb.init(config=hparams_defaults, project="multiplex-rna-embedding")
     config = wandb.config
+    config.n_classes = n_classes
+    config.vocab_size = len(vocab)
     print("config", config)
 
     logger = WandbLogger(project="multiplex-rna-embedding")
@@ -90,5 +122,4 @@ def objective():
 
 
 if __name__ == "__main__":
-    sweep_id = wandb.sweep("hparams_opt/sweep_lstm_gat.yaml", project="multiplex-rna-embedding")
-    wandb.agent(sweep_id, function=objective)
+    wandb.agent('jonnytran/multiplex-rna-embedding/z8yke4u0', function=objective)

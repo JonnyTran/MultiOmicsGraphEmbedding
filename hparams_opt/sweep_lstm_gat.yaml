@@ -1,4 +1,4 @@
-program: wandb_sweep.py
+program: hparams_opt/wandb_sweep.py
 method: bayes
 metric:
   name: val_loss
@@ -8,6 +8,10 @@ parameters:
     values: [64, 128, 256]
   embedding_dim:
     values: [128, 256, 386]
+
+  word_embedding_size:
+    min: 4
+    max: 20
 
   nb_conv1d_filters:
     min: 100
