@@ -28,7 +28,7 @@ parameters:
   nb_conv1d_dropout:
     min: 0.0
     max: 0.5
-  nb_conv1d_layernorm:
+  nb_conv1d_batchnorm:
     values: [True, False]
 
   nb_lstm_units:

@@ -79,7 +79,7 @@ def objective():
         "nb_conv1d_kernel_size": 6,
         "nb_max_pool_size": 14,
         "nb_conv1d_dropout": 0.2,
-        "nb_conv1d_layernorm": True,
+        "nb_conv1d_batchnorm": True,
 
         "nb_lstm_bidirectional": True,
         "nb_lstm_units": 192,
