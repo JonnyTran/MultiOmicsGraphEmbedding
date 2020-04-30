@@ -1,4 +1,4 @@
-program: hparams_opt/wandb_sweep.py -W ignore
+program: hparams_opt/wandb_sweep.py
 method: bayes
 metric:
   name: val_loss

@@ -103,7 +103,7 @@ def objective():
     config.n_classes = n_classes
     config.vocab_size = len(vocab)
 
-    logger = WandbLogger()
+    logger = WandbLogger(project="multiplex-rna-embedding")
     trainer = pl.Trainer(
         logger=logger,
         max_epochs=EPOCHS,
