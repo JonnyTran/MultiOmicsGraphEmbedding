@@ -13,7 +13,7 @@ import optuna
 import pytorch_lightning as pl
 import torch
 from optuna.integration import PyTorchLightningPruningCallback
-from pytorch_lightning.logging import LightningLoggerBase, rank_zero_warn
+from pytorch_lightning.logging import LightningLoggerBase
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.generator.subgraph_generator import SubgraphGenerator
@@ -22,7 +22,7 @@ from moge.module.encoder import EncoderLSTM
 
 import wandb
 
-wandb.init(project="multiplex-rna-embedding")
+# wandb.init(project="multiplex-rna-embedding")
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 EPOCHS = 10
@@ -88,11 +88,11 @@ def objective(trial):
     trial.nb_conv1d_dropout = trial.suggest_float("nb_conv1d_dropout", 0.0, 0.5)
     trial.nb_conv1d_layernorm = trial.suggest_categorical("nb_conv1d_layernorm", [True, False])
 
-    trial.nb_lstm_layers = 1  # trial.suggest_int("nb_lstm_layers", 1, 2)
+    trial.nb_lstm_layers = 1,  # trial.suggest_int("nb_lstm_layers", 1, 2)
     trial.nb_lstm_units = trial.suggest_int("nb_lstm_units", 100, 320)
     trial.nb_lstm_dropout = trial.suggest_float("nb_lstm_dropout", 0.0, 0.5)
     trial.nb_lstm_hidden_dropout = trial.suggest_float("nb_lstm_hidden_dropout", 0.0, 0.5)
-    trial.nb_lstm_bidirectional = trial.suggest_categorical("nb_lstm_bidirectional", [False])
+    trial.nb_lstm_bidirectional = trial.suggest_categorical("nb_lstm_bidirectional", [True, False])
     trial.nb_lstm_layernorm = trial.suggest_categorical("nb_lstm_layernorm", [True, False])
 
     trial.nb_attn_heads = trial.suggest_categorical("nb_attn_heads", [1, 2, 4, 8])
@@ -115,7 +115,8 @@ def objective(trial):
     # final accuracy can be obtained after optimization. When using the default logger, the
     # final accuracy could be stored in an attribute of the `Trainer` instead.
     # logger = DictLogger(trial.number)
-    logger = WandbLogger()
+    logger = WandbLogger(name="trial_{}".format(trial.number), project="multiplex-rna-embedding")
+    wandb.init(config=trial)
 
     trainer = pl.Trainer(
         logger=logger,
@@ -127,7 +128,6 @@ def objective(trial):
 
     encoder = EncoderLSTM(trial)
     model = LightningModel(encoder)
-    logger.watch(model, log='parameters', log_freq=100)
 
     trainer.fit(model, train_dataloader, test_dataloader)
     print("logger.metrics", logger.log_metrics)
