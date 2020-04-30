@@ -74,36 +74,6 @@ vocab = dataset_train.tokenizer.word_index
 
 
 def objective(trial):
-    trial.encoding_dim = trial.suggest_categorical("encoding_dim", [64, 128, 256])
-    trial.embedding_dim = trial.suggest_categorical("embedding_dim", [128, 256, 386])
-    trial.n_classes = n_classes
-    trial.vocab_size = len(vocab)
-    trial.word_embedding_size = None
-
-    trial.nb_conv1d_filters = trial.suggest_int("nb_conv1d_filters", 100, 320)
-    trial.nb_conv1d_kernel_size = trial.suggest_int("nb_conv1d_kernel_size", 5, 20)
-    trial.nb_max_pool_size = trial.suggest_int("nb_max_pool_size", 5, 20)
-    trial.nb_conv1d_dropout = trial.suggest_float("nb_conv1d_dropout", 0.0, 0.5)
-    trial.nb_conv1d_layernorm = trial.suggest_categorical("nb_conv1d_layernorm", [True, False])
-
-    trial.nb_lstm_layers = 1,  # trial.suggest_int("nb_lstm_layers", 1, 2)
-    trial.nb_lstm_units = trial.suggest_int("nb_lstm_units", 100, 320)
-    trial.nb_lstm_dropout = trial.suggest_float("nb_lstm_dropout", 0.0, 0.5)
-    trial.nb_lstm_hidden_dropout = trial.suggest_float("nb_lstm_hidden_dropout", 0.0, 0.5)
-    trial.nb_lstm_bidirectional = trial.suggest_categorical("nb_lstm_bidirectional", [True, False])
-    trial.nb_lstm_layernorm = trial.suggest_categorical("nb_lstm_layernorm", [True, False])
-
-    trial.nb_attn_heads = trial.suggest_categorical("nb_attn_heads", [1, 2, 4, 8])
-    trial.nb_attn_dropout = trial.suggest_float("nb_attn_dropout", 0.0, 0.8)
-
-    trial.nb_cls_dense_size = trial.suggest_categorical("nb_cls_dense_size", [128, 256, 512, 768])
-    trial.nb_cls_dropout = trial.suggest_float("nb_cls_dropout", 0.0, 0.5)
-
-    trial.nb_weight_decay = trial.suggest_float("nb_weight_decay", 1e-5, 1e-2)
-    trial.lr = trial.suggest_float("lr", 1e-4, 5e-2)
-
-    # PyTorch Lightning will try to restore model parameters from previous trials if checkpoint
-    # filenames match. Therefore, the filenames for each trial must be made unique.
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         os.path.join(MODEL_DIR, "trial_{}".format(trial.number)), monitor="precision"
     )
@@ -115,7 +85,6 @@ def objective(trial):
         checkpoint_callback=checkpoint_callback,
         max_epochs=EPOCHS,
         gpus=1 if torch.cuda.is_available() else None,
-        early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="precision"),
     )
 
     encoder = EncoderLSTM(trial)
