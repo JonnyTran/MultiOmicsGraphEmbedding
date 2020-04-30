@@ -30,8 +30,8 @@ class EncoderLSTM(nn.Module):
             out_channels=self.hparams.nb_conv1d_filters,
             kernel_size=self.hparams.nb_conv1d_kernel_size,
         )
+        self.conv_batchnorm = nn.BatchNorm1d(self.hparams.nb_conv1d_filters)
         self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1d_dropout)
-        self.conv_layernorm = nn.BatchNorm1d(self.hparams.nb_conv1d_filters)
 
         self.lstm = nn.LSTM(
             input_size=self.hparams.nb_conv1d_filters,
@@ -40,9 +40,9 @@ class EncoderLSTM(nn.Module):
             num_layers=self.hparams.nb_lstm_layers,
             dropout=self.hparams.nb_lstm_dropout,
             batch_first=True, )
-        self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
         self.lstm_layernorm = nn.LayerNorm(
             (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers)
+        self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
         self.fc_encoder = nn.Linear(
             (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units * self.hparams.nb_lstm_layers,
             self.hparams.encoding_dim)
@@ -94,9 +94,9 @@ class EncoderLSTM(nn.Module):
         X = self.word_embedding(input_seqs)
         X = X.permute(0, 2, 1)
         X = F.relu(F.max_pool1d(self.conv1(X), self.hparams.nb_max_pool_size))
-        X = self.conv1_dropout(X)
         if self.hparams.nb_conv1d_layernorm:
-            X = self.conv_layernorm(X)
+            X = self.conv_batchnorm(X)
+        X = self.conv1_dropout(X)
         X = X.permute(0, 2, 1)
 
         X_lengths = (X_lengths - self.hparams.nb_conv1d_kernel_size + 1) / self.hparams.nb_max_pool_size
@@ -109,9 +109,9 @@ class EncoderLSTM(nn.Module):
         X = X.reshape(batch_size, (
             2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_layers * self.hparams.nb_lstm_units)
 
-        X = self.lstm_hidden_dropout(X)
         if self.hparams.nb_lstm_layernorm:
             X = self.lstm_layernorm(X)
+        X = self.lstm_hidden_dropout(X)
         X = self.fc_encoder(X)
         return X
 

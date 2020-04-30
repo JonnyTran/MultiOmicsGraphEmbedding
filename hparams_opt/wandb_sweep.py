@@ -34,9 +34,9 @@ targets = ['go_id']
 network.process_feature_tranformer(filter_label=targets[0], min_count=100, verbose=False)
 classes = network.feature_transformer[targets[0]].classes_
 n_classes = len(classes)
-batch_size = 1000
+batch_size = 1800
 max_length = 1000
-test_frac = 0.05
+test_frac = 0.20
 n_steps = int(400000 / batch_size)
 directed = False
 seed = random.randint(0, 1000)
@@ -68,39 +68,32 @@ train_dataloader = torch.utils.data.DataLoader(
 test_dataloader = torch.utils.data.DataLoader(
     dataset_test,
     batch_size=None,
-    num_workers=10
+    num_workers=5
 )
 vocab = dataset_train.tokenizer.word_index
 
 
-def objective(trial):
-    checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        os.path.join(MODEL_DIR, "trial_{}".format(trial.number)), monitor="precision"
-    )
+def objective():
+    wandb.init()
+    config = wandb.config
 
-    logger = WandbLogger(name="trial_{}".format(trial.number), project="multiplex-rna-embedding")
-
+    logger = WandbLogger(project="multiplex-rna-embedding")
     trainer = pl.Trainer(
         logger=logger,
-        checkpoint_callback=checkpoint_callback,
         max_epochs=EPOCHS,
+        min_epochs=5,
         gpus=1 if torch.cuda.is_available() else None,
     )
 
-    encoder = EncoderLSTM(trial)
+    encoder = EncoderLSTM(config)
     model = LightningModel(encoder)
 
-    trainer.fit(model, train_dataloader, test_dataloader)
-    print("logger.metrics", logger.log_metrics)
+    trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
+    print("logger.metrics", logger.log_metrics, logger.log_metrics[-1]["val_precision"])
 
     return logger.log_metrics[-1]["val_precision"]
 
 
 if __name__ == "__main__":
-    wandb.init(project="multiplex-rna-embedding")
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-b', '--batch-size', type=int, default=8, metavar='N',
-                        help='input batch size for training (default: 8)')
-    args = parser.parse_args()
-    wandb.config.update(args)  # adds all of the arguments as config variables
+    sweep_id = wandb.sweep("hparams_opt/sweep_lstm_gat.yaml", project="multiplex-rna-embedding")
+    wandb.agent(sweep_id, function=objective)
