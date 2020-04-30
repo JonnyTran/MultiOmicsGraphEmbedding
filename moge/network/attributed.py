@@ -26,7 +26,7 @@ def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False,
         annotations_list = annotations.loc[nodes_index, y_label]
 
     labels_filter = get_label_min_count_filter(annotations_list, min_count)
-    print("label {} filtered: {}".format(y_label, len(labels_filter)))
+    print("label {} filtered: {} with min_count=".format(y_label, len(labels_filter), min_count))
 
     y_labels = annotations_list.map(
         lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])

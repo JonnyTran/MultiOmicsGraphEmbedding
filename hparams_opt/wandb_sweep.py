@@ -1,19 +1,13 @@
-import argparse
 import os
 import pickle
 import random
-import shutil
 
 import sys
-from typing import Any, Dict, Optional
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
-import optuna
 import pytorch_lightning as pl
 import torch
-from optuna.integration import PyTorchLightningPruningCallback
-from pytorch_lightning.logging import LightningLoggerBase
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.generator.subgraph_generator import SubgraphGenerator
@@ -76,6 +70,7 @@ vocab = dataset_train.tokenizer.word_index
 def objective():
     wandb.init()
     config = wandb.config
+    print("config", config)
 
     logger = WandbLogger(project="multiplex-rna-embedding")
     trainer = pl.Trainer(
@@ -86,7 +81,7 @@ def objective():
     )
 
     encoder = EncoderLSTM(config)
-    model = LightningModel(encoder)
+    model = LightningModel(encoder, data_path='../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle')
 
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
     print("logger.metrics", logger.log_metrics, logger.log_metrics[-1]["val_precision"])
