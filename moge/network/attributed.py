@@ -134,7 +134,7 @@ class AttributedNetwork(Network):
                         label)) if verbose else None
                     features = annotation.loc[node_list, label].dropna(axis=0)
 
-                if label in filter_label and min_count:
+                if filter_label is not None and label in filter_label and min_count:
                     labels_filter = get_label_min_count_filter(features, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 feature_transformers[label].fit(features)
