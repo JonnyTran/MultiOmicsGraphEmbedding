@@ -1,13 +1,8 @@
-import community  # python-louvain
 import matplotlib.cm as cm
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-from bokeh.models import ColumnDataSource
-from bokeh.models import HoverTool, LabelSet
-from bokeh.models import Toggle, CustomJS
-from bokeh.plotting import show, figure
 from scipy.sparse import csgraph
 from sklearn.decomposition import TruncatedSVD
 
@@ -151,80 +146,6 @@ def get_node_color(node_labels, n=256, index=False):
         return [float(hash(s) % n) / n for s in node_labels]
     else:
         return [hash(s) % n for s in node_labels]
-
-
-def plot_bokeh_graph(network, node_pos=None, node_size="centrality", node_label=None):
-    if node_pos == None:
-        node_pos = nx.spring_layout(network, iterations=100)
-
-    nodes, nodes_coordinates = zip(*sorted(node_pos.items()))
-    nodes_xs, nodes_ys = list(zip(*nodes_coordinates))
-    hover = HoverTool(tooltips=[('name', '@name')], renderers=[])
-    plot = figure(plot_width=875, plot_height=700,
-                  tools=['tap', hover, 'box_zoom', 'reset', 'pan'])
-    plot.xgrid.grid_line_color = None
-    plot.ygrid.grid_line_color = None
-
-    # node circles
-    nodes_source = ColumnDataSource(dict(x=nodes_xs, y=nodes_ys, name=nodes))
-    r_circles = plot.circle('x', 'y', source=nodes_source, size=5,
-                            color='blue', level='overlay')
-    hover.renderers.append(r_circles)
-
-    # edge lines
-    lines_source = ColumnDataSource(get_edges_specs(network, node_pos))
-    r_lines = plot.multi_line('xs', 'ys', line_width=1.0,
-                              alpha='alphas',
-                              color='black',
-                              source=lines_source)
-    hover.renderers.append(r_lines)
-
-    # Color and resize nodes
-    colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#b3cde3',
-              '#ccebc5', '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec', '#1b9e77', '#d95f02',
-              '#7570b3', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#666666']
-
-    if node_size == "centrality":
-        nodes_centrality = node_centrality(network)
-        max_centrality = max(nodes_centrality)
-        nodes_source.add([7 + 10 * t / max_centrality
-                          for t in nodes_centrality],
-                         'centrality')
-        r_circles.glyph.size = 'centrality'
-
-    if node_label == "community":
-        partition = community.best_partition(network)
-        p_, nodes_community = zip(*sorted(partition.items()))
-        nodes_source.add(nodes_community, 'community')
-        nodes_source.add([colors[t % len(colors)] for t in nodes_community], 'node_color')
-        r_circles.glyph.fill_color = 'node_color'
-
-    elif type(node_label) == list:
-        nodes_source.add(node_label, 'node_label')
-        node_colors = get_node_color(node_label, n=len(colors), index=True)
-        nodes_source.add([colors[t] for t in node_colors], 'node_color')
-        r_circles.glyph.fill_color = 'node_color'
-
-    proc_labels = LabelSet(x='x', y='y', text="name",
-                           text_font_size="8pt", text_color="navy",
-                           source=nodes_source, text_align='center')
-
-    plot.add_layout(proc_labels)
-
-    code = '''\
-    if toggle.active
-        labels.visible = true
-        console.log 'enabling box'
-    else
-        labels.visible = false
-        console.log 'disabling box'
-    '''
-    callback = CustomJS.from_coffeescript(code=code, args={})
-    toggle = Toggle(label="Toggle miRNA label", button_type="success", callback=callback)
-    callback.args = {'toggle': toggle, 'labels': proc_labels}
-
-    show(plot)
-    show(toggle)
 
 
 def node_centrality(network):
