@@ -54,6 +54,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
         if not hasattr(self, "node_list") or self.node_list is None:
             self.node_list = self.network.node_list
+        print("node_list", len(self.node_list))
 
         # Ensure every node must have an associated sequence
         if isinstance(self.annotations, pd.DataFrame):

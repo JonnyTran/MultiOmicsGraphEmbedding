@@ -90,7 +90,7 @@ class TrainTestSplit():
         if not hasattr(self, "training"):
             raise Exception("Must run split_train_test on the network first.")
 
-        kwargs['network'] = self.training
+        kwargs['network'] = self
         kwargs['node_list'] = self.training.node_list
 
         gen_inst = generator(**kwargs)
@@ -101,7 +101,7 @@ class TrainTestSplit():
         if not hasattr(self, "testing"):
             raise Exception("Must run split_train_test on the network first.")
 
-        kwargs['network'] = self.testing
+        kwargs['network'] = self
         kwargs['node_list'] = self.testing.node_list
 
         # A feature to ensure the test generator has the same tokenizer as the train generator
