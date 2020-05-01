@@ -69,7 +69,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         node_list = []
 
         while len(node_list) < batch_size:
-            seed_node = self.sample_node_by_freq(1)
+            seed_node = self.sample_seed_node(1)
             neighbors = []
             for modality, network_layer in self.network.networks.items():
                 if seed_node[0] not in network_layer.nodes:

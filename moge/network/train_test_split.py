@@ -91,6 +91,7 @@ class TrainTestSplit():
             raise Exception("Must run split_train_test on the network first.")
 
         if split_idx is not None:
+            assert split_idx < len(self.train_test_splits)
             node_list = self.train_test_splits[split_idx][0]
         else:
             node_list = self.training.node_list
@@ -107,6 +108,7 @@ class TrainTestSplit():
             raise Exception("Must run split_train_test on the network first.")
 
         if split_idx is not None:
+            assert split_idx < len(self.train_test_splits)
             node_list = self.train_test_splits[split_idx][1]
         else:
             node_list = self.testing.node_list

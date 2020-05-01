@@ -56,12 +56,12 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             self.node_list = self.network.node_list
         print("node_list", len(self.node_list))
 
-        # Ensure every node must have an associated sequence
-        if isinstance(self.annotations, pd.DataFrame):
+        if isinstance(self.annotations, pd.DataFrame):  # Heterogeneous network
+            # Ensure every node must have an associated sequence
             self.node_list = [node for node in self.node_list if node in self.annotations[
                 self.annotations[SEQUENCE_COL].notnull()].index.tolist()]
-        elif isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series):
-            # Check that each node must have a sequence in all modalities it's associated with
+        elif isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series):  # Multiplex network
+            # Check that each node must have sequence data in all layers
             null_nodes = [network.annotations[modality].loc[network.nodes[modality], SEQUENCE_COL][
                               network.annotations[modality].loc[
                                   network.nodes[modality], SEQUENCE_COL].isnull()].index.tolist() for modality in

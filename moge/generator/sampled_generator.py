@@ -12,6 +12,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         """
 
         Args:
+            sampling: one of {"node", "neighbor", "bfs", "dfs", "circle", "all"}.
             compression: {"log", "linear", "sqrt", "sqrt3", "cycle", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
             n_steps: Number of sampling steps each iteration
             replace: Whether to sample with or without replacement
@@ -99,7 +100,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         """
         raise NotImplementedError
 
-    def sample_node_by_freq(self, batch_size):
+    def sample_seed_node(self, size):
         """
         Samples a list of nodes of size `batch_size`, with prior probabilities from `self.node_sampling_freq`.
 
@@ -107,9 +108,9 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         :return: list of nodes names
         """
         if self.compression == "cycle":
-            return next(self.generate_random_node_cycle(batch_size))
+            return next(self.generate_random_node_cycle(size))
         else:
-            sampled_nodes = np.random.choice(self.node_list, size=batch_size, replace=False,
+            sampled_nodes = np.random.choice(self.node_list, size=size, replace=False,
                                              p=self.node_sampling_freq)
             return sampled_nodes
 

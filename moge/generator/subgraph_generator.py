@@ -71,18 +71,18 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
             return self.bfs_traversal(batch_size, seed_node=seed_node)
         elif self.sampling == "dfs":
             return self.dfs_traversal(batch_size, seed_node=seed_node)
+        elif self.sampling == 'all_slices':
+            return next(self.all_nodes_slices())
         elif self.sampling == "all":
             return self.network.node_list
-        elif self.sampling == 'circle':
-            return next(self.node_circle_sampling())
         else:
-            raise Exception("self.sampling_method must be {'node', 'bfs', 'dfs', 'all', or 'circle'}")
+            raise Exception("`sampling_method` must be {'node', 'bfs', 'dfs', 'all', or 'all_slices'}")
 
-    def node_circle_sampling(self):
+    def all_nodes_slices(self):
         yield [node for node in islice(self.nodes_circle, self.batch_size)]
 
     def node_sampling(self, batch_size):
-        sampled_nodes = self.sample_node_by_freq(batch_size)
+        sampled_nodes = self.sample_seed_node(batch_size)
 
         while len(sampled_nodes) < batch_size:
             add_nodes = np.random.choice(self.node_list, size=batch_size - len(sampled_nodes), replace=False,
@@ -95,7 +95,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
 
         while len(sampled_nodes) < batch_size:
             if seed_node is None or seed_node not in self.node_list:
-                start_node = self.sample_node_by_freq(1)[0]
+                start_node = self.sample_seed_node(1)[0]
             else:
                 start_node = seed_node
 
@@ -116,7 +116,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
 
         while len(sampled_nodes) < batch_size:
             if seed_node is None or seed_node not in self.node_list:
-                start_node = self.sample_node_by_freq(1)[0]
+                start_node = self.sample_seed_node(1)[0]
             else:
                 start_node = seed_node
 
@@ -133,6 +133,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
     def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
+        print("sampled_nodes", self.annotations.loc[sampled_nodes, "Transcript sequence"].isnull().sum())
         X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
                                                       variable_length=variable_length or self.variable_length)
 
