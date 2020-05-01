@@ -86,23 +86,33 @@ class TrainTestSplit():
             self.training.node_list = list(OrderedDict.fromkeys([node for node in self.node_list if node in nodelist]))
         self.training.feature_transformer = self.feature_transformer
 
-    def get_train_generator(self, generator, **kwargs):
+    def get_train_generator(self, generator, split_idx=None, **kwargs):
         if not hasattr(self, "training"):
             raise Exception("Must run split_train_test on the network first.")
 
+        if split_idx is not None:
+            node_list = self.train_test_splits[split_idx][0]
+        else:
+            node_list = self.training.node_list
+
         kwargs['network'] = self
-        kwargs['node_list'] = self.training.node_list
+        kwargs['node_list'] = node_list
 
         gen_inst = generator(**kwargs)
         self.tokenizer = gen_inst.tokenizer
         return gen_inst
 
-    def get_test_generator(self, generator, **kwargs):
+    def get_test_generator(self, generator, split_idx=None, **kwargs):
         if not hasattr(self, "testing"):
             raise Exception("Must run split_train_test on the network first.")
 
+        if split_idx is not None:
+            node_list = self.train_test_splits[split_idx][1]
+        else:
+            node_list = self.testing.node_list
+
         kwargs['network'] = self
-        kwargs['node_list'] = self.testing.node_list
+        kwargs['node_list'] = node_list
 
         # A feature to ensure the test generator has the same tokenizer as the train generator
         if hasattr(self, "tokenizer"):
