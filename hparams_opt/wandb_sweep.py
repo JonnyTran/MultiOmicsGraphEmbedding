@@ -35,8 +35,6 @@ test_frac = 0.10
 n_steps = int(400000 / batch_size)
 directed = False
 seed = random.randint(0, 1000)
-network.split_stratified(directed=directed, stratify_label=targets[0], stratify_omic=False,
-                         n_splits=int(1 / test_frac), dropna=True, seed=seed, verbose=False)
 
 dataset_train = network.get_train_generator(
     SubgraphGenerator, variables=variables, targets=targets,
