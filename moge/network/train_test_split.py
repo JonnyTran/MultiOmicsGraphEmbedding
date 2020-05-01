@@ -1,7 +1,5 @@
-import copy
 import random
 from abc import abstractmethod
-from collections import OrderedDict
 
 import networkx as nx
 import numpy as np
@@ -65,27 +63,6 @@ class TrainTestSplit():
         """
         raise NotImplementedError()
 
-    def set_val_annotations(self, val_nodes=None):
-        self.validation = copy.copy(self)
-        self.validation.annotations = self.annotations
-        if val_nodes:
-            self.validation.node_list = list(OrderedDict.fromkeys(val_nodes))
-        self.validation.feature_transformer = self.feature_transformer
-
-    def set_testing_annotations(self, test_nodes):
-        self.testing = copy.copy(self)
-        self.testing.annotations = self.annotations
-        if test_nodes:
-            self.testing.node_list = list(OrderedDict.fromkeys(test_nodes))
-        self.testing.feature_transformer = self.feature_transformer
-
-    def set_training_annotations(self, nodelist):
-        self.training = copy.copy(self)
-        self.training.annotations = self.annotations
-        if nodelist:
-            self.training.node_list = list(OrderedDict.fromkeys([node for node in self.node_list if node in nodelist]))
-        self.training.feature_transformer = self.feature_transformer
-
     def get_train_generator(self, generator, split_idx=None, **kwargs):
         if not hasattr(self, "training"):
             raise Exception("Must run split_train_test on the network first.")
@@ -101,6 +78,10 @@ class TrainTestSplit():
 
         gen_inst = generator(**kwargs)
         self.tokenizer = gen_inst.tokenizer
+
+        for key, graph in gen_inst.network.networks.items():
+            gen_inst.network.networks[key] = graph.subgraph(nodes=node_list)
+
         return gen_inst
 
     def get_test_generator(self, generator, split_idx=None, **kwargs):
@@ -119,7 +100,12 @@ class TrainTestSplit():
         # A feature to ensure the test generator has the same tokenizer as the train generator
         if hasattr(self, "tokenizer"):
             kwargs["tokenizer"] = self.tokenizer
-        return generator(**kwargs)
+        gen_inst = generator(**kwargs)
+
+        for key, graph in gen_inst.network.networks.items():
+            gen_inst.network.networks[key] = graph.subgraph(nodes=node_list)
+
+        return gen_inst
 
 
 def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_frac=0.0,

@@ -12,7 +12,7 @@ class Network(object):
         """
         self.networks = networks
         self.process_network()
-        self.remove_bad_nodes()
+        self.remove_invalid_nodes()
         self.node_list = self.get_node_list()
 
     def get_node_list(self):
@@ -24,7 +24,7 @@ class Network(object):
 
         return node_list
 
-    def remove_bad_nodes(self):
+    def remove_invalid_nodes(self):
         bad_nodes = [node for node in self.get_node_list()
                      if node is None or node == np.nan or \
                      type(node) != str or \
