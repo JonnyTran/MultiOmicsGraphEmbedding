@@ -15,10 +15,8 @@ from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import LightningModel
 from moge.module.encoder import EncoderLSTM
 
-import wandb
-
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
-MAX_EPOCHS = 10
+MAX_EPOCHS = 20
 DIR = os.getcwd()
 MODEL_DIR = os.path.join(DIR, "result")
 
