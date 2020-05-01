@@ -180,9 +180,9 @@ if __name__ == '__main__':
 
     parser.add_argument('--nb_conv1_filters', type=int, default=192)
     parser.add_argument('--nb_conv1_kernel_size', type=int, default=26)
+    parser.add_argument('--nb_conv1_dropout', type=float, default=0.2)
+    parser.add_argument('--nb_conv1_layernorm', type=bool, default=True)
     parser.add_argument('--nb_max_pool_size', type=int, default=13)
-    parser.add_argument('--nb_conv_dropout', type=float, default=0.2)
-    parser.add_argument('--nb_conv1d_layernorm', type=bool, default=True)
 
     parser.add_argument('--nb_lstm_units', type=int, default=100)
     parser.add_argument('--nb_lstm_hidden_dropout', type=float, default=0.0)

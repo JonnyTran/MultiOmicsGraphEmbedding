@@ -3,7 +3,7 @@ import pickle
 import random
 
 import sys
-
+from argparse import ArgumentParser
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 import pytorch_lightning as pl
@@ -18,7 +18,7 @@ from moge.module.encoder import EncoderLSTM
 import wandb
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
-EPOCHS = 10
+MAX_EPOCHS = 10
 DIR = os.getcwd()
 MODEL_DIR = os.path.join(DIR, "result")
 
@@ -35,6 +35,9 @@ test_frac = 0.10
 n_steps = int(400000 / batch_size)
 directed = False
 seed = random.randint(0, 1000)
+
+network.split_stratified(directed=directed, stratify_label=targets[0], stratify_omic=False,
+                         n_splits=int(1 / test_frac), dropna=True, seed=seed)
 
 dataset_train = network.get_train_generator(
     SubgraphGenerator, variables=variables, targets=targets,
@@ -66,55 +69,59 @@ test_dataloader = torch.utils.data.DataLoader(
 vocab = dataset_train.tokenizer.word_index
 
 
-def objective():
-    hparams_defaults = {
-        "encoding_dim": 128,
-        "embedding_dim": 256,
-        "n_classes": n_classes,
-        "vocab_size": len(vocab),
-        "word_embedding_size": None,
+def train(hparams):
+    hparams.n_classes = n_classes
+    hparams.vocab_size = len(vocab)
 
-        "nb_conv1_filters": 256,
-        "nb_conv1_kernel_size": 6,
-        "nb_conv1_dropout": 0.2,
-        "nb_conv1_batchnorm": True,
-        "nb_max_pool_size": 20,
-
-        "nb_lstm_bidirectional": True,
-        "nb_lstm_units": 192,
-        "nb_lstm_hidden_dropout": 0.2,
-        "nb_lstm_layernorm": False,
-
-        "nb_attn_heads": 4,
-        "nb_attn_dropout": 0.6,
-
-        "nb_cls_dense_size": 512,
-        "nb_cls_dropout": 0.5,
-
-        "nb_weight_decay": 1e-5,
-        "lr": 1e-3,
-    }
-    # logger = WandbLogger(project="multiplex-rna-embedding")
-    wandb.init(config=hparams_defaults, project="multiplex-rna-embedding")
-    config = wandb.config
+    logger = WandbLogger()
+    # wandb.init(config=hparams, project="multiplex-rna-embedding")
 
     trainer = pl.Trainer(
-        # logger=logger,
+        logger=logger,
         callbacks=[EarlyStopping(patience=3)],
-        min_epochs=3, max_epochs=EPOCHS,
+        min_epochs=3, max_epochs=MAX_EPOCHS,
         gpus=1 if torch.cuda.is_available() else None,
         weights_summary='top',
     )
+    encoder = EncoderLSTM(hparams)
+    model = LightningModel(encoder)
 
-    encoder = EncoderLSTM(config)
-    model = LightningModel(encoder, data_path='../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle')
-
-    wandb.watch(model)
+    # wandb.watch(model, criterion="val_loss", log="parameters", log_freq=100)
 
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
     # trainer.run_evaluation(test_mode=False)
     # wandb.log(logger.experiment._summary)
 
+
 if __name__ == "__main__":
-    # wandb.agent('jonnytran/multiplex-rna-embedding/z8yke4u0', function=objective)
-    objective()
+    parser = ArgumentParser()
+    # parametrize the network
+    parser.add_argument('--encoding_dim', type=int, default=128)
+    parser.add_argument('--embedding_dim', type=int, default=256)
+    parser.add_argument('--word_embedding_size', type=int, default=None)
+
+    parser.add_argument('--nb_conv1_filters', type=int, default=192)
+    parser.add_argument('--nb_conv1_kernel_size', type=int, default=26)
+    parser.add_argument('--nb_conv1_dropout', type=float, default=0.2)
+    parser.add_argument('--nb_conv1_batchnorm', type=bool, default=True)
+    parser.add_argument('--nb_max_pool_size', type=int, default=13)
+
+    parser.add_argument('--nb_lstm_units', type=int, default=100)
+    parser.add_argument('--nb_lstm_bidirectional', type=bool, default=False)
+    parser.add_argument('--nb_lstm_hidden_dropout', type=float, default=0.0)
+    parser.add_argument('--nb_lstm_layernorm', type=bool, default=False)
+
+    parser.add_argument('--nb_attn_heads', type=int, default=4)
+    parser.add_argument('--nb_attn_dropout', type=float, default=0.5)
+
+    parser.add_argument('--nb_cls_dense_size', type=int, default=512)
+    parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
+
+    parser.add_argument('--nb_weight_decay', type=float, default=0.0)
+    parser.add_argument('--lr', type=float, default=1e-3)
+
+    # add all the available options to the trainer
+    parser = pl.Trainer.add_argparse_args(parser)
+
+    args = parser.parse_args()
+    train(args)
