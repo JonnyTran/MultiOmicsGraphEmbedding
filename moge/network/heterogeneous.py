@@ -1,3 +1,5 @@
+from argparse import Namespace
+
 import networkx as nx
 import scipy.sparse as sps
 
@@ -378,7 +380,13 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("|")
             y_label = y_label + y_omic
 
-        train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
+        self.train_test_splits = list(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
+
+        self.training = Namespace()
+        self.testing = Namespace()
+        self.training.node_list = self.train_test_splits[0][0]
+        self.testing.node_list = self.train_test_splits[0][1]
+        return
 
         if directed:
             g = self.G.copy()

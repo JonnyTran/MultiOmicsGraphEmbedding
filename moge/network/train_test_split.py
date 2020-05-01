@@ -15,9 +15,10 @@ def stratify_train_test(y_label, n_splits=10, seed=42):
 
     k_fold = IterativeStratification(n_splits=n_splits, order=1, random_state=seed)
     for train, test in k_fold.split(y_label.index.to_list(), sps.lil_matrix(y_label_bin)):
+        print("train", len(train), "test", len(test))
         train_nodes = list(y_label.index[train])
         test_nodes = list(y_label.index[test])
-        return train_nodes, test_nodes
+        yield train_nodes, test_nodes
 
 class TrainTestSplit():
     def __init__(self) -> None:
