@@ -103,7 +103,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
                                islice(nx.traversal.bfs_successors(self.network.G if self.directed else self.network.G_u,
                                                                   source=start_node),
                                       batch_size) for node in successors]
-
+            successor_nodes = list(set(successor_nodes) & set(self.node_list))
             sampled_nodes.extend([start_node] + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
@@ -123,6 +123,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
             successor_nodes = list(
                 islice(nx.traversal.dfs_successors(self.network.G if self.directed else self.network.G_u,
                                                    source=start_node), batch_size))
+            successor_nodes = list(set(successor_nodes) & set(self.node_list))
             sampled_nodes.extend([start_node] + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
@@ -133,7 +134,8 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
     def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
-        print("sampled_nodes", self.annotations.loc[sampled_nodes, "Transcript sequence"].isnull().sum())
+        print("sampled_nodes", len(sampled_nodes),
+              self.annotations.loc[sampled_nodes, "Transcript sequence"].isnull().sum())
         X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
                                                       variable_length=variable_length or self.variable_length)
 

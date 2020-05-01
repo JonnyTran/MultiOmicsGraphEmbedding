@@ -79,9 +79,6 @@ class TrainTestSplit():
         gen_inst = generator(**kwargs)
         self.tokenizer = gen_inst.tokenizer
 
-        for key, graph in gen_inst.network.networks.items():
-            gen_inst.network.networks[key] = graph.subgraph(nodes=node_list)
-
         return gen_inst
 
     def get_test_generator(self, generator, split_idx=None, **kwargs):
@@ -101,9 +98,6 @@ class TrainTestSplit():
         if hasattr(self, "tokenizer"):
             kwargs["tokenizer"] = self.tokenizer
         gen_inst = generator(**kwargs)
-
-        for key, graph in gen_inst.network.networks.items():
-            gen_inst.network.networks[key] = graph.subgraph(nodes=node_list)
 
         return gen_inst
 
