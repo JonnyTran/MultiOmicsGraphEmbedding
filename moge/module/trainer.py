@@ -50,7 +50,7 @@ class LightningModel(pl.LightningModule):
         X, y, weights = batch
 
         Y_hat = self._model.forward(X)
-        loss = self._model.loss(Y_hat, y, None)
+        loss = self._model.loss(Y_hat, y, weights)
 
         self.update_metrics(Y_hat, y, training=False)
         return {"val_loss": loss}

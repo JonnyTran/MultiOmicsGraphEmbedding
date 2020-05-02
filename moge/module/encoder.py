@@ -86,9 +86,9 @@ class EncoderLSTM(nn.Module):
         # input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
 
         encodings = self.get_encodings(input_seqs)
-        # y_pred = F.sigmoid(encodings)
-        embeddings = self.embedder(encodings, subnetwork)
-        y_pred = self.fc_classifier(embeddings)
+        y_pred = F.sigmoid(encodings)
+        # embeddings = self.embedder(encodings, subnetwork)
+        # y_pred = self.fc_classifier(embeddings)
         return y_pred
 
     def get_encodings(self, input_seqs):
