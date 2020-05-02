@@ -34,8 +34,9 @@ n_steps = int(400000 / batch_size)
 directed = False
 seed = random.randint(0, 1000)
 
+split_idx = 0
 dataset_train = network.get_train_generator(
-    SubgraphGenerator, variables=variables, targets=targets,
+    SubgraphGenerator, split_idx=split_idx, variables=variables, targets=targets,
     traversal="bfs", batch_size=batch_size, agg_mode=None,
     method="GAT", adj_output="coo",
     sampling="log", n_steps=n_steps, directed=directed,
@@ -43,7 +44,7 @@ dataset_train = network.get_train_generator(
     seed=seed, verbose=False)
 
 dataset_test = network.get_test_generator(
-    SubgraphGenerator, variables=variables, targets=targets,
+    SubgraphGenerator, split_idx=split_idx, variables=variables, targets=targets,
     traversal='all', batch_size=batch_size, agg_mode=None,
     method="GAT", adj_output="coo",
     sampling="log", n_steps=1, directed=directed,

@@ -12,7 +12,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         """
 
         Args:
-            traversal: one of {"node", "neighbor", "bfs", "dfs", "circle", "all"}.
+            traversal: one of {"node", "neighbor", "bfs", "dfs", "all_slices", "all"}.
             sampling: {"log", "linear", "sqrt", "sqrt3", "cycle", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
             n_steps: Number of sampling steps each iteration
             replace: Whether to sample with or without replacement
@@ -108,19 +108,20 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         :return: list of nodes names
         """
         if self.sampling == "cycle":
-            return next(self.generate_random_node_cycle(size))
+            return next(self.cycle_random_node_list(size))
         else:
             sampled_nodes = np.random.choice(self.node_list, size=size, replace=False,
                                              p=self.node_sampling_freq)
             return sampled_nodes
 
-    def generate_random_node_cycle(self, batch_size):
+    def cycle_random_node_list(self, size):
         random_node_list = np.random.choice(self.node_list, size=len(self.node_sampling_freq.nonzero()[0]),
                                             replace=False, p=self.node_sampling_freq)
         while True:
-            if len(random_node_list) >= batch_size:
-                yield random_node_list[:batch_size]
-                random_node_list = random_node_list[batch_size:]
+            if len(random_node_list) >= size:
+                yield random_node_list[:size]
+                random_node_list = random_node_list[size:]
             else:
+                # Resample random_node_list
                 random_node_list = np.random.choice(self.node_list, size=len(self.node_sampling_freq.nonzero()[0]),
                                                     replace=False, p=self.node_sampling_freq)
