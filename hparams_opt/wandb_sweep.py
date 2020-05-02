@@ -10,6 +10,7 @@ import torch
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
+import openomics
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import LightningModel
 from moge.module.encoder import EncoderLSTM
@@ -18,7 +19,7 @@ DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 with open(DATASET, 'rb') as file:
     network = pickle.load(file)
 
-MAX_EPOCHS = 10
+MAX_EPOCHS = 20
 min_count = 500
 batch_size = 1000
 max_length = 1000
