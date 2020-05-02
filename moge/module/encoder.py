@@ -16,6 +16,9 @@ class EncoderLSTM(nn.Module):
         if hparams.word_embedding_size is None:
             hparams.word_embedding_size = hparams.vocab_size
 
+        if hasattr(hparams, "class_weights"):
+            hparams.class_weights
+
         self.hparams = hparams
 
         # Encoder
@@ -133,6 +136,9 @@ class EncoderLSTM(nn.Module):
 
     def loss(self, Y_hat, Y, weights=None):
         Y = Y.type_as(Y_hat)
+        idx = torch.nonzero(weights).view(-1)
+        Y = Y[idx]
+        Y_hat = Y_hat[idx]
         return F.binary_cross_entropy(Y_hat, Y, None)
         # return F.multilabel_soft_margin_loss(Y_hat, Y)
 

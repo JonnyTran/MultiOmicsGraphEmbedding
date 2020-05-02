@@ -67,8 +67,10 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
     def traverse_network(self, batch_size, seed_node=None):
         if self.traversal == "node":
             return self.node_sampling(batch_size)
-        elif self.traversal == "neighborhood" or self.traversal == "bfs":
+        elif self.traversal == "bfs":
             return self.bfs_traversal(batch_size, seed_node=seed_node)
+        elif self.traversal == "neighborhood":
+            return self.neighbors_traversal(seed_node=seed_node)
         elif self.traversal == "dfs":
             return self.dfs_traversal(batch_size, seed_node=seed_node)
         elif self.traversal == 'all_slices':
@@ -88,6 +90,22 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
             add_nodes = np.random.choice(self.node_list, size=batch_size - len(sampled_nodes), replace=False,
                                          p=self.node_sampling_freq).tolist()
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes + add_nodes))
+        return sampled_nodes
+
+    def neighbors_traversal(self, seed_node):
+        if seed_node is None or seed_node not in self.node_list:
+            sampled_nodes = self.sample_seed_node(1).tolist()
+        else:
+            sampled_nodes = [seed_node]
+
+        successor_nodes = [node for source, successors in
+                           islice(nx.traversal.bfs_successors(self.network.G if self.directed else self.network.G_u,
+                                                              source=sampled_nodes[0]), 1) for node in successors]
+        sampled_nodes.extend(successor_nodes)
+        sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))  # remove duplicates
+
+        if len(sampled_nodes) > self.batch_size:
+            sampled_nodes = sampled_nodes[:self.batch_size]
         return sampled_nodes
 
     def bfs_traversal(self, batch_size, seed_node: str = None):
@@ -132,8 +150,6 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
     def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
-        # print("sampled_nodes", len(sampled_nodes),
-        #       self.annotations.loc[sampled_nodes, "Transcript sequence"].isnull().sum())
         X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
                                                       variable_length=variable_length or self.variable_length)
 
@@ -141,7 +157,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
                                                             node_list=sampled_nodes, method=self.method,
                                                             output=self.adj_output)
 
-        # Features
+        # Additional Features
         for variable in self.variables:
             if "expression" == variable:
                 X[variable] = self.get_expressions(sampled_nodes, modality="Protein")
