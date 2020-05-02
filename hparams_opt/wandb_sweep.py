@@ -1,4 +1,3 @@
-import os
 import pickle
 import random
 
@@ -16,22 +15,23 @@ from moge.module.trainer import LightningModel
 from moge.module.encoder import EncoderLSTM
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
-MAX_EPOCHS = 20
-DIR = os.getcwd()
-MODEL_DIR = os.path.join(DIR, "result")
-
 with open(DATASET, 'rb') as file:
     network = pickle.load(file)
+
+MAX_EPOCHS = 20
 variables = []
 targets = ['go_id']
-network.process_feature_tranformer(filter_label=targets[0], min_count=100, verbose=False)
-classes = network.feature_transformer[targets[0]].classes_
-n_classes = len(classes)
+min_count = 100
 batch_size = 1000
 max_length = 1000
 test_frac = 0.10
 n_steps = int(400000 / batch_size)
 directed = False
+
+network.process_feature_tranformer(filter_label=targets[0], min_count=min_count, verbose=False)
+classes = network.feature_transformer[targets[0]].classes_
+n_classes = len(classes)
+
 seed = random.randint(0, 1000)
 
 split_idx = 0
