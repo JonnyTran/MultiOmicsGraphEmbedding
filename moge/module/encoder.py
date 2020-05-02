@@ -98,23 +98,30 @@ class EncoderLSTM(nn.Module):
         self.hidden = self.init_hidden(batch_size)
 
         X = self.word_embedding(input_seqs)
-        X = X.permute(0, 2, 1)
+
+        # Conv_1
+        X = X.permute(0, 2, 1)  # batch_size x
         X = F.relu(self.conv1(X))
         if self.hparams.nb_conv1_batchnorm:
             X = self.conv1_batchnorm(X)
         X = self.conv1_dropout(X)
 
+        X_lengths = (X_lengths - self.hparams.nb_conv1_kernel_size + 1)
+
+        # Conv_1
         if self.hparams.nb_conv2_kernel_size > 1:
             X = F.relu(self.conv2(X))
             if self.hparams.nb_conv2_batchnorm:
                 X = self.conv2_batchnorm(X)
+            X_lengths = (X_lengths - self.hparams.nb_conv2_kernel_size + 1)
 
+        # Maxpool
         X = F.max_pool1d(X, self.hparams.nb_max_pool_size)
         X = X.permute(0, 2, 1)
-
-        X_lengths = (X_lengths - self.hparams.nb_conv1_kernel_size + 1) / self.hparams.nb_max_pool_size
+        X_lengths = self.hparams.nb_max_pool_size
         X_lengths = torch.max(X_lengths, torch.ones_like(X_lengths))
 
+        # LSTM
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
         _, self.hidden = self.lstm(X, self.hidden)
 

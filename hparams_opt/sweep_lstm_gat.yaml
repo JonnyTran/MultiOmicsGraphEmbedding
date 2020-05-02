@@ -17,7 +17,7 @@ parameters:
     max: 20
 
   nb_conv1_filters:
-    min: 100
+    min: 64
     max: 320
   nb_conv1_kernel_size:
     min: 5
@@ -26,6 +26,15 @@ parameters:
     min: 0.0
     max: 0.5
   nb_conv1_batchnorm:
+    values: [True, False]
+
+  nb_conv2_filters:
+    min: 32
+    max: 256
+  nb_conv2_kernel_size:
+    min: 0
+    max: 10
+  nb_conv2_batchnorm:
     values: [True, False]
 
   nb_max_pool_size:
