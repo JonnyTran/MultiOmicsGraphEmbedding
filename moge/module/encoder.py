@@ -41,7 +41,7 @@ class EncoderLSTM(nn.Module):
         self.conv2_batchnorm = nn.BatchNorm1d(self.hparams.nb_conv2_filters)
 
         self.lstm = nn.LSTM(
-            input_size=self.hparams.nb_conv1_filters,
+            input_size=self.hparams.nb_conv2_filters if self.hparams.nb_conv2_kernel_size > 1 else self.hparams.nb_conv2_filters,
             hidden_size=self.hparams.nb_lstm_units,
             bidirectional=self.hparams.nb_lstm_bidirectional,
             num_layers=1,
@@ -118,7 +118,7 @@ class EncoderLSTM(nn.Module):
         # Maxpool
         X = F.max_pool1d(X, self.hparams.nb_max_pool_size)
         X = X.permute(0, 2, 1)
-        X_lengths = self.hparams.nb_max_pool_size
+        X_lengths = X_lengths / self.hparams.nb_max_pool_size
         X_lengths = torch.max(X_lengths, torch.ones_like(X_lengths))
 
         # LSTM
