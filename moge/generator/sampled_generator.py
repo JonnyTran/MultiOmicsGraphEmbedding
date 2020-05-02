@@ -1,5 +1,4 @@
 from abc import ABCMeta
-from itertools import cycle
 
 import numpy as np
 
@@ -24,18 +23,9 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
 
         super(SampledDataGenerator, self).__init__(network=network, **kwargs)
 
-        if self.traversal == 'circle':
-            self.nodes_circle = cycle(self.node_list)
-
-            self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
-
         self.process_normalized_node_degree(network)
 
     def process_normalized_node_degree(self, network):
-        # graph = nx.compose(network.G, network.G_u)
-        # self.edge_dict = {}
-        # self.edge_counts_dict = {}
-
         if self.directed:
             self.node_degrees = {node: degree for node, degree in network.G.degree(self.node_list)}
         else:
