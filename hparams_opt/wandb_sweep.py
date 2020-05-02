@@ -19,14 +19,14 @@ with open(DATASET, 'rb') as file:
     network = pickle.load(file)
 
 MAX_EPOCHS = 20
-variables = []
-targets = ['go_id']
-min_count = 100
+min_count = 500
 batch_size = 1000
 max_length = 1000
 n_steps = int(400000 / batch_size)
 directed = False
 
+variables = []
+targets = ['go_id']
 network.process_feature_tranformer(filter_label=targets[0], min_count=min_count, verbose=False)
 classes = network.feature_transformer[targets[0]].classes_
 n_classes = len(classes)
@@ -72,7 +72,7 @@ def train(hparams):
 
     trainer = pl.Trainer(
         logger=logger,
-        callbacks=[EarlyStopping(monitor='val_loss', patience=3)],
+        callbacks=[EarlyStopping(monitor='val_loss', patience=3), EarlyStopping(monitor='loss', patience=3)],
         min_epochs=3, max_epochs=MAX_EPOCHS,
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
