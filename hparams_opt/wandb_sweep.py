@@ -100,6 +100,11 @@ if __name__ == "__main__":
     parser.add_argument('--nb_conv1_kernel_size', type=int, default=26)
     parser.add_argument('--nb_conv1_dropout', type=float, default=0.2)
     parser.add_argument('--nb_conv1_batchnorm', type=bool, default=True)
+
+    parser.add_argument('--nb_conv2_filters', type=int, default=128)
+    parser.add_argument('--nb_conv2_kernel_size', type=int, default=3)
+    parser.add_argument('--nb_conv2_batchnorm', type=bool, default=True)
+
     parser.add_argument('--nb_max_pool_size', type=int, default=13)
 
     parser.add_argument('--nb_lstm_units', type=int, default=100)
