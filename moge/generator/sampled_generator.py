@@ -7,24 +7,24 @@ from moge.generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
-    def __init__(self, network, sampling=None, compression="log", n_steps=100, directed=True,
+    def __init__(self, network, traversal=None, sampling="log", n_steps=100, directed=True,
                  **kwargs):
         """
 
         Args:
-            sampling: one of {"node", "neighbor", "bfs", "dfs", "circle", "all"}.
-            compression: {"log", "linear", "sqrt", "sqrt3", "cycle", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
+            traversal: one of {"node", "neighbor", "bfs", "dfs", "circle", "all"}.
+            sampling: {"log", "linear", "sqrt", "sqrt3", "cycle", None}, default: "log". The node degree compression function to calculate the node sampling frequencies.
             n_steps: Number of sampling steps each iteration
             replace: Whether to sample with or without replacement
         """
+        self.traversal = traversal
         self.sampling = sampling
-        self.compression = compression
         self.n_steps = n_steps
         self.directed = directed
 
         super(SampledDataGenerator, self).__init__(network=network, **kwargs)
 
-        if self.sampling == 'circle':
+        if self.traversal == 'circle':
             self.nodes_circle = cycle(self.node_list)
 
             self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
@@ -44,7 +44,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         self.node_degrees_list = [self.node_degrees[node] if node in self.node_degrees else 0 for node in
                                   self.node_list]
         self.node_sampling_freq = self.normalize_node_degrees(self.node_degrees_list,
-                                                              compression=self.compression)
+                                                              compression=self.sampling)
         print("# of non-zero degree nodes: {}".format(
             np.count_nonzero(self.node_sampling_freq))) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)
@@ -107,7 +107,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         :param batch_size (int):
         :return: list of nodes names
         """
-        if self.compression == "cycle":
+        if self.sampling == "cycle":
             return next(self.generate_random_node_cycle(size))
         else:
             sampled_nodes = np.random.choice(self.node_list, size=size, replace=False,

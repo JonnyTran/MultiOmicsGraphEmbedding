@@ -16,7 +16,7 @@ from .sampled_generator import SampledDataGenerator
 
 class SubgraphGenerator(SampledDataGenerator, data.Dataset):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
-                 sampling='neighborhood', compression="log", n_steps=100, directed=True,
+                 traversal='neighborhood', sampling="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', agg_mode=None, tokenizer=None, replace=True,
                  variable_length=False,
                  seed=0, verbose=True, **kwargs):
@@ -27,8 +27,8 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         :param variables (list): list of annotation column names as features
         :param targets (list): list of annotation column names to prediction target
         :param batch_size: number of nodes to sample each batch
-        :param sampling: {'node', 'neighborhood', 'all'}. If 'all', overrides batch_size and returns the whole `node_list`
-        :param compression: {"log", "sqrt", "linear"}
+        :param traversal: {'node', 'neighborhood', 'all'}. If 'all', overrides batch_size and returns the whole `node_list`
+        :param sampling: {"log", "sqrt", "linear"}
         :param n_steps:
         :param directed:
         :param maxlen:
@@ -40,7 +40,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         super(SubgraphGenerator, self).__init__(network=network,
                                                 variables=variables, targets=targets,
                                                 batch_size=batch_size,
-                                                sampling=sampling, compression=compression,
+                                                traversal=traversal, sampling=sampling,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
                                                 agg_mode=agg_mode,
@@ -65,18 +65,18 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         return X, y, idx_weights
 
     def traverse_network(self, batch_size, seed_node=None):
-        if self.sampling == "node":
+        if self.traversal == "node":
             return self.node_sampling(batch_size)
-        elif self.sampling == "neighborhood" or self.sampling == "bfs":
+        elif self.traversal == "neighborhood" or self.traversal == "bfs":
             return self.bfs_traversal(batch_size, seed_node=seed_node)
-        elif self.sampling == "dfs":
+        elif self.traversal == "dfs":
             return self.dfs_traversal(batch_size, seed_node=seed_node)
-        elif self.sampling == 'all_slices':
+        elif self.traversal == 'all_slices':
             return next(self.all_nodes_slices())
-        elif self.sampling == "all":
+        elif self.traversal == "all":
             return self.node_list
         else:
-            raise Exception("`sampling_method` must be {'node', 'bfs', 'dfs', 'all', or 'all_slices'}")
+            raise Exception("`sampling` method must be {'node', 'bfs', 'dfs', 'all', or 'all_slices'}")
 
     def all_nodes_slices(self):
         yield [node for node in islice(self.nodes_circle, self.batch_size)]
