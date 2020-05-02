@@ -39,7 +39,7 @@ dataset_train = network.get_train_generator(
     SubgraphGenerator, split_idx=split_idx, variables=variables, targets=targets,
     traversal="bfs", batch_size=batch_size, agg_mode=None,
     method="GAT", adj_output="coo",
-    sampling="log", n_steps=n_steps, directed=directed,
+    sampling="all", n_steps=n_steps, directed=directed,
     maxlen=max_length, padding='post', truncating='post', variable_length=False,
     seed=seed, verbose=False)
 
