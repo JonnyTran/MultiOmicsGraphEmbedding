@@ -74,7 +74,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         elif self.sampling == 'all_slices':
             return next(self.all_nodes_slices())
         elif self.sampling == "all":
-            return self.network.node_list
+            return self.node_list
         else:
             raise Exception("`sampling_method` must be {'node', 'bfs', 'dfs', 'all', or 'all_slices'}")
 
@@ -132,8 +132,8 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
     def __getdata__(self, sampled_nodes, variable_length=False):
         # Features
         X = {}
-        print("sampled_nodes", len(sampled_nodes),
-              self.annotations.loc[sampled_nodes, "Transcript sequence"].isnull().sum())
+        # print("sampled_nodes", len(sampled_nodes),
+        #       self.annotations.loc[sampled_nodes, "Transcript sequence"].isnull().sum())
         X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
                                                       variable_length=variable_length or self.variable_length)
 
