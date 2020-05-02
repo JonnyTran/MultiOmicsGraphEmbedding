@@ -2,8 +2,8 @@ from setuptools import setup, find_packages
 
 requirements = [
     'numpy', 'pandas', 'cmake', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph',
-    'chart-studio',
-    "fa2", "scikit-multilearn", "MulticoreTSNE", "gseapy", "focal-loss", "obonet", "wandb"
+    'openomics',
+    'chart-studio', "fa2", "scikit-multilearn", "MulticoreTSNE", "gseapy", "focal-loss", "obonet", "wandb"
 ]
 
 setup(
