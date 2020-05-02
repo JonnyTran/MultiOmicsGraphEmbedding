@@ -86,9 +86,9 @@ class EncoderLSTM(nn.Module):
         # input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
 
         encodings = self.get_encodings(input_seqs)
-        y_pred = F.sigmoid(encodings)
-        # embeddings = self.embedder(encodings, subnetwork)
-        # y_pred = self.fc_classifier(embeddings)
+        # y_pred = F.sigmoid(encodings)
+        embeddings = self.embedder(encodings, subnetwork)
+        y_pred = self.fc_classifier(embeddings)
         return y_pred
 
     def get_encodings(self, input_seqs):
@@ -137,8 +137,9 @@ class EncoderLSTM(nn.Module):
     def loss(self, Y_hat, Y, weights=None):
         Y = Y.type_as(Y_hat)
         idx = torch.nonzero(weights).view(-1)
-        Y = Y[idx]
-        Y_hat = Y_hat[idx]
+        Y = Y[idx, :]
+        Y_hat = Y_hat[idx, :]
+        # print("Y", Y.size(), "Y_hat", Y_hat.size())
         return F.binary_cross_entropy(Y_hat, Y, None)
         # return F.multilabel_soft_margin_loss(Y_hat, Y)
 
