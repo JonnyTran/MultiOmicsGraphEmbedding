@@ -81,17 +81,24 @@ class AttributedNetwork(Network):
             {k: concat_uniques for k in self.annotations.columns})
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6"):
+    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
         labels = self.annotations[label]
         if labels.str.contains("\||;", regex=True).any():
             labels = labels.str.split("\||;")
 
-        labels = labels.map(lambda x: [node for node in x if node in go_id_colors.index] if x and len(x) > 0 else None)
+        if label_filter is not None:
+            # Filter only annotations in label_filter
+            if not isinstance(label_filter, set): label_filter = set(label_filter)
+            labels = labels.map(lambda x: [term for term in x if term in label_filter] if x and len(x) > 0 else None)
+
+        # Filter only annotations with an associated color
+        labels = labels.map(lambda x: [term for term in x if term in go_id_colors.index] if x and len(x) > 0 else None)
+
+        # For each node select one term
         labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
         label_color = labels.map(go_id_colors)
         if fillna:
             label_color.fillna("#e5ecf6", inplace=True)
-
         return label_color
 
     def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0, verbose=False):

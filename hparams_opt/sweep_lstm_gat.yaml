@@ -15,7 +15,7 @@ parameters:
 
   word_embedding_size:
     min: 4
-    max: 20
+    max: 22
 
   nb_conv1_filters:
     min: 64
@@ -40,11 +40,11 @@ parameters:
 
   nb_max_pool_size:
     min: 5
-    max: 20
+    max: 30
 
   nb_lstm_units:
     min: 64
-    max: 320
+    max: 512
   nb_lstm_hidden_dropout:
     min: 0.0
     max: 0.5
@@ -67,7 +67,7 @@ parameters:
 
   nb_weight_decay:
     min: 0.00001
-    max: 0.01
+    max: 0.1
   lr:
     min: 0.0001
     max: 0.005
