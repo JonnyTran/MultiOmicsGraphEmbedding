@@ -53,7 +53,7 @@ parameters:
     values: [True, False]
 
   nb_attn_heads:
-    values: [1, 2, 4, 8]
+    values: [2, 4, 8, 16]
   nb_attn_dropout:
     min: 0.0
     max: 0.6

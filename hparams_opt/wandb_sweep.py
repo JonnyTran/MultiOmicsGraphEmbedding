@@ -74,7 +74,7 @@ def train(hparams):
         logger=logger,
         callbacks=[EarlyStopping(monitor='val_loss', patience=3)],
         min_epochs=3, max_epochs=MAX_EPOCHS,
-        gpus=[random.randint(1, 4)] if torch.cuda.is_available() else None,
+        gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
     )
     encoder = EncoderLSTM(hparams)

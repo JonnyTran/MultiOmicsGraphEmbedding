@@ -67,7 +67,7 @@ class LightningModel(pl.LightningModule):
                    "log": tensorboard_logs}
         self.reset_metrics(training=False)
 
-        # print(tensorboard_logs)
+        print({k: v for k, v in tensorboard_logs.items() if "loss" not in k})
         return results
 
     def init_metrics(self):

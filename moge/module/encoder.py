@@ -25,24 +25,24 @@ class EncoderLSTM(nn.Module):
             padding_idx=0)
         self.conv1 = nn.Conv1d(
             in_channels=hparams.word_embedding_size,
-            out_channels=hparams.nb_conv1_filters,
             kernel_size=hparams.nb_conv1_kernel_size,
+            out_channels=hparams.nb_conv1_filters,
         )
         self.conv1_batchnorm = nn.BatchNorm1d(hparams.nb_conv1_filters)
         self.conv1_dropout = nn.Dropout(p=hparams.nb_conv1_dropout)
 
         self.conv2 = nn.Conv1d(
             in_channels=hparams.nb_conv1_filters,
-            out_channels=hparams.nb_conv2_filters,
             kernel_size=hparams.nb_conv2_kernel_size,
+            out_channels=hparams.nb_conv2_filters,
         )
         self.conv2_batchnorm = nn.BatchNorm1d(hparams.nb_conv2_filters)
 
         self.lstm = nn.LSTM(
+            num_layers=1,
             input_size=hparams.nb_conv2_filters if hparams.nb_conv2_kernel_size > 1 else hparams.nb_conv2_filters,
             hidden_size=hparams.nb_lstm_units,
             bidirectional=hparams.nb_lstm_bidirectional,
-            num_layers=1,
             batch_first=True, )
         self.lstm_layernorm = nn.LayerNorm((2 if hparams.nb_lstm_bidirectional else 1) * hparams.nb_lstm_units)
         self.lstm_hidden_dropout = nn.Dropout(p=hparams.nb_lstm_hidden_dropout)
