@@ -18,7 +18,7 @@ DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 with open(DATASET, 'rb') as file:
     network = pickle.load(file)
 
-MAX_EPOCHS = 20
+MAX_EPOCHS = 10
 min_count = 500
 batch_size = 1000
 max_length = 1000

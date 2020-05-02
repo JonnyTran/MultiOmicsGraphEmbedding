@@ -2,10 +2,11 @@ program: hparams_opt/wandb_sweep.py
 method: bayes
 metric:
   name: val_loss
-  goal: minimize
 early_terminate:
   type: hyperband
-  min_iter: 3
+  s: 2
+  eta: 3
+  max_iter: 27
 parameters:
   encoding_dim:
     values: [64, 128, 256]

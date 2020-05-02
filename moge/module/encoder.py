@@ -96,7 +96,7 @@ class EncoderLSTM(nn.Module):
         X = self.word_embedding(input_seqs)
 
         # Conv_1
-        X = X.permute(0, 2, 1)  # batch_size x
+        X = X.permute(0, 2, 1)  # (batch_size, n_channels, X_lengths)
         X = F.relu(self.conv1(X))
         if self.hparams.nb_conv1_batchnorm:
             X = self.conv1_batchnorm(X)
@@ -113,21 +113,21 @@ class EncoderLSTM(nn.Module):
 
         # Maxpool
         X = F.max_pool1d(X, self.hparams.nb_max_pool_size)
-        X = X.permute(0, 2, 1)
+        X = X.permute(0, 2, 1)  # {}
         X_lengths = X_lengths / self.hparams.nb_max_pool_size
         X_lengths = torch.max(X_lengths, torch.ones_like(X_lengths))
 
         # LSTM
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
-        _, self.hidden = self.lstm(X, self.hidden)
+        _, self.hidden = self.lstm(X, self.hidden)  # (output, (h_n, c_n))
 
-        X = self.hidden[0].permute(1, 0, 2)
+        X = self.hidden[0].permute(1, 0, 2)  # (batch_size, nb_layers, nb_lstm_units)
         X = X.reshape(batch_size, (
-            2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units)
-
+            2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units)  # (batch_size, lstm_hidden)
         if self.hparams.nb_lstm_layernorm:
             X = self.lstm_layernorm(X)
         X = self.lstm_hidden_dropout(X)
+
         X = self.fc_encoder(X)
         return X
 
