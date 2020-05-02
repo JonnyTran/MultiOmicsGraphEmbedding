@@ -40,7 +40,7 @@ class EncoderLSTM(nn.Module):
 
         self.lstm = nn.LSTM(
             num_layers=1,
-            input_size=hparams.nb_conv2_filters if hparams.nb_conv2_kernel_size > 1 else hparams.nb_conv2_filters,
+            input_size=hparams.nb_conv2_filters if hparams.nb_conv2_kernel_size > 1 else hparams.nb_conv1_filters,
             hidden_size=hparams.nb_lstm_units,
             bidirectional=hparams.nb_lstm_bidirectional,
             batch_first=True, )
@@ -104,7 +104,7 @@ class EncoderLSTM(nn.Module):
 
         X_lengths = (X_lengths - self.hparams.nb_conv1_kernel_size + 1)
 
-        # Conv_1
+        # Conv_2
         if self.hparams.nb_conv2_kernel_size > 1:
             X = F.relu(self.conv2(X))
             if self.hparams.nb_conv2_batchnorm:

@@ -10,7 +10,6 @@ import torch
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
-import openomics
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import LightningModel
 from moge.module.encoder import EncoderLSTM
