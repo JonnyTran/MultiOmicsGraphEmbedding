@@ -28,12 +28,12 @@ parameters:
   nb_conv1_batchnorm:
     values: [True, False]
 
-  nb_conv2_filters:
-    min: 32
-    max: 256
   nb_conv2_kernel_size:
     min: 0
     max: 10
+  nb_conv2_filters:
+    min: 32
+    max: 256
   nb_conv2_batchnorm:
     values: [True, False]
 
@@ -66,7 +66,7 @@ parameters:
 
   nb_weight_decay:
     min: 0.00001
-    max: 0.05
+    max: 0.01
   lr:
-    min: 0.001
-    max: 0.1
+    min: 0.0001
+    max: 0.005

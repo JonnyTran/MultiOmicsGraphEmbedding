@@ -66,7 +66,8 @@ class LightningModel(pl.LightningModule):
         results = {"progress_bar": tensorboard_logs,
                    "log": tensorboard_logs}
         self.reset_metrics(training=False)
-        print(tensorboard_logs)
+
+        # print(tensorboard_logs)
         return results
 
     def init_metrics(self):

@@ -12,62 +12,58 @@ from torch_geometric.nn import GATConv
 class EncoderLSTM(nn.Module):
     def __init__(self, hparams):
         super(EncoderLSTM, self).__init__()
+
+        if hparams.word_embedding_size is None:
+            hparams.word_embedding_size = hparams.vocab_size
+
         self.hparams = hparams
 
-        if self.hparams.word_embedding_size is None:
-            self.hparams.word_embedding_size = self.hparams.vocab_size
-
-        self.__build_model()
-
-    def __build_model(self):
         # Encoder
         self.word_embedding = nn.Embedding(
-            num_embeddings=self.hparams.vocab_size + 1,
-            embedding_dim=self.hparams.word_embedding_size,
+            num_embeddings=hparams.vocab_size + 1,
+            embedding_dim=hparams.word_embedding_size,
             padding_idx=0)
         self.conv1 = nn.Conv1d(
-            in_channels=self.hparams.word_embedding_size,
-            out_channels=self.hparams.nb_conv1_filters,
-            kernel_size=self.hparams.nb_conv1_kernel_size,
+            in_channels=hparams.word_embedding_size,
+            out_channels=hparams.nb_conv1_filters,
+            kernel_size=hparams.nb_conv1_kernel_size,
         )
-        self.conv1_batchnorm = nn.BatchNorm1d(self.hparams.nb_conv1_filters)
-        self.conv1_dropout = nn.Dropout(p=self.hparams.nb_conv1_dropout)
+        self.conv1_batchnorm = nn.BatchNorm1d(hparams.nb_conv1_filters)
+        self.conv1_dropout = nn.Dropout(p=hparams.nb_conv1_dropout)
 
         self.conv2 = nn.Conv1d(
-            in_channels=self.hparams.nb_conv1_filters,
-            out_channels=self.hparams.nb_conv2_filters,
-            kernel_size=self.hparams.nb_conv2_kernel_size,
+            in_channels=hparams.nb_conv1_filters,
+            out_channels=hparams.nb_conv2_filters,
+            kernel_size=hparams.nb_conv2_kernel_size,
         )
-        self.conv2_batchnorm = nn.BatchNorm1d(self.hparams.nb_conv2_filters)
+        self.conv2_batchnorm = nn.BatchNorm1d(hparams.nb_conv2_filters)
 
         self.lstm = nn.LSTM(
-            input_size=self.hparams.nb_conv2_filters if self.hparams.nb_conv2_kernel_size > 1 else self.hparams.nb_conv2_filters,
-            hidden_size=self.hparams.nb_lstm_units,
-            bidirectional=self.hparams.nb_lstm_bidirectional,
+            input_size=hparams.nb_conv2_filters if hparams.nb_conv2_kernel_size > 1 else hparams.nb_conv2_filters,
+            hidden_size=hparams.nb_lstm_units,
+            bidirectional=hparams.nb_lstm_bidirectional,
             num_layers=1,
             batch_first=True, )
-        self.lstm_layernorm = nn.LayerNorm(
-            (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units)
-        self.lstm_hidden_dropout = nn.Dropout(p=self.hparams.nb_lstm_hidden_dropout)
+        self.lstm_layernorm = nn.LayerNorm((2 if hparams.nb_lstm_bidirectional else 1) * hparams.nb_lstm_units)
+        self.lstm_hidden_dropout = nn.Dropout(p=hparams.nb_lstm_hidden_dropout)
         self.fc_encoder = nn.Linear(
-            (2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units,
-            self.hparams.encoding_dim)
+            (2 if hparams.nb_lstm_bidirectional else 1) * hparams.nb_lstm_units, hparams.encoding_dim)
 
         # Embedder
         self.embedder = GATConv(
-            in_channels=self.hparams.encoding_dim,
-            out_channels=int(self.hparams.embedding_dim / self.hparams.nb_attn_heads),
-            heads=self.hparams.nb_attn_heads,
+            in_channels=hparams.encoding_dim,
+            out_channels=int(hparams.embedding_dim / hparams.nb_attn_heads),
+            heads=hparams.nb_attn_heads,
             concat=True,
-            dropout=self.hparams.nb_attn_dropout
+            dropout=hparams.nb_attn_dropout
         )
 
         # Classifier
         self.fc_classifier = nn.Sequential(
-            nn.Linear(self.hparams.embedding_dim, self.hparams.nb_cls_dense_size),
+            nn.Linear(hparams.embedding_dim, hparams.nb_cls_dense_size),
             nn.ReLU(),
-            nn.Dropout(p=self.hparams.nb_cls_dropout),
-            nn.Linear(self.hparams.nb_cls_dense_size, self.hparams.n_classes),
+            nn.Dropout(p=hparams.nb_cls_dropout),
+            nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes),
             nn.Sigmoid()
         )
 
