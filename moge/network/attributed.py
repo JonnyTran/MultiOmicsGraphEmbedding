@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from openomics import MultiOmics
+import openomics
 from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 
@@ -47,7 +47,7 @@ def get_label_min_count_filter(annotation, min_count):
 
 
 class AttributedNetwork(Network):
-    def __init__(self, multiomics: MultiOmics, annotations=True, **kwargs) -> None:
+    def __init__(self, multiomics: openomics.MultiOmics, annotations=True, **kwargs) -> None:
         """
         Handles the MultiOmics attributes associated to the network(s).
 
