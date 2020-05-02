@@ -93,10 +93,16 @@ class LightningModel(pl.LightningModule):
             self.recall_val.reset()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self._model.hparams.lr,
-                                     weight_decay=self._model.hparams.nb_weight_decay
-                                     )
+        if self._model.hparams.optimizer == "adam":
+            optimizer = torch.optim.Adam(self.parameters(),
+                                         lr=self._model.hparams.lr,
+                                         weight_decay=self._model.hparams.nb_weight_decay
+                                         )
+        elif self._model.hparams.optimizer == "sgd":
+            optimizer = torch.optim.SGD(self.parameters(),
+                                        lr=self._model.hparams.lr,
+                                        weight_decay=self._model.hparams.nb_weight_decay
+                                        )
         return optimizer
 
     # def prepare_data(self) -> None:

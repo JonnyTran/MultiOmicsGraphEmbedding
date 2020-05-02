@@ -71,3 +71,5 @@ parameters:
   lr:
     min: 0.0001
     max: 0.005
+  optimizer:
+    values: ["adam", "sgd"]
