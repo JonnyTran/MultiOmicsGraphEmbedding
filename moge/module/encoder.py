@@ -136,17 +136,9 @@ class EncoderLSTM(nn.Module):
         idx = torch.nonzero(weights).view(-1)
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
-        # print("Y", Y.size(), "Y_hat", Y_hat.size())
 
-        if hasattr(self.hparams, "class_weights") and not isinstance(self.hparams.class_weights, torch.Tensor):
-            self.hparams.class_weights = torch.tensor(self.hparams.class_weights).type_as(self.fc_encoder.weight)
-
-        # return F.binary_cross_entropy(Y_hat, Y,
-        #                               weight=self.hparams.class_weights if hasattr(self.hparams,
-        #                                                                            "class_weights") else None,
-        #                               reduction="sum")
-        return F.multilabel_soft_margin_loss(Y_hat, Y, weight=self.hparams.class_weights if hasattr(self.hparams,
-                                                                                                    "class_weights") else None, )
+        return F.binary_cross_entropy(Y_hat, Y, reduction="mean")
+        # return F.multilabel_soft_margin_loss(Y_hat, Y)
 
     def get_embeddings(self, X, cuda=True):
         if not isinstance(X["input_seqs"], torch.Tensor):
