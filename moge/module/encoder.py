@@ -16,9 +16,6 @@ class EncoderLSTM(nn.Module):
         if hparams.word_embedding_size is None:
             hparams.word_embedding_size = hparams.vocab_size
 
-        if hasattr(hparams, "class_weights"):
-            hparams.class_weights = torch.tensor(hparams.class_weights)
-
         self.hparams = hparams
 
         # Encoder
@@ -140,10 +137,16 @@ class EncoderLSTM(nn.Module):
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
         # print("Y", Y.size(), "Y_hat", Y_hat.size())
-        return F.binary_cross_entropy(Y_hat, Y,
-                                      weight=self.hparams.class_weights if hasattr(self.hparams,
-                                                                                   "class_weights") else None)
-        # return F.multilabel_soft_margin_loss(Y_hat, Y)
+
+        if hasattr(self.hparams, "class_weights") and not isinstance(self.hparams.class_weights, torch.Tensor):
+            self.hparams.class_weights = torch.tensor(self.hparams.class_weights).type_as(self.fc_encoder.weight)
+
+        # return F.binary_cross_entropy(Y_hat, Y,
+        #                               weight=self.hparams.class_weights if hasattr(self.hparams,
+        #                                                                            "class_weights") else None,
+        #                               reduction="sum")
+        return F.multilabel_soft_margin_loss(Y_hat, Y, weight=self.hparams.class_weights if hasattr(self.hparams,
+                                                                                                    "class_weights") else None, )
 
     def get_embeddings(self, X, cuda=True):
         if not isinstance(X["input_seqs"], torch.Tensor):
