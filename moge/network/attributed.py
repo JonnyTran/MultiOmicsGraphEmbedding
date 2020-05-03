@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from openomics import MultiOmics
+import openomics
 from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 
@@ -26,7 +26,7 @@ def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False,
         annotations_list = annotations.loc[nodes_index, y_label]
 
     labels_filter = get_label_min_count_filter(annotations_list, min_count)
-    print("label {} filtered: {}".format(y_label, len(labels_filter)))
+    print("label {} filtered: {} with min_count={}".format(y_label, len(labels_filter), min_count))
 
     y_labels = annotations_list.map(
         lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
@@ -47,7 +47,7 @@ def get_label_min_count_filter(annotation, min_count):
 
 
 class AttributedNetwork(Network):
-    def __init__(self, multiomics: MultiOmics, annotations=True, **kwargs) -> None:
+    def __init__(self, multiomics: openomics.MultiOmics, annotations=True, **kwargs) -> None:
         """
         Handles the MultiOmics attributes associated to the network(s).
 
@@ -81,20 +81,27 @@ class AttributedNetwork(Network):
             {k: concat_uniques for k in self.annotations.columns})
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6"):
+    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
         labels = self.annotations[label]
         if labels.str.contains("\||;", regex=True).any():
             labels = labels.str.split("\||;")
 
-        labels = labels.map(lambda x: [node for node in x if node in go_id_colors.index] if x and len(x) > 0 else None)
+        if label_filter is not None:
+            # Filter only annotations in label_filter
+            if not isinstance(label_filter, set): label_filter = set(label_filter)
+            labels = labels.map(lambda x: [term for term in x if term in label_filter] if x and len(x) > 0 else None)
+
+        # Filter only annotations with an associated color
+        labels = labels.map(lambda x: [term for term in x if term in go_id_colors.index] if x and len(x) > 0 else None)
+
+        # For each node select one term
         labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
         label_color = labels.map(go_id_colors)
         if fillna:
             label_color.fillna("#e5ecf6", inplace=True)
-
         return label_color
 
-    def process_feature_tranformer(self, delimiter="\||;", min_count=0, verbose=False):
+    def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0, verbose=False):
         """
         For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer
         is used to convert a list of labels into a vector.
@@ -102,15 +109,18 @@ class AttributedNetwork(Network):
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
         self.delimiter = delimiter
-        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter, min_count,
+        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter,
+                                                                 filter_label, min_count,
                                                                  verbose=verbose)
 
     @classmethod
-    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", min_count=0, verbose=False):
+    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", filter_label=None, min_count=0,
+                                 verbose=False):
         """
         :param annotation: a pandas DataFrame
         :param node_list: list of nodes. Indexes the annotation DataFrame
         :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
+        :param filter_label: str or list of str for the labels to filter by min_count
         :param min_count: minimum frequency of label to keep
         :return: dict of feature transformers
         """
@@ -131,7 +141,7 @@ class AttributedNetwork(Network):
                         label)) if verbose else None
                     features = annotation.loc[node_list, label].dropna(axis=0)
 
-                if min_count:
+                if filter_label is not None and label in filter_label and min_count:
                     labels_filter = get_label_min_count_filter(features, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 feature_transformers[label].fit(features)

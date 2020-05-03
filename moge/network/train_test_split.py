@@ -1,7 +1,5 @@
-import copy
 import random
 from abc import abstractmethod
-from collections import OrderedDict
 
 import networkx as nx
 import numpy as np
@@ -15,9 +13,10 @@ def stratify_train_test(y_label, n_splits=10, seed=42):
 
     k_fold = IterativeStratification(n_splits=n_splits, order=1, random_state=seed)
     for train, test in k_fold.split(y_label.index.to_list(), sps.lil_matrix(y_label_bin)):
+        print("train", len(train), "test", len(test))
         train_nodes = list(y_label.index[train])
         test_nodes = list(y_label.index[test])
-        return train_nodes, test_nodes
+        yield train_nodes, test_nodes
 
 class TrainTestSplit():
     def __init__(self) -> None:
@@ -64,49 +63,43 @@ class TrainTestSplit():
         """
         raise NotImplementedError()
 
-    def set_val_annotations(self, val_nodes=None):
-        self.validation = copy.copy(self)
-        self.validation.annotations = self.annotations
-        if val_nodes:
-            self.validation.node_list = list(OrderedDict.fromkeys(val_nodes))
-        self.validation.feature_transformer = self.feature_transformer
-
-    def set_testing_annotations(self, test_nodes):
-        self.testing = copy.copy(self)
-        self.testing.annotations = self.annotations
-        if test_nodes:
-            self.testing.node_list = list(OrderedDict.fromkeys(test_nodes))
-        self.testing.feature_transformer = self.feature_transformer
-
-    def set_training_annotations(self, nodelist):
-        self.training = copy.copy(self)
-        self.training.annotations = self.annotations
-        if nodelist:
-            self.training.node_list = list(OrderedDict.fromkeys([node for node in self.node_list if node in nodelist]))
-        self.training.feature_transformer = self.feature_transformer
-
-    def get_train_generator(self, generator, **kwargs):
+    def get_train_generator(self, generator, split_idx=None, **kwargs):
         if not hasattr(self, "training"):
             raise Exception("Must run split_train_test on the network first.")
 
-        kwargs['network'] = self.training
-        kwargs['node_list'] = self.training.node_list
+        if split_idx is not None:
+            assert split_idx < len(self.train_test_splits)
+            node_list = self.train_test_splits[split_idx][0]
+        else:
+            node_list = self.training.node_list
+
+        kwargs['network'] = self
+        kwargs['node_list'] = node_list
 
         gen_inst = generator(**kwargs)
         self.tokenizer = gen_inst.tokenizer
+
         return gen_inst
 
-    def get_test_generator(self, generator, **kwargs):
+    def get_test_generator(self, generator, split_idx=None, **kwargs):
         if not hasattr(self, "testing"):
             raise Exception("Must run split_train_test on the network first.")
 
-        kwargs['network'] = self.testing
-        kwargs['node_list'] = self.testing.node_list
+        if split_idx is not None:
+            assert split_idx < len(self.train_test_splits)
+            node_list = self.train_test_splits[split_idx][1]
+        else:
+            node_list = self.testing.node_list
+
+        kwargs['network'] = self
+        kwargs['node_list'] = node_list
 
         # A feature to ensure the test generator has the same tokenizer as the train generator
         if hasattr(self, "tokenizer"):
             kwargs["tokenizer"] = self.tokenizer
-        return generator(**kwargs)
+        gen_inst = generator(**kwargs)
+
+        return gen_inst
 
 
 def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_frac=0.0,

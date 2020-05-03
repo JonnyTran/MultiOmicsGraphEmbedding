@@ -1,3 +1,5 @@
+from argparse import Namespace
+
 import networkx as nx
 import scipy.sparse as sps
 
@@ -5,7 +7,7 @@ from moge.evaluation.utils import sample_edges
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
 from moge.network.semantic_similarity import *
 from moge.network.train_test_split import TrainTestSplit, mask_test_edges, mask_test_edges_by_nodes, \
-    split_network_by_nodes, stratify_train_test
+    stratify_train_test
 
 UNDIRECTED = False
 DIRECTED = True
@@ -378,35 +380,9 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
             y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("|")
             y_label = y_label + y_omic
 
-        train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
+        self.train_test_splits = list(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
 
-        if directed:
-            g = self.G.copy()
-        else:
-            g = self.G_u.copy()
-        network_train, network_test = split_network_by_nodes(g, train_nodes=train_nodes, test_nodes=test_nodes,
-                                                             verbose=verbose)
-
-        self.set_training_annotations(train_nodes)
-        if directed:
-            self.training.G = network_train
-        else:
-            self.training.G_u = network_train
-
-        # Test network
-        self.set_testing_annotations(test_nodes)
-        if directed:
-            self.testing.G = network_test
-        else:
-            self.testing.G_u = network_test
-
-        if directed:
-            print("train_network", self.training.G.number_of_nodes(),
-                  self.training.G.number_of_edges()) if verbose else None
-            print("test_network", self.testing.G.number_of_nodes(),
-                  self.testing.G.number_of_edges()) if verbose else None
-        else:
-            print("train_network", self.training.G_u.number_of_nodes(),
-                  self.training.G_u.number_of_edges()) if verbose else None
-            print("test_network", self.testing.G.number_of_nodes(),
-                  self.testing.G_u.number_of_edges()) if verbose else None
+        self.training = Namespace()
+        self.testing = Namespace()
+        self.training.node_list = self.train_test_splits[0][0]
+        self.testing.node_list = self.train_test_splits[0][1]

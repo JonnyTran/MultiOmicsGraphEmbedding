@@ -1,3 +1,5 @@
+from argparse import Namespace
+
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -5,8 +7,7 @@ import scipy.sparse as sps
 from openomics.utils.df import concat_uniques
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
-from moge.network.train_test_split import TrainTestSplit, stratify_train_test, \
-    split_network_by_nodes
+from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
@@ -58,7 +59,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         print("All annotation columns (union):",
               {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
 
-    def process_feature_tranformer(self, delimiter="\||;", min_count=0):
+    def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0):
         self.delimiter = delimiter
         if not hasattr(self, "all_annotations"):
             annotations_list = []
@@ -74,6 +75,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
         print("Annotation columns:", self.all_annotations.columns.tolist())
         self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
+                                                                 filter_label,
                                                                  min_count)
 
     def add_edges(self, edgelist, layer: (str, str, str), database, **kwargs):
@@ -148,23 +150,28 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             y_omic = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
             y_label = y_label + y_omic
 
-        train_nodes, test_nodes = stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed)
+        self.train_test_splits = list(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
 
-        self.set_training_annotations(train_nodes)
-        self.set_testing_annotations(test_nodes)
+        self.training = Namespace()
+        self.testing = Namespace()
+        self.training.node_list = self.train_test_splits[0][0]
+        self.testing.node_list = self.train_test_splits[0][1]
 
-        self.training.networks = {}
-        self.testing.networks = {}
-        for layer, network in self.networks.items():
-            network_train, network_test = split_network_by_nodes(network, train_nodes=train_nodes,
-                                                                 test_nodes=test_nodes, verbose=False)
-            self.training.networks[layer] = network_train
-            self.testing.networks[layer] = network_test
-
-            print("Layer {} train_network".format(str(layer)), self.training.networks[layer].number_of_nodes(),
-                  self.training.networks[layer].number_of_edges()) if verbose else None
-            print("Layer {} test_network".format(str(layer)), self.testing.networks[layer].number_of_nodes(),
-                  self.testing.networks[layer].number_of_edges()) if verbose else None
+        # self.set_training_annotations(train_nodes)
+        # self.set_testing_annotations(test_nodes)
+        #
+        # self.training.networks = {}
+        # self.testing.networks = {}
+        # for layer, network in self.networks.items():
+        #     network_train, network_test = split_network_by_nodes(network, train_nodes=train_nodes,
+        #                                                          test_nodes=test_nodes, verbose=False)
+        #     self.training.networks[layer] = network_train
+        #     self.testing.networks[layer] = network_test
+        #
+        #     print("Layer {} train_network".format(str(layer)), self.training.networks[layer].number_of_nodes(),
+        #           self.training.networks[layer].number_of_edges()) if verbose else None
+        #     print("Layer {} test_network".format(str(layer)), self.testing.networks[layer].number_of_nodes(),
+        #           self.testing.networks[layer].number_of_edges()) if verbose else None
 
     def get_aggregated_network(self):
         G = nx.compose_all(list(self.networks.values()))

@@ -1,9 +1,11 @@
+import copy
 from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
 from tensorflow import keras
 
+import moge
 from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
 
 
@@ -19,7 +21,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         pair of nodes' RNA sequence input.
 
         :param network: A AttributedNetwork containing a MultiOmics
-        :param node_list: optional, default None. Pass if explicitly wants to limit processing to a set of nodes.
+        :param node_list: optional, default None. Used to explicitly limit processing to a set of nodes.
         :param batch_size: Sample batch size at each iteration
         :param dim: Dimensionality of the sample input
         :param negative_sampling_ratio: Ratio of negative edges to positive edges to sample from directed edges
@@ -28,7 +30,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         """
         self.batch_size = batch_size
         self.weighted = weighted
-        self.network = network
+        self.network = copy.deepcopy(network)  # Prevent shared pointers between training/testing
         self.replace = replace
 
         self.method = method
@@ -55,12 +57,19 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         if not hasattr(self, "node_list") or self.node_list is None:
             self.node_list = self.network.node_list
 
-        # Ensure every node must have an associated sequence
-        if isinstance(self.annotations, pd.DataFrame):
-            self.node_list = [node for node in self.node_list if node in self.annotations[
-                self.annotations[SEQUENCE_COL].notnull()].index.tolist()]
-        elif isinstance(self.annotations, dict) or isinstance(self.annotations, pd.Series):
-            # Check that each node must have a sequence in all modalities it's associated with
+        if isinstance(self.network, moge.network.heterogeneous.HeterogeneousNetwork):  # Heterogeneous network
+            # Ensure every node must have an associated sequence
+            valid_nodes = self.annotations[self.annotations[SEQUENCE_COL].notnull()].index.tolist()
+            self.node_list = [node for node in self.node_list if node in valid_nodes]
+
+            # Subgraph to training/testing
+            self.network.G = self.network.G.subgraph(nodes=self.node_list).copy()
+            self.network.G_u = self.network.G_u.subgraph(nodes=self.node_list).copy()
+            print("node_list", len(self.node_list),
+                  {"directed": self.network.G.number_of_nodes(), "undirected": self.network.G_u.number_of_nodes()})
+
+        elif isinstance(self.network, moge.network.multiplex.MultiplexAttributedNetwork):  # Multiplex network
+            # Check that each node must have sequence data in all layers
             null_nodes = [network.annotations[modality].loc[network.nodes[modality], SEQUENCE_COL][
                               network.annotations[modality].loc[
                                   network.nodes[modality], SEQUENCE_COL].isnull()].index.tolist() for modality in
@@ -68,6 +77,13 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             null_nodes = [node for nodes in null_nodes for node in nodes]
 
             self.node_list = [node for node in self.node_list if node not in null_nodes]
+
+            # Subgraph to training/testing
+            for key, graph in self.network.networks.items():
+                self.network.networks[key] = graph.subgraph(nodes=self.node_list).copy()
+
+            print("node_list", len(self.node_list),
+                  {key: graph.number_of_nodes() for key, graph in self.network.networks.items()})
         else:
             raise Exception("Check that `annotations` must be a dict of DataFrame or a DataFrame", self.annotations)
 
