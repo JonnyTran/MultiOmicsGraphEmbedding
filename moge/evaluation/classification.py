@@ -1,7 +1,7 @@
 import pandas as pd
 
 from sklearn import svm
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, precision_recall_curve, average_precision_score
 from sklearn.model_selection import cross_validate
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -67,3 +67,22 @@ def compute_roc_auc_curve(y_test, y_score, class_indices, sample_weight=None):
     fpr["micro"], tpr["micro"], _ = roc_curve(y_test.ravel(), y_score.ravel())
     roc_auc["micro"] = auc(fpr["micro"], tpr["micro"])
     return fpr, roc_auc, tpr
+
+
+def compute_pr_curve(y_test, y_score, class_indices, sample_weight=None):
+    if isinstance(y_score, pd.DataFrame):
+        y_score = y_score.values
+    if isinstance(y_test, pd.DataFrame):
+        y_score = y_test.values
+
+    precision = dict()
+    recall = dict()
+    avg_precision = dict()
+    for i in class_indices:
+        precision[i], recall[i], _ = precision_recall_curve(y_test[:, i], y_score[:, i],
+                                                            sample_weight=sample_weight if sample_weight is not None else None)
+        avg_precision[i] = average_precision_score(precision[i], recall[i])
+    # Compute micro-average ROC curve and ROC area
+    precision["micro"], recall["micro"], _ = precision_recall_curve(y_test.ravel(), y_score.ravel())
+    avg_precision["micro"] = average_precision_score(precision["micro"], recall["micro"], average="micro")
+    return precision, avg_precision, recall
