@@ -1,0 +1,75 @@
+program: hparams_opt/wandb_sweep.py
+method: bayes
+metric:
+  name: val_loss
+early_terminate:
+  type: hyperband
+  s: 2
+  eta: 3
+  max_iter: 27
+parameters:
+  encoding_dim:
+    values: [64, 128, 256]
+  embedding_dim:
+    values: [64, 128, 256, 512]
+
+  word_embedding_size:
+    min: 4
+    max: 22
+
+  nb_conv1_filters:
+    min: 64
+    max: 320
+  nb_conv1_kernel_size:
+    min: 5
+    max: 20
+  nb_conv1_dropout:
+    min: 0.0
+    max: 0.5
+  nb_conv1_batchnorm:
+    values: [True, False]
+
+  nb_conv2_kernel_size:
+    min: 0
+    max: 10
+  nb_conv2_filters:
+    min: 32
+    max: 256
+  nb_conv2_batchnorm:
+    values: [True, False]
+
+  nb_max_pool_size:
+    min: 5
+    max: 30
+
+  nb_lstm_units:
+    min: 64
+    max: 512
+  nb_lstm_hidden_dropout:
+    min: 0.0
+    max: 0.5
+  nb_lstm_bidirectional:
+    values: [True, False]
+  nb_lstm_layernorm:
+    values: [True, False]
+
+  nb_attn_heads:
+    values: [2, 4, 8, 16]
+  nb_attn_dropout:
+    min: 0.0
+    max: 0.6
+
+  nb_cls_dense_size:
+    values: [256, 512, 768, 1024, 1536]
+  nb_cls_dropout:
+    min: 0.0
+    max: 0.5
+
+  nb_weight_decay:
+    min: 0.00001
+    max: 0.1
+  lr:
+    min: 0.0001
+    max: 0.005
+  optimizer:
+    values: ["adam", "sgd"]
