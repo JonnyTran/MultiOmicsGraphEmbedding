@@ -4,6 +4,11 @@ import random
 import sys
 from argparse import ArgumentParser
 
+import logging
+
+logger = logging.getLogger("wandb")
+logger.setLevel(logging.ERROR)
+
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 import pytorch_lightning as pl
