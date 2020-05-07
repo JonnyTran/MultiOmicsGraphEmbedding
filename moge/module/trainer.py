@@ -81,11 +81,11 @@ class LightningModel(pl.LightningModule):
         if training:
             self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.top_k.append(top_k_multiclass(y_pred, y_true, topk=(5, 10, 25)).unsqueeze(0))
+            self.top_k.append(top_k_multiclass(y_pred, y_true, topk=(5)).unsqueeze(0))
         else:
             self.precision_val.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.top_k_val.append(top_k_multiclass(y_pred, y_true, topk=(5, 10, 25)).unsqueeze(0))
+            self.top_k_val.append(top_k_multiclass(y_pred, y_true, topk=(5)).unsqueeze(0))
 
         print("top_k", self.top_k_val)
 
