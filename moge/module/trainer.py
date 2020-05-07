@@ -24,7 +24,7 @@ class LightningModel(pl.LightningModule):
         progress_bar = {
             "precision": self.precision.compute(),
             "recall": self.recall.compute(),
-            "top_k": torch.cat(self.top_k_train).mean()[0].cpu().numpy(),
+            "top_k": self.top_k_train.compute(),
         }
 
         return {'loss': loss, 'progress_bar': progress_bar, }
@@ -35,7 +35,7 @@ class LightningModel(pl.LightningModule):
             "loss": avg_loss,
             "precision": self.precision.compute(),
             "recall": self.recall.compute(),
-            "top_k": torch.cat(self.top_k_train).mean()[0].cpu().numpy(),
+            "top_k": self.top_k_train.compute(),
         }
         self.reset_metrics(training=True)
         return {"loss": avg_loss, "progress_bar": logs, "log": logs, }
@@ -53,7 +53,7 @@ class LightningModel(pl.LightningModule):
             "val_loss": avg_loss,
             "val_precision": self.precision_val.compute(),
             "val_recall": self.recall_val.compute(),
-            "val_top_k": torch.cat(self.top_k_val).mean()[0].cpu().numpy(),
+            "val_top_k": self.top_k_val.compute(),
         }
 
         results = {"progress_bar": logs,
