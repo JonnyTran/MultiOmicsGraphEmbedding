@@ -1,20 +1,30 @@
+from argparse import ArgumentParser
+
 import torch.nn as nn
 from torch_geometric.nn import GATConv
 
+import pytorch_lightning as pl
 
-class GAT(nn.Module):
+
+class GAT(pl.LightningModule):
     def __init__(self, hparams) -> None:
         super(GAT, self).__init__()
 
-        self.gat = GATConv(
+        self.embedder = GATConv(
             in_channels=hparams.encoding_dim,
-            out_channels=hparams.embedding_dim,
+            out_channels=int(hparams.embedding_dim / hparams.nb_attn_heads),
             heads=hparams.nb_attn_heads,
             concat=True,
             dropout=hparams.nb_attn_dropout
         )
 
-    def forward(self, X):
-        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = ArgumentParser(parents=[parent_parser])
+        parser.add_argument('--embedding_dim', type=int, default=128)
+        parser.add_argument('--nb_attn_heads', type=int, default=4)
+        parser.add_argument('--nb_attn_dropout', type=float, default=0.5)
+        return parser
 
-        return self.gat(subnetwork)
+    def forward(self, encodings, subnetwork):
+        return self.embedder(encodings, subnetwork)

@@ -1,19 +1,85 @@
-import pytorch_lightning as pl
 import torch
+from torch.nn import functional as F
+
+import pytorch_lightning as pl
 from ignite.metrics import Precision, Recall
 
 from .metrics import TopKMulticlassAccuracy
+from .encoder import ConvLSTM, SeqTransformer
+from .embedder import GAT
+from .classifier import Dense
 
 
-class EncoderEmbedder(pl.LightningModule):
-    def __init__(self, encoder, embedder, classifier):
-        super(EncoderEmbedder, self).__init__()
-        self._encoder = encoder
-        self._embedder = embedder
-        self._classifier = classifier
+class EncoderEmbedderClassifier(pl.LightningModule):
+    def __init__(self, hparams):
+        super(EncoderEmbedderClassifier, self).__init__()
 
-    def forward(self, *args, **kwargs):
-        pass
+        if hparams.encoder == "ConvLSTM":
+            self._encoder = ConvLSTM(hparams)
+        if hparams.encoder == "SeqTransformer":
+            self._encoder = SeqTransformer(hparams)
+        else:
+            raise Exception("hparams.encoder must be one of {'ConvLSTM'}")
+
+        if hparams.embedder == "GAT":
+            self._embedder = GAT(hparams)
+        else:
+            raise Exception("hparams.embedder must be one of {'GAT'}")
+
+        if hparams.classifier == "Dense":
+            self._classifier = Dense(hparams)
+        else:
+            raise Exception("hparams.classifier must be one of {'Dense'}")
+
+        self.hparams = hparams
+
+    def forward(self, X):
+        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+
+        encodings = self._encoder(input_seqs)
+        embeddings = self._embedder(encodings, subnetwork)
+        y_pred = self._classifier(embeddings)
+        return y_pred
+
+    def loss(self, Y_hat, Y, weights=None):
+        Y = Y.type_as(Y_hat)
+        idx = torch.nonzero(weights).view(-1)
+        Y = Y[idx, :]
+        Y_hat = Y_hat[idx, :]
+
+        return F.binary_cross_entropy(Y_hat, Y, reduction="mean")
+
+    def get_embeddings(self, X, cuda=True):
+        """
+        Get embeddings for a set of nodes in `X`.
+        :param X: a dict with keys {"input_seqs", "subnetwork"}
+        :param cuda (bool): whether to run computations in
+        :return (np.array): a numpy array of size (node size, embedding dim)
+        """
+        if not isinstance(X["input_seqs"], torch.Tensor):
+            X = {k: torch.tensor(v).cuda() for k, v in X.items()}
+
+        if cuda:
+            X = {k: v.cuda() for k, v in X.items()}
+        else:
+            X = {k: v.cpu() for k, v in X.items()}
+
+        encodings = self._encoder(X["input_seqs"])
+        embeddings = self._embedder(encodings, X["subnetwork"])
+
+        return embeddings.detach().cpu().numpy()
+
+    def predict(self, embeddings, cuda=True):
+        if not isinstance(embeddings, torch.Tensor):
+            embeddings = torch.tensor(embeddings)
+
+        if cuda:
+            embeddings = embeddings.cuda()
+        else:
+            embeddings = embeddings.cpu()
+
+        y_pred = self._classifier(embeddings)
+        return y_pred.detach().cpu().numpy()
 
 
 class LightningModel(pl.LightningModule):

@@ -17,8 +17,8 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator.subgraph_generator import SubgraphGenerator
-from moge.module.trainer import LightningModel
-from moge.module.encoder import EncoderLSTM
+from moge.module.trainer import LightningModel, EncoderEmbedderClassifier
+from moge.module.encoder import ConvLSTM
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 with open(DATASET, 'rb') as file:
@@ -83,8 +83,8 @@ def train(hparams):
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
     )
-    encoder = EncoderLSTM(hparams)
-    model = LightningModel(encoder)
+    eec = EncoderEmbedderClassifier(hparams)
+    model = LightningModel(eec)
 
     # wandb.watch(model, criterion="val_loss", log="parameters", log_freq=100)
 
@@ -96,6 +96,7 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
+    parser.add_argument('--encoder', type=str, default="ConvLSTM")
     parser.add_argument('--encoding_dim', type=int, default=128)
     parser.add_argument('--embedding_dim', type=int, default=256)
     parser.add_argument('--word_embedding_size', type=int, default=None)
@@ -116,9 +117,11 @@ if __name__ == "__main__":
     parser.add_argument('--nb_lstm_hidden_dropout', type=float, default=0.0)
     parser.add_argument('--nb_lstm_layernorm', type=bool, default=False)
 
+    parser.add_argument('--embedder', type=str, default="GAT")
     parser.add_argument('--nb_attn_heads', type=int, default=4)
     parser.add_argument('--nb_attn_dropout', type=float, default=0.5)
 
+    parser.add_argument('--classifier', type=str, default="Dense")
     parser.add_argument('--nb_cls_dense_size', type=int, default=512)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
 

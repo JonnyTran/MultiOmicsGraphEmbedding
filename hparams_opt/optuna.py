@@ -18,7 +18,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import LightningModel
-from moge.module.encoder import EncoderLSTM
+from moge.module.encoder import ConvLSTM
 
 import wandb
 
@@ -126,7 +126,7 @@ def objective(trial):
         early_stop_callback=PyTorchLightningPruningCallback(trial, monitor="precision"),
     )
 
-    encoder = EncoderLSTM(trial)
+    encoder = ConvLSTM(trial)
     model = LightningModel(encoder)
 
     trainer.fit(model, train_dataloader, test_dataloader)

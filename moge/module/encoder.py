@@ -9,9 +9,14 @@ from torch.nn import functional as F
 from torch_geometric.nn import GATConv
 
 
-class EncoderLSTM(nn.Module):
+class SeqTransformer(pl.LightningModule):
     def __init__(self, hparams):
-        super(EncoderLSTM, self).__init__()
+        super(SeqTransformer, self).__init__()
+
+
+class ConvLSTM(pl.LightningModule):
+    def __init__(self, hparams):
+        super(ConvLSTM, self).__init__()
 
         if hparams.word_embedding_size is None:
             hparams.word_embedding_size = hparams.vocab_size
@@ -49,24 +54,6 @@ class EncoderLSTM(nn.Module):
         self.fc_encoder = nn.Linear(
             (2 if hparams.nb_lstm_bidirectional else 1) * hparams.nb_lstm_units, hparams.encoding_dim)
 
-        # Embedder
-        self.embedder = GATConv(
-            in_channels=hparams.encoding_dim,
-            out_channels=int(hparams.embedding_dim / hparams.nb_attn_heads),
-            heads=hparams.nb_attn_heads,
-            concat=True,
-            dropout=hparams.nb_attn_dropout
-        )
-
-        # Classifier
-        self.fc_classifier = nn.Sequential(
-            nn.Linear(hparams.embedding_dim, hparams.nb_cls_dense_size),
-            nn.ReLU(),
-            nn.Dropout(p=hparams.nb_cls_dropout),
-            nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes),
-            nn.Sigmoid()
-        )
-
     def init_hidden(self, batch_size):
         # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
         hidden_a = torch.randn((2 if self.hparams.nb_lstm_bidirectional else 1),
@@ -78,17 +65,7 @@ class EncoderLSTM(nn.Module):
 
         return (hidden_a, hidden_b)
 
-    def forward(self, X):
-        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
-        # input_seqs, subnetwork = input_seqs.view(input_seqs.shape[1:]), subnetwork.view(subnetwork.shape[1:])
-
-        encodings = self.get_encodings(input_seqs)
-        # y_pred = F.sigmoid(encodings)
-        embeddings = self.embedder(encodings, subnetwork)
-        y_pred = self.fc_classifier(embeddings)
-        return y_pred
-
-    def get_encodings(self, input_seqs):
+    def forward(self, input_seqs):
         batch_size, seq_len = input_seqs.size()
         X_lengths = (input_seqs > 0).sum(1)
         self.hidden = self.init_hidden(batch_size)
@@ -131,43 +108,27 @@ class EncoderLSTM(nn.Module):
         X = self.fc_encoder(X)
         return X
 
-    def loss(self, Y_hat, Y, weights=None):
-        Y = Y.type_as(Y_hat)
-        idx = torch.nonzero(weights).view(-1)
-        Y = Y[idx, :]
-        Y_hat = Y_hat[idx, :]
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = ArgumentParser(parents=[parent_parser])
+        parser.add_argument('--encoding_dim', type=int, default=128)
+        parser.add_argument('--embedding_dim', type=int, default=256)
+        parser.add_argument('--word_embedding_size', type=int, default=None)
 
-        return F.binary_cross_entropy(Y_hat, Y, reduction="mean")
-        # return F.multilabel_soft_margin_loss(Y_hat, Y)
+        parser.add_argument('--nb_conv1_filters', type=int, default=192)
+        parser.add_argument('--nb_conv1_kernel_size', type=int, default=10)
+        parser.add_argument('--nb_conv1_dropout', type=float, default=0.2)
+        parser.add_argument('--nb_conv1_batchnorm', type=bool, default=True)
 
-    def get_embeddings(self, X, cuda=True):
-        """
-        Get embeddings for a set of nodes in `X`.
-        :param X: a dict with keys {"input_seqs", "subnetwork"}
-        :param cuda (bool): whether to run computations in
-        :return (np.array): a numpy array of size (node size, embedding dim)
-        """
-        if not isinstance(X["input_seqs"], torch.Tensor):
-            X = {k: torch.tensor(v).cuda() for k, v in X.items()}
+        parser.add_argument('--nb_conv2_filters', type=int, default=128)
+        parser.add_argument('--nb_conv2_kernel_size', type=int, default=3)
+        parser.add_argument('--nb_conv2_batchnorm', type=bool, default=True)
 
-        if cuda:
-            X = {k: v.cuda() for k, v in X.items()}
-        else:
-            X = {k: v.cpu() for k, v in X.items()}
+        parser.add_argument('--nb_max_pool_size', type=int, default=13)
 
-        encodings = self.get_encodings(X["input_seqs"])
-        embeddings = self.embedder(encodings, X["subnetwork"])
+        parser.add_argument('--nb_lstm_units', type=int, default=100)
+        parser.add_argument('--nb_lstm_bidirectional', type=bool, default=False)
+        parser.add_argument('--nb_lstm_hidden_dropout', type=float, default=0.0)
+        parser.add_argument('--nb_lstm_layernorm', type=bool, default=False)
 
-        return embeddings.detach().cpu().numpy()
-
-    def predict(self, embeddings, cuda=True):
-        if not isinstance(embeddings, torch.Tensor):
-            embeddings = torch.tensor(embeddings)
-
-        if cuda:
-            embeddings = embeddings.cuda()
-        else:
-            embeddings = embeddings.cpu()
-
-        y_pred = self.fc_classifier(embeddings)
-        return y_pred.detach().cpu().numpy()
+        return parser
