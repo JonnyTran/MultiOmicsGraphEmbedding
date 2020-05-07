@@ -41,14 +41,14 @@ class LightningModel(pl.LightningModule):
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().cpu().numpy()
         logs = self.metric_logs(training=False)
         logs.update({"val_loss": avg_loss})
 
         results = {"progress_bar": logs,
                    "log": logs}
         self.reset_metrics(training=False)
-        print(logs)
+        print(logs)  # print val results every epoch
         return results
 
     def init_metrics(self):
@@ -74,12 +74,12 @@ class LightningModel(pl.LightningModule):
             logs = {
                 "precision": self.precision.compute(),
                 "recall": self.recall.compute(),
-                "top_k": self.top_k_train.compute()}
+                f"top_k@{self.top_k._k}": self.top_k_train.compute()}
         else:
             logs = {
                 "val_precision": self.precision_val.compute(),
                 "val_recall": self.recall_val.compute(),
-                "val_top_k": self.top_k_train_val.compute()}
+                f"val_top_k@{self.top_k_val._k}": self.top_k_val.compute()}
         return logs
 
     def reset_metrics(self, training: bool):
@@ -113,8 +113,6 @@ class LightningModel(pl.LightningModule):
     #     n_steps = int(400000 / batch_size)
     #     directed = False
     #     seed = random.randint(0, 1000)
-    #     network.split_stratified(directed=directed, stratify_label=targets[0], stratify_omic=False,
-    #                              n_splits=int(1 / test_frac), dropna=True, seed=seed, verbose=False)
     #
     #     self.dataset_train = network.get_train_generator(
     #         SubgraphGenerator, variables=variables, targets=targets,
