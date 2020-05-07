@@ -21,23 +21,16 @@ class LightningModel(pl.LightningModule):
         loss = self._model.loss(Y_hat, y, weights)
 
         self.update_metrics(Y_hat, y, training=True)
-        progress_bar = {
-            "precision": self.precision.compute(),
-            "recall": self.recall.compute(),
-            "top_k": self.top_k_train.compute(),
-        }
+        progress_bar = self.metric_logs(training=True)
 
         return {'loss': loss, 'progress_bar': progress_bar, }
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        logs = {
-            "loss": avg_loss,
-            "precision": self.precision.compute(),
-            "recall": self.recall.compute(),
-            "top_k": self.top_k_train.compute(),
-        }
+        logs = self.metric_logs(training=True)
+        logs.update({"loss": avg_loss})
         self.reset_metrics(training=True)
+
         return {"loss": avg_loss, "progress_bar": logs, "log": logs, }
 
     def validation_step(self, batch, batch_nb):
@@ -49,12 +42,8 @@ class LightningModel(pl.LightningModule):
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        logs = {
-            "val_loss": avg_loss,
-            "val_precision": self.precision_val.compute(),
-            "val_recall": self.recall_val.compute(),
-            "val_top_k": self.top_k_val.compute(),
-        }
+        logs = self.metric_logs(training=False)
+        logs.update({"val_loss": avg_loss})
 
         results = {"progress_bar": logs,
                    "log": logs}
@@ -65,10 +54,10 @@ class LightningModel(pl.LightningModule):
     def init_metrics(self):
         self.precision = Precision(average=True, is_multilabel=True)
         self.recall = Recall(average=True, is_multilabel=True)
-        self.top_k_train = TopKMulticlassAccuracy(k=25)
+        self.top_k_train = TopKMulticlassAccuracy(k=107)
         self.precision_val = Precision(average=True, is_multilabel=True)
         self.recall_val = Recall(average=True, is_multilabel=True)
-        self.top_k_val = TopKMulticlassAccuracy(k=25)
+        self.top_k_val = TopKMulticlassAccuracy(k=107)
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
         if training:
@@ -80,6 +69,18 @@ class LightningModel(pl.LightningModule):
             self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.top_k_val.update((y_pred, y_true))
 
+    def metric_logs(self, training: bool):
+        if training:
+            logs = {
+                "precision": self.precision.compute(),
+                "recall": self.recall.compute(),
+                "top_k": self.top_k_train.compute()}
+        else:
+            logs = {
+                "val_precision": self.precision_val.compute(),
+                "val_recall": self.recall_val.compute(),
+                "val_top_k": self.top_k_train_val.compute()}
+        return logs
 
     def reset_metrics(self, training: bool):
         if training:
