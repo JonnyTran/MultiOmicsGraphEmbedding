@@ -141,6 +141,12 @@ class EncoderLSTM(nn.Module):
         # return F.multilabel_soft_margin_loss(Y_hat, Y)
 
     def get_embeddings(self, X, cuda=True):
+        """
+        Get embeddings for a set of nodes in `X`.
+        :param X: a dict with keys {"input_seqs", "subnetwork"}
+        :param cuda (bool): whether to run computations in
+        :return (np.array): a numpy array of size (node size, embedding dim)
+        """
         if not isinstance(X["input_seqs"], torch.Tensor):
             X = {k: torch.tensor(v).cuda() for k, v in X.items()}
 
