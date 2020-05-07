@@ -74,7 +74,7 @@ class LightningModel(pl.LightningModule):
             logs = {
                 "precision": self.precision.compute(),
                 "recall": self.recall.compute(),
-                f"top_k@{self.top_k._k}": self.top_k_train.compute()}
+                f"top_k@{self.top_k_train._k}": self.top_k_train.compute()}
         else:
             logs = {
                 "val_precision": self.precision_val.compute(),
