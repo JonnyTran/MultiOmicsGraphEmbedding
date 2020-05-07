@@ -2,7 +2,19 @@ import pytorch_lightning as pl
 import torch
 from ignite.metrics import Precision, Recall
 
-from .metrics import top_k_multiclass, TopKMulticlassAccuracy
+from .metrics import TopKMulticlassAccuracy
+
+
+class EncoderEmbedder(pl.LightningModule):
+    def __init__(self, encoder, embedder, classifier):
+        super(EncoderEmbedder, self).__init__()
+        self._encoder = encoder
+        self._embedder = embedder
+        self._classifier = classifier
+
+    def forward(self, *args, **kwargs):
+        pass
+
 
 class LightningModel(pl.LightningModule):
     def __init__(self, model):

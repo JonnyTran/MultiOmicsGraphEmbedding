@@ -22,11 +22,14 @@ class TopKMulticlassAccuracy(Metric):
         self._num_examples = 0
 
     @reinit__is_reduced
-    def update(self, outputs):
-        output, target = outputs
+    def update(self, output: torch.Tensor, target: torch.Tensor):
+        # output, target = outputs
         batch_size, n_classes = target.size()
 
         _, top_indices = output.topk(self._k, 1, True, True)
+
+        targets_select = target.index_select(1, top_indices)
+        print("targets_select", targets_select.shape, targets_select)
 
         for i in range(0, batch_size):
             corrects_sample = target[i, top_indices[i]].float().sum(0) * 1.0 / self._k
@@ -41,16 +44,3 @@ class TopKMulticlassAccuracy(Metric):
                                      "least one example before it can be computed.")
         return self._num_correct / self._num_examples
 
-
-def top_k_multiclass(output: torch.Tensor, target: torch.Tensor, topk):
-    """Computes the precision@k for the specified values of k"""
-    batch_size, n_classes = target.size()
-
-    _, top_indices = output.topk(topk, 1, True, True)
-
-    corrects_batch = 0
-    for i in range(0, batch_size):
-        corrects_sample = target[i, top_indices[i]].float().sum(0) * 1.0 / topk
-        corrects_batch += corrects_sample
-
-    return corrects_batch.__mul__(1.0 / batch_size)

@@ -3,19 +3,18 @@ from torch_geometric.nn import GATConv
 
 
 class GAT(nn.Module):
-    def __init__(self, encoding_dim=128, embedding_dim=128, nb_attn_heads=4, nb_attn_dropout=0.5) -> None:
+    def __init__(self, hparams) -> None:
         super(GAT, self).__init__()
 
-        self.nb_attn_heads = nb_attn_heads
-        self.nb_attn_dropout = nb_attn_dropout
-
         self.gat = GATConv(
-            in_channels=encoding_dim,
-            out_channels=embedding_dim,
-            heads=self.nb_attn_heads,
+            in_channels=hparams.encoding_dim,
+            out_channels=hparams.embedding_dim,
+            heads=hparams.nb_attn_heads,
             concat=True,
-            dropout=self.nb_attn_dropout
+            dropout=hparams.nb_attn_dropout
         )
 
-    def forward(self, subnetwork):
+    def forward(self, X):
+        input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+
         return self.gat(subnetwork)
