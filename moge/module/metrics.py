@@ -9,7 +9,7 @@ class TopKMulticlassAccuracy(Metric):
     """
     Calculates the top-k categorical accuracy.
 
-    - `update` must receive output of the form `(y_pred, y)` or `{'y_pred': y_pred, 'y': y}`.
+    - `update` must receive output of the form `(y_pred, y)` or `{'y_pred': y_pred, 'y': y}` Tensors of size (batch_size, n_classes).
     """
 
     def __init__(self, k=5, output_transform=lambda x: x, device=None):
@@ -22,19 +22,15 @@ class TopKMulticlassAccuracy(Metric):
         self._num_examples = 0
 
     @reinit__is_reduced
-    def update(self, output: torch.Tensor, target: torch.Tensor):
-        # output, target = outputs
-        batch_size, n_classes = target.size()
+    def update(self, outputs):
+        y_pred, y_true = outputs
+        batch_size, n_classes = y_true.size()
+        _, top_indices = y_pred.topk(self._k, 1, True, True)
 
-        _, top_indices = output.topk(self._k, 1, True, True)
-
-        targets_select = target.index_select(1, top_indices)
-        print("targets_select", targets_select.shape, targets_select)
-
-        for i in range(0, batch_size):
-            corrects_sample = target[i, top_indices[i]].float().sum(0) * 1.0 / self._k
-            self._num_correct += corrects_sample.item()
-
+        y_true_select = torch.gather(y_true, 1, top_indices)
+        corrects_in_k = y_true_select.sum(1) * 1.0 / self._k
+        corrects_in_k = corrects_in_k.sum(0)  # sum across all samples (to average at .compute())
+        self._num_correct += corrects_in_k.item()
         self._num_examples += batch_size
 
     @sync_all_reduce("_num_correct", "_num_examples")
