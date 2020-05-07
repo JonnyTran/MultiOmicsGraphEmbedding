@@ -17,6 +17,7 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
             lambda x: sorted(x)[0] if x and len(x) >= 1 else None)
 
     if n_clusters is None:
+        print("y_true.unique()", y_true.unique())
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())
         print("Clustering", len(nodelist), "nodes with n_clusters:", n_clusters) if verbose else None
     try:

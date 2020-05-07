@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 from ignite.metrics import Precision, Recall
 
 from .metrics import TopKMulticlassAccuracy
-from .encoder import ConvLSTM, SeqTransformer
+from .encoder import ConvLSTM, TransformerEncoder
 from .embedder import GAT
 from .classifier import Dense
 
@@ -17,7 +17,7 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         if hparams.encoder == "ConvLSTM":
             self._encoder = ConvLSTM(hparams)
         if hparams.encoder == "SeqTransformer":
-            self._encoder = SeqTransformer(hparams)
+            self._encoder = TransformerEncoder(hparams)
         else:
             raise Exception("hparams.encoder must be one of {'ConvLSTM'}")
 

@@ -78,7 +78,7 @@ def train(hparams):
 
     trainer = pl.Trainer(
         logger=logger,
-        callbacks=[EarlyStopping(monitor='val_loss', patience=3), EarlyStopping(monitor='loss', patience=3)],
+        callbacks=[EarlyStopping(monitor='val_loss', patience=5), EarlyStopping(monitor='loss', patience=3)],
         min_epochs=3, max_epochs=MAX_EPOCHS,
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
@@ -86,11 +86,7 @@ def train(hparams):
     eec = EncoderEmbedderClassifier(hparams)
     model = LightningModel(eec)
 
-    # wandb.watch(model, criterion="val_loss", log="parameters", log_freq=100)
-
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
-    # trainer.run_evaluation(test_mode=False)
-    # wandb.log(logger.experiment._summary)
 
 
 if __name__ == "__main__":

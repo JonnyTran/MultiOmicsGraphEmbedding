@@ -8,10 +8,29 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from torch_geometric.nn import GATConv
 
+from transformers import AlbertForSequenceClassification, AlbertModel
 
-class SeqTransformer(pl.LightningModule):
+
+class TransformerEncoder(pl.LightningModule):
     def __init__(self, hparams):
-        super(SeqTransformer, self).__init__()
+        super(TransformerEncoder, self).__init__()
+
+        self.albert = AlbertModel(hparams)
+
+    def forward(self, sequences):
+        outputs = self.albert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
+
+        sequence_output = outputs[0]
+        hidden_states = outputs[2]
+
+        return hidden_states
 
 
 class ConvLSTM(pl.LightningModule):
