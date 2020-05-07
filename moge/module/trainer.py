@@ -1,8 +1,8 @@
 import pytorch_lightning as pl
 import torch
-from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
+from ignite.metrics import Precision, Recall
 
-from .metrics import top_k_multiclass
+from .metrics import top_k_multiclass, TopKMulticlassAccuracy
 
 class LightningModel(pl.LightningModule):
     def __init__(self, model):
@@ -23,81 +23,73 @@ class LightningModel(pl.LightningModule):
         self.update_metrics(Y_hat, y, training=True)
         progress_bar = {
             "precision": self.precision.compute(),
-            "recall": self.recall.compute()
+            "recall": self.recall.compute(),
+            "top_k": torch.cat(self.top_k_train).mean()[0].cpu().numpy(),
         }
 
-        return {'loss': loss,
-                'progress_bar': progress_bar,
-                }
+        return {'loss': loss, 'progress_bar': progress_bar, }
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        tensorboard_logs = {
+        logs = {
             "loss": avg_loss,
             "precision": self.precision.compute(),
             "recall": self.recall.compute(),
-            "top_k": torch.cat(self.top_k),
+            "top_k": torch.cat(self.top_k_train).mean()[0].cpu().numpy(),
         }
         self.reset_metrics(training=True)
-        return {"loss": avg_loss,
-                "progress_bar": tensorboard_logs,
-                "log": tensorboard_logs,
-                }
+        return {"loss": avg_loss, "progress_bar": logs, "log": logs, }
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-
         Y_hat = self._model.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
-
         self.update_metrics(Y_hat, y, training=False)
-
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        tensorboard_logs = {
+        logs = {
             "val_loss": avg_loss,
             "val_precision": self.precision_val.compute(),
             "val_recall": self.recall_val.compute(),
-            "val_top_k": torch.cat(self.top_k_val),
+            "val_top_k": torch.cat(self.top_k_val).mean()[0].cpu().numpy(),
         }
 
-        results = {"progress_bar": tensorboard_logs,
-                   "log": tensorboard_logs}
+        results = {"progress_bar": logs,
+                   "log": logs}
         self.reset_metrics(training=False)
-        print(tensorboard_logs)
+        print(logs)
         return results
 
     def init_metrics(self):
         self.precision = Precision(average=True, is_multilabel=True)
         self.recall = Recall(average=True, is_multilabel=True)
-        self.top_k = []
+        self.top_k_train = TopKMulticlassAccuracy(k=25)
         self.precision_val = Precision(average=True, is_multilabel=True)
         self.recall_val = Recall(average=True, is_multilabel=True)
-        self.top_k_val = []
+        self.top_k_val = TopKMulticlassAccuracy(k=25)
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
         if training:
             self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.top_k.append(top_k_multiclass(y_pred, y_true, topk=(5)).unsqueeze(0))
+            self.top_k_train.update((y_pred, y_true))
         else:
             self.precision_val.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.top_k_val.append(top_k_multiclass(y_pred, y_true, topk=(5)).unsqueeze(0))
+            self.top_k_val.update((y_pred, y_true))
 
-        print("top_k", self.top_k_val)
 
     def reset_metrics(self, training: bool):
         if training:
             self.precision.reset()
             self.recall.reset()
-            self.top_k = []
+            self.top_k_train.reset()
         else:
             self.precision_val.reset()
             self.recall_val.reset()
-            self.top_k_val = []
+            self.top_k_val.reset()
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
