@@ -8,25 +8,26 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from torch_geometric.nn import GATConv
 
-from transformers import AlbertForSequenceClassification, AlbertModel
-
+from transformers import AlbertConfig, AlbertForSequenceClassification, AlbertModel, AlbertEmbeddings, AlbertTransformer
 
 class TransformerEncoder(pl.LightningModule):
-    def __init__(self, hparams):
+    def __init__(self, config: AlbertConfig):
         super(TransformerEncoder, self).__init__()
 
-        self.albert = AlbertModel(hparams)
+        self.albert = AlbertModel(config)
 
-    def forward(self, sequences):
+    def forward(self, input_seqs):
+        attention_mask = (input_seqs > 0).type(torch.int)
+
         outputs = self.albert(
-            input_ids=input_ids,
+            input_seqs,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
         )
-
+        print([k.shape for k in outputs])
         sequence_output = outputs[0]
         hidden_states = outputs[2]
 
