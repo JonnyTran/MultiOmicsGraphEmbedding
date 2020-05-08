@@ -75,6 +75,9 @@ def train(hparams):
     logger = WandbLogger()
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
 
+    eec = EncoderEmbedderClassifier(hparams)
+    model = LightningModel(eec)
+
     trainer = pl.Trainer(
         logger=logger,
         callbacks=[EarlyStopping(monitor='val_loss', patience=5), EarlyStopping(monitor='loss', patience=3)],
@@ -82,9 +85,6 @@ def train(hparams):
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
     )
-    eec = EncoderEmbedderClassifier(hparams)
-    model = LightningModel(eec)
-
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
 
 
