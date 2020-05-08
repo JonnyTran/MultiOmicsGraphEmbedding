@@ -29,7 +29,7 @@ def train(hparams):
     min_count = hparams.classes_min_count
     batch_size = hparams.batch_size
     max_length = hparams.max_length
-    n_steps = int(400000 / batch_size)
+    n_steps = int(200000 / batch_size)
     directed = False
 
     variables = []
