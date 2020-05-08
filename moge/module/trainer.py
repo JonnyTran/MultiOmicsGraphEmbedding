@@ -48,6 +48,8 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
         self.hparams = hparams
 
+        self.criterion = torch.nn.BCEWithLogitsLoss()
+
     def forward(self, X):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
 
@@ -62,7 +64,9 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
 
-        return F.binary_cross_entropy(Y_hat, Y, reduction="mean")
+        # return F.binary_cross_entropy(Y_hat, Y, reduction="mean")
+
+        return self.criterion(Y_hat, Y)
 
     def get_embeddings(self, X, cuda=True):
         """

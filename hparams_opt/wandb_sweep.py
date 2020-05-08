@@ -22,6 +22,7 @@ from moge.module.trainer import LightningModel, EncoderEmbedderClassifier
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 
 def train(hparams):
+    print(hparams)
     with open(DATASET, 'rb') as file:
         network = pickle.load(file)
 
@@ -84,6 +85,7 @@ def train(hparams):
         min_epochs=3, max_epochs=MAX_EPOCHS,
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
+        amp_level='O1', precision=16,
     )
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
 
@@ -91,10 +93,10 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
-    parser.add_argument('--encoder', type=str, default="ConvLSTM")
+    parser.add_argument('--encoder', type=str, default="Albert")
     parser.add_argument('--encoding_dim', type=int, default=128)
     parser.add_argument('--embedding_dim', type=int, default=256)
-    parser.add_argument('--word_embedding_size', type=int, default=None)
+    parser.add_argument('--word_embedding_size', type=int, default=22)
     parser.add_argument('--max_length', type=int, default=1000)
     parser.add_argument('--batch_size', type=int, default=1000)
 

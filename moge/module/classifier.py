@@ -16,7 +16,7 @@ class Dense(pl.LightningModule):
             nn.ReLU(),
             nn.Dropout(p=hparams.nb_cls_dropout),
             nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes),
-            nn.Sigmoid()
+            # nn.Sigmoid()
         )
 
     @staticmethod
