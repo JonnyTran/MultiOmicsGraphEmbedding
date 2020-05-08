@@ -16,7 +16,7 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
-from moge.evaluation.metrics import precision_d, recall_d, precision, recall
+from moge.model.metrics import precision_d, recall_d, precision, recall
 from moge.generator.data_generator import DataGenerator
 from moge.generator.sampled_generator import SampledDataGenerator
 from moge.model.static_graph_embedding import ImportedGraphEmbedding

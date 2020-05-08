@@ -15,7 +15,7 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.utils import multi_gpu_model
 
-from moge.evaluation.metrics import precision, recall
+from moge.model.metrics import precision, recall
 # from kegra.layers.graph import GraphConvolution
 # from spektral.layers import GraphConv
 from .graph_attention_layer import GraphAttention
