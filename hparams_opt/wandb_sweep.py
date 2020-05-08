@@ -22,11 +22,10 @@ from moge.module.trainer import LightningModel, EncoderEmbedderClassifier
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 
 def train(hparams):
-    print(hparams)
     with open(DATASET, 'rb') as file:
         network = pickle.load(file)
 
-    MAX_EPOCHS = 20
+    MAX_EPOCHS = hparams.max_epochs
     min_count = hparams.classes_min_count
     batch_size = hparams.batch_size
     max_length = hparams.max_length
@@ -51,7 +50,7 @@ def train(hparams):
 
     dataset_test = network.get_test_generator(
         SubgraphGenerator, split_idx=split_idx, variables=variables, targets=targets,
-        traversal='all', batch_size=batch_size, agg_mode=None,
+        traversal='all_slices', batch_size=batch_size, agg_mode=None,
         method="GAT", adj_output="coo",
         sampling="log", n_steps=1, directed=directed,
         maxlen=max_length, padding='post', truncating='post', variable_length=False,
@@ -97,15 +96,16 @@ if __name__ == "__main__":
     parser.add_argument('--encoding_dim', type=int, default=128)
     parser.add_argument('--embedding_dim', type=int, default=256)
     parser.add_argument('--word_embedding_size', type=int, default=22)
-    parser.add_argument('--max_length', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=1000)
+    parser.add_argument('--max_length', type=int, default=600)
+    parser.add_argument('--batch_size', type=int, default=100)
+    parser.add_argument('--max_epochs', type=int, default=5)
 
     parser.add_argument('--num_hidden_layers', type=int, default=1)
     parser.add_argument('--num_hidden_groups', type=int, default=1)
     parser.add_argument('--hidden_dropout_prob', type=float, default=0.2)
     parser.add_argument('--attention_probs_dropout_prob', type=float, default=0.2)
     parser.add_argument('--num_attention_heads', type=int, default=4)
-    parser.add_argument('--intermediate_size', type=int, default=512)
+    parser.add_argument('--intermediate_size', type=int, default=128)
 
     parser.add_argument('--nb_conv1_filters', type=int, default=192)
     parser.add_argument('--nb_conv1_kernel_size', type=int, default=10)

@@ -19,6 +19,8 @@ parameters:
     values: [700]
   batch_size:
     values: [100]
+  max_epochs:
+    values: [5]
 
   word_embedding_size:
     min: 4
@@ -27,8 +29,7 @@ parameters:
     min: 1
     max: 2
   num_hidden_groups:
-    min: 1
-    max: 2
+    values: [1]
   hidden_dropout_prob:
     min: 0.0
     max: 0.5
