@@ -80,7 +80,7 @@ def train(hparams):
 
     trainer = pl.Trainer(
         logger=logger,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2),
         min_epochs=3, max_epochs=MAX_EPOCHS,
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
