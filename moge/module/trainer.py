@@ -25,8 +25,10 @@ class EncoderEmbedderClassifier(pl.LightningModule):
                 hidden_size=hparams.encoding_dim,
                 num_hidden_layers=1,
                 num_hidden_groups=1,
+                hidden_dropout_prob=0,
+                attention_probs_dropout_prob=0,
                 num_attention_heads=4,
-                intermediate_size=256,
+                intermediate_size=128,
                 type_vocab_size=1,
                 max_position_embeddings=hparams.max_length,
             )

@@ -1,4 +1,5 @@
 from abc import ABCMeta
+from itertools import cycle
 
 import numpy as np
 
@@ -22,6 +23,10 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         self.directed = directed
 
         super(SampledDataGenerator, self).__init__(network=network, **kwargs)
+
+        if self.traversal == 'all_slices':
+            self.nodes_circle = cycle(self.node_list)
+            self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
 
         self.process_normalized_node_degree(network)
 
