@@ -10,9 +10,9 @@ from torch_geometric.nn import GATConv
 
 from transformers import AlbertConfig, AlbertForSequenceClassification, AlbertModel
 
-class TransformerEncoder(pl.LightningModule):
+class AlbertEncoder(pl.LightningModule):
     def __init__(self, config: AlbertConfig):
-        super(TransformerEncoder, self).__init__()
+        super(AlbertEncoder, self).__init__()
 
         self.albert = AlbertModel(config)
 

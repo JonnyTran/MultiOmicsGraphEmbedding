@@ -7,7 +7,7 @@ from ignite.metrics import Precision, Recall
 from transformers import AlbertConfig
 
 from .metrics import TopKMulticlassAccuracy
-from .encoder import ConvLSTM, TransformerEncoder
+from .encoder import ConvLSTM, AlbertEncoder
 from .embedder import GAT
 from .classifier import Dense
 
@@ -30,7 +30,7 @@ class EncoderEmbedderClassifier(pl.LightningModule):
                 type_vocab_size=1,
                 max_position_embeddings=hparams.max_length,
             )
-            self._encoder = TransformerEncoder(config)
+            self._encoder = AlbertEncoder(config)
         else:
             raise Exception("hparams.encoder must be one of {'ConvLSTM'}")
 
