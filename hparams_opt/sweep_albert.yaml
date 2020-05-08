@@ -12,13 +12,13 @@ parameters:
   encoder:
     values: ["Albert"]
   encoding_dim:
-    values: [64, 128, 256]
+    values: [64, 128, 256, 512]
   embedding_dim:
     values: [64, 128, 256, 512]
   max_length:
     values: [700]
   batch_size:
-    values: [128]
+    values: [100]
 
   word_embedding_size:
     min: 4
