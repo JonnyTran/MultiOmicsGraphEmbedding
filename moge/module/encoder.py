@@ -40,6 +40,7 @@ class AlbertEncoder(pl.LightningModule):
         parser.add_argument('--max_length', type=int, default=1000)
 
         parser.add_argument('--num_hidden_layers', type=int, default=1)
+        parser.add_argument('--num_hidden_groups', type=int, default=1)
         parser.add_argument('--num_attention_heads', type=int, default=4)
         parser.add_argument('--intermediate_size', type=int, default=256)
 

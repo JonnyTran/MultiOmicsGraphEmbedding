@@ -20,15 +20,15 @@ class EncoderEmbedderClassifier(pl.LightningModule):
             self._encoder = ConvLSTM(hparams)
         if hparams.encoder == "Albert":
             config = AlbertConfig(
-                vocab_size=hparams.vocab_size + 1,
+                vocab_size=hparams.vocab_size,
                 embedding_size=hparams.word_embedding_size,
                 hidden_size=hparams.encoding_dim,
-                num_hidden_layers=1,
-                num_hidden_groups=1,
-                hidden_dropout_prob=0,
-                attention_probs_dropout_prob=0,
-                num_attention_heads=4,
-                intermediate_size=128,
+                num_hidden_layers=hparams.num_hidden_layers,
+                num_hidden_groups=hparams.num_hidden_groups,
+                hidden_dropout_prob=hparams.hidden_dropout_prob,
+                attention_probs_dropout_prob=hparams.attention_probs_dropout_prob,
+                num_attention_heads=hparams.num_attention_heads,
+                intermediate_size=hparams.intermediate_size,
                 type_vocab_size=1,
                 max_position_embeddings=hparams.max_length,
             )
@@ -167,12 +167,12 @@ class LightningModel(pl.LightningModule):
             logs = {
                 "precision": self.precision.compute(),
                 "recall": self.recall.compute(),
-                f"top_k@{self.top_k_train._k}": self.top_k_train.compute()}
+                "top_k": self.top_k_train.compute()}
         else:
             logs = {
                 "val_precision": self.precision_val.compute(),
                 "val_recall": self.recall_val.compute(),
-                f"val_top_k@{self.top_k_val._k}": self.top_k_val.compute()}
+                "val_top_k": self.top_k_val.compute()}
         return logs
 
     def reset_metrics(self, training: bool):
