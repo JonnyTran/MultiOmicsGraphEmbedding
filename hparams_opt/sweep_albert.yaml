@@ -19,7 +19,7 @@ parameters:
     values: [700]
   batch_size:
     values: [100]
-  max_epochs:
+  num_epochs:
     values: [5]
 
   word_embedding_size:

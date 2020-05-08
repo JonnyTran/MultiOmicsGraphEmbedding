@@ -25,7 +25,7 @@ def train(hparams):
     with open(DATASET, 'rb') as file:
         network = pickle.load(file)
 
-    MAX_EPOCHS = hparams.max_epochs
+    MAX_EPOCHS = hparams.num_epochs
     min_count = hparams.classes_min_count
     batch_size = hparams.batch_size
     max_length = hparams.max_length
@@ -80,7 +80,7 @@ def train(hparams):
 
     trainer = pl.Trainer(
         logger=logger,
-        callbacks=[EarlyStopping(monitor='val_loss', patience=5), EarlyStopping(monitor='loss', patience=3)],
+        callbacks=[EarlyStopping(monitor='val_loss', patience=3), EarlyStopping(monitor='loss', patience=1)],
         min_epochs=3, max_epochs=MAX_EPOCHS,
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     parser.add_argument('--word_embedding_size', type=int, default=22)
     parser.add_argument('--max_length', type=int, default=600)
     parser.add_argument('--batch_size', type=int, default=100)
-    parser.add_argument('--max_epochs', type=int, default=5)
+    parser.add_argument('--num_epochs', type=int, default=5)
 
     parser.add_argument('--num_hidden_layers', type=int, default=1)
     parser.add_argument('--num_hidden_groups', type=int, default=1)
