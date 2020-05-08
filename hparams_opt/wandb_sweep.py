@@ -25,7 +25,7 @@ def train(hparams):
     with open(DATASET, 'rb') as file:
         network = pickle.load(file)
 
-    MAX_EPOCHS = hparams.num_epochs
+    MAX_EPOCHS = 10
     min_count = hparams.classes_min_count
     batch_size = hparams.batch_size
     max_length = hparams.max_length
