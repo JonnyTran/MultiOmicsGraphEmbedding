@@ -96,6 +96,7 @@ if __name__ == "__main__":
     parser.add_argument('--encoding_dim', type=int, default=128)
     parser.add_argument('--embedding_dim', type=int, default=256)
     parser.add_argument('--word_embedding_size', type=int, default=None)
+    parser.add_argument('--max_length', type=int, default=1000)
 
     parser.add_argument('--nb_conv1_filters', type=int, default=192)
     parser.add_argument('--nb_conv1_kernel_size', type=int, default=10)

@@ -8,7 +8,7 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from torch_geometric.nn import GATConv
 
-from transformers import AlbertConfig, AlbertForSequenceClassification, AlbertModel, AlbertEmbeddings, AlbertTransformer
+from transformers import AlbertConfig, AlbertForSequenceClassification, AlbertModel
 
 class TransformerEncoder(pl.LightningModule):
     def __init__(self, config: AlbertConfig):
@@ -20,19 +20,30 @@ class TransformerEncoder(pl.LightningModule):
         attention_mask = (input_seqs > 0).type(torch.int)
 
         outputs = self.albert(
-            input_seqs,
+            input_ids=input_seqs,
             attention_mask=attention_mask,
             token_type_ids=None,
             position_ids=None,
             head_mask=None,
             inputs_embeds=None,
         )
-        print([k.shape for k in outputs])
-        sequence_output = outputs[0]
-        hidden_states = outputs[2]
+        last_hidden_state, pooled_output = outputs
 
-        return hidden_states
+        return pooled_output
 
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = ArgumentParser(parents=[parent_parser])
+        parser.add_argument('--encoding_dim', type=int, default=128)
+        parser.add_argument('--vocab_size', type=int, default=22)
+        parser.add_argument('--word_embedding_size', type=int, default=22)
+        parser.add_argument('--max_length', type=int, default=1000)
+
+        parser.add_argument('--num_hidden_layers', type=int, default=1)
+        parser.add_argument('--num_attention_heads', type=int, default=4)
+        parser.add_argument('--intermediate_size', type=int, default=256)
+
+        return parser
 
 class ConvLSTM(pl.LightningModule):
     def __init__(self, hparams):

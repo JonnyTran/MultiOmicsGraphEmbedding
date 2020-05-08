@@ -4,6 +4,8 @@ from torch.nn import functional as F
 import pytorch_lightning as pl
 from ignite.metrics import Precision, Recall
 
+from transformers import AlbertConfig
+
 from .metrics import TopKMulticlassAccuracy
 from .encoder import ConvLSTM, TransformerEncoder
 from .embedder import GAT
@@ -16,8 +18,19 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
         if hparams.encoder == "ConvLSTM":
             self._encoder = ConvLSTM(hparams)
-        if hparams.encoder == "SeqTransformer":
-            self._encoder = TransformerEncoder(hparams)
+        if hparams.encoder == "Albert":
+            config = AlbertConfig(
+                vocab_size=hparams.vocab_size + 1,
+                embedding_size=hparams.word_embedding_size,
+                hidden_size=hparams.encoding_dim,
+                num_hidden_layers=1,
+                num_hidden_groups=1,
+                num_attention_heads=4,
+                intermediate_size=256,
+                type_vocab_size=1,
+                max_position_embeddings=hparams.max_length,
+            )
+            self._encoder = TransformerEncoder(config)
         else:
             raise Exception("hparams.encoder must be one of {'ConvLSTM'}")
 
