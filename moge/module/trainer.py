@@ -58,17 +58,36 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         y_pred = self._classifier(embeddings)
         return y_pred
 
-    def loss(self, Y_hat, Y, weights=None):
+    def loss(self, Y_hat: torch.Tensor, Y, weights=None):
         Y = Y.type_as(Y_hat)
         idx = torch.nonzero(weights).view(-1)
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
 
-        # return F.binary_cross_entropy(Y_hat, Y, reduction="mean")
-
         return self.criterion(Y_hat, Y)
 
-    def get_embeddings(self, X, cuda=True):
+    def get_encodings(self, X, batch_size=None, cuda=True):
+        if not isinstance(X["input_seqs"], torch.Tensor):
+            X = {k: torch.tensor(v).cuda(1) for k, v in X.items()}
+
+        if cuda:
+            X = {k: v.cuda(1) for k, v in X.items()}
+        else:
+            self._encoder.cpu()
+            X = {k: v.cpu() for k, v in X.items()}
+
+        if batch_size is not None:
+            input_chunks = X["input_seqs"].split(split_size=batch_size, dim=0)
+            encodings = []
+            for i in range(len(input_chunks)):
+                encodings.append(self._encoder.forward(input_chunks[i]))
+            encodings = torch.cat(encodings, 0)
+        else:
+            encodings = self._encoder(X["input_seqs"])
+
+        return encodings.detach().cpu().numpy()
+
+    def get_embeddings(self, X, encodings=None, batch_size=None, cuda=True):
         """
         Get embeddings for a set of nodes in `X`.
         :param X: a dict with keys {"input_seqs", "subnetwork"}
@@ -83,7 +102,9 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         else:
             X = {k: v.cpu() for k, v in X.items()}
 
-        encodings = self._encoder(X["input_seqs"])
+        if encodings is None:
+            encodings = self._encoder(X["input_seqs"])
+
         embeddings = self._embedder(encodings, X["subnetwork"])
 
         return embeddings.detach().cpu().numpy()
