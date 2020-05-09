@@ -22,10 +22,10 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .configuration_albert import AlbertConfig
-from .file_utils import add_start_docstrings, add_start_docstrings_to_callable
-from .modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
-from .modeling_utils import PreTrainedModel
+from transformers.configuration_albert import AlbertConfig
+from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_callable
+from transformers.modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
+from transformers.modeling_utils import PreTrainedModel
 
 logger = logging.getLogger(__name__)
 
@@ -434,6 +434,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
     ALBERT_START_DOCSTRING,
 )
 class AlbertModel(AlbertPreTrainedModel):
+
     config_class = AlbertConfig
     pretrained_model_archive_map = ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP
     load_tf_weights = load_tf_weights_in_albert
@@ -443,8 +444,8 @@ class AlbertModel(AlbertPreTrainedModel):
         super().__init__(config)
 
         self.config = config
-        self.embeddings = AlbertEmbeddings(config).cuda(1)
-        self.encoder = AlbertTransformer(config).cuda(2)
+        self.embeddings = AlbertEmbeddings(config)
+        self.encoder = AlbertTransformer(config)
         self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
         self.pooler_activation = nn.Tanh()
 

@@ -11,7 +11,6 @@ from torch_geometric.nn import GATConv
 from transformers import AlbertConfig, AlbertForSequenceClassification
 from .albert import AlbertModel
 
-
 class AlbertEncoder(pl.LightningModule):
     def __init__(self, config: AlbertConfig):
         super(AlbertEncoder, self).__init__()
