@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import tensorflow as tf
 import torch
@@ -7,39 +8,20 @@ from torch.utils.data import BatchSampler, Sampler
 from . import DataGenerator, SubgraphGenerator
 
 
-class GraphSampler(Sampler):
-    def __init__(self, dataset: SubgraphGenerator) -> None:
-        self.dataset = dataset
-        self.batch_size = self.dataset.batch_size
-
-    def __iter__(self):
-        return iter(self.dataset.traverse_network(self.batch_size))
-
-    def __len__(self):
-        return self.dataset.n_steps
-
-
-class NeighborSampler(BatchSampler):
-    def __init__(self, sampler, batch_size: int, drop_last: bool) -> None:
-        self.dataset = sampler.dataset
-        self.batch_size = self.dataset.batch_size
-        super(NeighborSampler, self).__init__(sampler, batch_size, drop_last)
-
-    def __iter__(self):
-        return iter(self.dataset.traverse_network(self.batch_size))
-
-    def __len__(self):
-        return self.dataset.n_steps
-
-
 class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
-    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500, sampling='neighborhood',
-                 compression="log", n_steps=100, directed=True, maxlen=1400, padding='post', truncating='post',
-                 agg_mode=None, tokenizer=None, replace=True, variable_length=False, seed=0, verbose=True, **kwargs):
-        super(SubgraphDataset, self).__init__(network, variables, targets, batch_size, sampling, compression, n_steps,
-                                              directed, maxlen,
-                                              padding, truncating, agg_mode, tokenizer, replace, variable_length, seed,
-                                              verbose, **kwargs)
+    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
+                 traversal='neighborhood', sampling="log", n_steps=100, directed=True,
+                 maxlen=1400, padding='post', truncating='post', agg_mode=None, tokenizer=None, replace=True,
+                 variable_length=False,
+                 seed=0, verbose=True, **kwargs):
+        super(SubgraphDataset, self).__init__(network=network,
+                                              variables=variables, targets=targets,
+                                              batch_size=batch_size,
+                                              traversal=traversal, sampling=sampling,
+                                              n_steps=n_steps, directed=directed, replace=replace,
+                                              maxlen=maxlen, padding=padding, truncating=truncating,
+                                              agg_mode=agg_mode,
+                                              tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
         self.node_list = pd.Series(self.node_list)
 
@@ -47,9 +29,9 @@ class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
         return len(self.node_list)
 
     def __getitem__(self, item=None):
-        sampled_node = self.node_list.loc[item]
-        nodelist = self.traverse_network(self.batch_size, seed_node=sampled_node)
-        X, y, idx_weights = self.__getdata__(nodelist, variable_length=False)
+        sampled_nodes = self.traverse_network(batch_size=self.batch_size)
+        X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
+        X["subnetwork"] = np.expand_dims(X["subnetwork"], 0)
         return X, y, idx_weights
 
 

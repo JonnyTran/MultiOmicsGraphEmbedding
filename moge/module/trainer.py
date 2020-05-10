@@ -1,8 +1,12 @@
+from typing import List
+
 import torch
 from torch.nn import functional as F
 
 import pytorch_lightning as pl
+from pytorch_lightning.core.lightning import LightningDistributedDataParallel
 from ignite.metrics import Precision, Recall
+from torch.nn.parallel import DistributedDataParallel
 
 from transformers import AlbertConfig
 
@@ -52,6 +56,7 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
     def forward(self, X):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+        subnetwork = subnetwork[0].squeeze(0)
 
         encodings = self._encoder(input_seqs)
         embeddings = self._embedder(encodings, subnetwork)
@@ -216,6 +221,14 @@ class LightningModel(pl.LightningModule):
                                      weight_decay=self._model.hparams.nb_weight_decay
                                      )
         return optimizer
+
+    # def configure_ddp(self, model, device_ids):
+    #     model = LightningDistributedDataParallel(
+    #         model,
+    #         device_ids=device_ids,
+    #         find_unused_parameters=True
+    #     )
+    #     return model
 
     # def prepare_data(self) -> None:
     #     with open(self.data_path, 'rb') as file:
