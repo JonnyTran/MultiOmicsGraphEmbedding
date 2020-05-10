@@ -1,7 +1,7 @@
 import torch
 
 import pytorch_lightning as pl
-
+from .ddp import LightningDistributedDataParallel
 from .metrics import Metrics
 
 
@@ -61,13 +61,13 @@ class LightningModel(pl.LightningModule):
                                      )
         return optimizer
 
-    # def configure_ddp(self, model, device_ids):
-    #     model = LightningDistributedDataParallel(
-    #         model,
-    #         device_ids=device_ids,
-    #         find_unused_parameters=True
-    #     )
-    #     return model
+    def configure_ddp(self, model, device_ids):
+        model = LightningDistributedDataParallel(
+            model,
+            device_ids=device_ids,
+            find_unused_parameters=True
+        )
+        return model
 
     # def prepare_data(self) -> None:
     #     with open(self.data_path, 'rb') as file:
