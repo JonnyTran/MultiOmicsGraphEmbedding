@@ -22,7 +22,7 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
         if hparams.encoder == "ConvLSTM":
             self._encoder = ConvLSTM(hparams)
-        if hparams.encoder == "Albert":
+        elif hparams.encoder == "Albert":
             config = AlbertConfig(
                 vocab_size=hparams.vocab_size,
                 embedding_size=hparams.word_embedding_size,
@@ -38,7 +38,7 @@ class EncoderEmbedderClassifier(pl.LightningModule):
             )
             self._encoder = AlbertEncoder(config)
         else:
-            raise Exception("hparams.encoder must be one of {'ConvLSTM'}")
+            raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
 
         if hparams.embedder == "GAT":
             self._embedder = GAT(hparams)
@@ -57,7 +57,8 @@ class EncoderEmbedderClassifier(pl.LightningModule):
     def forward(self, X):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
         subnetwork = subnetwork[0].squeeze(0)
-
+        # print("input_seqs", input_seqs.shape)
+        # print("subnetwork", subnetwork.shape, subnetwork.device, subnetwork.dtype)
         encodings = self._encoder(input_seqs)
         embeddings = self._embedder(encodings, subnetwork)
         y_pred = self._classifier(embeddings)
