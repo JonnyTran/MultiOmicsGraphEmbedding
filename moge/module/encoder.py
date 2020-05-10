@@ -100,7 +100,7 @@ class ConvLSTM(pl.LightningModule):
     def forward(self, input_seqs):
         batch_size, seq_len = input_seqs.size()
         X_lengths = (input_seqs > 0).sum(1)
-        self.hidden = self.init_hidden(batch_size)
+        hidden = self.init_hidden(batch_size)
 
         X = self.word_embedding(input_seqs)
 
@@ -128,9 +128,9 @@ class ConvLSTM(pl.LightningModule):
 
         # LSTM
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True, enforce_sorted=False)
-        _, self.hidden = self.lstm(X, self.hidden)  # (output, (h_n, c_n))
+        _, hidden = self.lstm(X, hidden)  # (output, (h_n, c_n))
 
-        X = self.hidden[0].permute(1, 0, 2)  # (batch_size, nb_layers, nb_lstm_units)
+        X = hidden[0].permute(1, 0, 2)  # (batch_size, nb_layers, nb_lstm_units)
         X = X.reshape(batch_size, (
             2 if self.hparams.nb_lstm_bidirectional else 1) * self.hparams.nb_lstm_units)  # (batch_size, lstm_hidden)
         if self.hparams.nb_lstm_layernorm:

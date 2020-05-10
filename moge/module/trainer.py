@@ -56,9 +56,10 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
     def forward(self, X):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
+        # print("subnetwork[0]", len(subnetwork), subnetwork[0].shape)
         subnetwork = subnetwork[0].squeeze(0)
         # print("input_seqs", input_seqs.shape)
-        # print("subnetwork", subnetwork.shape, subnetwork.device, subnetwork.dtype)
+        # print("subnetwork", subnetwork.shape)
         encodings = self._encoder(input_seqs)
         embeddings = self._embedder(encodings, subnetwork)
         y_pred = self._classifier(embeddings)
