@@ -81,10 +81,12 @@ def train(hparams):
     model = LightningModel(eec)
 
     trainer = pl.Trainer(
+        gpus=1,
+        distributed_backend="horovod",
         logger=logger,
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=2),
         min_epochs=3, max_epochs=MAX_EPOCHS,
-        gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
+        # gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         weights_summary='top',
         amp_level='O1', precision=16,
     )

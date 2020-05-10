@@ -3,7 +3,6 @@ import torch
 import pytorch_lightning as pl
 from .metrics import Metrics
 
-
 class LightningModel(pl.LightningModule):
     def __init__(self, model):
         super(LightningModel, self).__init__()
@@ -59,6 +58,7 @@ class LightningModel(pl.LightningModule):
                                      lr=self._model.hparams.lr,
                                      weight_decay=self._model.hparams.nb_weight_decay
                                      )
+
         return optimizer
 
     # def configure_ddp(self, model, device_ids):
