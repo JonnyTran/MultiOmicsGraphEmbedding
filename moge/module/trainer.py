@@ -46,9 +46,6 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         else:
             raise Exception("hparams.classifier must be one of {'Dense'}")
 
-        self._embedder.cuda(3)
-        self._classifier.cuda(4)
-
         self.hparams = hparams
 
         self.criterion = torch.nn.BCEWithLogitsLoss()
@@ -56,9 +53,9 @@ class EncoderEmbedderClassifier(pl.LightningModule):
     def forward(self, X):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
 
-        encodings = self._encoder(input_seqs.cuda(1))
-        embeddings = self._embedder(encodings.cuda(2), subnetwork.cuda(2))
-        y_pred = self._classifier(embeddings.cuda(3))
+        encodings = self._encoder(input_seqs)
+        embeddings = self._embedder(encodings, subnetwork)
+        y_pred = self._classifier(embeddings)
         return y_pred
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):
@@ -181,7 +178,6 @@ class LightningModel(pl.LightningModule):
         self.top_k_val = TopKMulticlassAccuracy(k=107)
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
-        y_true = y_true.cuda(3)
         if training:
             self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))

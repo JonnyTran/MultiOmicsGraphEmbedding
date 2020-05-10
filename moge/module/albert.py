@@ -27,7 +27,9 @@ from transformers.file_utils import add_start_docstrings, add_start_docstrings_t
 from transformers.modeling_bert import ACT2FN, BertEmbeddings, BertSelfAttention, prune_linear_layer
 from transformers.modeling_utils import PreTrainedModel
 
+
 logger = logging.getLogger(__name__)
+
 
 ALBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "albert-base-v1": "https://cdn.huggingface.co/albert-base-v1-pytorch_model.bin",

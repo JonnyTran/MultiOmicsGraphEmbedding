@@ -8,8 +8,7 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from torch_geometric.nn import GATConv
 
-from transformers import AlbertConfig, AlbertForSequenceClassification
-from .albert import AlbertModel
+from transformers import AlbertConfig, AlbertForSequenceClassification, AlbertModel
 
 class AlbertEncoder(pl.LightningModule):
     def __init__(self, config: AlbertConfig):
