@@ -22,8 +22,8 @@ class LightningModel(pl.LightningModule):
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
-        self.metrics.update(Y_hat, y, training=True)
-        progress_bar = self.metrics.compute(training=True)
+        self.metrics.update_metrics(Y_hat, y, training=True)
+        progress_bar = self.metrics.compute_metrics(training=True)
 
         return {'loss': loss, 'progress_bar': progress_bar, }
 
@@ -31,25 +31,25 @@ class LightningModel(pl.LightningModule):
         X, y, weights = batch
         Y_hat = self._model.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
-        self.metrics.update(Y_hat, y, training=False)
+        self.metrics.update_metrics(Y_hat, y, training=False)
         return {"val_loss": loss}
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.metrics.compute(training=True)
-        logs.update({"loss": avg_loss})
-        self.metrics.reset(training=True)
+        logs = self.metrics.compute_metrics(training=True)
+        logs.update_metrics({"loss": avg_loss})
+        self.metrics.reset_metrics(training=True)
 
         return {"loss": avg_loss, "progress_bar": logs, "log": logs, }
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.metrics.compute(training=False)
-        logs.update({"val_loss": avg_loss})
+        logs = self.metrics.compute_metrics(training=False)
+        logs.update_metrics({"val_loss": avg_loss})
 
         results = {"progress_bar": logs,
                    "log": logs}
-        self.metrics.reset(training=False)
+        self.metrics.reset_metrics(training=False)
         print(logs)  # print val results every epoch
         return results
 

@@ -52,11 +52,13 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
         # print("input_seqs", input_seqs.shape)
         # print("subnetwork", len(subnetwork), [batch.shape for batch in subnetwork])
-        # subnetwork = subnetwork[0].squeeze(0)
+        if subnetwork.dim() > 2:
+            subnetwork = subnetwork[0].squeeze(0)
+
         encodings = self._encoder(input_seqs)
-        embeddings = self._embedder(encodings, subnetwork)
-        y_pred = self._classifier(embeddings)
-        return y_pred
+        # embeddings = self._embedder(encodings, subnetwork)
+        # y_pred = self._classifier(embeddings)
+        return encodings
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):
         Y = Y.type_as(Y_hat)

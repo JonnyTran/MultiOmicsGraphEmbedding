@@ -16,7 +16,7 @@ class Metrics():
         self.recall_val = Recall(average=True, is_multilabel=True)
         self.top_k_val = TopKMulticlassAccuracy(k=107)
 
-    def update(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
+    def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
         if training:
             self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
@@ -26,7 +26,7 @@ class Metrics():
             self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.top_k_val.update((y_pred, y_true))
 
-    def compute(self, training: bool):
+    def compute_metrics(self, training: bool):
         if training:
             logs = {
                 "precision": self.precision.compute(),
@@ -39,7 +39,7 @@ class Metrics():
                 "val_top_k": self.top_k_val.compute()}
         return logs
 
-    def reset(self, training: bool):
+    def reset_metrics(self, training: bool):
         if training:
             self.precision.reset()
             self.recall.reset()
