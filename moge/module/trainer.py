@@ -1,7 +1,6 @@
 import torch
 
 import pytorch_lightning as pl
-from .ddp import LightningDistributedDataParallel
 from .metrics import Metrics
 
 
@@ -17,14 +16,15 @@ class LightningModel(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
-        print("batch_nb", batch_nb)
+
+        # print("batch_nb", batch_nb)
         # print({k: v.size() if not isinstance(v, list) else (len(v), len(v[0])) for k, v in X.items()})
 
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
-        self.update_metrics(Y_hat, y, training=True)
-        progress_bar = self.metrics.compute_metrics(training=True)
+        self.metrics.update(Y_hat, y, training=True)
+        progress_bar = self.metrics.compute(training=True)
 
         return {'loss': loss, 'progress_bar': progress_bar, }
 
@@ -32,42 +32,42 @@ class LightningModel(pl.LightningModule):
         X, y, weights = batch
         Y_hat = self._model.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
-        self.metrics.update_metrics(Y_hat, y, training=False)
+        self.metrics.update(Y_hat, y, training=False)
         return {"val_loss": loss}
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.metrics.compute_metrics(training=True)
+        logs = self.metrics.compute(training=True)
         logs.update({"loss": avg_loss})
-        self.metrics.reset_metrics(training=True)
+        self.metrics.reset(training=True)
 
         return {"loss": avg_loss, "progress_bar": logs, "log": logs, }
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.metrics.compute_metrics(training=False)
+        logs = self.metrics.compute(training=False)
         logs.update({"val_loss": avg_loss})
 
         results = {"progress_bar": logs,
                    "log": logs}
-        self.metrics.reset_metrics(training=False)
+        self.metrics.reset(training=False)
         print(logs)  # print val results every epoch
         return results
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
+        optimizer = torch.optim.Adam(self._model.parameters(),
                                      lr=self._model.hparams.lr,
                                      weight_decay=self._model.hparams.nb_weight_decay
                                      )
         return optimizer
 
-    def configure_ddp(self, model, device_ids):
-        model = LightningDistributedDataParallel(
-            model,
-            device_ids=device_ids,
-            find_unused_parameters=True
-        )
-        return model
+    # def configure_ddp(self, model, device_ids):
+    #     model = LightningDistributedDataParallel(
+    #         model,
+    #         device_ids=device_ids,
+    #         find_unused_parameters=True
+    #     )
+    #     return model
 
     # def prepare_data(self) -> None:
     #     with open(self.data_path, 'rb') as file:
