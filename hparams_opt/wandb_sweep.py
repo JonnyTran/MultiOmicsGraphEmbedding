@@ -17,9 +17,11 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator.subgraph_generator import SubgraphGenerator
-from moge.module.trainer import LightningModel, EncoderEmbedderClassifier
+from moge.module.trainer import LightningModel
+from moge.module.classifier import EncoderEmbedderClassifier
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
+
 
 def train(hparams):
     with open(DATASET, 'rb') as file:
