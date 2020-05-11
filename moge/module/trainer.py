@@ -8,7 +8,7 @@ class LightningModel(pl.LightningModule):
         super(LightningModel, self).__init__()
 
         self._model = model
-        self.metrics = Metrics()
+        self.metrics = Metrics(loss_type=self._model.hparams.loss_type)
 
     def forward(self, X):
         return self._model(X)

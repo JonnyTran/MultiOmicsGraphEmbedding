@@ -8,7 +8,8 @@ from ignite.metrics import Precision, Recall
 
 
 class Metrics():
-    def __init__(self):
+    def __init__(self, loss_type):
+        self.loss_type = loss_type
         self.precision = Precision(average=True, is_multilabel=True)
         self.recall = Recall(average=True, is_multilabel=True)
         self.top_k_train = TopKMulticlassAccuracy(k=107)
@@ -17,6 +18,9 @@ class Metrics():
         self.top_k_val = TopKMulticlassAccuracy(k=107)
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
+        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
+            y_pred = torch.sigmoid(y_pred)
+
         if training:
             self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
             self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))

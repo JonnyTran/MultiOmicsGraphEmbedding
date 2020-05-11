@@ -138,8 +138,11 @@ class Dense(pl.LightningModule):
             nn.ReLU(),
             nn.Dropout(p=hparams.nb_cls_dropout),
             nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes),
-            nn.Sigmoid() if "LOGITS" not in hparams.loss_type else None,
         )
+        if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
+            print("INFO: Output of `_classifier` is logits")
+        else:
+            self.fc_classifier.add_module("sigmoid", nn.Sigmoid())
 
     @staticmethod
     def add_model_specific_args(parent_parser):
