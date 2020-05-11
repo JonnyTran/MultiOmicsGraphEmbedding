@@ -37,7 +37,7 @@ class LightningModel(pl.LightningModule):
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
         logs = self.metrics.compute_metrics(training=True)
-        logs.update_metrics({"loss": avg_loss})
+        logs.update({"loss": avg_loss})
         self.metrics.reset_metrics(training=True)
 
         return {"loss": avg_loss, "progress_bar": logs, "log": logs, }
@@ -45,7 +45,7 @@ class LightningModel(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
         logs = self.metrics.compute_metrics(training=False)
-        logs.update_metrics({"val_loss": avg_loss})
+        logs.update({"val_loss": avg_loss})
 
         results = {"progress_bar": logs,
                    "log": logs}
