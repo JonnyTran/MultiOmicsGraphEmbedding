@@ -8,7 +8,7 @@ from transformers import AlbertConfig
 
 from moge.module.embedder import GAT
 from moge.module.encoder import ConvLSTM, AlbertEncoder
-
+from .losses import ClassificationLoss
 
 class EncoderEmbedderClassifier(pl.LightningModule):
     def __init__(self, hparams):
@@ -46,7 +46,7 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
         self.hparams = hparams
 
-        self.criterion = torch.nn.BCEWithLogitsLoss()
+        self.criterion = ClassificationLoss(n_classes=hparams.n_classes, loss_type=hparams.loss_type)
 
     def forward(self, X):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
@@ -56,9 +56,9 @@ class EncoderEmbedderClassifier(pl.LightningModule):
             subnetwork = subnetwork[0].squeeze(0)
 
         encodings = self._encoder(input_seqs)
-        # embeddings = self._embedder(encodings, subnetwork)
-        # y_pred = self._classifier(embeddings)
-        return encodings
+        embeddings = self._embedder(encodings, subnetwork)
+        y_pred = self._classifier(embeddings)
+        return y_pred
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):
         Y = Y.type_as(Y_hat)
@@ -66,7 +66,8 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
 
-        return self.criterion(Y_hat, Y)
+        return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
+                              hierar_penalty=None, hierar_paras=None, hierar_relations=None)
 
     def get_encodings(self, X, batch_size=None, cuda=True):
         if not isinstance(X["input_seqs"], torch.Tensor):
@@ -121,6 +122,9 @@ class EncoderEmbedderClassifier(pl.LightningModule):
             embeddings = embeddings.cpu()
 
         y_pred = self._classifier(embeddings)
+        if "LOGITS" in self.hparams.loss_type:
+            y_pred = torch.sigmoid(y_pred)
+
         return y_pred.detach().cpu().numpy()
 
 
@@ -134,7 +138,7 @@ class Dense(pl.LightningModule):
             nn.ReLU(),
             nn.Dropout(p=hparams.nb_cls_dropout),
             nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes),
-            # nn.Sigmoid()
+            nn.Sigmoid() if "LOGITS" not in hparams.loss_type else None,
         )
 
     @staticmethod
