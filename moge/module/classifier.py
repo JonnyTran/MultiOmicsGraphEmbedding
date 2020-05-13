@@ -44,9 +44,8 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         else:
             raise Exception("hparams.classifier must be one of {'Dense'}")
 
-        self.hparams = hparams
-
         self.criterion = ClassificationLoss(n_classes=hparams.n_classes, loss_type=hparams.loss_type)
+        self.hparams = hparams
 
     def forward(self, X):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
@@ -69,15 +68,24 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
                               hierar_penalty=None, hierar_paras=None, hierar_relations=None)
 
-    def get_encodings(self, X, batch_size=None, cuda=True):
-        if not isinstance(X["input_seqs"], torch.Tensor):
-            X = {k: torch.tensor(v).cuda() for k, v in X.items()}
+    def get_embeddings(self, X, encodings=None, batch_size=None, cuda=True, half=False):
+        """
+        Get embeddings for a set of nodes in `X`.
+        :param X: a dict with keys {"input_seqs", "subnetwork"}
+        :param cuda (bool): whether to run computations in GPUs
+        :return (np.array): a numpy array of size (node size, embedding dim)
+        """
+        X = preprocess_input(X, cuda=cuda, half=half)
 
-        if cuda:
-            X = {k: v.cuda() for k, v in X.items()}
-        else:
-            self._encoder.cpu()
-            X = {k: v.cpu() for k, v in X.items()}
+        if encodings is None:
+            encodings = self._encoder(X["input_seqs"])
+
+        embeddings = self._embedder(encodings, X["subnetwork"])
+
+        return embeddings.detach().cpu().numpy()
+
+    def get_encodings(self, X, batch_size=None, cuda=True, half=False):
+        X = preprocess_input(X, cuda=cuda, half=half)
 
         if batch_size is not None:
             input_chunks = X["input_seqs"].split(split_size=batch_size, dim=0)
@@ -89,28 +97,6 @@ class EncoderEmbedderClassifier(pl.LightningModule):
             encodings = self._encoder(X["input_seqs"])
 
         return encodings.detach().cpu().numpy()
-
-    def get_embeddings(self, X, encodings=None, batch_size=None, cuda=True):
-        """
-        Get embeddings for a set of nodes in `X`.
-        :param X: a dict with keys {"input_seqs", "subnetwork"}
-        :param cuda (bool): whether to run computations in
-        :return (np.array): a numpy array of size (node size, embedding dim)
-        """
-        if not isinstance(X["input_seqs"], torch.Tensor):
-            X = {k: torch.tensor(v).cuda() for k, v in X.items()}
-
-        if cuda:
-            X = {k: v.cuda() for k, v in X.items()}
-        else:
-            X = {k: v.cpu() for k, v in X.items()}
-
-        if encodings is None:
-            encodings = self._encoder(X["input_seqs"])
-
-        embeddings = self._embedder(encodings, X["subnetwork"])
-
-        return embeddings.detach().cpu().numpy()
 
     def predict(self, embeddings, cuda=True):
         if not isinstance(embeddings, torch.Tensor):
@@ -154,3 +140,20 @@ class Dense(pl.LightningModule):
 
     def forward(self, embeddings):
         return self.fc_classifier(embeddings)
+
+
+def preprocess_input(X, cuda=True, half=False):
+    if not isinstance(X["subnetwork"], torch.Tensor):
+        X = {k: torch.tensor(v).cuda() for k, v in X.items()}
+
+    if cuda:
+        X = {k: v.cuda() for k, v in X.items()}
+    else:
+        X = {k: v.cpu() for k, v in X.items()}
+
+    if half:
+        X = {k: v.type(torch.LongTensor) for k, v in X.items()}
+
+    print({k: v.dtype for k, v in X.items()})
+
+    return X

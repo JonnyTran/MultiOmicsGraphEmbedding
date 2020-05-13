@@ -21,7 +21,7 @@ parameters:
     min: 64
     max: 320
   nb_conv1_kernel_size:
-    min: 5
+    min: 3
     max: 20
   nb_conv1_dropout:
     min: 0.0
