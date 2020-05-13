@@ -13,14 +13,14 @@ from .subgraph_generator import SubgraphGenerator
 
 class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
     def __init__(self, network: MultiplexAttributedNetwork, variables: list = [], targets: list = None,
-                 batch_size=500, sampling='neighborhood', compression="log", n_steps=100,
+                 batch_size=500, traversal='neighborhood', sampling="log", n_steps=100,
                  maxlen=1400, padding='post', truncating='post', agg_mode=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
 
         super(MultiplexGenerator, self).__init__(network=network,
                                                  variables=variables, targets=targets,
                                                  batch_size=batch_size,
-                                                 sampling=sampling, compression=compression, n_steps=n_steps,
+                                                 traversal=traversal, sampling=sampling, n_steps=n_steps,
                                                  directed=None, maxlen=maxlen,
                                                  padding=padding, truncating=truncating,
                                                  agg_mode=agg_mode, tokenizer=tokenizer,

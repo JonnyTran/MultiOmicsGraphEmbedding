@@ -144,7 +144,7 @@ class Dense(pl.LightningModule):
 
 def preprocess_input(X, cuda=True, half=False):
     if not isinstance(X["subnetwork"], torch.Tensor):
-        X = {k: torch.tensor(v).cuda() for k, v in X.items()}
+        X = {k: torch.tensor(v) for k, v in X.items()}
 
     if cuda:
         X = {k: v.cuda() for k, v in X.items()}
@@ -152,8 +152,6 @@ def preprocess_input(X, cuda=True, half=False):
         X = {k: v.cpu() for k, v in X.items()}
 
     if half:
-        X = {k: v.type(torch.LongTensor) for k, v in X.items()}
-
-    print({k: v.dtype for k, v in X.items()})
+        X = {k: v.half() for k, v in X.items()}
 
     return X
