@@ -1,3 +1,3 @@
-from .attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
+from .attributed import AttributedNetwork
 from .heterogeneous import HeterogeneousNetwork
 from .multiplex import MultiplexAttributedNetwork
