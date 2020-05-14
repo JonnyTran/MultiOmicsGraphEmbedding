@@ -1,12 +1,12 @@
 import numpy as np
-import pandas as pd
 import openomics
+import pandas as pd
 from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 
-from ..generator.sequences import SEQUENCE_COL
-from ..network.base import Network
-from ..network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
+from moge.generator.sequences import SEQUENCE_COL
+from moge.network.base import Network
+from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 
 MODALITY_COL = "omic"
 EPSILON = 1e-16
