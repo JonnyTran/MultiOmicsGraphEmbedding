@@ -9,9 +9,7 @@ from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 
 MODALITY_COL = "omic"
-
 EPSILON = 1e-16
-
 
 def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
     if dropna:
