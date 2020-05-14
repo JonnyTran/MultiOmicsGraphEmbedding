@@ -6,12 +6,11 @@ import pandas as pd
 import scipy.sparse as sps
 from openomics.utils.df import concat_uniques
 
-import moge
-from moge.network.attributed import MODALITY_COL, filter_y_multilabel
+from moge.network.attributed import MODALITY_COL, filter_y_multilabel, AttributedNetwork
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
 
-class MultiplexAttributedNetwork(moge.network.attributed.AttributedNetwork, TrainTestSplit):
+class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
     def __init__(self, multiomics, modalities: list, layers: {(str, str): nx.Graph}, annotations=True, ) -> None:
         """
 
