@@ -4,9 +4,9 @@ import pandas as pd
 from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 
+import moge
 from moge.generator.sequences import SEQUENCE_COL
 from moge.network.base import Network
-from moge.network.multiplex import MultiplexAttributedNetwork
 from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 
 EPSILON = 1e-16
@@ -49,7 +49,7 @@ class AttributedNetwork(Network):
         print("Annotation columns:", self.annotations.columns.tolist())
 
     def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
-        if isinstance(self, MultiplexAttributedNetwork):
+        if isinstance(self, moge.network.multiplex.MultiplexAttributedNetwork):
             labels = self.all_annotations[label]
         else:
             labels = self.annotations[label]

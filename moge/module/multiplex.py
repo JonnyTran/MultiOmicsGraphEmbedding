@@ -4,7 +4,7 @@ from torch import nn
 from transformers import AlbertConfig
 
 from moge.module.classifier import Dense
-from moge.module.embedder import GAT, GCN
+from moge.module.embedder import GAT, GCN, GraphSAGE
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
 from moge.module.monoplex import preprocess_input
@@ -50,6 +50,9 @@ class MultiplexConcatEmbedder(nn.Module):
             if embedder == "GCN":
                 self.__setattr__("_embedder_" + subnetwork_type, GCN(hparams))
                 self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
+            if embedder == "GraphSAGE":
+                self.__setattr__("_embedder_" + subnetwork_type, GraphSAGE(hparams))
+                self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
             else:
                 raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN']")
 
@@ -71,7 +74,7 @@ class MultiplexConcatEmbedder(nn.Module):
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
         embeddings = torch.cat(embeddings, 1)
-
+        # print("embeddings", embeddings.shape)
         y_pred = self._classifier(embeddings)
         return y_pred
 
