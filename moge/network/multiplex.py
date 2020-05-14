@@ -7,7 +7,7 @@ from openomics.utils.df import concat_uniques
 
 import moge
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
-from moge.network import MODALITY_COL, filter_y_multilabel
+from .attributed import MODALITY_COL, filter_y_multilabel
 
 
 class MultiplexAttributedNetwork(moge.network.attributed.AttributedNetwork, TrainTestSplit):
