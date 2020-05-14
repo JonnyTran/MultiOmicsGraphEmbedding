@@ -5,11 +5,12 @@ import numpy as np
 import pandas as pd
 from openomics.utils.df import concat_uniques
 
-from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
+import moge
+from moge.network.attributed import MODALITY_COL, filter_y_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
 
-class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
+class MultiplexAttributedNetwork(moge.network.attributed.AttributedNetwork, TrainTestSplit):
     def __init__(self, multiomics, modalities: list, layers: {(str, str): nx.Graph}, annotations=True, ) -> None:
         """
 

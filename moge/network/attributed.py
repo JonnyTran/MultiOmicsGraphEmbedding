@@ -12,39 +12,6 @@ from moge.network.semantic_similarity import compute_expression_correlation_dist
 
 from moge.generator.sequences import SEQUENCE_COL
 
-def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
-    if dropna:
-        nodes_index = annotations[[SEQUENCE_COL] + [y_label]].dropna().index
-    else:
-        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
-
-    if annotations.loc[nodes_index, y_label].dtypes == np.object and annotations.loc[nodes_index, y_label].str.contains(
-            delimiter, regex=True).any():
-        annotations_list = annotations.loc[nodes_index, y_label].str.split(delimiter)
-    else:
-        annotations_list = annotations.loc[nodes_index, y_label]
-
-    labels_filter = get_label_min_count_filter(annotations_list, min_count)
-    print("label {} filtered: {} with min_count={}".format(y_label, len(labels_filter), min_count))
-
-    y_labels = annotations_list.map(
-        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
-
-    return y_labels
-
-
-def get_label_min_count_filter(annotation, min_count):
-    label_counts = {}
-
-    for items in annotation:
-        if not isinstance(items, list): continue
-        for item in items:
-            label_counts[item] = label_counts.setdefault(item, 0) + 1
-    label_counts = pd.Series(label_counts)
-    labels_filter = label_counts[label_counts < min_count].index
-    return labels_filter
-
-
 class AttributedNetwork(Network):
     def __init__(self, multiomics: openomics.MultiOmics, annotations=True, **kwargs) -> None:
         """
@@ -231,3 +198,35 @@ network if the similarity measures passes the threshold
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
         return annotation_affinities_df
 
+
+def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
+    if dropna:
+        nodes_index = annotations[[SEQUENCE_COL] + [y_label]].dropna().index
+    else:
+        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
+
+    if annotations.loc[nodes_index, y_label].dtypes == np.object and annotations.loc[nodes_index, y_label].str.contains(
+            delimiter, regex=True).any():
+        annotations_list = annotations.loc[nodes_index, y_label].str.split(delimiter)
+    else:
+        annotations_list = annotations.loc[nodes_index, y_label]
+
+    labels_filter = get_label_min_count_filter(annotations_list, min_count)
+    print("label {} filtered: {} with min_count={}".format(y_label, len(labels_filter), min_count))
+
+    y_labels = annotations_list.map(
+        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
+
+    return y_labels
+
+
+def get_label_min_count_filter(annotation, min_count):
+    label_counts = {}
+
+    for items in annotation:
+        if not isinstance(items, list): continue
+        for item in items:
+            label_counts[item] = label_counts.setdefault(item, 0) + 1
+    label_counts = pd.Series(label_counts)
+    labels_filter = label_counts[label_counts < min_count].index
+    return labels_filter
