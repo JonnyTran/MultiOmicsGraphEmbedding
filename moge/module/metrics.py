@@ -1,10 +1,8 @@
 import torch
-
-from ignite.metrics.metric import Metric
 from ignite.exceptions import NotComputableError
-from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
-
 from ignite.metrics import Precision, Recall
+from ignite.metrics.metric import Metric
+from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 
 
 class Metrics():
@@ -19,7 +17,7 @@ class Metrics():
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
-            y_pred = torch.sigmoid(y_pred)
+            y_pred = torch.softmax(y_pred) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
 
         if training:
             self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))

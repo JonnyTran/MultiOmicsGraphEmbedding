@@ -112,13 +112,13 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
         y_pred = self._classifier(embeddings)
         if "LOGITS" in self.hparams.loss_type:
-            y_pred = torch.sigmoid(y_pred)
+            y_pred = torch.softmax(y_pred, 1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
 
         return y_pred.detach().cpu().numpy()
 
 
 def preprocess_input(X, cuda=True, half=False):
-    if not isinstance(X["subnetwork"], torch.Tensor):
+    if any([not isinstance(X[k], torch.Tensor) for k in X]):
         X = {k: torch.tensor(v) for k, v in X.items()}
 
     if cuda:

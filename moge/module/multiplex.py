@@ -4,9 +4,10 @@ from torch import nn
 from transformers import AlbertConfig
 
 from moge.module.classifier import Dense
-from moge.module.embedder import GAT
+from moge.module.embedder import GAT, GCN
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
+from moge.module.monoplex import preprocess_input
 
 
 class MultiplexConcatEmbedder(nn.Module):
@@ -46,8 +47,11 @@ class MultiplexConcatEmbedder(nn.Module):
             if embedder == "GAT":
                 self.__setattr__("_embedder_" + subnetwork_type, GAT(hparams))
                 self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
+            if embedder == "GCN":
+                self.__setattr__("_embedder_" + subnetwork_type, GCN(hparams))
+                self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
             else:
-                raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT']")
+                raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN']")
 
         if hparams.classifier == "Dense":
             hparams.embedding_dim = hparams.embedding_dim * len(hparams.embedder)
@@ -83,3 +87,36 @@ class MultiplexConcatEmbedder(nn.Module):
 
         return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
                               hierar_penalty=None, hierar_paras=None, hierar_relations=None)
+
+    def get_embeddings(self, X, batch_size=None, cuda=True, half=False):
+        """
+        Get embeddings for a set of nodes in `X`.
+        :param X: a dict with keys {"input_seqs", "subnetwork"}
+        :param cuda (bool): whether to run computations in GPUs
+        :return (np.array): a numpy array of size (node size, embedding dim)
+        """
+        X = preprocess_input(X, cuda=cuda, half=half)
+
+        encodings = self._encoder["Protein_seqs"](X["Protein_seqs"])
+
+        embeddings = []
+        for subnetwork_type, _ in self.hparams.embedder.items():
+            embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
+        embeddings = torch.cat(embeddings, 1)
+
+        return embeddings.detach().cpu().numpy()
+
+    def predict(self, embeddings, cuda=True):
+        if not isinstance(embeddings, torch.Tensor):
+            embeddings = torch.tensor(embeddings)
+
+        if cuda:
+            embeddings = embeddings.cuda()
+        else:
+            embeddings = embeddings.cpu()
+
+        y_pred = self._classifier(embeddings)
+        if "LOGITS" in self.hparams.loss_type:
+            y_pred = torch.softmax(y_pred, 1) if "SOFTMAX" in self.hparams.loss_type else torch.sigmoid(y_pred)
+
+        return y_pred.detach().cpu().numpy()

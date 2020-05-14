@@ -1,8 +1,4 @@
 import torch
-
-import pytorch_lightning as pl
-
-import torch
 import torch.nn as nn
 
 
@@ -39,6 +35,7 @@ class FocalLoss(nn.Module):
                    torch.pow((1 - logits), self.gamma) * \
                    (logits + self.epsilon).log()
             loss = loss.sum(1)
+
         elif self.activation_type == "SIGMOID":
             multi_hot_key = target
             logits = torch.sigmoid(logits)
@@ -69,6 +66,8 @@ class ClassificationLoss(torch.nn.Module):
             self.criterion = FocalLoss(n_classes, "SIGMOID")
         elif loss_type == "BCE_WITH_LOGITS":
             self.criterion = torch.nn.BCEWithLogitsLoss()
+        elif loss_type == "MULTI_LABEL_MARGIN":
+            self.criterion = torch.nn.MultiLabelMarginLoss()
         else:
             raise TypeError(
                 "Unsupported loss type: %s." % (
@@ -87,7 +86,7 @@ class ClassificationLoss(torch.nn.Module):
         else:
             if multiclass:
                 assert self.loss_type in ["BCE_WITH_LOGITS",
-                                          "SIGMOID_FOCAL_CROSS_ENTROPY"]
+                                          "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
             else:
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:

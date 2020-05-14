@@ -6,6 +6,7 @@ from sklearn import preprocessing
 
 from moge.generator.sequences import SEQUENCE_COL
 from moge.network.base import Network
+from moge.network.multiplex import MultiplexAttributedNetwork
 from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
 
 EPSILON = 1e-16
@@ -48,7 +49,11 @@ class AttributedNetwork(Network):
         print("Annotation columns:", self.annotations.columns.tolist())
 
     def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
-        labels = self.annotations[label]
+        if isinstance(self, MultiplexAttributedNetwork):
+            labels = self.all_annotations[label]
+        else:
+            labels = self.annotations[label]
+
         if labels.str.contains("\||;", regex=True).any():
             labels = labels.str.split("\||;")
 

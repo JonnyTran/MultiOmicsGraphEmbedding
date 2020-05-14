@@ -1,14 +1,10 @@
 from argparse import ArgumentParser
 
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-from pytorch_lightning.callbacks import EarlyStopping
 from torch.autograd import Variable
 from torch.nn import functional as F
-from torch_geometric.nn import GATConv
-
-from transformers import AlbertConfig, AlbertForSequenceClassification
+from transformers import AlbertConfig
 
 from .albert import AlbertModel
 
@@ -120,6 +116,7 @@ class ConvLSTM(nn.Module):
         # Conv_2
         if self.hparams.nb_conv2_kernel_size > 1:
             X = F.relu(self.conv2(X))
+            X = self.conv1_dropout(X)
             if self.hparams.nb_conv2_batchnorm:
                 X = self.conv2_batchnorm(X)
             X_lengths = (X_lengths - self.hparams.nb_conv2_kernel_size + 1)
