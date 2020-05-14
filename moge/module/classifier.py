@@ -1,14 +1,14 @@
 from argparse import ArgumentParser
 
+import pytorch_lightning as pl
 import torch
 from torch import nn
-
-import pytorch_lightning as pl
 from transformers import AlbertConfig
 
 from moge.module.embedder import GAT
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from .losses import ClassificationLoss
+
 
 class EncoderEmbedderClassifier(pl.LightningModule):
     def __init__(self, hparams):
@@ -34,6 +34,8 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         else:
             raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
 
+        if hparams.embedder == "GAT":
+            self._embedder = GAT(hparams)
         if hparams.embedder == "GAT":
             self._embedder = GAT(hparams)
         else:
