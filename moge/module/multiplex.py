@@ -1,9 +1,6 @@
 import numpy as np
 import torch
 from torch import nn
-
-import pytorch_lightning as pl
-
 from transformers import AlbertConfig
 
 from moge.module.classifier import Dense
@@ -25,7 +22,6 @@ class MultiplexConcatEmbedder(nn.Module):
         for seq_type, encoder in hparams.encoder.items():
             if encoder == "ConvLSTM":
                 self.__setattr__("_encoder_" + seq_type, ConvLSTM(hparams))
-                # self._encoder[seq_type] = ConvLSTM(hparams)
                 self._encoder[seq_type] = self.__getattr__("_encoder_" + seq_type)
             elif encoder == "Albert":
                 config = AlbertConfig(
@@ -48,7 +44,6 @@ class MultiplexConcatEmbedder(nn.Module):
         self._embedder = {}
         for subnetwork_type, embedder in hparams.embedder.items():
             if embedder == "GAT":
-                # self._embedder[subnetwork_type] = GAT(hparams)
                 self.__setattr__("_embedder_" + subnetwork_type, GAT(hparams))
                 self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
             else:
@@ -72,7 +67,6 @@ class MultiplexConcatEmbedder(nn.Module):
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
         embeddings = torch.cat(embeddings, 1)
-        print("embeddings", embeddings.shape)
 
         y_pred = self._classifier(embeddings)
         return y_pred
