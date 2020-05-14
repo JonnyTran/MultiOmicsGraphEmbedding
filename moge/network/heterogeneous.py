@@ -105,8 +105,8 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
                          d['type'] in edge_types]
             adj = nx.adjacency_matrix(nx.Graph(incoming_graph_data=edge_list), nodelist=node_list)
 
-        if method == "GAT":
-            adj = adj + sps.csr_matrix(np.eye(adj.shape[0]))  # Add self-loops
+        # if method == "GAT":
+        #     adj = adj + sps.csr_matrix(np.eye(adj.shape[0]))  # Add self-loops
 
         if output == "csr":
             return adj.astype(float)

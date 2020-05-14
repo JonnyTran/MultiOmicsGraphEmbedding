@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+import numpy as np
 
 import pytorch_lightning as pl
 import torch
@@ -63,7 +64,12 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):
         Y = Y.type_as(Y_hat)
-        idx = torch.nonzero(weights).view(-1)
+
+        if isinstance(weights, torch.Tensor):
+            idx = torch.nonzero(weights).view(-1)
+        else:
+            idx = torch.tensor(np.nonzero(weights)[0])
+
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
 

@@ -137,7 +137,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
             raise e
 
         # Get a vector of nonnull indicators
-        idx_weights = self.network.all_annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1)
+        idx_weights = self.network.all_annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1).values * 1
 
         assert len(sampled_nodes) == y.shape[0]
         return X, y, idx_weights
