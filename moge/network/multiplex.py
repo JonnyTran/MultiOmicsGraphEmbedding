@@ -6,11 +6,12 @@ import pandas as pd
 import scipy.sparse as sps
 from openomics.utils.df import concat_uniques
 
-from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
+import moge
+from moge.network.attributed import MODALITY_COL, filter_y_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
 
-class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
+class MultiplexAttributedNetwork(moge.network.attributed.AttributedNetwork, TrainTestSplit):
     def __init__(self, multiomics, modalities: list, layers: {(str, str): nx.Graph}, annotations=True, ) -> None:
         """
 
@@ -59,7 +60,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         print("All annotation columns (union):",
               {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
 
-    def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0):
+    def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0, verbose=False):
         self.delimiter = delimiter
         if not hasattr(self, "all_annotations"):
             annotations_list = []
@@ -73,10 +74,10 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             self.all_annotations = self.all_annotations.groupby(self.all_annotations.index).agg(
                 {k: concat_uniques for k in self.all_annotations.columns})
 
-        print("Annotation columns:", self.all_annotations.columns.tolist())
+        print("Annotation columns:", self.all_annotations.columns.tolist()) if verbose else None
         self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
                                                                  filter_label,
-                                                                 min_count)
+                                                                 min_count, verbose=verbose)
 
     def add_edges(self, edgelist, layer: (str, str, str), database, **kwargs):
         source = layer[0]
@@ -94,7 +95,6 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         if node_list is None:
             node_list = self.node_list
 
-        # edge_list = [(u, v) for u, v, d in self.networks[edge_types].edges(nbunch=node_list, data=True)]
         if isinstance(edge_types, tuple):
             assert edge_types in self.networks
             adj = self.get_layer_adjacency_matrix(edge_types, node_list, method=method, output=output)
@@ -139,6 +139,8 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         elif set(node_list) > set(self.node_list):
             raise Exception(f"A node in node_l is not in self.node_list : {set(node_list) - set(self.node_list)}")
 
+        if output == "coo":
+            return np.vstack((adjacency_matrix.row, adjacency_matrix.col)).astype("long")
 
         return adjacency_matrix
 

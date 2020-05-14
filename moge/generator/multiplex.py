@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from moge.network.multiplex import MultiplexAttributedNetwork
+from moge.network import MultiplexAttributedNetwork
 from .sequences import MultiSequenceTokenizer
 from .subgraph_generator import SubgraphGenerator
 
@@ -65,31 +65,35 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
               np.count_nonzero(self.node_sampling_freq)) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)
 
-    def bfs_traversal(self, batch_size):
-        node_list = []
+    def bfs_traversal(self, batch_size, seed_node=None):
+        sampled_nodes = []
 
-        while len(node_list) < batch_size:
-            seed_node = self.sample_seed_node(1)
-            neighbors = []
+        while len(sampled_nodes) < batch_size:
+            if seed_node is None or seed_node not in self.node_list:
+                start_node = self.sample_seed_node(1)[0]
+            else:
+                start_node = seed_node
+
+            successor_nodes = []
             for modality, network_layer in self.network.networks.items():
-                if seed_node[0] not in network_layer.nodes:
+                if start_node not in network_layer.nodes:
                     continue
                 layer_neighbors = [node for source, successors in
                                    islice(nx.traversal.bfs_successors(network_layer,
-                                                                      source=seed_node[0]),
+                                                                      source=start_node),
                                           batch_size) for node in successors]
 
                 if len(layer_neighbors) > batch_size / len(self.network.networks):
                     layer_neighbors = layer_neighbors[:int(batch_size // len(self.network.networks))]
-                neighbors.extend(layer_neighbors)
+                successor_nodes.extend(layer_neighbors)
 
-            node_list = node_list + list(seed_node) + neighbors
-            node_list = [node for node in node_list if node in self.node_list]
-            node_list = list(OrderedDict.fromkeys(node_list))
+            sampled_nodes.extend([start_node] + successor_nodes)
+            # sampled_nodes = [node for node in sampled_nodes if node in self.node_list]
+            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
-        if len(node_list) > batch_size:
-            node_list = node_list[:batch_size]
-        return node_list
+        if len(sampled_nodes) > batch_size:
+            sampled_nodes = sampled_nodes[:batch_size]
+        return sampled_nodes
 
     def __getitem__(self, item=None):
         sampled_nodes = self.traverse_network(batch_size=self.batch_size)
@@ -115,8 +119,9 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         for layer, network_layer in self.network.networks.items():
             layer_key = "-".join(layer)
-            X[layer_key] = self.network.get_adjacency_matrix(edge_types=layer, node_list=sampled_nodes, method="GAT",
-                                                             output="csr")
+            X[layer_key] = self.network.get_adjacency_matrix(edge_types=layer, node_list=sampled_nodes,
+                                                             method=self.method,
+                                                             output=self.adj_output)
 
         # Labels
         targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
