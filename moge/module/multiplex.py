@@ -24,7 +24,9 @@ class MultiplexConcatEmbedder(nn.Module):
         self._encoder = {}
         for seq_type, encoder in hparams.encoder.items():
             if encoder == "ConvLSTM":
-                self._encoder[seq_type] = ConvLSTM(hparams)
+                self.__setattr__("_encoder_" + seq_type, ConvLSTM(hparams))
+                # self._encoder[seq_type] = ConvLSTM(hparams)
+                self._encoder[seq_type] = self.__getattr__("_encoder_" + seq_type)
             elif encoder == "Albert":
                 config = AlbertConfig(
                     vocab_size=hparams.vocab_size,
@@ -46,7 +48,9 @@ class MultiplexConcatEmbedder(nn.Module):
         self._embedder = {}
         for subnetwork_type, embedder in hparams.embedder.items():
             if embedder == "GAT":
-                self._embedder[subnetwork_type] = GAT(hparams)
+                # self._embedder[subnetwork_type] = GAT(hparams)
+                self.__setattr__("_embedder_" + subnetwork_type, GAT(hparams))
+                self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
             else:
                 raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT']")
 
@@ -59,15 +63,12 @@ class MultiplexConcatEmbedder(nn.Module):
         self.criterion = ClassificationLoss(n_classes=hparams.n_classes, loss_type=hparams.loss_type)
 
     def forward(self, X):
-        print('X["Protein_seqs"]', X["Protein_seqs"].device,
-              '_encoder["Protein_seqs"]', self._encoder["Protein_seqs"].fc_encoder.weight.device)
         encodings = self._encoder["Protein_seqs"](X["Protein_seqs"])
 
         embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():
             if X[subnetwork_type].dim() > 2:
                 X[subnetwork_type] = X[subnetwork_type][0].squeeze(0)
-
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
         embeddings = torch.cat(embeddings, 1)

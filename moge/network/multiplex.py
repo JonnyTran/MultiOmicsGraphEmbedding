@@ -106,7 +106,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         else:
             raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.layers))
 
-        return adj.astype(float)
+        return adj
 
     def get_layer_adjacency_matrix(self, edge_type, node_list=None, method="GAT", output="csr"):
         if edge_type in self.layers_adj:
