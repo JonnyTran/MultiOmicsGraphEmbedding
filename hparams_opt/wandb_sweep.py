@@ -17,8 +17,8 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator.subgraph_generator import SubgraphGenerator
-from moge.module.trainer import LightningModel
-from moge.module.classifier import EncoderEmbedderClassifier
+from moge.module.trainer import ModelTrainer
+from moge.module.monoplex import EncoderEmbedderClassifier
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 
@@ -78,7 +78,7 @@ def train(hparams):
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
 
     eec = EncoderEmbedderClassifier(hparams)
-    model = LightningModel(eec)
+    model = ModelTrainer(eec)
 
     trainer = pl.Trainer(
         gpus=1,

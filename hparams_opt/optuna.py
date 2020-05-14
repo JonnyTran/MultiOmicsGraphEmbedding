@@ -17,7 +17,7 @@ from pytorch_lightning.logging import LightningLoggerBase
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.generator.subgraph_generator import SubgraphGenerator
-from moge.module.trainer import LightningModel
+from moge.module.trainer import ModelTrainer
 from moge.module.encoder import ConvLSTM
 
 import wandb
@@ -127,7 +127,7 @@ def objective(trial):
     )
 
     encoder = ConvLSTM(trial)
-    model = LightningModel(encoder)
+    model = ModelTrainer(encoder)
 
     trainer.fit(model, train_dataloader, test_dataloader)
     print("logger.metrics", logger.log_metrics)

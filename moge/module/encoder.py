@@ -13,7 +13,7 @@ from transformers import AlbertConfig, AlbertForSequenceClassification
 from .albert import AlbertModel
 
 
-class AlbertEncoder(pl.LightningModule):
+class AlbertEncoder(nn.Module):
     def __init__(self, config: AlbertConfig):
         super(AlbertEncoder, self).__init__()
 
@@ -49,7 +49,8 @@ class AlbertEncoder(pl.LightningModule):
 
         return parser
 
-class ConvLSTM(pl.LightningModule):
+
+class ConvLSTM(nn.Module):
     def __init__(self, hparams):
         super(ConvLSTM, self).__init__()
 

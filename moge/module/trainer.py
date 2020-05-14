@@ -3,9 +3,9 @@ import torch
 import pytorch_lightning as pl
 from .metrics import Metrics
 
-class LightningModel(pl.LightningModule):
+class ModelTrainer(pl.LightningModule):
     def __init__(self, model):
-        super(LightningModel, self).__init__()
+        super(ModelTrainer, self).__init__()
 
         self._model = model
         self.metrics = Metrics(loss_type=self._model.hparams.loss_type)
@@ -15,9 +15,6 @@ class LightningModel(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
-
-        # print("batch_nb", batch_nb)
-        # print({k: v.size() if not isinstance(v, list) else (len(v), len(v[0])) for k, v in X.items()})
 
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
