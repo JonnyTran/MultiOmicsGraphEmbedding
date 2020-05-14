@@ -6,8 +6,8 @@ import pandas as pd
 import scipy.sparse as sps
 from openomics.utils.df import concat_uniques
 
-from moge.network.train_test_split import TrainTestSplit, stratify_train_test
-from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
+from ..network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
+from ..network.train_test_split import TrainTestSplit, stratify_train_test
 
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
