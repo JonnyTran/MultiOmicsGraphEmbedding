@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 from torch import nn
 
 
-class Dense(pl.LightningModule):
+class Dense(nn.Module):
     def __init__(self, hparams) -> None:
         super(Dense, self).__init__()
 

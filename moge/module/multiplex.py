@@ -12,7 +12,7 @@ from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
 
 
-class MultiplexConcatEmbedder(pl.LightningModule):
+class MultiplexConcatEmbedder(nn.Module):
     def __init__(self, hparams):
         super(MultiplexConcatEmbedder, self).__init__()
 
@@ -60,7 +60,7 @@ class MultiplexConcatEmbedder(pl.LightningModule):
 
     def forward(self, X):
         print('X["Protein_seqs"]', X["Protein_seqs"].device,
-              '_encoder["Protein_seqs"]', self._encoder["Protein_seqs"].device)
+              '_encoder["Protein_seqs"]', self._encoder["Protein_seqs"].fc_encoder.weight.device)
         encodings = self._encoder["Protein_seqs"](X["Protein_seqs"])
 
         embeddings = []

@@ -6,7 +6,7 @@ from torch_geometric.nn import GATConv
 import pytorch_lightning as pl
 
 
-class GAT(pl.LightningModule):
+class GAT(nn.Module):
     def __init__(self, hparams) -> None:
         super(GAT, self).__init__()
 
@@ -30,9 +30,9 @@ class GAT(pl.LightningModule):
         return self.embedder(encodings, subnetwork)
 
 
-class MultiplexGAT(pl.LightningModule):
+class MultiplexGAT(nn.Module):
     def __init__(self, hparams) -> None:
-        super(GAT, self).__init__()
+        super(MultiplexGAT, self).__init__()
 
         self.embedder = GATConv(
             in_channels=hparams.encoding_dim,
