@@ -3,7 +3,6 @@ from argparse import Namespace
 import networkx as nx
 import numpy as np
 import pandas as pd
-import scipy.sparse as sps
 from openomics.utils.df import concat_uniques
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
@@ -116,32 +115,28 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         else:
             adjacency_matrix = nx.adjacency_matrix(self.networks[edge_type],
                                                    nodelist=self.node_list)
-            if method == "GAT":
-                adjacency_matrix = adjacency_matrix + sps.csr_matrix(
-                    np.eye(adjacency_matrix.shape[0]))  # Add self-loops
-
-            if output == "csr":
-                adjacency_matrix = adjacency_matrix.astype(float)
-            elif output == "coo":
-                adjacency_matrix = adjacency_matrix.tocoo(copy=False)
-            elif output == "dense":
-                adjacency_matrix = adjacency_matrix.todense()
-            else:
-                raise Exception("Output must be one of {csr, coo, dense}")
+            # if method == "GAT":
+            #     adjacency_matrix = adjacency_matrix + sps.csr_matrix(
+            #         np.eye(adjacency_matrix.shape[0]))  # Add self-loops
 
             self.layers_adj[edge_type] = adjacency_matrix
 
         if node_list is None or node_list == self.node_list:
-            return adjacency_matrix
+            pass
         elif set(node_list) <= set(self.node_list):
-            return self.slice_adj(adjacency_matrix, node_list, None)
+            adjacency_matrix = self.slice_adj(adjacency_matrix, node_list, None)
         elif set(node_list) > set(self.node_list):
             raise Exception(f"A node in node_l is not in self.node_list : {set(node_list) - set(self.node_list)}")
 
-        if output == "coo":
+        if output == "csr":
+            return adjacency_matrix.astype(float)
+        elif output == "coo":
+            adjacency_matrix = adjacency_matrix.tocoo(copy=True)
             return np.vstack((adjacency_matrix.row, adjacency_matrix.col)).astype("long")
-
-        return adjacency_matrix
+        elif output == "dense":
+            return adjacency_matrix.todense()
+        else:
+            raise Exception("Output must be one of {csr, coo, dense}")
 
     def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
                          dropna=False, seed=42, verbose=False):
