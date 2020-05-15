@@ -70,18 +70,18 @@ class GraphSAGE(nn.Module):
 
 
 class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
-    def __init__(self, in_channels, out_channels, layers, bias=True):
+    def __init__(self, in_channels, hidden_dim, layers, bias=True):
         super(MultiplexLayerAttention, self).__init__()
 
         self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.hidden_dim = hidden_dim
         self.layers = layers
 
-        self.weight = nn.Parameter(torch.Tensor(in_channels, out_channels))
-        self.att = nn.Parameter(torch.Tensor(1, out_channels))
+        self.weight = nn.Parameter(torch.Tensor(in_channels, hidden_dim))
+        self.att = nn.Parameter(torch.Tensor(1, hidden_dim))
 
         if bias:
-            self.bias = nn.Parameter(torch.Tensor(out_channels))
+            self.bias = nn.Parameter(torch.Tensor(hidden_dim))
         else:
             self.register_parameter('bias', None)
 
@@ -99,6 +99,7 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
         return z
 
     def compute_attention(self, embeddings):
+        assert len(embeddings) == len(self.layers)
         w = torch.zeros((len(self.layers), 1)).type_as(self.att)
 
         for i, layer in enumerate(self.layers):
@@ -116,18 +117,18 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
 
 
 class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
-    def __init__(self, in_channels, out_channels, layers, bias=True):
+    def __init__(self, in_channels, hidden_dim, layers, bias=True):
         super(MultiplexNodeAttention, self).__init__()
 
         self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.hidden_dim = hidden_dim
         self.layers = layers
 
-        self.weight = nn.Parameter(torch.Tensor(in_channels, out_channels))
-        self.att = nn.Parameter(torch.Tensor(1, out_channels))
+        self.weight = nn.Parameter(torch.Tensor(in_channels, hidden_dim))
+        self.att = nn.Parameter(torch.Tensor(1, hidden_dim))
 
         if bias:
-            self.bias = nn.Parameter(torch.Tensor(out_channels))
+            self.bias = nn.Parameter(torch.Tensor(hidden_dim))
         else:
             self.register_parameter('bias', None)
 
@@ -145,6 +146,7 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
         return z
 
     def compute_attention(self, embeddings):
+        assert len(embeddings) == len(self.layers)
         batch_size, in_channels = embeddings[0].size()
         w = torch.zeros((batch_size, len(self.layers), 1)).type_as(self.att)
 

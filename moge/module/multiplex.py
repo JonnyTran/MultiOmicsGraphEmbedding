@@ -58,11 +58,11 @@ class MultiplexConcatEmbedder(nn.Module):
 
         if hparams.multiplex_embedder == "MultiplexLayerAttention":
             self._multiplex_embedder = MultiplexLayerAttention(in_channels=hparams.embedding_dim,
-                                                               out_channels=hparams.embedding_dim,
+                                                               hidden_dim=hparams.embedding_dim,
                                                                layers=list(hparams.embedder.keys()))
         elif hparams.multiplex_embedder == "MultiplexNodeAttention":
             self._multiplex_embedder = MultiplexNodeAttention(in_channels=hparams.embedding_dim,
-                                                              out_channels=hparams.embedding_dim,
+                                                              hidden_dim=hparams.embedding_dim,
                                                               layers=list(hparams.embedder.keys()))
         else:
             print('"multiplex_embedder" not used. Concatenate multi-layer embeddings instead.')
@@ -105,7 +105,7 @@ class MultiplexConcatEmbedder(nn.Module):
         return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
                               hierar_penalty=None, hierar_paras=None, hierar_relations=None)
 
-    def get_embeddings(self, X, batch_size=None, cuda=True, half=False):
+    def get_embeddings(self, X, batch_size=None, return_multi_emb=False, cuda=True, half=False):
         """
         Get embeddings for a set of nodes in `X`.
         :param X: a dict with keys {"input_seqs", "subnetwork"}
@@ -116,14 +116,17 @@ class MultiplexConcatEmbedder(nn.Module):
 
         encodings = self._encoder["Protein_seqs"](X["Protein_seqs"])
 
-        embeddings = []
+        multi_embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():
-            embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
+            multi_embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
+
+        if return_multi_emb:
+            return multi_embeddings
 
         if "Multiplex" in self.hparams.multiplex_embedder:
-            embeddings = self._multiplex_embedder.forward(embeddings)
+            embeddings = self._multiplex_embedder.forward(multi_embeddings)
         else:
-            embeddings = torch.cat(embeddings, 1)
+            embeddings = torch.cat(multi_embeddings, 1)
 
         return embeddings.detach().cpu().numpy()
 
