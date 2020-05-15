@@ -70,14 +70,14 @@ class GraphSAGE(nn.Module):
 
 
 class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
-    def __init__(self, in_channels, hidden_dim, layers, bias=True):
+    def __init__(self, embedding_dim, hidden_dim, layers, bias=True):
         super(MultiplexLayerAttention, self).__init__()
 
-        self.in_channels = in_channels
+        self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.layers = layers
 
-        self.weight = nn.Parameter(torch.Tensor(in_channels, hidden_dim))
+        self.weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
         self.att = nn.Parameter(torch.Tensor(1, hidden_dim))
 
         if bias:
@@ -117,14 +117,14 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
 
 
 class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
-    def __init__(self, in_channels, hidden_dim, layers, bias=True):
+    def __init__(self, embedding_dim, hidden_dim, layers, bias=True):
         super(MultiplexNodeAttention, self).__init__()
 
-        self.in_channels = in_channels
+        self.embedding_dim = embedding_dim
         self.hidden_dim = hidden_dim
         self.layers = layers
 
-        self.weight = nn.Parameter(torch.Tensor(in_channels, hidden_dim))
+        self.weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
         self.att = nn.Parameter(torch.Tensor(1, hidden_dim))
 
         if bias:

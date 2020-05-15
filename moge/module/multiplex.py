@@ -7,7 +7,7 @@ from moge.module.classifier import Dense
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
-from moge.module.monoplex import preprocess_input
+from moge.module.utils import preprocess_input
 
 
 class MultiplexConcatEmbedder(nn.Module):
@@ -57,11 +57,11 @@ class MultiplexConcatEmbedder(nn.Module):
                 raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN']")
 
         if hparams.multiplex_embedder == "MultiplexLayerAttention":
-            self._multiplex_embedder = MultiplexLayerAttention(in_channels=hparams.embedding_dim,
+            self._multiplex_embedder = MultiplexLayerAttention(embedding_dim=hparams.embedding_dim,
                                                                hidden_dim=hparams.embedding_dim,
                                                                layers=list(hparams.embedder.keys()))
         elif hparams.multiplex_embedder == "MultiplexNodeAttention":
-            self._multiplex_embedder = MultiplexNodeAttention(in_channels=hparams.embedding_dim,
+            self._multiplex_embedder = MultiplexNodeAttention(embedding_dim=hparams.embedding_dim,
                                                               hidden_dim=hparams.embedding_dim,
                                                               layers=list(hparams.embedder.keys()))
         else:
