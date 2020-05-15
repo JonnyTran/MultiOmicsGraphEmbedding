@@ -92,7 +92,7 @@ class MultiplexConcatEmbedder(nn.Module):
             embeddings = self._multiplex_embedder.forward(embeddings)
         else:
             embeddings = torch.cat(embeddings, 1)
-        # print("embeddings", embeddings.shape)
+        print("embeddings", embeddings.shape)
         y_pred = self._classifier(embeddings)
         return y_pred
 

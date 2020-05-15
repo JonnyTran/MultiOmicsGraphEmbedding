@@ -58,6 +58,7 @@ class ClassificationLoss(torch.nn.Module):
         super(ClassificationLoss, self).__init__()
         self.label_size = n_classes
         self.loss_type = loss_type
+
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.criterion = torch.nn.CrossEntropyLoss(class_weight)
         elif loss_type == "SOFTMAX_FOCAL_CROSS_ENTROPY":
