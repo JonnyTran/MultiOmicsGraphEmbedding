@@ -42,7 +42,12 @@ parameters:
     values: [64, 128, 512, 1024]
 
   embedder:
-    values: ["GAT"]
+    Protein-Protein-physical:
+      values: ["GAT", "GCN", "GraphSAGE"]
+    Protein-Protein-genetic:
+      values: ["GAT", "GCN", "GraphSAGE"]
+    Protein-Protein-correlation:
+      values: ["GAT", "GCN", "GraphSAGE"]
   nb_attn_heads:
     values: [2, 4, 8, 16]
   nb_attn_dropout:
@@ -51,6 +56,8 @@ parameters:
 
   multiplex_embedder:
     values: ["MultiplexLayerEmbedding", "MultiplexNodeEmbedding", "Concat"]
+  multiplex_hidden_dim:
+    values: [64, 128, 256, 512, 768]
 
   classifier:
     values: ["Dense"]

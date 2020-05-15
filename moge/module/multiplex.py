@@ -7,7 +7,6 @@ from moge.module.classifier import Dense
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
-from moge.module.utils import preprocess_input
 
 
 class MultiplexConcatEmbedder(nn.Module):
@@ -19,6 +18,7 @@ class MultiplexConcatEmbedder(nn.Module):
         # assert isinstance(hparams.vocab_size, dict)
         self.hparams = hparams
 
+        ################### Encoding ####################
         self._encoder = {}
         for seq_type, encoder in hparams.encoder.items():
             if encoder == "ConvLSTM":
@@ -42,32 +42,36 @@ class MultiplexConcatEmbedder(nn.Module):
             else:
                 raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
 
+        ################### Layer-specfic Embedding ####################
         self._embedder = {}
         for subnetwork_type, embedder in hparams.embedder.items():
             if embedder == "GAT":
                 self.__setattr__("_embedder_" + subnetwork_type, GAT(hparams))
                 self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
-            if embedder == "GCN":
+            elif embedder == "GCN":
                 self.__setattr__("_embedder_" + subnetwork_type, GCN(hparams))
                 self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
-            if embedder == "GraphSAGE":
+            elif embedder == "GraphSAGE":
                 self.__setattr__("_embedder_" + subnetwork_type, GraphSAGE(hparams))
                 self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
             else:
-                raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN']")
+                raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN', 'GraphSAGE']")
 
+        ################### Multiplex Embedding ####################
+        layers = list(hparams.embedder.keys())
         if hparams.multiplex_embedder == "MultiplexLayerAttention":
             self._multiplex_embedder = MultiplexLayerAttention(embedding_dim=hparams.embedding_dim,
-                                                               hidden_dim=hparams.embedding_dim,
-                                                               layers=list(hparams.embedder.keys()))
+                                                               hidden_dim=hparams.multiplex_hidden_dim,
+                                                               layers=layers)
         elif hparams.multiplex_embedder == "MultiplexNodeAttention":
             self._multiplex_embedder = MultiplexNodeAttention(embedding_dim=hparams.embedding_dim,
-                                                              hidden_dim=hparams.embedding_dim,
-                                                              layers=list(hparams.embedder.keys()))
+                                                              hidden_dim=hparams.multiplex_hidden_dim,
+                                                              layers=layers)
         else:
             print('"multiplex_embedder" not used. Concatenate multi-layer embeddings instead.')
             hparams.embedding_dim = hparams.embedding_dim * len(hparams.embedder)
 
+        ################### Classifier ####################
         if hparams.classifier == "Dense":
             self._classifier = Dense(hparams)
         else:
@@ -85,7 +89,7 @@ class MultiplexConcatEmbedder(nn.Module):
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
         if "Multiplex" in self.hparams.multiplex_embedder:
-            embeddings = self._multiplex_embedder(embeddings)
+            embeddings = self._multiplex_embedder.forward(embeddings)
         else:
             embeddings = torch.cat(embeddings, 1)
         # print("embeddings", embeddings.shape)
@@ -105,15 +109,13 @@ class MultiplexConcatEmbedder(nn.Module):
         return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
                               hierar_penalty=None, hierar_paras=None, hierar_relations=None)
 
-    def get_embeddings(self, X, batch_size=None, return_multi_emb=False, cuda=True, half=False):
+    def get_embeddings(self, X, batch_size=None, return_multi_emb=False):
         """
         Get embeddings for a set of nodes in `X`.
         :param X: a dict with keys {"input_seqs", "subnetwork"}
         :param cuda (bool): whether to run computations in GPUs
         :return (np.array): a numpy array of size (node size, embedding dim)
         """
-        X = preprocess_input(X, cuda=cuda, half=half)
-
         encodings = self._encoder["Protein_seqs"](X["Protein_seqs"])
 
         multi_embeddings = []
@@ -131,13 +133,6 @@ class MultiplexConcatEmbedder(nn.Module):
         return embeddings.detach().cpu().numpy()
 
     def predict(self, embeddings, cuda=True):
-        if not isinstance(embeddings, torch.Tensor):
-            embeddings = torch.tensor(embeddings)
-        if cuda:
-            embeddings = embeddings.cuda()
-        else:
-            embeddings = embeddings.cpu()
-
         y_pred = self._classifier(embeddings)
         if "LOGITS" in self.hparams.loss_type:
             y_pred = torch.softmax(y_pred, 1) if "SOFTMAX" in self.hparams.loss_type else torch.sigmoid(y_pred)

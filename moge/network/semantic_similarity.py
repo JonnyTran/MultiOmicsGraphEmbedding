@@ -11,7 +11,7 @@ def compute_annotation_affinities(genes_info, node_list, modality=None, correlat
                                   weights=None,
                                   squareform=True, nanmean=True,
                                   multiprocessing=True):
-    if features is None:
+    if features is None and modality is not None:
         if modality == "MessengerRNA":
             features = ["locus_type", "gene_family_id", "GO Terms", "location", "Disease association",
                         "Transcript sequence"]
@@ -37,13 +37,13 @@ def compute_annotation_affinities(genes_info, node_list, modality=None, correlat
     # return np.exp(-beta * gower_dists)
 
 
-def compute_expression_correlation_dists(multi_omics_data: MultiOmics, modalities, node_list, absolute_corr=True,
-                                         return_distance=True,
-                                         pathologic_stages=[], histological_subtypes=[], squareform=True,
-                                         tissue_expression=False):
+def compute_expression_correlation(multiomics: MultiOmics, modalities, node_list, absolute_corr=True,
+                                   return_distance=True,
+                                   pathologic_stages=[], histological_subtypes=[], squareform=True,
+                                   tissue_expression=False):
     # Only works with TCGA expression data
-    X_multiomics, y = multi_omics_data.load_data(omics=modalities, pathologic_stages=pathologic_stages,
-                                                 histological_subtypes=histological_subtypes)
+    X_multiomics, y = multiomics.load_data(omics=modalities, pathologic_stages=pathologic_stages,
+                                           histological_subtypes=histological_subtypes)
 
     # Remove duplicate index and columns
     for modality in modalities:
@@ -62,7 +62,9 @@ def compute_expression_correlation_dists(multi_omics_data: MultiOmics, modalitie
     X_multiomics_concat = pd.concat([X_multiomics[m] for m in modalities], axis=1)
 
     # Calculate the correlation DISTANCE between all genes/transcripts, keeping shape with null values
-    X_multiomics_corr_dists = squareform_(scipy_pdist(X_multiomics_concat.T, metric="correlation"))
+    X_multiomics_corr_dists = pairwise_distances(X_multiomics_concat.T,
+                                                 metric="correlation",
+                                                 force_all_finite="allow_nan")
 
     # Filter to only correlations between nodes in node_lists
     cols = X_multiomics_concat.columns

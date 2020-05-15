@@ -7,7 +7,7 @@ from sklearn import preprocessing
 import moge
 from moge.generator.sequences import SEQUENCE_COL
 from moge.network.base import Network
-from moge.network.semantic_similarity import compute_expression_correlation_dists, compute_annotation_affinities
+from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
@@ -108,13 +108,26 @@ class AttributedNetwork(Network):
 
         return feature_transformers
 
-    def add_undirected_edges_from_attibutes(self, modality, node_list, features=None, weights=None,
-                                            nanmean=True,
-                                            similarity_threshold=0.7, dissimilarity_threshold=0.1,
-                                            negative_sampling_ratio=2.0, max_positive_edges=None,
-                                            compute_correlation=True, tissue_expression=False, histological_subtypes=[],
-                                            pathologic_stages=[],
-                                            epsilon=EPSILON, tag="affinity"):
+    def get_correlation_edges(self, modality, node_list, threshold=0.7):
+        # Filter similarity adj by correlation
+        correlations = compute_expression_correlation(self.multiomics, modalities=[modality],
+                                                      node_list=node_list, absolute_corr=True,
+                                                      return_distance=False,
+                                                      squareform=True)
+
+        # Selects positive edges with high affinity in the affinity matrix
+        similarity_filtered = np.triu(correlations >= threshold, k=1)  # A True/False matrix
+        edgelist = [(node_list[x], node_list[y], {"weight": correlations.iloc[x, y]}) for x, y in
+                    zip(*np.nonzero(similarity_filtered))]
+
+        return edgelist
+
+    def add_affinity_edges(self, modality, node_list, features=None, weights=None, nanmean=True,
+                           similarity_threshold=0.7, dissimilarity_threshold=0.1,
+                           negative_sampling_ratio=2.0, max_positive_edges=None,
+                           tissue_expression=False, histological_subtypes=[],
+                           pathologic_stages=[],
+                           epsilon=EPSILON, tag="affinity"):
         """
         Computes similarity measures between genes within the same modality, and add them as undirected edges to the
 network if the similarity measures passes the threshold
@@ -128,21 +141,9 @@ network if the similarity measures passes the threshold
         """
         annotations = self.multiomics[modality].get_annotations()
 
-        # Filter similarity adj by correlation
-        if compute_correlation:
-            correlation_dist = compute_expression_correlation_dists(self.multiomics, modalities=[modality],
-                                                                    node_list=node_list, absolute_corr=True,
-                                                                    return_distance=True,
-                                                                    histological_subtypes=histological_subtypes,
-                                                                    pathologic_stages=pathologic_stages,
-                                                                    squareform=False,
-                                                                    tissue_expression=tissue_expression)
-        else:
-            correlation_dist = None
-
         annotation_affinities_df = pd.DataFrame(
             data=compute_annotation_affinities(annotations, node_list=node_list, modality=modality,
-                                               correlation_dist=correlation_dist, nanmean=nanmean,
+                                               correlation_dist=None, nanmean=nanmean,
                                                features=features, weights=weights, squareform=True),
             index=node_list)
 

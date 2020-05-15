@@ -95,7 +95,6 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
     def forward(self, embeddings):
         w = self.compute_attention(embeddings)
         z = torch.matmul(torch.stack(embeddings, 2), w)
-        z = z.squeeze(2)
         return z
 
     def compute_attention(self, embeddings):
@@ -141,7 +140,10 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
 
     def forward(self, embeddings):
         w = self.compute_attention(embeddings)
-        z = torch.matmul(torch.stack(embeddings, 2), w)
+        # print("embeddings", len(embeddings), torch.stack(embeddings, dim=2).shape)
+        # print("w", w.shape)
+        z = torch.matmul(torch.stack(embeddings, dim=2), w)
+        # print("z", z.shape)
         z = z.squeeze(2)
         return z
 
@@ -155,7 +157,7 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
             w[:, i] = torch.matmul(x, self.att.t())
 
         w = torch.softmax(w, 1)
-        return w.squeeze(2)
+        return w
 
     @staticmethod
     def add_model_specific_args(parent_parser):
