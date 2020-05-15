@@ -4,7 +4,7 @@ from torch import nn
 from transformers import AlbertConfig
 
 from moge.module.classifier import Dense
-from moge.module.embedder import GAT, GCN, GraphSAGE
+from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
 from moge.module.monoplex import preprocess_input
@@ -56,8 +56,18 @@ class MultiplexConcatEmbedder(nn.Module):
             else:
                 raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN']")
 
-        if hparams.classifier == "Dense":
+        if hparams.multiplex_embedder == "MultiplexLayerAttention":
+            self._multiplex_embedder = MultiplexLayerAttention(in_channels=hparams.embedding_dim,
+                                                               out_channels=hparams.embedding_dim,
+                                                               layers=list(hparams.embedder.keys()))
+        elif hparams.multiplex_embedder == "MultiplexNodeAttention":
+            self._multiplex_embedder = MultiplexNodeAttention(in_channels=hparams.embedding_dim,
+                                                              out_channels=hparams.embedding_dim,
+                                                              layers=list(hparams.embedder.keys()))
+        else:
             hparams.embedding_dim = hparams.embedding_dim * len(hparams.embedder)
+
+        if hparams.classifier == "Dense":
             self._classifier = Dense(hparams)
         else:
             raise Exception("hparams.classifier must be one of {'Dense'}")
@@ -73,7 +83,10 @@ class MultiplexConcatEmbedder(nn.Module):
                 X[subnetwork_type] = X[subnetwork_type][0].squeeze(0)
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
-        embeddings = torch.cat(embeddings, 1)
+        if self.hparams.multiplex_embedder == "MultiplexAttention":
+            embeddings = self._multiplex_embedder(embeddings)
+        else:
+            embeddings = torch.cat(embeddings, 1)
         # print("embeddings", embeddings.shape)
         y_pred = self._classifier(embeddings)
         return y_pred
