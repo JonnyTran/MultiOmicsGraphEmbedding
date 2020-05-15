@@ -118,15 +118,24 @@ class EncoderEmbedderClassifier(pl.LightningModule):
 
 
 def preprocess_input(X, cuda=True, half=False):
-    if any([not isinstance(X[k], torch.Tensor) for k in X]):
-        X = {k: torch.tensor(v) for k, v in X.items()}
+    if isinstance(X, dict):
+        X = {k: _preprocess_input(v, cuda=cuda, half=half) for k, v in X.items()}
+    else:
+        X = _preprocess_input(X, cuda=cuda, half=half)
+
+    return X
+
+
+def _preprocess_input(X, cuda=True, half=False):
+    if not isinstance(X, torch.Tensor):
+        X = torch.tensor(X)
 
     if cuda:
-        X = {k: v.cuda() for k, v in X.items()}
+        X = X.cuda()
     else:
-        X = {k: v.cpu() for k, v in X.items()}
+        X = X.cpu()
 
     if half:
-        X = {k: v.half() for k, v in X.items()}
+        X = X.half()
 
     return X

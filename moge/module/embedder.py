@@ -93,6 +93,12 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
         zeros(self.bias)
 
     def forward(self, embeddings):
+        w = self.compute_attention(embeddings)
+        z = torch.matmul(torch.stack(embeddings, 2), w)
+        z = z.squeeze(2)
+        return z
+
+    def compute_attention(self, embeddings):
         w = torch.zeros((len(self.layers), 1)).type_as(self.att)
 
         for i, layer in enumerate(self.layers):
@@ -100,9 +106,7 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
             w[i] = torch.mean(torch.matmul(x, self.att.t()), dim=0)
 
         w = torch.softmax(w, 0)
-        z = torch.matmul(torch.stack(embeddings, 2), w)
-        z = z.squeeze(2)
-        return z
+        return w.squeeze(-1)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -135,6 +139,12 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
         zeros(self.bias)
 
     def forward(self, embeddings):
+        w = self.compute_attention(embeddings)
+        z = torch.matmul(torch.stack(embeddings, 2), w)
+        z = z.squeeze(2)
+        return z
+
+    def compute_attention(self, embeddings):
         batch_size, in_channels = embeddings[0].size()
         w = torch.zeros((batch_size, len(self.layers), 1)).type_as(self.att)
 
@@ -143,13 +153,7 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
             w[:, i] = torch.matmul(x, self.att.t())
 
         w = torch.softmax(w, 1)
-        # print("w", w.shape)
-        # print("embeddings", torch.stack(embeddings, 2).shape)
-        z = torch.matmul(torch.stack(embeddings, 2), w)
-        # print("z", z.shape)
-        z = z.squeeze(2)
-        # print("z.squeeze", z.shape)
-        return z
+        return w.squeeze(2)
 
     @staticmethod
     def add_model_specific_args(parent_parser):

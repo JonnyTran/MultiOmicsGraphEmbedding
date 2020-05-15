@@ -184,9 +184,9 @@ network if the similarity measures passes the threshold
         Filter the gene GO annotations and assign a color for each term given :param go_id_colors:.
         """
         if isinstance(self, moge.network.multiplex.MultiplexAttributedNetwork):
-            labels = self.all_annotations[label].copy()
+            labels = self.all_annotations[label].copy(deep=True)
         else:
-            labels = self.annotations[label].copy()
+            labels = self.annotations[label].copy(deep=True)
 
         if labels.str.contains("\||;", regex=True).any():
             labels = labels.str.split("\||;")

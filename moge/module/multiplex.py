@@ -121,7 +121,7 @@ class MultiplexConcatEmbedder(nn.Module):
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
         if "Multiplex" in self.hparams.multiplex_embedder:
-            embeddings = self._multiplex_embedder(embeddings)
+            embeddings = self._multiplex_embedder.forward(embeddings)
         else:
             embeddings = torch.cat(embeddings, 1)
 
@@ -130,7 +130,6 @@ class MultiplexConcatEmbedder(nn.Module):
     def predict(self, embeddings, cuda=True):
         if not isinstance(embeddings, torch.Tensor):
             embeddings = torch.tensor(embeddings)
-
         if cuda:
             embeddings = embeddings.cuda()
         else:
