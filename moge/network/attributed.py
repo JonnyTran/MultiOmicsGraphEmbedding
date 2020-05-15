@@ -48,30 +48,6 @@ class AttributedNetwork(Network):
             {k: concat_uniques for k in self.annotations.columns})
         print("Annotation columns:", self.annotations.columns.tolist())
 
-    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
-        if isinstance(self, moge.network.multiplex.MultiplexAttributedNetwork):
-            labels = self.all_annotations[label]
-        else:
-            labels = self.annotations[label]
-
-        if labels.str.contains("\||;", regex=True).any():
-            labels = labels.str.split("\||;")
-
-        if label_filter is not None:
-            # Filter only annotations in label_filter
-            if not isinstance(label_filter, set): label_filter = set(label_filter)
-            labels = labels.map(lambda x: [term for term in x if term in label_filter] if x and len(x) > 0 else None)
-
-        # Filter only annotations with an associated color
-        labels = labels.map(lambda x: [term for term in x if term in go_id_colors.index] if x and len(x) > 0 else None)
-
-        # For each node select one term
-        labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
-        label_color = labels.map(go_id_colors)
-        if fillna:
-            label_color.fillna("#e5ecf6", inplace=True)
-        return label_color
-
     def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0, verbose=False):
         """
         For each of the annotation column, create a sklearn label binarizer. If the column data is delimited, a MultiLabelBinarizer
@@ -202,6 +178,33 @@ network if the similarity measures passes the threshold
 
         print(len(dissim_edgelist_ebunch), "undirected negative edges (type='u_n') added.")
         return annotation_affinities_df
+
+    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
+        """
+        Filter the gene GO annotations and assign a color for each term given :param go_id_colors:.
+        """
+        if isinstance(self, moge.network.multiplex.MultiplexAttributedNetwork):
+            labels = self.all_annotations[label].copy()
+        else:
+            labels = self.annotations[label].copy()
+
+        if labels.str.contains("\||;", regex=True).any():
+            labels = labels.str.split("\||;")
+
+        if label_filter is not None:
+            # Filter only annotations in label_filter
+            if not isinstance(label_filter, set): label_filter = set(label_filter)
+            labels = labels.map(lambda x: [term for term in x if term in label_filter] if x and len(x) > 0 else None)
+
+        # Filter only annotations with an associated color
+        labels = labels.map(lambda x: [term for term in x if term in go_id_colors.index] if x and len(x) > 0 else None)
+
+        # For each node select one term
+        labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
+        label_color = labels.map(go_id_colors)
+        if fillna:
+            label_color.fillna("#e5ecf6", inplace=True)
+        return label_color
 
 
 def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):

@@ -120,7 +120,7 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
         self.layers = layers
 
         self.weight = nn.Parameter(torch.Tensor(in_channels, out_channels))
-        self.att = nn.Parameter(torch.Tensor(len(self.layers), out_channels))
+        self.att = nn.Parameter(torch.Tensor(1, out_channels))
 
         if bias:
             self.bias = nn.Parameter(torch.Tensor(out_channels))
@@ -142,9 +142,13 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
             x = torch.tanh(torch.matmul(embeddings[i], self.weight) + self.bias)
             w[:, i] = torch.matmul(x, self.att.t())
 
-        w = torch.softmax(w, 0)
+        w = torch.softmax(w, 1)
+        # print("w", w.shape)
+        # print("embeddings", torch.stack(embeddings, 2).shape)
         z = torch.matmul(torch.stack(embeddings, 2), w)
+        # print("z", z.shape)
         z = z.squeeze(2)
+        # print("z.squeeze", z.shape)
         return z
 
     @staticmethod

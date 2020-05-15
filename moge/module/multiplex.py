@@ -65,6 +65,7 @@ class MultiplexConcatEmbedder(nn.Module):
                                                               out_channels=hparams.embedding_dim,
                                                               layers=list(hparams.embedder.keys()))
         else:
+            print('"multiplex_embedder" not used. Concatenate multi-layer embeddings instead.')
             hparams.embedding_dim = hparams.embedding_dim * len(hparams.embedder)
 
         if hparams.classifier == "Dense":
@@ -83,7 +84,7 @@ class MultiplexConcatEmbedder(nn.Module):
                 X[subnetwork_type] = X[subnetwork_type][0].squeeze(0)
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
-        if self.hparams.multiplex_embedder == "MultiplexAttention":
+        if "Multiplex" in self.hparams.multiplex_embedder:
             embeddings = self._multiplex_embedder(embeddings)
         else:
             embeddings = torch.cat(embeddings, 1)
@@ -118,7 +119,11 @@ class MultiplexConcatEmbedder(nn.Module):
         embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
-        embeddings = torch.cat(embeddings, 1)
+
+        if "Multiplex" in self.hparams.multiplex_embedder:
+            embeddings = self._multiplex_embedder(embeddings)
+        else:
+            embeddings = torch.cat(embeddings, 1)
 
         return embeddings.detach().cpu().numpy()
 

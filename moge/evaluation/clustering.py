@@ -6,7 +6,7 @@ from sklearn.metrics import homogeneity_score, completeness_score, normalized_mu
 
 
 def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters=None,
-                        metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, verbose=True, delim="\||;"):
+                        metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, delim="\||;"):
     if annotations.loc[nodelist, node_label].dtypes == np.object \
             and annotations.loc[nodelist, node_label].str.contains(delim, regex=True).any():
 
@@ -17,16 +17,12 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
             lambda x: sorted(x)[0] if x and len(x) >= 1 else None)
 
     if n_clusters is None:
-        print("y_true.unique()", y_true.unique())
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())
-        print("Clustering", len(nodelist), "nodes with n_clusters:", n_clusters) if verbose else None
+        print("Clustering", len(nodelist), "nodes with n_clusters:", n_clusters)
     try:
         y_pred = embedding.predict_cluster(n_clusters, node_list=nodelist)
     except AttributeError as e:
         return e
-
-    print(len(y_pred), len(y_true))
-    print(y_pred.shape, y_true.shape)
 
     results = {}
     for metric in metrics:

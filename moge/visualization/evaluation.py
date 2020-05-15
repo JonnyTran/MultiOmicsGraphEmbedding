@@ -9,32 +9,6 @@ from .utils import colors
 from ..evaluation.classification import compute_roc_auc_curve, compute_pr_curve
 
 
-def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, height=700,
-                   title='Receiver operating characteristic example'):
-    # Compute ROC curve and ROC area for each class
-    if isinstance(y_test, pd.DataFrame):
-        y_test = y_test.values
-
-    if isinstance(y_score, pd.DataFrame):
-        y_score = y_score.values
-
-    fpr, roc_auc, tpr = compute_roc_auc_curve(y_test, y_score, range(n_classes), sample_weight)
-
-    trace1 = go.Scatter(x=fpr[2], y=tpr[2],
-                        mode='lines',
-                        line=dict(color='darkorange', width=2),
-                        name='ROC curve (area = %0.2f)' % roc_auc[2])
-
-    trace2 = go.Scatter(x=[0, 1], y=[0, 1],
-                        mode='lines',
-                        line=dict(color='navy', width=2, dash='dash'),
-                        showlegend=False)
-
-    fig = configure_figure([trace1, trace2], title, width, height, x_label='False Positive Rate',
-                           y_label='True Positive Rate')
-    return fig
-
-
 def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.Index), sample_weight=None,
                               title='ROC Curve (multi-class)', plot_classes=False,
                               width=800, height=700):
@@ -49,8 +23,8 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
     if isinstance(y_score, pd.DataFrame):
         y_score = y_score.values
 
-    fpr, roc_auc, tpr = compute_roc_auc_curve(y_test, y_score, class_indices, sample_weight)
     # Compute macro-average ROC curve and ROC area
+    fpr, roc_auc, tpr = compute_roc_auc_curve(y_test, y_score, class_indices, sample_weight)
 
     # First aggregate all false positive rates
     all_fpr = np.unique(np.concatenate([fpr[i] for i in class_indices]))
@@ -99,6 +73,32 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
 
     fig = configure_figure(data, title, width, height, x_label='False Positive Rate', y_label='True Positive Rate')
 
+    return fig
+
+
+def plot_roc_curve(y_test, y_score, n_classes, sample_weight=None, width=700, height=700,
+                   title='Receiver operating characteristic example'):
+    # Compute ROC curve and ROC area for each class
+    if isinstance(y_test, pd.DataFrame):
+        y_test = y_test.values
+
+    if isinstance(y_score, pd.DataFrame):
+        y_score = y_score.values
+
+    fpr, roc_auc, tpr = compute_roc_auc_curve(y_test, y_score, range(n_classes), sample_weight)
+
+    trace1 = go.Scatter(x=fpr[2], y=tpr[2],
+                        mode='lines',
+                        line=dict(color='darkorange', width=2),
+                        name='ROC curve (area = %0.2f)' % roc_auc[2])
+
+    trace2 = go.Scatter(x=[0, 1], y=[0, 1],
+                        mode='lines',
+                        line=dict(color='navy', width=2, dash='dash'),
+                        showlegend=False)
+
+    fig = configure_figure([trace1, trace2], title, width, height, x_label='False Positive Rate',
+                           y_label='True Positive Rate')
     return fig
 
 

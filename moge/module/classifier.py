@@ -1,6 +1,5 @@
 from argparse import ArgumentParser
 
-import pytorch_lightning as pl
 from torch import nn
 
 
@@ -18,7 +17,7 @@ class Dense(nn.Module):
         if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
             print("INFO: Output of `_classifier` is logits")
         else:
-            self.fc_classifier.add_module("sigmoid", nn.Sigmoid())
+            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
 
     @staticmethod
     def add_model_specific_args(parent_parser):
