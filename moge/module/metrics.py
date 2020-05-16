@@ -10,10 +10,10 @@ class Metrics():
         self.loss_type = loss_type
         self.precision = Precision(average=True, is_multilabel=True)
         self.recall = Recall(average=True, is_multilabel=True)
-        self.top_k_train = TopKMulticlassAccuracy(k=20)
+        self.top_k_train = TopKMulticlassAccuracy(k=100)
         self.precision_val = Precision(average=True, is_multilabel=True)
         self.recall_val = Recall(average=True, is_multilabel=True)
-        self.top_k_val = TopKMulticlassAccuracy(k=20)
+        self.top_k_val = TopKMulticlassAccuracy(k=100)
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:

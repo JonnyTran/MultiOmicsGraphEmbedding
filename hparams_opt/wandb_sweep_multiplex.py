@@ -30,7 +30,6 @@ def train(hparams):
     batch_size = hparams.batch_size
     max_length = hparams.max_length
     n_steps = int(200000 / batch_size)
-    directed = False
 
     variables = []
     targets = ['go_id']
@@ -42,19 +41,19 @@ def train(hparams):
     split_idx = 0
     dataset_train = network.get_train_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-        traversal="bfs", batch_size=batch_size, agg_mode=None,
+        traversal="bfs", batch_size=batch_size,
+        sampling="cycle", n_steps=n_steps,
         method="GAT", adj_output="coo",
-        sampling="all", n_steps=n_steps, directed=directed,
-        maxlen=max_length, padding='post', truncating='post', variable_length=False,
-        seed=seed, verbose=False)
+        maxlen=max_length, padding='post', truncating='random',
+        seed=seed, verbose=True)
 
     dataset_test = network.get_test_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-        traversal='all', batch_size=batch_size, agg_mode=None,
+        traversal='all', batch_size=int(batch_size * 1.5),
+        sampling="cycle", n_steps=1,
         method="GAT", adj_output="coo",
-        sampling="log", n_steps=1, directed=directed,
-        maxlen=max_length, padding='post', truncating='post', variable_length=False,
-        seed=seed, verbose=False)
+        maxlen=max_length, padding='post', truncating='post',
+        seed=seed, verbose=True)
 
     train_dataloader = torch.utils.data.DataLoader(
         dataset_train,
@@ -67,7 +66,8 @@ def train(hparams):
         batch_size=None,
         num_workers=5
     )
-    vocab = dataset_train.tokenizer.word_index
+
+    vocab = dataset_train.tokenizer[network.modalities[0]].word_index
 
     hparams.n_classes = n_classes
     hparams.vocab_size = len(vocab)
@@ -93,7 +93,7 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
-    parser.add_argument('--encoder', type=str, default="ConvLSTM")
+    parser.add_argument('--encoder', type=dict, default={"Protein_seqs": "ConvLSTM"})
     parser.add_argument('--encoder.Protein_seqs', type=str, default="ConvLSTM")
     parser.add_argument('--encoding_dim', type=int, default=128)
     parser.add_argument('--embedding_dim', type=int, default=256)
@@ -141,6 +141,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--nb_weight_decay', type=float, default=0.0)
     parser.add_argument('--lr', type=float, default=1e-3)
+
+    parser.add_argument('--loss_type', type=str, default="BCE_WITH_LOGITS")
 
     parser.add_argument('--optimizer', type=str, default="adam")
 

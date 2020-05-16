@@ -58,6 +58,7 @@ class MultiplexEmbedder(nn.Module):
                 raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN', 'GraphSAGE']")
 
         ################### Multiplex Embedding ####################
+        print("hparams", hparams)
         layers = list(hparams.embedder.keys())
         if hparams.multiplex_embedder == "MultiplexLayerAttention":
             self._multiplex_embedder = MultiplexLayerAttention(embedding_dim=hparams.embedding_dim,
