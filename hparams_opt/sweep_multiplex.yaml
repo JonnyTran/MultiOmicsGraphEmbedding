@@ -9,8 +9,9 @@ early_terminate:
   eta: 3
   max_iter: 27
 parameters:
-  encoder.Protein_seqs:
-    values: ["ConvLSTM"]
+  encoder:
+    Protein_seqs:
+      values: ["ConvLSTM"]
   encoding_dim:
     values: [64, 128, 256, 512]
   embedding_dim:
@@ -62,12 +63,13 @@ parameters:
   nb_lstm_layernorm:
     values: [True, False]
 
-  embedder.Protein-Protein-physical:
-    values: ["GAT", "GCN", "GraphSAGE"]
-  embedder.Protein-Protein-genetic:
-    values: ["GAT", "GCN", "GraphSAGE"]
-  embedder.Protein-Protein-correlation:
-    values: ["GAT", "GCN", "GraphSAGE"]
+  embedder:
+    Protein-Protein-physical:
+      values: ["GAT", "GCN", "GraphSAGE"]
+    Protein-Protein-genetic:
+      values: ["GAT", "GCN", "GraphSAGE"]
+    Protein-Protein-correlation:
+      values: ["GAT", "GCN", "GraphSAGE"]
   nb_attn_heads:
     values: [2, 4, 8, 16]
   nb_attn_dropout:

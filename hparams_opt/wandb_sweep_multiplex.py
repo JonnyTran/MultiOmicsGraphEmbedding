@@ -1,3 +1,4 @@
+import copy
 import logging
 import pickle
 import random
@@ -74,6 +75,16 @@ def train(hparams):
 
     logger = WandbLogger()
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
+    print('hparams.keys', hparams.__dict__.keys())
+    hparams_dict = copy.copy(hparams.__dict__)
+
+    for key in hparams_dict.keys():
+        if "." in key:
+            name, value = key.split(".")
+            if name not in hparams:
+                hparams.__setattr__(name, {})
+            hparams.__dict__[name][value] = hparams.__dict__[key]
+    print('hparams', hparams)
 
     eec = MultiplexEmbedder(hparams)
     model = ModelTrainer(eec)
@@ -93,7 +104,6 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
-    parser.add_argument('--encoder', type=dict, default={"Protein_seqs": "ConvLSTM"})
     parser.add_argument('--encoder.Protein_seqs', type=str, default="ConvLSTM")
     parser.add_argument('--encoding_dim', type=int, default=128)
     parser.add_argument('--embedding_dim', type=int, default=256)
@@ -122,9 +132,6 @@ if __name__ == "__main__":
     parser.add_argument('--nb_lstm_hidden_dropout', type=float, default=0.0)
     parser.add_argument('--nb_lstm_layernorm', type=bool, default=False)
 
-    parser.add_argument('--embedder', type=dict, default={"Protein-Protein-physical": "GAT",
-                                                          "Protein-Protein-genetic": "GAT",
-                                                          "Protein-Protein-correlation": "GAT"})
     parser.add_argument('--embedder.Protein-Protein-physical', type=str, default="GAT")
     parser.add_argument('--embedder.Protein-Protein-genetic', type=str, default="GAT")
     parser.add_argument('--embedder.Protein-Protein-correlation', type=str, default="GAT")
