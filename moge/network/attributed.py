@@ -4,7 +4,6 @@ import pandas as pd
 from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 
-import moge
 from moge.generator.sequences import SEQUENCE_COL
 from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
