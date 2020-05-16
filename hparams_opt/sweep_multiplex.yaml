@@ -16,11 +16,11 @@ parameters:
   embedding_dim:
     values: [64, 128, 256, 512]
   max_length:
-    values: [700]
+    values: [1000]
   batch_size:
-    values: [100]
+    values: [1500]
   num_epochs:
-    values: [5]
+    values: [20]
 
   word_embedding_size:
     min: 4

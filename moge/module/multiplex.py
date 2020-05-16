@@ -89,7 +89,7 @@ class MultiplexEmbedder(nn.Module):
                 X[subnetwork_type] = X[subnetwork_type][0].squeeze(0)
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
-        if "Multiplex" in self.hparams.multiplex_embedder:
+        if hasattr(self, "_multiplex_embedder"):
             embeddings = self._multiplex_embedder.forward(embeddings)
         else:
             embeddings = torch.cat(embeddings, 1)
