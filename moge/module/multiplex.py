@@ -1,15 +1,15 @@
 import numpy as np
 import torch
-from torch import nn
 from transformers import AlbertConfig
 
 from moge.module.classifier import Dense
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
+from moge.module.model import EncoderEmbedderClassifier
 
 
-class MultiplexEmbedder(nn.Module):
+class MultiplexEmbedder(EncoderEmbedderClassifier):
     def __init__(self, hparams):
         super(MultiplexEmbedder, self).__init__()
 
@@ -110,14 +110,14 @@ class MultiplexEmbedder(nn.Module):
         return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
                               hierar_penalty=None, hierar_paras=None, hierar_relations=None)
 
-    def get_embeddings(self, X, batch_size=None, return_multi_emb=False):
+    def get_embeddings(self, X, batch_size=100, return_multi_emb=False):
         """
         Get embeddings for a set of nodes in `X`.
         :param X: a dict with keys {"input_seqs", "subnetwork"}
         :param cuda (bool): whether to run computations in GPUs
         :return (np.array): a numpy array of size (node size, embedding dim)
         """
-        encodings = self._encoder["Protein_seqs"](X["Protein_seqs"])
+        encodings = self.get_encodings(X, key="Protein_seqs", batch_size=batch_size)
 
         multi_embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():

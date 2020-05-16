@@ -1,5 +1,4 @@
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from transformers import AlbertConfig
 
@@ -7,12 +6,46 @@ from moge.module.classifier import Dense
 from moge.module.embedder import GAT
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
-from moge.module.utils import preprocess_input
 
 
-class EncoderEmbedderClassifier(pl.LightningModule):
+class EncoderEmbedderClassifier(torch.nn.Module):
+    def __init__(self) -> None:
+        super(EncoderEmbedderClassifier).__init__()
+
+    def get_embeddings(self, *args):
+        raise NotImplementedError()
+
+    def get_encodings(self, X, key, batch_size=None):
+        if key is not None:
+            input_seqs = X[key]
+
+        if isinstance(self._encoder, dict):
+            encoder_module = self._encoder[key]
+        else:
+            encoder_module = self._encoder
+
+        if batch_size is not None:
+            input_chunks = input_seqs.split(split_size=batch_size, dim=0)
+            encodings = []
+            for i in range(len(input_chunks)):
+                encodings.append(encoder_module.forward(input_chunks[i]))
+            encodings = torch.cat(encodings, 0)
+        else:
+            encodings = encoder_module.forward(X)
+
+        return encodings
+
+    def predict(self, embeddings, cuda=True):
+        y_pred = self._classifier(embeddings)
+        if "LOGITS" in self.hparams.loss_type:
+            y_pred = torch.softmax(y_pred, 1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
+
+        return y_pred.detach().cpu().numpy()
+
+
+class MonoplexEmebdder(EncoderEmbedderClassifier):
     def __init__(self, hparams):
-        super(EncoderEmbedderClassifier, self).__init__()
+        super(MonoplexEmebdder, self).__init__()
 
         if hparams.encoder == "ConvLSTM":
             self._encoder = ConvLSTM(hparams)
@@ -72,49 +105,16 @@ class EncoderEmbedderClassifier(pl.LightningModule):
         return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
                               hierar_penalty=None, hierar_paras=None, hierar_relations=None)
 
-    def get_embeddings(self, X, encodings=None, batch_size=None, cuda=True, half=False):
+    def get_embeddings(self, X, batch_size=None):
         """
         Get embeddings for a set of nodes in `X`.
         :param X: a dict with keys {"input_seqs", "subnetwork"}
         :param cuda (bool): whether to run computations in GPUs
         :return (np.array): a numpy array of size (node size, embedding dim)
         """
-        X = preprocess_input(X, cuda=cuda, half=half)
-
-        if encodings is None:
-            encodings = self._encoder(X["input_seqs"])
+        encodings = self.get_encodings(X, key="input_seqs", batch_size=batch_size)
 
         embeddings = self._embedder(encodings, X["subnetwork"])
 
         return embeddings.detach().cpu().numpy()
-
-    def get_encodings(self, X, batch_size=None, cuda=True, half=False):
-        X = preprocess_input(X, cuda=cuda, half=half)
-
-        if batch_size is not None:
-            input_chunks = X["input_seqs"].split(split_size=batch_size, dim=0)
-            encodings = []
-            for i in range(len(input_chunks)):
-                encodings.append(self._encoder.forward(input_chunks[i]))
-            encodings = torch.cat(encodings, 0)
-        else:
-            encodings = self._encoder(X["input_seqs"])
-
-        return encodings.detach().cpu().numpy()
-
-    def predict(self, embeddings, cuda=True):
-        if not isinstance(embeddings, torch.Tensor):
-            embeddings = torch.tensor(embeddings)
-
-        if cuda:
-            embeddings = embeddings.cuda()
-        else:
-            embeddings = embeddings.cpu()
-
-        y_pred = self._classifier(embeddings)
-        if "LOGITS" in self.hparams.loss_type:
-            y_pred = torch.softmax(y_pred, 1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
-
-        return y_pred.detach().cpu().numpy()
-
 

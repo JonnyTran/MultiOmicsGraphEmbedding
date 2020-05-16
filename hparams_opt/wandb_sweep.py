@@ -1,10 +1,8 @@
+import logging
 import pickle
 import random
-
 import sys
 from argparse import ArgumentParser
-
-import logging
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -18,7 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import ModelTrainer
-from moge.module.monoplex import EncoderEmbedderClassifier
+from moge.module.model import MonoplexEmebdder
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 
@@ -77,7 +75,7 @@ def train(hparams):
     logger = WandbLogger()
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
 
-    eec = EncoderEmbedderClassifier(hparams)
+    eec = MonoplexEmebdder(hparams)
     model = ModelTrainer(eec)
 
     trainer = pl.Trainer(
