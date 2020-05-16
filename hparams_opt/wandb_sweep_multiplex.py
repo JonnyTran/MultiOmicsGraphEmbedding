@@ -75,9 +75,8 @@ def train(hparams):
 
     logger = WandbLogger()
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
-    print('\nhparams.keys', hparams.__dict__.keys())
-    hparams_dict = copy.copy(hparams.__dict__)
 
+    hparams_dict = copy.copy(hparams.__dict__)
     for key in hparams_dict.keys():
         if "." in key:
             name, value = key.split(".")
@@ -86,7 +85,6 @@ def train(hparams):
             if name not in hparams:
                 hparams.__setattr__(name, {})
             hparams.__dict__[name][value] = hparams.__dict__[key]
-    print('\nhparams', hparams)
 
     eec = MultiplexEmbedder(hparams)
     model = ModelTrainer(eec)
