@@ -81,7 +81,8 @@ def train(hparams):
     for key in hparams_dict.keys():
         if "." in key:
             name, value = key.split(".")
-            name = name.replace("_", "-")
+            if "seqs" not in value:
+                value = value.replace("_", "-")
             if name not in hparams:
                 hparams.__setattr__(name, {})
             hparams.__dict__[name][value] = hparams.__dict__[key]
