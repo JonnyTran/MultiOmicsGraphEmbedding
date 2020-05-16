@@ -39,7 +39,7 @@ def graph_viz(g: nx.Graph,
     node_x, node_y = zip(*[(pos[node][0], pos[node][1])
                            for node in nodelist])
 
-    if node_color.str.contains("#").any():
+    if node_color is not None and node_color.str.contains("#").any():
         express_mode = False
     else:
         express_mode = True
@@ -91,7 +91,7 @@ def graph_viz3d(g: nx.Graph,
     node_x, node_y, node_z = zip(*[(pos[node][0], pos[node][1], pos[node][2])
                                    for node in nodelist])
 
-    if node_color.str.contains("#").any():
+    if node_color is not None and node_color.str.contains("#").any():
         express_mode = False
     else:
         express_mode = True
@@ -199,7 +199,7 @@ def plot_edge_w_labels(fig, edges, edge_label, pos, plot3d=True):
         label = edge[2][edge_label]
         Xed_by_label.setdefault(label, []).extend([pos[edge[0]][0], pos[edge[1]][0], None])
         Yed_by_label.setdefault(label, []).extend([pos[edge[0]][1], pos[edge[1]][1], None])
-        if plot3d: Zed_by_label.setdefault(label, []).extend([pos[edge[0]][2], pos[edge[1]][3], None])
+        if plot3d: Zed_by_label.setdefault(label, []).extend([pos[edge[0]][2], pos[edge[1]][2], None])
 
     if plot3d:
         for label in Xed_by_label:
@@ -224,10 +224,10 @@ def plot_edge_w_labels(fig, edges, edge_label, pos, plot3d=True):
                             hoverinfo='none')
 
 
-def process_labels(labels: pd.Series):
+def process_labels(labels: pd.Series, delim="|"):
     if labels is not None and type(labels) is pd.Series:
         if labels.isna().any():
             labels.fillna("None", inplace=True)
-        if labels.dtype == "object" and labels.str.contains("|").any():
-            labels = labels.str.split("|", expand=True)[0].astype(str)
+        if labels.dtype == "object" and labels.str.contains(delim).any():
+            labels = labels.str.split(delim, expand=True)[0].astype(str)
     return labels

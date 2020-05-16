@@ -9,9 +9,9 @@ from moge.module.losses import ClassificationLoss
 from moge.module.model import EncoderEmbedderClassifier
 
 
-class MultiplexEmbedder(EncoderEmbedderClassifier):
+class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
     def __init__(self, hparams):
-        super(MultiplexEmbedder, self).__init__()
+        torch.nn.Module.__init__(self)
 
         assert isinstance(hparams.encoder, dict)
         assert isinstance(hparams.embedder, dict)

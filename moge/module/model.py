@@ -45,7 +45,7 @@ class EncoderEmbedderClassifier(torch.nn.Module):
 
 class MonoplexEmebdder(EncoderEmbedderClassifier):
     def __init__(self, hparams):
-        super(MonoplexEmebdder, self).__init__()
+        torch.nn.Module.__init__(self)
 
         if hparams.encoder == "ConvLSTM":
             self._encoder = ConvLSTM(hparams)
