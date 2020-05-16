@@ -82,6 +82,7 @@ class AttributedNetwork(Network):
                     print("INFO: Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(label,
                                                                                                             delimiter)) if verbose else None
                     features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
+                    features = features.map(lambda x: [term.strip() for term in x] if isinstance(x, list) else x)
                 else:
                     print("INFO: Label {} (of str) is transformed by MultiLabelBinarizer".format(
                         label)) if verbose else None

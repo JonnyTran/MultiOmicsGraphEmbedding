@@ -107,6 +107,9 @@ class MultiplexEmbedder(nn.Module):
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
 
+        print("y_true", Y.sum(0))
+        print("y_pred", Y_hat.sum(0))
+
         return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
                               hierar_penalty=None, hierar_paras=None, hierar_relations=None)
 

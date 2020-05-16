@@ -162,11 +162,11 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
             if "expression" == variable:
                 X[variable] = self.get_expressions(sampled_nodes, modality="Protein")
             else:
-                labels_vector = self.process_vector(self.annotations.loc[sampled_nodes, variable])
+                labels_vector = self.process_label(self.annotations.loc[sampled_nodes, variable])
                 X[variable] = self.network.feature_transformer[variable].transform(labels_vector)
 
         # Labels
-        targets_vector = self.process_vector(self.annotations.loc[sampled_nodes, self.targets[0]])
+        targets_vector = self.process_label(self.annotations.loc[sampled_nodes, self.targets[0]])
 
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
 

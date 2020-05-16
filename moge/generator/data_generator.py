@@ -156,7 +156,12 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             return node_list.map(
                 lambda node: self.multiomics[self.node_to_modality[node]].get_annotation_expressions().loc[node])
 
-    def process_vector(self, targets_vector, delim="\||;"):
+    def process_label(self, targets_vector):
+        if not hasattr(self.network, "delimiter"):
+            raise Exception(
+                "self.network.delimiter doesn't exist. Must run network.process_feature_tranformer(filter_label=targets[0], delimiter='\||, ', min_count=0)")
+
+        delim = self.network.delimiter
         if targets_vector.dtypes == np.object:
             if targets_vector.str.contains(delim, regex=True).any():
                 targets_vector = targets_vector.str.split(delim)

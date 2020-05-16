@@ -113,7 +113,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                     X["_".join([modality, variable])] = self.get_expressions(sampled_nodes, modality=modality)
                 else:
                     labels_vector = self.annotations[modality].loc[sampled_nodes, variable]
-                    labels_vector = self.process_vector(labels_vector)
+                    labels_vector = self.process_label(labels_vector)
                     X["_".join([modality, variable])] = self.network.feature_transformer[variable].transform(
                         labels_vector)
 
@@ -125,7 +125,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         # Labels
         targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
-        targets_vector = self.process_vector(targets_vector)
+        targets_vector = self.process_label(targets_vector)
 
         try:
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
