@@ -1,8 +1,7 @@
-program: hparams_opt/wandb_sweep.py
+program: hparams_opt/wandb_sweep_multiplex.py
 method: bayes
 metric:
-  name: val_top_k
-  goal: maximize
+  name: val_loss
 early_terminate:
   type: hyperband
   s: 2
@@ -10,7 +9,8 @@ early_terminate:
   max_iter: 27
 parameters:
   encoder:
-    values: ["Albert"]
+    Protein_seqs:
+      values: ["ConvLSTM"]
   encoding_dim:
     values: [64, 128, 256, 512]
   embedding_dim:
@@ -25,21 +25,42 @@ parameters:
   word_embedding_size:
     min: 4
     max: 22
-  num_hidden_layers:
-    min: 1
-    max: 2
-  num_hidden_groups:
-    values: [1]
-  hidden_dropout_prob:
+
+  nb_conv1_filters:
+    min: 64
+    max: 320
+  nb_conv1_kernel_size:
+    min: 3
+    max: 20
+  nb_conv1_dropout:
     min: 0.0
     max: 0.5
-  num_attention_heads:
-    values: [1, 2, 4, 8, 16, 32]
-  attention_probs_dropout_prob:
+  nb_conv1_batchnorm:
+    values: [True, False]
+
+  nb_conv2_kernel_size:
+    min: 0
+    max: 10
+  nb_conv2_filters:
+    min: 32
+    max: 256
+  nb_conv2_batchnorm:
+    values: [True, False]
+
+  nb_max_pool_size:
+    min: 5
+    max: 30
+
+  nb_lstm_units:
+    min: 64
+    max: 512
+  nb_lstm_hidden_dropout:
     min: 0.0
     max: 0.5
-  intermediate_size:
-    values: [64, 128, 512, 1024]
+  nb_lstm_bidirectional:
+    values: [True, False]
+  nb_lstm_layernorm:
+    values: [True, False]
 
   embedder:
     Protein-Protein-physical:
@@ -74,4 +95,4 @@ parameters:
     min: 0.00001
     max: 0.005
   optimizer:
-    values: ["adam", "sgd"]
+    values: ["adam"]

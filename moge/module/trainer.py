@@ -1,7 +1,8 @@
+import pytorch_lightning as pl
 import torch
 
-import pytorch_lightning as pl
 from .metrics import Metrics
+
 
 class ModelTrainer(pl.LightningModule):
     def __init__(self, model):
@@ -37,7 +38,7 @@ class ModelTrainer(pl.LightningModule):
         logs.update({"loss": avg_loss})
         self.metrics.reset_metrics(training=True)
 
-        return {"loss": avg_loss, "progress_bar": logs, "log": logs, }
+        return {"progress_bar": logs, "log": logs, }
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()

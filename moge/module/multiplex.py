@@ -9,9 +9,9 @@ from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss
 
 
-class MultiplexConcatEmbedder(nn.Module):
+class MultiplexEmbedder(nn.Module):
     def __init__(self, hparams):
-        super(MultiplexConcatEmbedder, self).__init__()
+        super(MultiplexEmbedder, self).__init__()
 
         assert isinstance(hparams.encoder, dict)
         assert isinstance(hparams.embedder, dict)
@@ -92,7 +92,7 @@ class MultiplexConcatEmbedder(nn.Module):
             embeddings = self._multiplex_embedder.forward(embeddings)
         else:
             embeddings = torch.cat(embeddings, 1)
-        print("embeddings", embeddings.shape)
+        # print("embeddings", embeddings.shape)
         y_pred = self._classifier(embeddings)
         return y_pred
 
