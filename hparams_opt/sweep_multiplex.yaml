@@ -1,8 +1,7 @@
 program: hparams_opt/wandb_sweep_multiplex.py
 method: bayes
 metric:
-  name: val_top_k
-  goal: maximize
+  name: val_loss
 early_terminate:
   type: hyperband
   s: 2
@@ -10,7 +9,7 @@ early_terminate:
   max_iter: 27
 parameters:
   encoder.Protein_seqs:
-    values: ["ConvLSTM"]
+    values: ["ConvLSTM", "Albert"]
   encoding_dim:
     values: [64, 128, 256, 512]
   embedding_dim:
@@ -78,6 +77,8 @@ parameters:
     values: ["MultiplexLayerEmbedding", "MultiplexNodeEmbedding", "Concat"]
   multiplex_hidden_dim:
     values: [64, 128, 256, 512, 768]
+  multiplex_attn_dropout:
+    values: [0.0, 0.5]
 
   classifier:
     values: ["Dense"]
@@ -95,6 +96,6 @@ parameters:
     max: 0.005
 
   loss_type:
-    values: ["BCE_WITH_LOGITS", "SIGMOID_FOCAL_CROSS_ENTROPY"]
+    values: ["BCE_WITH_LOGITS"]
   optimizer:
     values: ["adam"]

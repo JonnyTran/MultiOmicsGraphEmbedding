@@ -43,7 +43,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             for gene in self.multiomics[modality].get_genes_list():
                 self.node_to_modality[gene] = self.node_to_modality.setdefault(gene, []) + [modality, ]
 
-            print(modality, " nodes:", len(self.nodes[modality]))
+            print(modality, " nodes:", len(self.nodes[modality]), self.multiomics[modality].gene_index)
         print("Total nodes:", len(self.get_node_list()))
         self.nodes = pd.Series(self.nodes)
         self.node_to_modality = pd.Series(self.node_to_modality)

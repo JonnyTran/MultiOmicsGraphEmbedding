@@ -19,7 +19,7 @@ from moge.generator.multiplex import MultiplexGenerator
 from moge.module.trainer import ModelTrainer
 from moge.module.multiplex import MultiplexEmbedder
 
-DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_biogrid_multi_network.pickle'
+DATASET = '../moge/data/proteinatlas_biogrid_multi_network.pickle'
 
 
 def train(hparams):
@@ -28,13 +28,17 @@ def train(hparams):
 
     MAX_EPOCHS = 10
     min_count = hparams.classes_min_count
+    if hparams.__getattr__("encoder.Protein_seqs") == "Albert":
+        hparams.batch_size = 100
+        hparams.max_length = 700
+
     batch_size = hparams.batch_size
     max_length = hparams.max_length
     n_steps = int(200000 / batch_size)
 
     variables = []
-    targets = ['go_id']
-    network.process_feature_tranformer(filter_label=targets[0], min_count=min_count, verbose=False)
+    targets = ['Protein class']
+    network.process_feature_tranformer(filter_label=targets[0], delimiter="\||, ", min_count=min_count, verbose=False)
     classes = network.feature_transformer[targets[0]].classes_
     n_classes = len(classes)
     seed = random.randint(0, 1000)
@@ -50,7 +54,7 @@ def train(hparams):
 
     dataset_test = network.get_test_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-        traversal='all', batch_size=int(batch_size * 1.5),
+        traversal='all_slices', batch_size=int(batch_size * 1.5),
         sampling="cycle", n_steps=1,
         method="GAT", adj_output="coo",
         maxlen=max_length, padding='post', truncating='post',
@@ -93,7 +97,7 @@ def train(hparams):
         # distributed_backend="horovod",
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         logger=logger,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=5),
         min_epochs=3, max_epochs=MAX_EPOCHS,
         weights_summary='top',
         amp_level='O1', precision=16,
@@ -140,11 +144,12 @@ if __name__ == "__main__":
 
     parser.add_argument('--multiplex_embedder', type=str, default="MultiplexNodeEmbedding")
     parser.add_argument('--multiplex_hidden_dim', type=int, default=128)
+    parser.add_argument('--multiplex_attn_dropout', type=float, default=0.0)
 
     parser.add_argument('--classifier', type=str, default="Dense")
     parser.add_argument('--nb_cls_dense_size', type=int, default=512)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
-    parser.add_argument('--classes_min_count', type=int, default=100)
+    parser.add_argument('--classes_min_count', type=int, default=0)
 
     parser.add_argument('--nb_weight_decay', type=float, default=0.0)
     parser.add_argument('--lr', type=float, default=1e-3)

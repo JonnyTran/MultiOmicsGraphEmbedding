@@ -70,7 +70,7 @@ class GraphSAGE(nn.Module):
 
 
 class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
-    def __init__(self, embedding_dim, hidden_dim, layers, bias=True):
+    def __init__(self, embedding_dim, hidden_dim, layers, attention_dropout=0.0, bias=True):
         super(MultiplexLayerAttention, self).__init__()
 
         self.embedding_dim = embedding_dim
@@ -79,7 +79,7 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
 
         self.weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
         self.att = nn.Parameter(torch.Tensor(1, hidden_dim))
-
+        self.dropout = nn.Dropout(attention_dropout)
         if bias:
             self.bias = nn.Parameter(torch.Tensor(hidden_dim))
         else:
@@ -103,6 +103,7 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
 
         for i, layer in enumerate(self.layers):
             x = torch.tanh(torch.matmul(embeddings[i], self.weight) + self.bias)
+            x = self.dropout(x)
             w[i] = torch.mean(torch.matmul(x, self.att.t()), dim=0)
 
         w = torch.softmax(w, 0)
@@ -116,7 +117,7 @@ class MultiplexLayerAttention(nn.MultiLabelSoftMarginLoss):
 
 
 class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
-    def __init__(self, embedding_dim, hidden_dim, layers, bias=True):
+    def __init__(self, embedding_dim, hidden_dim, layers, attention_dropout=0.0, bias=True):
         super(MultiplexNodeAttention, self).__init__()
 
         self.embedding_dim = embedding_dim
@@ -125,6 +126,7 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
 
         self.weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
         self.att = nn.Parameter(torch.Tensor(1, hidden_dim))
+        self.dropout = nn.Dropout(attention_dropout)
 
         if bias:
             self.bias = nn.Parameter(torch.Tensor(hidden_dim))
@@ -154,6 +156,7 @@ class MultiplexNodeAttention(nn.MultiLabelSoftMarginLoss):
 
         for i, layer in enumerate(self.layers):
             x = torch.tanh(torch.matmul(embeddings[i], self.weight) + self.bias)
+            x = self.dropout(x)
             w[:, i] = torch.matmul(x, self.att.t())
 
         w = torch.softmax(w, 1)

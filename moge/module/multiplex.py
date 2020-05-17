@@ -63,10 +63,12 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         if hparams.multiplex_embedder == "MultiplexLayerAttention":
             self._multiplex_embedder = MultiplexLayerAttention(embedding_dim=hparams.embedding_dim,
                                                                hidden_dim=hparams.multiplex_hidden_dim,
+                                                               attention_dropout=hparams.multiplex_attn_dropout,
                                                                layers=layers)
         elif hparams.multiplex_embedder == "MultiplexNodeAttention":
             self._multiplex_embedder = MultiplexNodeAttention(embedding_dim=hparams.embedding_dim,
                                                               hidden_dim=hparams.multiplex_hidden_dim,
+                                                              attention_dropout=hparams.multiplex_attn_dropout,
                                                               layers=layers)
         else:
             print('"multiplex_embedder" not used. Concatenate multi-layer embeddings instead.')
