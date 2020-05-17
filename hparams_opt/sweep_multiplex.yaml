@@ -9,7 +9,7 @@ early_terminate:
   max_iter: 27
 parameters:
   encoder.Protein_seqs:
-    values: ["ConvLSTM", "Albert"]
+    values: ["ConvLSTM"]
   encoding_dim:
     values: [64, 128, 256, 512]
   embedding_dim:
@@ -17,7 +17,7 @@ parameters:
   max_length:
     values: [1000]
   batch_size:
-    values: [1500]
+    values: [1200]
   num_epochs:
     values: [20]
 

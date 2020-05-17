@@ -19,7 +19,7 @@ from moge.generator.multiplex import MultiplexGenerator
 from moge.module.trainer import ModelTrainer
 from moge.module.multiplex import MultiplexEmbedder
 
-DATASET = '../moge/data/proteinatlas_biogrid_multi_network.pickle'
+DATASET = '../MultiOmicsGraphEmbedding/data/proteinatlas_biogrid_multi_network.pickle'
 
 
 def train(hparams):
@@ -27,12 +27,13 @@ def train(hparams):
         network = pickle.load(file)
 
     MAX_EPOCHS = 10
-    min_count = hparams.classes_min_count
-    if hparams.__getattr__("encoder.Protein_seqs") == "Albert":
+    min_count = 2
+
+    if hparams.__dict__["encoder.Protein_seqs"] == "Albert":
         hparams.batch_size = 100
         hparams.max_length = 700
 
-    batch_size = hparams.batch_size
+    batch_size = min(hparams.batch_size, 1000)
     max_length = hparams.max_length
     n_steps = int(200000 / batch_size)
 
@@ -100,7 +101,7 @@ def train(hparams):
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=5),
         min_epochs=3, max_epochs=MAX_EPOCHS,
         weights_summary='top',
-        amp_level='O1', precision=16,
+        # amp_level='O1', precision=16,
     )
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
 
