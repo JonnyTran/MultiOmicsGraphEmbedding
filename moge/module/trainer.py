@@ -17,6 +17,9 @@ class ModelTrainer(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
 
+        # print("batch_nb", batch_nb)
+        # print({k: v.size() if not isinstance(v, list) else (len(v), len(v[0])) for k, v in X.items()})
+
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 

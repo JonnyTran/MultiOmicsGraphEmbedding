@@ -1,3 +1,4 @@
+
 import torch
 import torch.nn as nn
 
@@ -52,7 +53,7 @@ class FocalLoss(nn.Module):
         return loss.mean()
 
 
-class ClassificationLoss(torch.nn.Module):
+class ClassificationLoss(nn.Module):
     def __init__(self, n_classes, class_weight=None,
                  loss_type="SOFTMAX_CROSS_ENTROPY"):
         super(ClassificationLoss, self).__init__()
