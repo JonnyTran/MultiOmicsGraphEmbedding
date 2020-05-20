@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 
+import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -46,11 +47,11 @@ class AlbertEncoder(nn.Module):
         return parser
 
 
-class ConvLSTM(nn.Module):
+class ConvLSTM(pl.LightningModule):
     def __init__(self, hparams):
         super(ConvLSTM, self).__init__()
 
-        if hparams.word_embedding_size is None:
+        if not hasattr(hparams, "word_embedding_size") or hparams.word_embedding_size is None:
             hparams.word_embedding_size = hparams.vocab_size
 
         self.hparams = hparams
@@ -102,6 +103,8 @@ class ConvLSTM(nn.Module):
         X_lengths = (input_seqs > 0).sum(1)
         hidden = self.init_hidden(batch_size)
 
+        print(f"\nself.word_embedding {self.word_embedding.weight.device}")
+        print(f"\ninput_seqs {input_seqs.device}")
         X = self.word_embedding(input_seqs)
 
         # Conv_1

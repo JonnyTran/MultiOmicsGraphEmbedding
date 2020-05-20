@@ -142,10 +142,7 @@ class MultiplexNodeAttention(nn.Module):
 
     def forward(self, embeddings):
         w = self.compute_attention(embeddings)
-        # print("embeddings", len(embeddings), torch.stack(embeddings, dim=2).shape)
-        # print("w", w.shape)
         z = torch.matmul(torch.stack(embeddings, dim=2), w)
-        # print("z", z.shape)
         z = z.squeeze(2)
         return z
 

@@ -20,11 +20,9 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         self.hparams = hparams
 
         ################### Encoding ####################
-        self._encoder = {}
         for seq_type, encoder in hparams.encoder.items():
             if encoder == "ConvLSTM":
-                self.__setattr__("_encoder_" + seq_type, ConvLSTM(hparams))
-                self._encoder[seq_type] = self.__getattr__("_encoder_" + seq_type)
+                self.set_encoder(seq_type, ConvLSTM(hparams))
             elif encoder == "Albert":
                 config = AlbertConfig(
                     vocab_size=hparams.vocab_size,
@@ -39,22 +37,18 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
                     type_vocab_size=1,
                     max_position_embeddings=hparams.max_length,
                 )
-                self._encoder[seq_type] = AlbertEncoder(config)
+                self.set_encoder(seq_type, AlbertEncoder(config))
             else:
                 raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
 
         ################### Layer-specfic Embedding ####################
-        self._embedder = {}
         for subnetwork_type, embedder in hparams.embedder.items():
             if embedder == "GAT":
-                self.__setattr__("_embedder_" + subnetwork_type, GAT(hparams))
-                self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
+                self.set_embedder(subnetwork_type, GAT(hparams))
             elif embedder == "GCN":
-                self.__setattr__("_embedder_" + subnetwork_type, GCN(hparams))
-                self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
+                self.set_embedder(subnetwork_type, GCN(hparams))
             elif embedder == "GraphSAGE":
-                self.__setattr__("_embedder_" + subnetwork_type, GraphSAGE(hparams))
-                self._embedder[subnetwork_type] = self.__getattr__("_embedder_" + subnetwork_type)
+                self.set_embedder(subnetwork_type, GraphSAGE(hparams))
             else:
                 raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN', 'GraphSAGE']")
 
@@ -95,17 +89,15 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         )
 
     def forward(self, X):
-        encodings = self._encoder["Protein_seqs"](X["Protein_seqs"])
-        print("X[Protein_seqs]", X["Protein_seqs"].shape)
+        encodings = self.get_encoder("Protein_seqs")(X["Protein_seqs"])
 
         embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():
             if X[subnetwork_type].dim() > 2:
                 X[subnetwork_type] = X[subnetwork_type].squeeze(0)
             print(f"X[{subnetwork_type}]", X[subnetwork_type].shape)
-            embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
+            embeddings.append(self.get_embedder(subnetwork_type)(encodings, X[subnetwork_type]))
 
-        print("embeddings", [emb.shape for emb in embeddings])
         if hasattr(self, "_multiplex_embedder"):
             embeddings = self._multiplex_embedder.forward(embeddings)
         else:
@@ -137,14 +129,14 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         :param cuda (bool): whether to run computations in GPUs
         :return (np.array): a numpy array of size (node size, embedding dim)
         """
-        encodings = self.get_encodings(X, key="Protein_seqs", batch_size=batch_size)
+        encodings = self.get_encodings(X, node_type="Protein_seqs", batch_size=batch_size)
         print("X[Protein_seqs]", X["Protein_seqs"].shape)
         multi_embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():
             if X[subnetwork_type].dim() > 2:
                 print(f"X[{subnetwork_type}]", X[subnetwork_type].shape)
                 X[subnetwork_type] = X[subnetwork_type].squeeze(0)
-            multi_embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
+            multi_embeddings.append(self.get_embedder(subnetwork_type)(encodings, X[subnetwork_type]))
 
         if return_multi_emb:
             return multi_embeddings
@@ -162,3 +154,15 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
             y_pred = torch.softmax(y_pred, 1) if "SOFTMAX" in self.hparams.loss_type else torch.sigmoid(y_pred)
 
         return y_pred.detach().cpu().numpy()
+
+    def get_encoder(self, node_type):
+        return self.__getattr__("_encoder_" + node_type)
+
+    def set_encoder(self, node_type, model):
+        self.__setattr__("_encoder_" + node_type, model)
+
+    def get_embedder(self, subnetwork_type):
+        return self.__getattr__("_embedder_" + subnetwork_type)
+
+    def set_embedder(self, subnetwork_type, model):
+        self.__setattr__("_embedder_" + subnetwork_type, model)

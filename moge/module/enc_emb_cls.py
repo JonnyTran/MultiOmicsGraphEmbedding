@@ -16,12 +16,12 @@ class EncoderEmbedderClassifier(torch.nn.Module):
     def get_embeddings(self, *args):
         raise NotImplementedError()
 
-    def get_encodings(self, X, key, batch_size=32):
-        if key is not None:
-            input_seqs = X[key]
+    def get_encodings(self, X, node_type, batch_size=32):
+        if node_type is not None:
+            input_seqs = X[node_type]
 
         if isinstance(self._encoder, dict):
-            encoder_module = self._encoder[key]
+            encoder_module = self.get_encoder(node_type)
         else:
             encoder_module = self._encoder
 
@@ -98,7 +98,7 @@ class MonoplexEmebdder(EncoderEmbedderClassifier):
         # print("input_seqs", input_seqs.shape)
         # print("subnetwork", len(subnetwork), [batch.shape for batch in subnetwork])
         if subnetwork.dim() > 2:
-            subnetwork = subnetwork[0].squeeze(0)
+            subnetwork = subnetwork.squeeze(0)
 
         encodings = self._encoder(input_seqs)
         embeddings = self._embedder(encodings, subnetwork)
@@ -126,7 +126,7 @@ class MonoplexEmebdder(EncoderEmbedderClassifier):
         :param cuda (bool): whether to run computations in GPUs
         :return (np.array): a numpy array of size (node size, embedding dim)
         """
-        encodings = self.get_encodings(X, key="input_seqs", batch_size=batch_size)
+        encodings = self.get_encodings(X, node_type="input_seqs", batch_size=batch_size)
 
         embeddings = self._embedder(encodings, X["subnetwork"])
 
