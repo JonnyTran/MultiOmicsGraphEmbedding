@@ -113,11 +113,12 @@ def graph_viz3d(g: nx.Graph,
     if isinstance(node_color, pd.Series) and node_color.str.contains("#").any():
         # if node_color contains hex colors (e.g. #aaaaa)
         express_mode = False
-    elif isinstance(node_color, pd.Series) and node_color.map(lambda x: isinstance(x, tuple)).any():
+    elif isinstance(node_color, pd.Series) and node_color.map(lambda x: isinstance(x, tuple) and len(x) == 3).any():
         # if node_color are a tuple of RGB values
         express_mode = False
+        node_color = node_color.map(lambda rgb: [val / (max(rgb)) for val in rgb])  # change values
         node_color = node_color.map(
-            lambda tup: f"rgba({int(255 * tup[0])}, {int(255 * tup[1])}, {int(255 * tup[2])}, 1.0)")
+            lambda rgb: f"rgba({int(255 * rgb[0])}, {int(255 * rgb[1])}, {int(255 * rgb[2])}, 1.0)")
     else:
         express_mode = True
 

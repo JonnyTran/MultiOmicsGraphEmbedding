@@ -24,6 +24,10 @@ class Network(object):
 
         return node_list
 
+    def get_connected_nodelist(self, layer):
+        degrees = self.networks[layer].degree()
+        return [node for node, deg in degrees if deg > 0]
+
     def remove_invalid_nodes(self):
         bad_nodes = [node for node in self.get_node_list()
                      if node is None or node == np.nan or \

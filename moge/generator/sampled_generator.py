@@ -44,7 +44,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
             np.count_nonzero(self.node_sampling_freq))) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)
 
-    def get_nonzero_nodelist(self):
+    def get_connected_nodelist(self):
         """
         Returns a list of nodes that have an associated edge
         :return:

@@ -136,9 +136,12 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         :return (np.array): a numpy array of size (node size, embedding dim)
         """
         encodings = self.get_encodings(X, key="Protein_seqs", batch_size=batch_size)
-
+        print("X[Protein_seqs]", X["Protein_seqs"].shape)
         multi_embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():
+            if X[subnetwork_type].dim() > 2:
+                print(f"X[{subnetwork_type}]", X[subnetwork_type].shape)
+                X[subnetwork_type] = X[subnetwork_type].squeeze(0)
             multi_embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
         if return_multi_emb:

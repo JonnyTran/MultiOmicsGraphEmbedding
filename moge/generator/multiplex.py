@@ -144,7 +144,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
     def load_data(self, connected_nodes_only=True, dropna=True, y_label=None, variable_length=False):
         if connected_nodes_only:
-            node_list = self.get_nonzero_nodelist()
+            node_list = self.get_connected_nodelist()
         else:
             node_list = self.network.node_list
 
