@@ -27,7 +27,7 @@ def train(hparams):
         network = pickle.load(file)
 
     MAX_EPOCHS = 10
-    min_count = 2
+    min_count = 10
 
     if hparams.__dict__["encoder.Protein_seqs"] == "Albert":
         hparams.batch_size = 100
@@ -55,7 +55,8 @@ def train(hparams):
 
     dataset_test = network.get_test_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-        traversal='all_slices', batch_size=int(batch_size * 1.5),
+        traversal='all' if hparams.__dict__["encoder.Protein_seqs"] != "Albert" else "all_slices",
+        batch_size=int(batch_size * 1.5),
         sampling="cycle", n_steps=1,
         method="GAT", adj_output="coo",
         maxlen=max_length, padding='post', truncating='post',
@@ -100,7 +101,7 @@ def train(hparams):
         # distributed_backend="horovod",
         gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
         logger=logger,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=5),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3),
         min_epochs=3, max_epochs=MAX_EPOCHS,
         weights_summary='top',
         # amp_level='O1', precision=16,

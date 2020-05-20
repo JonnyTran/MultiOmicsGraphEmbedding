@@ -1,7 +1,8 @@
 program: hparams_opt/wandb_sweep_multiplex.py
 method: bayes
 metric:
-  name: val_loss
+  name: val_top_k
+  goal: maximize
 early_terminate:
   type: hyperband
   s: 2
@@ -22,18 +23,16 @@ parameters:
     values: [20]
 
   word_embedding_size:
-    min: 4
-    max: 22
+    values: [9,10,11,19,20,21]
 
-  nb_conv1_filters:
-    min: 64
-    max: 320
   nb_conv1_kernel_size:
     min: 3
     max: 20
+  nb_conv1_filters:
+    min: 64
+    max: 320
   nb_conv1_dropout:
-    min: 0.0
-    max: 0.5
+    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
   nb_conv1_batchnorm:
     values: [True, False]
 
@@ -91,11 +90,9 @@ parameters:
     values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
 
   nb_weight_decay:
-    min: 0.00001
-    max: 0.01
+    values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
   lr:
-    min: 0.00001
-    max: 0.005
+    values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
 
   loss_type:
     values: ["BCE_WITH_LOGITS"]
