@@ -85,6 +85,11 @@ parameters:
   nb_cls_dropout:
     values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
+  use_hierar:
+    values: [True, False]
+  hierar_penalty:
+    values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
+
   nb_weight_decay:
     min: 0.00001
     max: 0.01

@@ -76,6 +76,8 @@ def train(hparams):
     vocab = dataset_train.tokenizer[network.modalities[0]].word_index
 
     hparams.n_classes = n_classes
+    hparams.classes = classes
+    hparams.hierar_taxonomy_file = "../MultiOmicsGraphEmbedding/data/go_term.taxonomy"
     hparams.vocab_size = len(vocab)
 
     logger = WandbLogger()
