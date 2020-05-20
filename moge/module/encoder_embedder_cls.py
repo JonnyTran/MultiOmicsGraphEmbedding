@@ -16,7 +16,7 @@ class EncoderEmbedderClassifier(torch.nn.Module):
     def get_embeddings(self, *args):
         raise NotImplementedError()
 
-    def get_encodings(self, X, key, batch_size=None):
+    def get_encodings(self, X, key, batch_size=32):
         if key is not None:
             input_seqs = X[key]
 
