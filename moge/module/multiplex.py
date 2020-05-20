@@ -108,7 +108,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
             embeddings = self._multiplex_embedder.forward(embeddings)
         else:
             embeddings = torch.cat(embeddings, 1)
-        # print("embeddings", embeddings.shape)
+
         y_pred = self._classifier(embeddings)
         return y_pred
 
@@ -122,8 +122,11 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
 
-        return self.criterion.forward(Y_hat, Y, use_hierar=self.hparams.use_hierar, multiclass=True,
-                                      classifier_weight=self._classifier.fc_classifier.linear.weight if self.hparams.use_hierar else None, )
+        return self.criterion.forward(
+            Y_hat, Y,
+            use_hierar=self.hparams.use_hierar, multiclass=True,
+            classifier_weight=self._classifier.fc_classifier.linear.weight if self.hparams.use_hierar else None,
+        )
 
     def get_embeddings(self, X, batch_size=100, return_multi_emb=False):
         """

@@ -56,7 +56,7 @@ class FocalLoss(nn.Module):
 
 class ClassificationLoss(nn.Module):
     def __init__(self, n_classes, class_weight=None,
-                 loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1.0, hierar_relations=None):
+                 loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1e-6, hierar_relations=None):
         super(ClassificationLoss, self).__init__()
         self.label_size = n_classes
         self.loss_type = loss_type
@@ -96,28 +96,25 @@ class ClassificationLoss(nn.Module):
                     target = torch.eye(self.label_size)[target]
             return self.criterion(logits, target)
 
-    def recursive_regularize(self, weight, hierar_relations):
+    def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):
         """ Only support hierarchical text classification with BCELoss
         references: http://www.cse.ust.hk/~yqsong/papers/2018-WWW-Text-GraphCNN.pdf
                     http://www.cs.cmu.edu/~sgopal1/papers/KDD13.pdf
         """
         recursive_loss = 0.0
-        # print("len(weight)")
-        for i in range(len(weight)):
+        for i in range(weight.size(0)):
             if i not in hierar_relations:
                 continue
             children_ids = hierar_relations[i]
             if not children_ids:
                 continue
-            # print("children_ids", children_ids)
-            children_ids_list = torch.tensor(children_ids, dtype=torch.long)
+            children_ids_list = torch.tensor(children_ids, dtype=torch.long, device=weight.device)
             children_paras = torch.index_select(weight, 0, children_ids_list)
-            parent_para = torch.index_select(weight, 0, torch.tensor(i))
-            parent_para = parent_para.repeat(children_ids_list.size()[0], 1)
+            parent_para = torch.index_select(weight, 0, torch.tensor(i, device=weight.device))
+            parent_para = parent_para.repeat(children_ids_list.size(0), 1)
             diff_paras = parent_para - children_paras
-            diff_paras = diff_paras.view(diff_paras.size()[0], -1)
+            diff_paras = diff_paras.view(diff_paras.size(0), -1)
             recursive_loss += 1.0 / 2 * torch.norm(diff_paras, p=2) ** 2
-        print("recursive_loss", recursive_loss)
         return recursive_loss
 
 
