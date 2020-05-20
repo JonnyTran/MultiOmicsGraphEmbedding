@@ -95,7 +95,6 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         for subnetwork_type, _ in self.hparams.embedder.items():
             if X[subnetwork_type].dim() > 2:
                 X[subnetwork_type] = X[subnetwork_type].squeeze(0)
-            print(f"X[{subnetwork_type}]", X[subnetwork_type].shape)
             embeddings.append(self.get_embedder(subnetwork_type)(encodings, X[subnetwork_type]))
 
         if hasattr(self, "_multiplex_embedder"):
@@ -130,11 +129,9 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         :return (np.array): a numpy array of size (node size, embedding dim)
         """
         encodings = self.get_encodings(X, node_type="Protein_seqs", batch_size=batch_size)
-        print("X[Protein_seqs]", X["Protein_seqs"].shape)
         multi_embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():
             if X[subnetwork_type].dim() > 2:
-                print(f"X[{subnetwork_type}]", X[subnetwork_type].shape)
                 X[subnetwork_type] = X[subnetwork_type].squeeze(0)
             multi_embeddings.append(self.get_embedder(subnetwork_type)(encodings, X[subnetwork_type]))
 
@@ -155,14 +152,4 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
 
         return y_pred.detach().cpu().numpy()
 
-    def get_encoder(self, node_type):
-        return self.__getattr__("_encoder_" + node_type)
 
-    def set_encoder(self, node_type, model):
-        self.__setattr__("_encoder_" + node_type, model)
-
-    def get_embedder(self, subnetwork_type):
-        return self.__getattr__("_embedder_" + subnetwork_type)
-
-    def set_embedder(self, subnetwork_type, model):
-        self.__setattr__("_embedder_" + subnetwork_type, model)

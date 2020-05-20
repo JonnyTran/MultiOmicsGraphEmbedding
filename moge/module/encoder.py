@@ -103,8 +103,6 @@ class ConvLSTM(pl.LightningModule):
         X_lengths = (input_seqs > 0).sum(1)
         hidden = self.init_hidden(batch_size)
 
-        print(f"\nself.word_embedding {self.word_embedding.weight.device}")
-        print(f"\ninput_seqs {input_seqs.device}")
         X = self.word_embedding(input_seqs)
 
         # Conv_1
