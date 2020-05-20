@@ -17,7 +17,7 @@ class Metrics():
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
-            y_pred = torch.softmax(y_pred) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
+            y_pred = torch.softmax(y_pred, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
 
         if training:
             self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))

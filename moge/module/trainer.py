@@ -19,16 +19,29 @@ class ModelTrainer(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
 
-        # print("batch_nb", batch_nb)
-        # print({k: v.size() if not isinstance(v, list) else (len(v), len(v[0])) for k, v in X.items()})
-
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
         self.metrics.update_metrics(Y_hat, y, training=True)
-        progress_bar = self.metrics.compute_metrics(training=True)
 
-        return {'loss': loss, 'progress_bar': progress_bar, }
+        logs = self.metrics.compute_metrics(training=True)
+        logs = _fix_dp_return_type(logs, device=Y_hat.device)
+
+        return {'loss': loss, 'progress_bar': logs, }
+
+    def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
+        logs = self.metrics.compute_metrics(training=True)
+
+        logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
+        logs.update({"loss": avg_loss})
+        self.metrics.reset_metrics(training=True)
+
+        return {"log": logs}
+
+    # def training_step_end(self, batch_parts_outputs):
+    #     outputs = torch.cat(batch_parts_outputs, dim=1)
+    #     return outputs
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
@@ -37,23 +50,17 @@ class ModelTrainer(pl.LightningModule):
         self.metrics.update_metrics(Y_hat, y, training=False)
         return {"val_loss": loss}
 
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.metrics.compute_metrics(training=True)
-        logs.update({"loss": avg_loss})
-        self.metrics.reset_metrics(training=True)
-
-        return {"log": logs}
-
     def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.metrics.compute_metrics(training=False)
-        logs.update({"val_loss": avg_loss})
+        avg_loss = torch.cat([x["val_loss"] for x in outputs]).mean().item()
 
-        results = {"progress_bar": logs,
-                   "log": logs}
+        logs = self.metrics.compute_metrics(training=False)
+        logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
         self.metrics.reset_metrics(training=False)
-        print(logs)  # print val results every epoch
+
+        logs.update({"val_loss": avg_loss})
+        results = {"progress_bar": logs, "log": logs}
+
+        print_logs(logs)
         return results
 
     def configure_optimizers(self):
@@ -120,3 +127,17 @@ class ModelTrainer(pl.LightningModule):
     #         batch_size=None,
     #         num_workers=2
     #     )
+
+
+def _fix_dp_return_type(result, device):
+    if isinstance(result, torch.Tensor):
+        return result.to(device)
+    if isinstance(result, dict):
+        return {k: _fix_dp_return_type(v, device) for k, v in result.items()}
+    # Must be a number then
+    return torch.Tensor([result]).to(device)
+
+
+def print_logs(logs):
+    print({key: f"{item.item():.3f}" if isinstance(item, torch.Tensor) else f"{item:.3f}" for key, item in
+           logs.items()})

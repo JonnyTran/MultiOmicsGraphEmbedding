@@ -3,25 +3,23 @@ import pandas as pd
 import tensorflow as tf
 import torch
 from torch.utils import data
-from torch.utils.data import BatchSampler, Sampler
 
 from . import DataGenerator, SubgraphGenerator
 
 
-class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
+class PytorchDataset(SubgraphGenerator, torch.utils.data.Dataset):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
                  traversal='neighborhood', sampling="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', agg_mode=None, tokenizer=None, replace=True,
-                 variable_length=False,
                  seed=0, verbose=True, **kwargs):
-        super(SubgraphDataset, self).__init__(network=network,
-                                              variables=variables, targets=targets,
-                                              batch_size=batch_size,
-                                              traversal=traversal, sampling=sampling,
-                                              n_steps=n_steps, directed=directed, replace=replace,
-                                              maxlen=maxlen, padding=padding, truncating=truncating,
-                                              agg_mode=agg_mode,
-                                              tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
+        super(PytorchDataset, self).__init__(network=network,
+                                             variables=variables, targets=targets,
+                                             batch_size=batch_size,
+                                             traversal=traversal, sampling=sampling,
+                                             n_steps=n_steps, directed=directed, replace=replace,
+                                             maxlen=maxlen, padding=padding, truncating=truncating,
+                                             agg_mode=agg_mode,
+                                             tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
 
         self.node_list = pd.Series(self.node_list)
 
@@ -35,7 +33,7 @@ class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
         return X, y, idx_weights
 
 
-class GeneratorDataset(tf.data.Dataset):
+class TFDataset(tf.data.Dataset):
     def __new__(cls, generator: DataGenerator, output_types=None, output_shapes=None):
         """
         A tf.data wrapper for keras.utils.Sequence generator
