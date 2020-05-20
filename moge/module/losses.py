@@ -1,3 +1,4 @@
+import codecs as cs
 
 import torch
 import torch.nn as nn
@@ -55,10 +56,12 @@ class FocalLoss(nn.Module):
 
 class ClassificationLoss(nn.Module):
     def __init__(self, n_classes, class_weight=None,
-                 loss_type="SOFTMAX_CROSS_ENTROPY"):
+                 loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1.0, hierar_relations=None):
         super(ClassificationLoss, self).__init__()
         self.label_size = n_classes
         self.loss_type = loss_type
+        self.hierar_penalty = hierar_penalty
+        self.hierar_relations = hierar_relations
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.criterion = torch.nn.CrossEntropyLoss(class_weight)
@@ -75,16 +78,14 @@ class ClassificationLoss(nn.Module):
                 "Unsupported loss type: %s." % (
                     loss_type))
 
-    def forward(self, logits, target, use_hierar=False, multiclass=False,
-                hierar_penalty=1.0, hierar_paras=None, hierar_relations=None):
+    def forward(self, logits, target, multiclass=False, use_hierar=False, classifier_weight: torch.Tensor = None):
         if use_hierar:
             assert self.loss_type in ["BCE_WITH_LOGITS",
                                       "SIGMOID_FOCAL_CROSS_ENTROPY"]
             if not multiclass:
                 target = torch.eye(self.label_size)[target]
             return self.criterion(logits, target) + \
-                   hierar_penalty * self.recursive_regularize(hierar_paras,
-                                                              hierar_relations)
+                   self.hierar_penalty * self.recursive_regularize(classifier_weight, self.hierar_relations)
         else:
             if multiclass:
                 assert self.loss_type in ["BCE_WITH_LOGITS",
@@ -95,23 +96,44 @@ class ClassificationLoss(nn.Module):
                     target = torch.eye(self.label_size)[target]
             return self.criterion(logits, target)
 
-    def recursive_regularize(self, paras, hierar_relations):
+    def recursive_regularize(self, weight, hierar_relations):
         """ Only support hierarchical text classification with BCELoss
         references: http://www.cse.ust.hk/~yqsong/papers/2018-WWW-Text-GraphCNN.pdf
                     http://www.cs.cmu.edu/~sgopal1/papers/KDD13.pdf
         """
         recursive_loss = 0.0
-        for i in range(len(paras)):
+        # print("len(weight)")
+        for i in range(len(weight)):
             if i not in hierar_relations:
                 continue
             children_ids = hierar_relations[i]
             if not children_ids:
                 continue
+            # print("children_ids", children_ids)
             children_ids_list = torch.tensor(children_ids, dtype=torch.long)
-            children_paras = torch.index_select(paras, 0, children_ids_list)
-            parent_para = torch.index_select(paras, 0, torch.tensor(i))
+            children_paras = torch.index_select(weight, 0, children_ids_list)
+            parent_para = torch.index_select(weight, 0, torch.tensor(i))
             parent_para = parent_para.repeat(children_ids_list.size()[0], 1)
             diff_paras = parent_para - children_paras
             diff_paras = diff_paras.view(diff_paras.size()[0], -1)
             recursive_loss += 1.0 / 2 * torch.norm(diff_paras, p=2) ** 2
+        print("recursive_loss", recursive_loss)
         return recursive_loss
+
+
+def get_hierar_relations(hierar_taxonomy_file, label_map):
+    """ get parent-children relationships from given hierar_taxonomy
+        hierar_taxonomy: parent_label \t child_label_0 \t child_label_1 \n
+    """
+    hierar_relations = {}
+    with cs.open(hierar_taxonomy_file, "r", "utf8") as f:
+        for line in f:
+            line_split = line.strip("\n").split("\t")
+            parent_label, children_label = line_split[0], line_split[1:]
+            if parent_label not in label_map:
+                continue
+            parent_label_id = label_map[parent_label]
+            children_label_ids = [label_map[child_label] \
+                                  for child_label in children_label if child_label in label_map]
+            hierar_relations[parent_label_id] = children_label_ids
+    return hierar_relations

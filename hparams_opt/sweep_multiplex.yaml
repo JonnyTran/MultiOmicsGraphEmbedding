@@ -54,39 +54,36 @@ parameters:
     min: 64
     max: 512
   nb_lstm_hidden_dropout:
-    min: 0.0
-    max: 0.5
+    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
   nb_lstm_bidirectional:
     values: [True, False]
   nb_lstm_layernorm:
     values: [True, False]
 
-  embedder.Protein-Protein-physical:
+  embedder.Protein_Protein_physical:
     values: ["GAT", "GCN", "GraphSAGE"]
-  embedder.Protein-Protein-genetic:
+  embedder.Protein_Protein_genetic:
     values: ["GAT", "GCN", "GraphSAGE"]
-  embedder.Protein-Protein-correlation:
+  embedder.Protein_Protein_correlation:
     values: ["GAT", "GCN", "GraphSAGE"]
   nb_attn_heads:
-    values: [2, 4, 8, 16]
+    values: [1, 2, 4, 8, 16]
   nb_attn_dropout:
-    min: 0.0
-    max: 0.6
+    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
 
   multiplex_embedder:
     values: ["MultiplexLayerEmbedding", "MultiplexNodeEmbedding", "Concat"]
   multiplex_hidden_dim:
     values: [64, 128, 256, 512, 768]
   multiplex_attn_dropout:
-    values: [0.0, 0.5]
+    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
 
   classifier:
     values: ["Dense"]
   nb_cls_dense_size:
-    values: [256, 512, 768, 1024, 1536]
+    values: [512, 768, 1024, 1536, 2048]
   nb_cls_dropout:
-    min: 0.0
-    max: 0.5
+    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
   nb_weight_decay:
     min: 0.00001

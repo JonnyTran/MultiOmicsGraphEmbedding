@@ -1,11 +1,12 @@
 import numpy as np
+import pandas as pd
 import torch
 from transformers import AlbertConfig
 
 from moge.module.classifier import Dense, HierarchicalAWX
 from moge.module.embedder import GAT
 from moge.module.encoder import ConvLSTM, AlbertEncoder
-from moge.module.losses import ClassificationLoss
+from moge.module.losses import ClassificationLoss, get_hierar_relations
 
 
 class EncoderEmbedderClassifier(torch.nn.Module):
@@ -79,7 +80,17 @@ class MonoplexEmebdder(EncoderEmbedderClassifier):
         else:
             raise Exception("hparams.classifier must be one of {'Dense'}")
 
-        self.criterion = ClassificationLoss(n_classes=hparams.n_classes, loss_type=hparams.loss_type)
+        if hparams.use_hierar:
+            label_map = pd.Series(range(len(hparams.classes)), index=hparams.classes).to_dict()
+            hierar_relations = get_hierar_relations(hparams.hierar_taxonomy_file,
+                                                    label_map=label_map)
+
+        self.criterion = ClassificationLoss(
+            n_classes=hparams.n_classes,
+            loss_type=hparams.loss_type,
+            hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
+            hierar_relations=hierar_relations if hparams.use_hierar else None
+        )
         self.hparams = hparams
 
     def forward(self, X):
@@ -104,8 +115,9 @@ class MonoplexEmebdder(EncoderEmbedderClassifier):
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
 
-        return self.criterion(Y_hat, Y, use_hierar=False, multiclass=True,
-                              hierar_penalty=None, hierar_paras=None, hierar_relations=None)
+        return self.criterion.forward(Y_hat, Y,
+                                      use_hierar=self.hparams.use_hierar, multiclass=True,
+                                      classifier_weight=self._classifier.fc_classifier.linear.weight if self.hparams.use_hierar else None, )
 
     def get_embeddings(self, X, batch_size=None):
         """

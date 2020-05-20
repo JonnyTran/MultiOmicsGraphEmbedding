@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import ModelTrainer
-from moge.module.model import MonoplexEmebdder
+from moge.module.encoder_embedder_cls import MonoplexEmebdder
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 
