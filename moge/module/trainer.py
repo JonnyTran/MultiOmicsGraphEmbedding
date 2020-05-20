@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .metrics import Metrics
 
@@ -60,7 +61,9 @@ class ModelTrainer(pl.LightningModule):
                                      weight_decay=self._model.hparams.nb_weight_decay
                                      )
 
-        return optimizer
+        scheduler = ReduceLROnPlateau(optimizer, )
+
+        return [optimizer], [scheduler]
 
     # def configure_ddp(self, model, device_ids):
     #     model = LightningDistributedDataParallel(
