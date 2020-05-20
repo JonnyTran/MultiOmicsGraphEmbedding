@@ -5,6 +5,8 @@ import random
 import sys
 from argparse import ArgumentParser
 
+import numpy as np
+
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 
@@ -18,9 +20,10 @@ from pytorch_lightning.callbacks import EarlyStopping
 from moge.generator.multiplex import MultiplexGenerator
 from moge.module.trainer import ModelTrainer
 from moge.module.multiplex import MultiplexEmbedder
+from moge.module.utils import get_multiplex_collate_fn
 
 DATASET = '../MultiOmicsGraphEmbedding/data/proteinatlas_biogrid_multi_network.pickle'
-
+HIER_TAXONOMY_FILE = "../MultiOmicsGraphEmbedding/data/go_term.taxonomy"
 
 def train(hparams):
     with open(DATASET, 'rb') as file:
@@ -47,16 +50,16 @@ def train(hparams):
     split_idx = 0
     dataset_train = network.get_train_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-        traversal="bfs", batch_size=batch_size,
-        sampling="cycle", n_steps=n_steps,
+        traversal=hparams.traversal, batch_size=batch_size,
+        sampling=hparams.sampling, n_steps=n_steps,
         method="GAT", adj_output="coo",
         maxlen=max_length, padding='post', truncating='random',
         seed=seed, verbose=True)
 
     dataset_test = network.get_test_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-        traversal='all' if hparams.__dict__["encoder.Protein_seqs"] != "Albert" else "all_slices",
-        batch_size=int(batch_size * 1.5),
+        traversal='all_slices',
+        batch_size=np.ceil(len(network.testing.node_list) * .25).astype(int),
         sampling="cycle", n_steps=1,
         method="GAT", adj_output="coo",
         maxlen=max_length, padding='post', truncating='post',
@@ -64,21 +67,25 @@ def train(hparams):
 
     train_dataloader = torch.utils.data.DataLoader(
         dataset_train,
-        batch_size=None,
-        num_workers=10
+        batch_size=4,
+        num_workers=18,
+        collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
+                                            layers=list(hparams.embedder.keys()))
     )
 
     test_dataloader = torch.utils.data.DataLoader(
         dataset_test,
-        batch_size=None,
-        num_workers=5
+        batch_size=4,
+        num_workers=4,
+        collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
+                                            layers=list(hparams.embedder.keys()))
     )
 
     vocab = dataset_train.tokenizer[network.modalities[0]].word_index
 
     hparams.n_classes = n_classes
     hparams.classes = classes
-    hparams.hierar_taxonomy_file = "../MultiOmicsGraphEmbedding/data/go_term.taxonomy"
+    hparams.hierar_taxonomy_file = HIER_TAXONOMY_FILE
     hparams.vocab_size = len(vocab)
 
     logger = WandbLogger()
@@ -98,13 +105,14 @@ def train(hparams):
     model = ModelTrainer(eec)
 
     trainer = pl.Trainer(
-        # distributed_backend="horovod",
-        gpus=[random.randint(0, 3)] if torch.cuda.is_available() else None,
+        distributed_backend='dp',
+        gpus=4,
+        auto_lr_find=True,
         logger=logger,
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=3),
         min_epochs=3, max_epochs=MAX_EPOCHS,
         weights_summary='top',
-        # amp_level='O1', precision=16,
+        amp_level='O1', precision=16,
     )
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
 
@@ -119,6 +127,8 @@ if __name__ == "__main__":
     parser.add_argument('--max_length', type=int, default=1000)
     parser.add_argument('--batch_size', type=int, default=1000)
     parser.add_argument('--num_epochs', type=int, default=5)
+    parser.add_argument('--traversal', type=str, default="bfs")
+    parser.add_argument('--sampling', type=str, default="cycle")
 
     parser.add_argument('--num_hidden_layers', type=int, default=1)
     parser.add_argument('--num_hidden_groups', type=int, default=1)

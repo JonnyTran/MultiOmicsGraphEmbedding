@@ -6,11 +6,17 @@ from .metrics import Metrics
 
 
 class ModelTrainer(pl.LightningModule):
-    def __init__(self, model: torch.nn.Module):
+    def __init__(self, model: torch.nn.Module, gpus=1, data_path=None):
         super(ModelTrainer, self).__init__()
 
         self._model = model
         self.hparams = self._model.hparams
+        self.gpus = gpus
+
+        self.data_path = data_path
+        if self.data_path is not None:
+            self.prepare_data()
+
         self.metrics = Metrics(loss_type=self.hparams.loss_type)
 
     def forward(self, X):
@@ -39,9 +45,9 @@ class ModelTrainer(pl.LightningModule):
 
         return {"log": logs}
 
-    # def training_step_end(self, batch_parts_outputs):
-    #     outputs = torch.cat(batch_parts_outputs, dim=1)
-    #     return outputs
+    def training_step_end(self, batch_parts_outputs):
+        outputs = torch.cat(batch_parts_outputs, dim=1)
+        return outputs
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
@@ -64,68 +70,73 @@ class ModelTrainer(pl.LightningModule):
         return results
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self._model.parameters(),
-                                     lr=self.hparams.lr,
-                                     weight_decay=self.hparams.weight_decay
-                                     )
+        optimizer = torch.optim.Adam(self._model.parameters(), lr=self.hparams.lr,
+                                     weight_decay=self.hparams.weight_decay)
 
         scheduler = ReduceLROnPlateau(optimizer, )
-
         return [optimizer], [scheduler]
-
-    # def configure_ddp(self, model, device_ids):
-    #     model = LightningDistributedDataParallel(
-    #         model,
-    #         device_ids=device_ids,
-    #         find_unused_parameters=True
-    #     )
-    #     return model
-
+    #
     # def prepare_data(self) -> None:
     #     with open(self.data_path, 'rb') as file:
     #         network = pickle.load(file)
+    #
     #     variables = []
     #     targets = ['go_id']
-    #     network.process_feature_tranformer(filter_label=targets[0], min_count=100, verbose=False)
+    #     network.process_feature_tranformer(filter_label=targets[0], min_count=self.hparams.classes_min_count, verbose=False)
     #     classes = network.feature_transformer[targets[0]].classes_
-    #     self.n_classes = len(classes)
+    #     self.hparams.n_classes = len(classes)
     #     batch_size = 1000
     #     max_length = 1000
-    #     test_frac = 0.05
     #     n_steps = int(400000 / batch_size)
-    #     directed = False
     #     seed = random.randint(0, 1000)
     #
-    #     self.dataset_train = network.get_train_generator(
-    #         SubgraphGenerator, variables=variables, targets=targets,
-    #         sampling="bfs", batch_size=batch_size, agg_mode=None,
+    #     split_idx = 0
+    #     self.generator_train = network.get_train_generator(
+    #         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
+    #         traversal=self.hparams.traversal, batch_size=batch_size,
+    #         sampling=self.hparams.sampling, n_steps=n_steps,
     #         method="GAT", adj_output="coo",
-    #         compression="log", n_steps=n_steps, directed=directed,
-    #         maxlen=max_length, padding='post', truncating='post', variable_length=False,
+    #         maxlen=max_length, padding='post', truncating='post',
     #         seed=seed, verbose=False)
     #
-    #     self.dataset_test = network.get_test_generator(
-    #         SubgraphGenerator, variables=variables, targets=targets,
-    #         sampling='all', batch_size=batch_size, agg_mode=None,
+    #     self.generator_test = network.get_test_generator(
+    #         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
+    #         traversal='all_slices', batch_size=np.ceil(len(network.testing.node_list)*.25).astype(int),
+    #         sampling="cycle", n_steps=1,
     #         method="GAT", adj_output="coo",
-    #         compression="log", n_steps=1, directed=directed,
-    #         maxlen=max_length, padding='post', truncating='post', variable_length=False,
+    #         maxlen=max_length, padding='post', truncating='post',
     #         seed=seed, verbose=False)
     #
-    #     self.vocab = self.dataset_train.tokenizer.word_index
+    #     self.vocab = self.generator_train.tokenizer.word_index
     #
     # def train_dataloader(self):
+    #     if self.gpus == 1 or self.gpus == None:
+    #         batch_size = None
+    #     else:
+    #         batch_size = self.gpus
+    #
     #     return torch.utils.data.DataLoader(
-    #         self.dataset_train,
-    #         batch_size=None,
-    #         num_workers=10
+    #         self.generator_train,
+    #         batch_size=batch_size,
+    #         shuffle=False,
+    #         num_workers=18,
+    #         collate_fn=get_multiplex_collate_fn(node_types=list(self.hparams.encoder.keys()),
+    #                                             layers=list(self.hparams.embedder.keys())) if self.gpus > 1 else None
     #     )
     #
     # def val_dataloader(self):
+    #     if self.gpus == 1 or self.gpus == None:
+    #         batch_size = None
+    #     else:
+    #         batch_size = self.gpus
+    #
     #     return torch.utils.data.DataLoader(
-    #         self.dataset_test,
-    #         batch_size=None,
-    #         num_workers=2
+    #         self.generator_test,
+    #         batch_size=batch_size,
+    #         shuffle=False,
+    #         num_workers=4,
+    #         collate_fn=get_multiplex_collate_fn(node_types=list(self.hparams.encoder.keys()),
+    #                                             layers=list(self.hparams.embedder.keys())) if self.gpus > 1 else None
     #     )
 
 
@@ -141,3 +152,4 @@ def _fix_dp_return_type(result, device):
 def print_logs(logs):
     print({key: f"{item.item():.3f}" if isinstance(item, torch.Tensor) \
         else f"{item:.5f}" for key, item in logs.items()})
+

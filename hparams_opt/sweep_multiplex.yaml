@@ -21,6 +21,10 @@ parameters:
     values: [1200]
   num_epochs:
     values: [20]
+  traversal:
+    values: ["node", "neighbor", "bfs", "dfs"]
+  sampling:
+    values: ["log", "linear", "sqrt", "sqrt3", "cycle"]
 
   word_embedding_size:
     values: [9,10,11,19,20,21]
