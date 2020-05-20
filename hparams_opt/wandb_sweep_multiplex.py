@@ -38,7 +38,7 @@ def train(hparams):
     n_steps = int(200000 / batch_size)
 
     variables = []
-    targets = ['Protein class']
+    targets = ['go_id']
     network.process_feature_tranformer(filter_label=targets[0], delimiter="\||, ", min_count=min_count, verbose=False)
     classes = network.feature_transformer[targets[0]].classes_
     n_classes = len(classes)
@@ -153,6 +153,9 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dense_size', type=int, default=1536)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
     parser.add_argument('--classes_min_count', type=int, default=0)
+
+    parser.add_argument('--use_hierar', type=bool, default=True)
+    parser.add_argument('--hierar_penalty', type=float, default=1e-6)
 
     parser.add_argument('--nb_weight_decay', type=float, default=0.0)
     parser.add_argument('--lr', type=float, default=1e-3)
