@@ -158,7 +158,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_hierar', type=bool, default=True)
     parser.add_argument('--hierar_penalty', type=float, default=1e-6)
 
-    parser.add_argument('--nb_weight_decay', type=float, default=0.0)
+    parser.add_argument('--weight_decay', type=float, default=0.0)
     parser.add_argument('--lr', type=float, default=1e-3)
 
     parser.add_argument('--loss_type', type=str, default="BCE_WITH_LOGITS")

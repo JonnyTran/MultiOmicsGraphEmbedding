@@ -6,14 +6,15 @@ from .metrics import Metrics
 
 
 class ModelTrainer(pl.LightningModule):
-    def __init__(self, model):
+    def __init__(self, model: torch.nn.Module):
         super(ModelTrainer, self).__init__()
 
         self._model = model
-        self.metrics = Metrics(loss_type=self._model.hparams.loss_type)
+        self.hparams = self._model.hparams
+        self.metrics = Metrics(loss_type=self.hparams.loss_type)
 
     def forward(self, X):
-        return self._model(X)
+        return self._model.forward(X)
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
@@ -57,8 +58,8 @@ class ModelTrainer(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self._model.parameters(),
-                                     lr=self._model.hparams.lr,
-                                     weight_decay=self._model.hparams.nb_weight_decay
+                                     lr=self.hparams.lr,
+                                     weight_decay=self.hparams.weight_decay
                                      )
 
         scheduler = ReduceLROnPlateau(optimizer, )

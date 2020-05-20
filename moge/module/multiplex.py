@@ -5,8 +5,8 @@ from transformers import AlbertConfig
 
 from moge.module.classifier import Dense, HierarchicalAWX
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention
+from moge.module.enc_emb_cls import EncoderEmbedderClassifier
 from moge.module.encoder import ConvLSTM, AlbertEncoder
-from moge.module.encoder_embedder_cls import EncoderEmbedderClassifier
 from moge.module.losses import ClassificationLoss, get_hierar_relations
 
 
@@ -59,7 +59,6 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
                 raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN', 'GraphSAGE']")
 
         ################### Multiplex Embedding ####################
-        print("\nhparams", hparams)
         layers = list(hparams.embedder.keys())
         if hparams.multiplex_embedder == "MultiplexLayerAttention":
             self._multiplex_embedder = MultiplexLayerAttention(embedding_dim=hparams.embedding_dim,
@@ -97,13 +96,16 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
 
     def forward(self, X):
         encodings = self._encoder["Protein_seqs"](X["Protein_seqs"])
+        print("X[Protein_seqs]", X["Protein_seqs"].shape)
 
         embeddings = []
         for subnetwork_type, _ in self.hparams.embedder.items():
             if X[subnetwork_type].dim() > 2:
-                X[subnetwork_type] = X[subnetwork_type][0].squeeze(0)
+                X[subnetwork_type] = X[subnetwork_type].squeeze(0)
+            print(f"X[{subnetwork_type}]", X[subnetwork_type].shape)
             embeddings.append(self._embedder[subnetwork_type](encodings, X[subnetwork_type]))
 
+        print("embeddings", [emb.shape for emb in embeddings])
         if hasattr(self, "_multiplex_embedder"):
             embeddings = self._multiplex_embedder.forward(embeddings)
         else:

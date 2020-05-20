@@ -57,7 +57,7 @@ parameters:
     min: 0.0
     max: 0.5
 
-  nb_weight_decay:
+  weight_decay:
     min: 0.00001
     max: 0.01
   lr:

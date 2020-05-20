@@ -89,7 +89,7 @@ parameters:
   hierar_penalty:
     values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
 
-  nb_weight_decay:
+  weight_decay:
     values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
   lr:
     values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
