@@ -139,5 +139,5 @@ def _fix_dp_return_type(result, device):
 
 
 def print_logs(logs):
-    print({key: f"{item.item():.3f}" if isinstance(item, torch.Tensor) else f"{item:.3f}" for key, item in
-           logs.items()})
+    print({key: f"{item.item():.3f}" if isinstance(item, torch.Tensor) \
+        else f"{item:.5f}" for key, item in logs.items()})
