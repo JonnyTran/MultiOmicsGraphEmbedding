@@ -5,8 +5,6 @@ import random
 import sys
 from argparse import ArgumentParser
 
-import numpy as np
-
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 
@@ -35,8 +33,10 @@ def train(hparams):
     if hparams.__dict__["encoder.Protein_seqs"] == "Albert":
         hparams.batch_size = 100
         hparams.max_length = 700
+    hparams = parse_hparams(hparams)
+    print(hparams)
 
-    batch_size = min(hparams.batch_size, 1000)
+    batch_size = hparams.batch_size
     max_length = hparams.max_length
     n_steps = int(200000 / batch_size)
 
@@ -48,7 +48,7 @@ def train(hparams):
     seed = random.randint(0, 1000)
 
     split_idx = 0
-    dataset_train = network.get_train_generator(
+    generator_train = network.get_train_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
         traversal=hparams.traversal, batch_size=batch_size,
         sampling=hparams.sampling, n_steps=n_steps,
@@ -56,17 +56,17 @@ def train(hparams):
         maxlen=max_length, padding='post', truncating='random',
         seed=seed, verbose=True)
 
-    dataset_test = network.get_test_generator(
+    generator_test = network.get_test_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
         traversal='all_slices',
-        batch_size=np.ceil(len(network.testing.node_list) * .25).astype(int),
+        batch_size=int(len(network.testing.node_list) * 0.25),
         sampling="cycle", n_steps=1,
         method="GAT", adj_output="coo",
         maxlen=max_length, padding='post', truncating='post',
         seed=seed, verbose=True)
 
     train_dataloader = torch.utils.data.DataLoader(
-        dataset_train,
+        generator_train,
         batch_size=4,
         num_workers=18,
         collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
@@ -74,14 +74,14 @@ def train(hparams):
     )
 
     test_dataloader = torch.utils.data.DataLoader(
-        dataset_test,
+        generator_test,
         batch_size=4,
         num_workers=4,
         collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
                                             layers=list(hparams.embedder.keys()))
     )
 
-    vocab = dataset_train.tokenizer[network.modalities[0]].word_index
+    vocab = generator_train.tokenizer[network.modalities[0]].word_index
 
     hparams.n_classes = n_classes
     hparams.classes = classes
@@ -91,6 +91,23 @@ def train(hparams):
     logger = WandbLogger()
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
 
+    eec = MultiplexEmbedder(hparams)
+    model = ModelTrainer(eec)
+
+    trainer = pl.Trainer(
+        distributed_backend='dp',
+        gpus=4,
+        # auto_lr_find=True,
+        logger=logger,
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3),
+        min_epochs=3, max_epochs=MAX_EPOCHS,
+        weights_summary='top',
+        # amp_level='O1', precision=16,
+    )
+    trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
+
+
+def parse_hparams(hparams):
     hparams_dict = copy.copy(hparams.__dict__)
     for key in hparams_dict.keys():
         if "." in key:
@@ -100,21 +117,7 @@ def train(hparams):
             if name not in hparams:
                 hparams.__setattr__(name, {})
             hparams.__dict__[name][value] = hparams.__dict__[key]
-
-    eec = MultiplexEmbedder(hparams)
-    model = ModelTrainer(eec)
-
-    trainer = pl.Trainer(
-        distributed_backend='dp',
-        gpus=4,
-        auto_lr_find=True,
-        logger=logger,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3),
-        min_epochs=3, max_epochs=MAX_EPOCHS,
-        weights_summary='top',
-        amp_level='O1', precision=16,
-    )
-    trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
+    return hparams
 
 
 if __name__ == "__main__":

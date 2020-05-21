@@ -18,7 +18,7 @@ parameters:
   max_length:
     values: [1000]
   batch_size:
-    values: [1200]
+    values: [1000]
   num_epochs:
     values: [20]
   traversal:
