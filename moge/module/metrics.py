@@ -1,6 +1,5 @@
 import torch
 from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 
@@ -8,27 +7,29 @@ from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 class Metrics():
     def __init__(self, loss_type):
         self.loss_type = loss_type
-        self.precision = Precision(average=True, is_multilabel=True)
-        self.recall = Recall(average=True, is_multilabel=True)
-        self.top_k_train = TopKMulticlassAccuracy(k=100)
-        self.precision_val = Precision(average=True, is_multilabel=True)
-        self.recall_val = Recall(average=True, is_multilabel=True)
-        self.top_k_val = TopKMulticlassAccuracy(k=100)
+        # self.precision = Precision(average=True, is_multilabel=True)
+        # self.recall = Recall(average=True, is_multilabel=True)
+        # self.top_k_train = TopKMulticlassAccuracy(k=100)
+        # self.precision_val = Precision(average=True, is_multilabel=True)
+        # self.recall_val = Recall(average=True, is_multilabel=True)
+        # self.top_k_val = TopKMulticlassAccuracy(k=100)
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
-        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
-            y_pred = torch.softmax(y_pred, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
-
-        if training:
-            self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.top_k_train.update((y_pred, y_true))
-        else:
-            self.precision_val.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.top_k_val.update((y_pred, y_true))
+        pass
+        # if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
+        #     y_pred = torch.softmax(y_pred, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
+        #
+        # if training:
+        #     self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
+        #     self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
+        #     self.top_k_train.update((y_pred, y_true))
+        # else:
+        #     self.precision_val.update(((y_pred > 0.5).type_as(y_true), y_true))
+        #     self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
+        #     self.top_k_val.update((y_pred, y_true))
 
     def compute_metrics(self, training: bool):
+        return {}
         if training:
             logs = {
                 "precision": self.precision.compute(),
@@ -42,14 +43,15 @@ class Metrics():
         return logs
 
     def reset_metrics(self, training: bool):
-        if training:
-            self.precision.reset()
-            self.recall.reset()
-            self.top_k_train.reset()
-        else:
-            self.precision_val.reset()
-            self.recall_val.reset()
-            self.top_k_val.reset()
+        pass
+        # if training:
+        #     self.precision.reset()
+        #     self.recall.reset()
+        #     self.top_k_train.reset()
+        # else:
+        #     self.precision_val.reset()
+        #     self.recall_val.reset()
+        #     self.top_k_val.reset()
 
 
 class TopKMulticlassAccuracy(Metric):

@@ -10,7 +10,7 @@ from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss, get_hierar_relations
 
 
-class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
+class MultiplexEmbedder(EncoderEmbedderClassifier):
     def __init__(self, hparams):
         torch.nn.Module.__init__(self)
 

@@ -1,6 +1,5 @@
 import pytorch_lightning as pl
 import torch
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .metrics import Metrics
 
@@ -69,8 +68,9 @@ class ModelTrainer(pl.LightningModule):
         optimizer = torch.optim.Adam(self._model.parameters(), lr=self.hparams.lr,
                                      weight_decay=self.hparams.weight_decay)
 
-        scheduler = ReduceLROnPlateau(optimizer, )
-        return [optimizer], [scheduler]
+        # scheduler = ReduceLROnPlateau(optimizer, )
+        # return [optimizer], [scheduler]
+        return optimizer
     #
     # def prepare_data(self) -> None:
     #     with open(self.data_path, 'rb') as file:
