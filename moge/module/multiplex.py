@@ -5,7 +5,7 @@ from transformers import AlbertConfig
 
 from moge.module.classifier import Dense, HierarchicalAWX
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention
-from moge.module.enc_emb_cls import EncoderEmbedderClassifier
+from moge.module.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss, get_hierar_relations
 
@@ -97,7 +97,10 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         embeddings = []
         for layer, _ in self.hparams.embedder.items():
             if X[layer].dim() > 2:
+                print(f"X[layer] {X[layer].shape}")
                 X[layer] = X[layer].squeeze(0)
+                X[layer], _ = remove_self_loops(X[layer], None)
+                print(f"X[layer] {X[layer].shape}")
             embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
         if hasattr(self, "_multiplex_embedder"):

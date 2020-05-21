@@ -1,36 +1,26 @@
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 import torch
 from torch.utils import data
 
-from . import DataGenerator, SubgraphGenerator
+from . import DataGenerator
 
 
-class PytorchDataset(SubgraphGenerator, torch.utils.data.Dataset):
-    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
-                 traversal='neighborhood', sampling="log", n_steps=100, directed=True,
-                 maxlen=1400, padding='post', truncating='post', agg_mode=None, tokenizer=None, replace=True,
-                 seed=0, verbose=True, **kwargs):
-        super(PytorchDataset, self).__init__(network=network,
-                                             variables=variables, targets=targets,
-                                             batch_size=batch_size,
-                                             traversal=traversal, sampling=sampling,
-                                             n_steps=n_steps, directed=directed, replace=replace,
-                                             maxlen=maxlen, padding=padding, truncating=truncating,
-                                             agg_mode=agg_mode,
-                                             tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
-
-        self.node_list = pd.Series(self.node_list)
+class TorchDataset(torch.utils.data.Dataset):
+    def __init__(self, generator):
+        self.generator = generator
 
     def __len__(self):
-        return len(self.node_list)
+        return len(self.generator.node_list)
 
     def __getitem__(self, item=None):
-        sampled_nodes = self.traverse_network(batch_size=self.batch_size)
-        X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
-        X["subnetwork"] = np.expand_dims(X["subnetwork"], 0)
-        return X, y, idx_weights
+        sampled_nodes = self.generator.traverse_network(batch_size=self.generator.batch_size)
+        X, y, sample_weights = self.generator.__getdata__(sampled_nodes, variable_length=False)
+
+        X = {k: np.expand_dims(v, 0) for k, v in X.items()}
+        y = np.expand_dims(y, 0)
+        sample_weights = np.expand_dims(sample_weights, 0)
+        return X, y, sample_weights
 
 
 class TFDataset(tf.data.Dataset):
