@@ -118,8 +118,8 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
 
             successor_nodes = [node for source, successors in
                                islice(nx.traversal.bfs_successors(self.network.G if self.directed else self.network.G_u,
-                                                                  source=start_node),
-                                      batch_size) for node in successors]
+                                                                  source=start_node), self.traversal_depth) for node in
+                               successors]
             sampled_nodes.extend([start_node] + successor_nodes)
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 

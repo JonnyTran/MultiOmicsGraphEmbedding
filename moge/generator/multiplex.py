@@ -79,8 +79,35 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                 if start_node not in network_layer.nodes:
                     continue
                 layer_neighbors = [node for source, successors in
-                                   islice(nx.traversal.bfs_successors(network_layer,
-                                                                      source=start_node),
+                                   islice(nx.traversal.bfs_successors(network_layer, source=start_node),
+                                          self.traversal_depth) for node in successors]
+
+                if len(layer_neighbors) > batch_size / len(self.network.networks):
+                    layer_neighbors = layer_neighbors[:int(batch_size // len(self.network.networks))]
+                successor_nodes.extend(layer_neighbors)
+
+            sampled_nodes.extend([start_node] + successor_nodes)
+            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+
+        if len(sampled_nodes) > batch_size:
+            sampled_nodes = sampled_nodes[:batch_size]
+        return sampled_nodes
+
+    def dfs_traversal(self, batch_size, seed_node=None):
+        sampled_nodes = []
+
+        while len(sampled_nodes) < batch_size:
+            if seed_node is None or seed_node not in self.node_list:
+                start_node = self.sample_seed_node(1)[0]
+            else:
+                start_node = seed_node
+
+            successor_nodes = []
+            for modality, network_layer in self.network.networks.items():
+                if start_node not in network_layer.nodes:
+                    continue
+                layer_neighbors = [node for source, successors in
+                                   islice(nx.traversal.dfs_successors(network_layer, source=start_node),
                                           batch_size) for node in successors]
 
                 if len(layer_neighbors) > batch_size / len(self.network.networks):
@@ -88,7 +115,6 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                 successor_nodes.extend(layer_neighbors)
 
             sampled_nodes.extend([start_node] + successor_nodes)
-            # sampled_nodes = [node for node in sampled_nodes if node in self.node_list]
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:

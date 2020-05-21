@@ -3,11 +3,11 @@ from itertools import cycle
 
 import numpy as np
 
-from moge.generator import DataGenerator
+from .data_generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
-    def __init__(self, network, traversal=None, sampling="log", n_steps=100, directed=True,
+    def __init__(self, network, traversal=None, traversal_depth=2, sampling="log", n_steps=100, directed=True,
                  **kwargs):
         """
 
@@ -27,7 +27,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         if self.traversal == 'all_slices':
             self.nodes_circle = cycle(self.node_list)
             self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
-
+        self.traversal_depth = traversal_depth
         self.process_normalized_node_degree(network)
 
     def process_normalized_node_degree(self, network):

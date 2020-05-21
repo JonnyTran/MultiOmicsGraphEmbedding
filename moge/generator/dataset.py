@@ -3,20 +3,25 @@ import tensorflow as tf
 import torch
 from torch.utils import data
 
-from . import DataGenerator
+from .sampled_generator import SampledDataGenerator
 
 
 class TorchDataset(torch.utils.data.Dataset):
-    def __init__(self, generator):
-        self.generator = generator
+    def __init__(self, generator: SampledDataGenerator):
+        self._generator = generator
+        self.node_list = self._generator.get_connected_nodelist()
+        self.n_steps = self._generator.n_steps
 
     def __len__(self):
-        return len(self.generator.node_list)
+        if self.n_steps is not None:
+            return self.n_steps
+        else:
+            return len(self.node_list)
 
     def __getitem__(self, item=None):
-        sampled_nodes = self.generator.traverse_network(batch_size=self.generator.batch_size)
-        X, y, sample_weights = self.generator.__getdata__(sampled_nodes, variable_length=False)
-
+        # seed_node = self.node_list[item]
+        sampled_nodes = self._generator.traverse_network(batch_size=self._generator.batch_size, seed_node=None)
+        X, y, sample_weights = self._generator.__getdata__(sampled_nodes, variable_length=False)
         X = {k: np.expand_dims(v, 0) for k, v in X.items()}
         y = np.expand_dims(y, 0)
         sample_weights = np.expand_dims(sample_weights, 0)
@@ -24,7 +29,7 @@ class TorchDataset(torch.utils.data.Dataset):
 
 
 class TFDataset(tf.data.Dataset):
-    def __new__(cls, generator: DataGenerator, output_types=None, output_shapes=None):
+    def __new__(cls, generator: SampledDataGenerator, output_types=None, output_shapes=None):
         """
         A tf.data wrapper for keras.utils.Sequence generator
         >>> generator = DataGenerator()
