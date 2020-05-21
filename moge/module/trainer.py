@@ -10,13 +10,13 @@ class ModelTrainer(pl.LightningModule):
 
         self._model = model
         self.hparams = self._model.hparams
-        self.gpus = gpus
+        self.metrics = Metrics(loss_type=self.hparams.loss_type)
 
+        self.n_gpus = gpus
         self.data_path = data_path
         if self.data_path is not None:
             self.prepare_data()
 
-        self.metrics = Metrics(loss_type=self.hparams.loss_type)
 
     def forward(self, X):
         return self._model.forward(X)
@@ -71,7 +71,7 @@ class ModelTrainer(pl.LightningModule):
         # scheduler = ReduceLROnPlateau(optimizer, )
         # return [optimizer], [scheduler]
         return optimizer
-    #
+
     # def prepare_data(self) -> None:
     #     with open(self.data_path, 'rb') as file:
     #         network = pickle.load(file)

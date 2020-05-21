@@ -18,7 +18,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
                           dict), "hparams.encoder must be a dict. If not multi node types, use MonoplexEmbedder instead."
         assert isinstance(hparams.embedder,
                           dict), "hparams.embedder must be a dict. If not multi-layer, use MonoplexEmbedder instead."
-        assert not (isinstance(hparams.encoder, dict) and not isinstance(hparams.vocab_size, dict))
+        assert not (len(hparams.encoder) > 1 and not len(hparams.vocab_size) > 1)
         self.hparams = hparams
 
         ################### Encoding ####################

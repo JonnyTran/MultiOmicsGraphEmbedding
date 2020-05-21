@@ -1,5 +1,6 @@
 import torch
 from ignite.exceptions import NotComputableError
+from ignite.metrics import Precision, Recall
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 

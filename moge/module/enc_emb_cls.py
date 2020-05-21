@@ -109,6 +109,7 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
         if subnetwork.dim() > 2:
             subnetwork = subnetwork.squeeze(0)
+            subnetwork, _ = remove_self_loops(subnetwork, None)
         encodings = self._encoder(input_seqs)
         embeddings = self._embedder(encodings, subnetwork)
         y_pred = self._classifier(embeddings)
@@ -142,3 +143,20 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
         return embeddings.detach().cpu().numpy()
 
 
+def remove_self_loops(edge_index, edge_attr=None):
+    r"""Removes every self-loop in the graph given by :attr:`edge_index`, so
+    that :math:`(i,i) \not\in \mathcal{E}` for every :math:`i \in \mathcal{V}`.
+
+    Args:
+        edge_index (LongTensor): The edge indices.
+        edge_attr (Tensor, optional): Edge weights or multi-dimensional
+            edge features. (default: :obj:`None`)
+
+    :rtype: (:class:`LongTensor`, :class:`Tensor`)
+    """
+    row, col = edge_index
+    mask = row != col
+    edge_attr = edge_attr if edge_attr is None else edge_attr[mask]
+    edge_index = edge_index[:, mask]
+
+    return edge_index, edge_attr
