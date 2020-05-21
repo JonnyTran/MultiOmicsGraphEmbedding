@@ -31,6 +31,7 @@ def train(hparams):
 
     MAX_EPOCHS = 30
     min_count = 100
+    n_gpus = 4
 
     if hparams.__dict__["encoder.Protein_seqs"] == "Albert":
         hparams.batch_size = 100
@@ -40,7 +41,7 @@ def train(hparams):
 
     batch_size = hparams.batch_size
     max_length = hparams.max_length
-    n_steps = int(200000 / batch_size)
+    n_steps = int(400000 * n_gpus / batch_size)
 
     variables = []
     targets = ['go_id']
@@ -69,15 +70,15 @@ def train(hparams):
 
     train_dataloader = torch.utils.data.DataLoader(
         TorchDataset(generator_train),
-        batch_size=4,
-        num_workers=18,
+        batch_size=n_gpus,
+        num_workers=14,
         collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
                                             layers=list(hparams.embedder.keys()))
     )
 
     test_dataloader = torch.utils.data.DataLoader(
         TorchDataset(generator_test),
-        batch_size=4,
+        batch_size=n_gpus,
         num_workers=4,
         collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
                                             layers=list(hparams.embedder.keys()))
@@ -98,13 +99,13 @@ def train(hparams):
 
     trainer = pl.Trainer(
         distributed_backend='dp',
-        gpus=4,
+        gpus=n_gpus,
         # auto_lr_find=True,
         logger=logger,
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=3),
         min_epochs=3, max_epochs=MAX_EPOCHS,
         weights_summary='top',
-        # amp_level='O1', precision=16,
+        amp_level='O1', precision=16,
     )
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
 

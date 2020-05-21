@@ -92,6 +92,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:
+            np.random.shuffle(sampled_nodes)
             sampled_nodes = sampled_nodes[:batch_size]
         return sampled_nodes
 
@@ -108,9 +109,8 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
             for modality, network_layer in self.network.networks.items():
                 if start_node not in network_layer.nodes:
                     continue
-                layer_neighbors = [node for source, successors in
-                                   islice(nx.traversal.dfs_successors(network_layer, source=start_node),
-                                          batch_size) for node in successors]
+                layer_neighbors = list(
+                    islice(nx.traversal.dfs_successors(network_layer, source=start_node), batch_size))
 
                 if len(layer_neighbors) > batch_size / len(self.network.networks):
                     layer_neighbors = layer_neighbors[:int(batch_size // len(self.network.networks))]
@@ -120,6 +120,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
             sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
 
         if len(sampled_nodes) > batch_size:
+            np.random.shuffle(sampled_nodes)
             sampled_nodes = sampled_nodes[:batch_size]
         return sampled_nodes
 
