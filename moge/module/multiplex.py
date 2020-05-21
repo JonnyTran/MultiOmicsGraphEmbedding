@@ -14,9 +14,11 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
     def __init__(self, hparams):
         torch.nn.Module.__init__(self)
 
-        assert isinstance(hparams.encoder, dict)
-        assert isinstance(hparams.embedder, dict)
-        # assert isinstance(hparams.vocab_size, dict)
+        assert isinstance(hparams.encoder,
+                          dict), "hparams.encoder must be a dict. If not multi node types, use MonoplexEmbedder instead."
+        assert isinstance(hparams.embedder,
+                          dict), "hparams.embedder must be a dict. If not multi-layer, use MonoplexEmbedder instead."
+        assert not (isinstance(hparams.encoder, dict) and not isinstance(hparams.vocab_size, dict))
         self.hparams = hparams
 
         ################### Encoding ####################
@@ -42,15 +44,16 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
                 raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
 
         ################### Layer-specfic Embedding ####################
-        for subnetwork_type, embedder in hparams.embedder.items():
-            if embedder == "GAT":
+        for subnetwork_type, embedder_model in hparams.embedder.items():
+            if embedder_model == "GAT":
                 self.set_embedder(subnetwork_type, GAT(hparams))
-            elif embedder == "GCN":
+            elif embedder_model == "GCN":
                 self.set_embedder(subnetwork_type, GCN(hparams))
-            elif embedder == "GraphSAGE":
+            elif embedder_model == "GraphSAGE":
                 self.set_embedder(subnetwork_type, GraphSAGE(hparams))
             else:
-                raise Exception(f"hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN', 'GraphSAGE']")
+                raise Exception(
+                    f"Embedder model for hparams.embedder[{subnetwork_type}]] must be one of ['GAT', 'GCN', 'GraphSAGE']")
 
         ################### Multiplex Embedding ####################
         layers = list(hparams.embedder.keys())
@@ -100,7 +103,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         if hasattr(self, "_multiplex_embedder"):
             embeddings = self._multiplex_embedder.forward(embeddings)
         else:
-            embeddings = torch.cat(embeddings, 1)
+            embeddings = torch.cat(embeddings, dim=1)
 
         y_pred = self._classifier(embeddings)
         return y_pred

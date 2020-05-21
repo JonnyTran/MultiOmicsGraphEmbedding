@@ -56,7 +56,7 @@ class EncoderEmbedderClassifier(torch.nn.Module):
         return y_pred.detach().cpu().numpy()
 
 
-class MonoplexEmebdder(EncoderEmbedderClassifier):
+class MonoplexEmbedder(EncoderEmbedderClassifier):
     def __init__(self, hparams):
         torch.nn.Module.__init__(self)
 
@@ -107,11 +107,8 @@ class MonoplexEmebdder(EncoderEmbedderClassifier):
 
     def forward(self, X):
         input_seqs, subnetwork = X["input_seqs"], X["subnetwork"]
-        # print("input_seqs", input_seqs.shape)
-        # print("subnetwork", len(subnetwork), [batch.shape for batch in subnetwork])
         if subnetwork.dim() > 2:
             subnetwork = subnetwork.squeeze(0)
-
         encodings = self._encoder(input_seqs)
         embeddings = self._embedder(encodings, subnetwork)
         y_pred = self._classifier(embeddings)
