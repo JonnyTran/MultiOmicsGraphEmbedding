@@ -59,7 +59,7 @@ class ModelTrainer(pl.LightningModule):
 
         logs = self.metrics.compute_metrics(training=False)
         self.metrics.reset_metrics(training=False)
-        logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
+        logs = _fix_dp_return_type(logs, devic˚e = outputs[0]["val_loss"].device)
         logs.update({"val_loss": avg_loss})
         print_logs(logs)
         return {"progress_bar": logs, "log": logs}
