@@ -92,6 +92,9 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         )
 
     def forward(self, X):
+        if X["Protein_seqs"].dim() > 2:
+            X["Protein_seqs"] = X["Protein_seqs"].squeeze(0)
+
         encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"])
 
         embeddings = []
