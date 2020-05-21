@@ -89,13 +89,13 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
         )
 
     def forward(self, X):
-        encodings = self.get_encoder("Protein_seqs")(X["Protein_seqs"])
+        encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"])
 
         embeddings = []
-        for subnetwork_type, _ in self.hparams.embedder.items():
-            if X[subnetwork_type].dim() > 2:
-                X[subnetwork_type] = X[subnetwork_type].squeeze(0)
-            embeddings.append(self.get_embedder(subnetwork_type)(encodings, X[subnetwork_type]))
+        for layer, _ in self.hparams.embedder.items():
+            if X[layer].dim() > 2:
+                X[layer] = X[layer].squeeze(0)
+            embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
         if hasattr(self, "_multiplex_embedder"):
             embeddings = self._multiplex_embedder.forward(embeddings)

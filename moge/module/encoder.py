@@ -1,6 +1,5 @@
 from argparse import ArgumentParser
 
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -47,7 +46,7 @@ class AlbertEncoder(nn.Module):
         return parser
 
 
-class ConvLSTM(pl.LightningModule):
+class ConvLSTM(nn.Module):
     def __init__(self, hparams):
         super(ConvLSTM, self).__init__()
 

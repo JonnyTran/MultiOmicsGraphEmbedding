@@ -60,10 +60,10 @@ class ModelTrainer(pl.LightningModule):
         avg_loss = torch.cat([x["val_loss"] for x in outputs]).mean().item()
 
         logs = self.metrics.compute_metrics(training=False)
-        logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
         self.metrics.reset_metrics(training=False)
-
         logs.update({"val_loss": avg_loss})
+
+        logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
         results = {"progress_bar": logs, "log": logs}
 
         print_logs(logs)

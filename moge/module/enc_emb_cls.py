@@ -19,11 +19,11 @@ class EncoderEmbedderClassifier(torch.nn.Module):
     def set_encoder(self, node_type, model):
         self.__setattr__("_encoder_" + node_type, model)
 
-    def get_embedder(self, subnetwork_type):
-        return self.__getattr__("_embedder_" + subnetwork_type)
+    def get_embedder(self, layer):
+        return self.__getattr__("_embedder_" + layer)
 
-    def set_embedder(self, subnetwork_type, model):
-        self.__setattr__("_embedder_" + subnetwork_type, model)
+    def set_embedder(self, layer, model):
+        self.__setattr__("_embedder_" + layer, model)
 
     def get_embeddings(self, *args):
         raise NotImplementedError()
