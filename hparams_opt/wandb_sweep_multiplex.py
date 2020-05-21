@@ -168,7 +168,7 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
     parser.add_argument('--classes_min_count', type=int, default=0)
 
-    parser.add_argument('--use_hierar', type=bool, default=True)
+    parser.add_argument('--use_hierar', type=bool, default=False)
     parser.add_argument('--hierar_penalty', type=float, default=1e-6)
 
     parser.add_argument('--weight_decay', type=float, default=0.0)

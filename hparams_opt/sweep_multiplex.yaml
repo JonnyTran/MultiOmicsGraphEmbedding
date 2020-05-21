@@ -63,11 +63,11 @@ parameters:
     values: [True, False]
 
   embedder.Protein_Protein_physical:
-    values: ["GCN", "GraphSAGE"]
+    values: ["GraphSAGE"]
   embedder.Protein_Protein_genetic:
-    values: ["GCN", "GraphSAGE"]
+    values: ["GraphSAGE"]
   embedder.Protein_Protein_correlation:
-    values: ["GCN", "GraphSAGE"]
+    values: ["GraphSAGE"]
   nb_attn_heads:
     values: [1, 2, 4, 8, 16]
   nb_attn_dropout:
@@ -88,9 +88,9 @@ parameters:
     values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 
   use_hierar:
-    values: [True, False]
+    values: [False]
   hierar_penalty:
-    values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
+    values: [0.0000001, 0.000001, 0.00001, 0.0001, 0.001]
 
   weight_decay:
     values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
