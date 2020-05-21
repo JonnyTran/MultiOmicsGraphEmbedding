@@ -89,8 +89,8 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
     def traverse_network(self, batch_size, seed_node=None):
         """
         Sample a traversal on the network.
-        :param batch_size (int): size of random walk
-        :param seed_node (str): starting node
+        :param batch_size (int): size of random walk. Each batch outputs must return the exact batch_size.
+        :param seed_node (str, Optional): the starting node. If None, and leaves the traversal method to use the sample_seed_node() method.
         :return: list of nodes in the traversal.
         """
         raise NotImplementedError

@@ -15,13 +15,15 @@ import torch
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.generator.multiplex import MultiplexGenerator
 from moge.module.trainer import ModelTrainer
 from moge.module.multiplex import MultiplexEmbedder
 from moge.module.utils import get_multiplex_collate_fn
+from moge.generator.multiplex import MultiplexGenerator
+from moge.generator.dataset import TorchDataset
 
 DATASET = '../MultiOmicsGraphEmbedding/data/proteinatlas_biogrid_multi_network.pickle'
 HIER_TAXONOMY_FILE = "../MultiOmicsGraphEmbedding/data/go_term.taxonomy"
+
 
 def train(hparams):
     with open(DATASET, 'rb') as file:
@@ -50,7 +52,7 @@ def train(hparams):
     split_idx = 0
     generator_train = network.get_train_generator(
         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-        traversal=hparams.traversal, batch_size=batch_size,
+        traversal=hparams.traversal, traversal_depth=hparams.traversal_depth, batch_size=batch_size,
         sampling=hparams.sampling, n_steps=n_steps,
         method="GAT", adj_output="coo",
         maxlen=max_length, padding='post', truncating='random',
@@ -66,7 +68,7 @@ def train(hparams):
         seed=seed, verbose=True)
 
     train_dataloader = torch.utils.data.DataLoader(
-        generator_train,
+        TorchDataset(generator_train),
         batch_size=4,
         num_workers=18,
         collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
@@ -74,7 +76,7 @@ def train(hparams):
     )
 
     test_dataloader = torch.utils.data.DataLoader(
-        generator_test,
+        TorchDataset(generator_test),
         batch_size=4,
         num_workers=4,
         collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
@@ -131,6 +133,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=1000)
     parser.add_argument('--num_epochs', type=int, default=5)
     parser.add_argument('--traversal', type=str, default="bfs")
+    parser.add_argument('--traversal_depth', type=int, default=2)
     parser.add_argument('--sampling', type=str, default="cycle")
 
     parser.add_argument('--num_hidden_layers', type=int, default=1)
