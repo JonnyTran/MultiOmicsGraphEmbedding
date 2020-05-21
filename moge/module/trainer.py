@@ -24,8 +24,10 @@ class ModelTrainer(pl.LightningModule):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         if y.dim() > 2:
+            assert y.size(0) == 1
             y = y.squeeze(0)
         if weights.dim() > 2:
+            assert weights.size(0) == 1
             weights = weights.squeeze(0)
 
         Y_hat = self.forward(X)
@@ -54,8 +56,10 @@ class ModelTrainer(pl.LightningModule):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
         if y.dim() > 2:
+            assert y.size(0) == 1
             y = y.squeeze(0)
         if weights.dim() > 2:
+            assert weights.size(0) == 1
             weights = weights.squeeze(0)
 
         Y_hat = self._model.forward(X)
