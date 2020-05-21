@@ -36,9 +36,9 @@ class ModelTrainer(pl.LightningModule):
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
         logs = self.metrics.compute_metrics(training=True)
+        logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
 
         logs.update({"loss": avg_loss})
-        logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
         self.metrics.reset_metrics(training=True)
 
         return {"log": logs}
@@ -60,8 +60,8 @@ class ModelTrainer(pl.LightningModule):
 
         logs = self.metrics.compute_metrics(training=False)
         self.metrics.reset_metrics(training=False)
-        logs.update({"val_loss": avg_loss})
         logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
+        logs.update({"val_loss": avg_loss})
         print_logs(logs)
         return {"progress_bar": logs, "log": logs}
 
