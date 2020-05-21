@@ -1,8 +1,7 @@
 program: hparams_opt/wandb_sweep_multiplex.py
 method: bayes
 metric:
-  name: val_top_k
-  goal: maximize
+  name: val_loss
 early_terminate:
   type: hyperband
   s: 2
@@ -22,7 +21,7 @@ parameters:
   num_epochs:
     values: [20]
   traversal:
-    values: ["node", "bfs", "dfs"]
+    values: ["bfs"]
   sampling:
     values: ["log", "linear", "sqrt", "sqrt3", "cycle"]
 
