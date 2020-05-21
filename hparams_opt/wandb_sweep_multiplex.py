@@ -29,8 +29,8 @@ def train(hparams):
     with open(DATASET, 'rb') as file:
         network = pickle.load(file)
 
-    MAX_EPOCHS = 10
-    min_count = 10
+    MAX_EPOCHS = 30
+    min_count = 100
 
     if hparams.__dict__["encoder.Protein_seqs"] == "Albert":
         hparams.batch_size = 100
@@ -172,7 +172,6 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=1e-3)
 
     parser.add_argument('--loss_type', type=str, default="BCE_WITH_LOGITS")
-
     parser.add_argument('--optimizer', type=str, default="adam")
 
     # add all the available options to the trainer
