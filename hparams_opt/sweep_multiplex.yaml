@@ -64,11 +64,11 @@ parameters:
     values: [True, False]
 
   embedder.Protein_Protein_physical:
-    values: ["GAT", "GCN", "GraphSAGE"]
+    values: ["GCN", "GraphSAGE"]
   embedder.Protein_Protein_genetic:
-    values: ["GAT", "GCN", "GraphSAGE"]
+    values: ["GCN", "GraphSAGE"]
   embedder.Protein_Protein_correlation:
-    values: ["GAT", "GCN", "GraphSAGE"]
+    values: ["GCN", "GraphSAGE"]
   nb_attn_heads:
     values: [1, 2, 4, 8, 16]
   nb_attn_dropout:
