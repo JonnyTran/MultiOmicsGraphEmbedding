@@ -1,6 +1,5 @@
 import torch
 
-
 def pad_tensors(sequences):
     num = len(sequences)
     max_len = max([s.size(-1) for s in sequences])
@@ -24,11 +23,11 @@ def collate_fn(batch):
         y_all.append(torch.tensor(y))
         idx_all.append(torch.tensor(idx))
 
-    X_all = {"Protein_seqs": torch.cat(protein_seqs_all),
+    X_all = {"Protein_seqs": torch.cat(protein_seqs_all, dim=0),
              "Protein-Protein-physical": pad_tensors(physical),
              "Protein-Protein-genetic": pad_tensors(genetic),
              "Protein-Protein-correlation": pad_tensors(correlation), }
-    return X_all, torch.cat(y_all), torch.cat(idx_all)
+    return X_all, torch.cat(y_all, dim=0), torch.cat(idx_all, dim=0)
 
 
 def get_multiplex_collate_fn(node_types, layers):
