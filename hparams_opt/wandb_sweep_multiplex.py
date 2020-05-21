@@ -41,7 +41,7 @@ def train(hparams):
 
     batch_size = hparams.batch_size
     max_length = hparams.max_length
-    n_steps = int(400000 * n_gpus / batch_size)
+    n_steps = int(400000 / batch_size)
 
     variables = []
     targets = ['go_id']

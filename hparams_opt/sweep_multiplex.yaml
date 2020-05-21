@@ -2,6 +2,7 @@ program: hparams_opt/wandb_sweep_multiplex.py
 method: bayes
 metric:
   name: val_loss
+  goal: minimize
 early_terminate:
   type: hyperband
   s: 2
@@ -17,7 +18,7 @@ parameters:
   max_length:
     values: [1000]
   batch_size:
-    values: [800]
+    values: [1000]
   num_epochs:
     values: [20]
   traversal:
@@ -78,7 +79,7 @@ parameters:
   multiplex_embedder:
     values: ["MultiplexLayerEmbedding", "MultiplexNodeEmbedding", "Concat"]
   multiplex_hidden_dim:
-    values: [64, 128, 256, 512, 768]
+    values: [64, 128, 512, 768, 1024, 2048]
   multiplex_attn_dropout:
     values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
 
