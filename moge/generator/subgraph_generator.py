@@ -16,7 +16,7 @@ from .sampled_generator import SampledDataGenerator
 
 class SubgraphGenerator(SampledDataGenerator, data.Dataset):
     def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
-                 traversal='neighborhood', sampling="log", n_steps=100, directed=True,
+                 traversal='neighborhood', traversal_depth=2, sampling="log", n_steps=100, directed=True,
                  maxlen=1400, padding='post', truncating='post', agg_mode=None, tokenizer=None, replace=True,
                  variable_length=False, seed=0, verbose=True, **kwargs):
         """
@@ -39,7 +39,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         super(SubgraphGenerator, self).__init__(network=network,
                                                 variables=variables, targets=targets,
                                                 batch_size=batch_size,
-                                                traversal=traversal, sampling=sampling,
+                                                traversal=traversal, traversal_depth=traversal_depth, sampling=sampling,
                                                 n_steps=n_steps, directed=directed, replace=replace,
                                                 maxlen=maxlen, padding=padding, truncating=truncating,
                                                 agg_mode=agg_mode,
