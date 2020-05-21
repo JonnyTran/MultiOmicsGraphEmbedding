@@ -24,12 +24,10 @@ class ModelTrainer(pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
-
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
         self.metrics.update_metrics(Y_hat, y, training=True)
-
         logs = self.metrics.compute_metrics(training=True)
         logs = _fix_dp_return_type(logs, device=Y_hat.device)
 
@@ -39,20 +37,21 @@ class ModelTrainer(pl.LightningModule):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
         logs = self.metrics.compute_metrics(training=True)
 
-        logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
         logs.update({"loss": avg_loss})
+        logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
         self.metrics.reset_metrics(training=True)
 
         return {"log": logs}
 
-    def training_step_end(self, batch_parts_outputs):
-        outputs = torch.cat(batch_parts_outputs, dim=1)
-        return outputs
+    # def training_step_end(self, batch_parts_outputs):
+    #     outputs = torch.cat(batch_parts_outputs, dim=1)
+    #     return outputs
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
         Y_hat = self._model.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
+
         self.metrics.update_metrics(Y_hat, y, training=False)
         return {"val_loss": loss}
 
@@ -62,12 +61,9 @@ class ModelTrainer(pl.LightningModule):
         logs = self.metrics.compute_metrics(training=False)
         self.metrics.reset_metrics(training=False)
         logs.update({"val_loss": avg_loss})
-
         logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
-        results = {"progress_bar": logs, "log": logs}
-
         print_logs(logs)
-        return results
+        return {"progress_bar": logs, "log": logs}
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self._model.parameters(), lr=self.hparams.lr,

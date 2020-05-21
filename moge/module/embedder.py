@@ -27,6 +27,7 @@ class GAT(nn.Module):
         return parser
 
     def forward(self, encodings, subnetwork):
+        print("subnetwork", subnetwork.shape)
         return self.embedder(encodings, subnetwork)
 
 
