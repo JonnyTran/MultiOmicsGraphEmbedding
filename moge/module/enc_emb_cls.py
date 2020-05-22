@@ -127,7 +127,7 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
 
         return self.criterion.forward(Y_hat, Y,
                                       use_hierar=self.hparams.use_hierar, multiclass=True,
-                                      classifier_weight=self._classifier.fc_classifier.linear.weight if self.hparams.use_hierar else None, )
+                                      classifier_weight=self._classifier.fc_classifier.linear.att_weight if self.hparams.use_hierar else None, )
 
     def get_embeddings(self, X, batch_size=None):
         """

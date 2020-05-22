@@ -17,6 +17,7 @@ class GAT(nn.Module):
             concat=True,
             dropout=hparams.nb_attn_dropout
         )
+        # self.batchnorm = torch.nn.BatchNorm1d(hparams.embedding_dim)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -28,7 +29,9 @@ class GAT(nn.Module):
 
     def forward(self, encodings, subnetwork):
         # print("subnetwork", subnetwork.shape)
-        return self.embedder(encodings, subnetwork)
+        embeddings = self.embedder(encodings, subnetwork)
+        # embeddings = self.batchnorm(embeddings)
+        return embeddings
 
 
 class GCN(nn.Module):
@@ -125,10 +128,11 @@ class MultiplexNodeAttention(nn.Module):
         self.hidden_dim = hidden_dim
         self.layers = layers
 
-        self.weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
+        self.att_weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
         self.att = nn.Parameter(torch.Tensor(1, hidden_dim))
         self.dropout = nn.Dropout(attention_dropout)
 
+        self.weight = nn.Parameter(torch.Tensor(embedding_dim, embedding_dim))
         if bias:
             self.bias = nn.Parameter(torch.Tensor(hidden_dim))
         else:
@@ -137,12 +141,16 @@ class MultiplexNodeAttention(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
+        glorot(self.att_weight)
         glorot(self.weight)
         glorot(self.att)
         zeros(self.bias)
 
     def forward(self, embeddings):
         w = self.compute_attention(embeddings)
+
+        for i, layer in enumerate(self.layers):
+            embeddings[i] = torch.matmul(embeddings[i], self.weight)
         z = torch.matmul(torch.stack(embeddings, dim=2), w)
         z = z.squeeze(2)
         return z
@@ -150,12 +158,10 @@ class MultiplexNodeAttention(nn.Module):
     def compute_attention(self, embeddings):
         assert len(embeddings) == len(self.layers)
         batch_size, in_channels = embeddings[0].size()
-        # print(f"embeddings [{len(embeddings)}, {batch_size}, {in_channels}]")
-        w = torch.zeros((batch_size, len(self.layers), 1), requires_grad=True).type_as(self.weight)
-        # print("w", w.shape, w.device)
+        w = torch.zeros((batch_size, len(self.layers), 1), requires_grad=True).type_as(self.att_weight)
 
         for i, layer in enumerate(self.layers):
-            x = torch.tanh(torch.matmul(embeddings[i], self.weight) + self.bias)
+            x = torch.tanh(torch.matmul(embeddings[i], self.att_weight) + self.bias)
             x = self.dropout(x)
             w[:, i] = torch.matmul(x, self.att.t())
 
