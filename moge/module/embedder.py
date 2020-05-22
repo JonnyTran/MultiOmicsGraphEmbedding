@@ -128,11 +128,11 @@ class MultiplexNodeAttention(nn.Module):
         self.hidden_dim = hidden_dim
         self.layers = layers
 
-        self.att_weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
+        self.weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
+        # self.att_weight = nn.Parameter(torch.Tensor(embedding_dim, hidden_dim))
         self.att = nn.Parameter(torch.Tensor(1, hidden_dim))
         self.dropout = nn.Dropout(attention_dropout)
 
-        self.weight = nn.Parameter(torch.Tensor(embedding_dim, embedding_dim))
         if bias:
             self.bias = nn.Parameter(torch.Tensor(hidden_dim))
         else:
@@ -141,7 +141,7 @@ class MultiplexNodeAttention(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self):
-        glorot(self.att_weight)
+        # glorot(self.att_weight)
         glorot(self.weight)
         glorot(self.att)
         zeros(self.bias)

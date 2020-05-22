@@ -82,7 +82,7 @@ class ClassificationLoss(nn.Module):
 
     def forward(self, logits, target, multiclass=False, use_hierar=False, classifier_weight: torch.Tensor = None):
         if use_hierar:
-            assert self.loss_type in ["BCE_WITH_LOGITS",
+            assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
                                       "SIGMOID_FOCAL_CROSS_ENTROPY"]
             if not multiclass:
                 target = torch.eye(self.label_size)[target]
@@ -90,7 +90,7 @@ class ClassificationLoss(nn.Module):
                    self.hierar_penalty * self.recursive_regularize(classifier_weight, self.hierar_relations)
         else:
             if multiclass:
-                assert self.loss_type in ["BCE_WITH_LOGITS",
+                assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
                                           "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
             else:
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
