@@ -29,7 +29,7 @@ def train(hparams):
     with open(DATASET, 'rb') as file:
         network = pickle.load(file)
 
-    MAX_EPOCHS = 30
+    MAX_EPOCHS = 20
     min_count = 100
     n_gpus = 4
 
@@ -105,7 +105,7 @@ def train(hparams):
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=3),
         min_epochs=3, max_epochs=MAX_EPOCHS,
         weights_summary='top',
-        amp_level='O1', precision=16,
+        # amp_level='O1', precision=16,
     )
     trainer.fit(model, train_dataloader=train_dataloader, val_dataloaders=test_dataloader)
 

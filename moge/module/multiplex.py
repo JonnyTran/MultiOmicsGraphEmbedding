@@ -100,10 +100,8 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         embeddings = []
         for layer, _ in self.hparams.embedder.items():
             if X[layer].dim() > 2:
-                # print(f"X[layer] {X[layer].shape}")
                 X[layer] = X[layer].squeeze(0)
                 X[layer], _ = remove_self_loops(X[layer], None)
-                # print(f"X[layer] {X[layer].shape}")
             embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
         if hasattr(self, "_multiplex_embedder"):

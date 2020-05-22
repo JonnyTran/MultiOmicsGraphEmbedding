@@ -3,11 +3,6 @@ method: bayes
 metric:
   name: val_loss
   goal: minimize
-early_terminate:
-  type: hyperband
-  s: 2
-  eta: 3
-  max_iter: 27
 parameters:
   encoder.Protein_seqs:
     values: ["ConvLSTM"]
@@ -15,12 +10,6 @@ parameters:
     values: [64, 128, 256, 512]
   embedding_dim:
     values: [64, 128, 256, 512]
-  max_length:
-    values: [1000]
-  batch_size:
-    values: [1000]
-  num_epochs:
-    values: [20]
   traversal:
     values: ["node", "dfs", "bfs"]
   traversal_depth:
@@ -29,7 +18,7 @@ parameters:
     values: ["log", "linear", "sqrt", "sqrt3", "cycle"]
 
   word_embedding_size:
-    values: [9,10,11,19,20,21]
+    values: [9, 10, 11, 19, 20, 21]
 
   nb_conv1_kernel_size:
     min: 3
@@ -99,8 +88,3 @@ parameters:
     values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
   lr:
     values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
-
-  loss_type:
-    values: ["BCE_WITH_LOGITS"]
-  optimizer:
-    values: ["adam"]
