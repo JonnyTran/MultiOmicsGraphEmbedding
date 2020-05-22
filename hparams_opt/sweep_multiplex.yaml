@@ -6,10 +6,6 @@ metric:
 parameters:
   encoder.Protein_seqs:
     values: ["ConvLSTM"]
-  encoding_dim:
-    values: [64, 128, 256, 512]
-  embedding_dim:
-    values: [64, 128, 256, 512]
   traversal:
     values: ["node", "dfs", "bfs"]
   traversal_depth:
@@ -50,9 +46,9 @@ parameters:
   nb_lstm_hidden_dropout:
     values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
   nb_lstm_bidirectional:
-    values: [True, False]
+    values: [True]
   nb_lstm_layernorm:
-    values: [True, False]
+    values: [True]
 
   embedder.Protein_Protein_physical:
     values: ["GAT", "GCN", "GraphSAGE"]
@@ -68,14 +64,14 @@ parameters:
   multiplex_embedder:
     values: ["MultiplexLayerEmbedding", "MultiplexNodeEmbedding", "Concat"]
   multiplex_hidden_dim:
-    values: [64, 128, 512, 768, 1024, 2048]
+    values: [64, 128, 512, 1024, 2048]
   multiplex_attn_dropout:
     values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
 
   classifier:
     values: ["Dense"]
   nb_cls_dense_size:
-    values: [512, 768, 1024, 1536, 2048]
+    values: [512, 768, 1024, 2048]
   nb_cls_dropout:
     values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
 

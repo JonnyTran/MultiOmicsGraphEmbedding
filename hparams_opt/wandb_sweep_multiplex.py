@@ -102,7 +102,7 @@ def train(hparams):
         gpus=n_gpus,
         # auto_lr_find=True,
         logger=logger,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2),
         min_epochs=3, max_epochs=MAX_EPOCHS,
         weights_summary='top',
         # amp_level='O1', precision=16,
