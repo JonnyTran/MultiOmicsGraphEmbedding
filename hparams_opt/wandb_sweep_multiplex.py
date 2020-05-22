@@ -28,6 +28,7 @@ HIER_TAXONOMY_FILE = "../MultiOmicsGraphEmbedding/data/go_term.taxonomy"
 def train(hparams):
     with open(DATASET, 'rb') as file:
         network = pickle.load(file)
+    hparams = parse_hparams(hparams)
 
     MAX_EPOCHS = 20
     min_count = 100
@@ -36,8 +37,7 @@ def train(hparams):
     if hparams.__dict__["encoder.Protein_seqs"] == "Albert":
         hparams.batch_size = 100
         hparams.max_length = 700
-    hparams = parse_hparams(hparams)
-    print(hparams)
+
 
     batch_size = hparams.batch_size
     max_length = hparams.max_length
@@ -94,15 +94,17 @@ def train(hparams):
     logger = WandbLogger()
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
 
+    print(hparams)
     eec = MultiplexEmbedder(hparams)
     model = ModelTrainer(eec)
 
     trainer = pl.Trainer(
         distributed_backend='dp',
         gpus=n_gpus,
-        # auto_lr_find=True,
+        auto_lr_find=True,
         logger=logger,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2),
+        early_stop_callbacks=[EarlyStopping(monitor='val_loss', patience=2),
+                              EarlyStopping(monitor='loss', patience=1, min_delta=0.0001)],
         min_epochs=3, max_epochs=MAX_EPOCHS,
         weights_summary='top',
         # amp_level='O1', precision=16,

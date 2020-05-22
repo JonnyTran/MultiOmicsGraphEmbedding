@@ -32,7 +32,7 @@ class EncoderEmbedderClassifier(torch.nn.Module):
         if node_type is not None:
             input_seqs = X[node_type]
 
-        if isinstance(self._encoder, dict):
+        if isinstance(self.hparams.encoder, dict):
             encoder_module = self.get_encoder(node_type)
         else:
             encoder_module = self._encoder

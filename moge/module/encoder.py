@@ -6,7 +6,8 @@ from torch.autograd import Variable
 from torch.nn import functional as F
 from transformers import AlbertConfig
 
-from .albert import AlbertModel
+# from .albert import AlbertModel
+from transformers import AlbertModel
 
 
 class AlbertEncoder(nn.Module):
