@@ -71,6 +71,8 @@ class ClassificationLoss(nn.Module):
             self.criterion = FocalLoss(n_classes, "SIGMOID")
         elif loss_type == "BCE_WITH_LOGITS":
             self.criterion = torch.nn.BCEWithLogitsLoss()
+        elif loss_type == "BCE":
+            self.criterion = torch.nn.BCELoss()
         elif loss_type == "MULTI_LABEL_MARGIN":
             self.criterion = torch.nn.MultiLabelMarginLoss()
         else:

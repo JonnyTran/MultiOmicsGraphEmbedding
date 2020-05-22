@@ -48,10 +48,15 @@ class EncoderEmbedderClassifier(torch.nn.Module):
 
         return encodings
 
-    def predict(self, embeddings, cuda=True):
+    def predict(self, embeddings):
         y_pred = self._classifier(embeddings)
         if "LOGITS" in self.hparams.loss_type:
-            y_pred = torch.softmax(y_pred, 1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
+            if "SOFTMAX" in self.hparams.loss_type:
+                print("Applied softmax to predictions")
+                y_pred = torch.softmax(y_pred, 1)
+            else:
+                print("Applied sigmoid to predictions")
+                torch.sigmoid(y_pred)
 
         return y_pred.detach().cpu().numpy()
 
