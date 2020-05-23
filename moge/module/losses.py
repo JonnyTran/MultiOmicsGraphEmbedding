@@ -74,7 +74,7 @@ class ClassificationLoss(nn.Module):
         elif loss_type == "BCE":
             self.criterion = torch.nn.BCELoss()
         elif loss_type == "MULTI_LABEL_MARGIN":
-            self.criterion = torch.nn.MultiLabelMarginLoss()
+            self.criterion = torch.nn.MultiLabelSoftMarginLoss()
         else:
             raise TypeError(
                 "Unsupported loss type: %s." % (
