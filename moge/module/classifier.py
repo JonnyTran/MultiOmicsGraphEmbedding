@@ -24,7 +24,7 @@ class Dense(nn.Module):
             print("INFO: Output of `_classifier` is logits")
 
         elif "SOFTMAX_CROSS_ENTROPY" in hparams.loss_type:
-            self.fc_classifier.add_module("pred_activation", nn.Softmax())
+            self.fc_classifier.add_module("pred_activation", nn.Softmax(dim=1))
             print("INFO: Output of `_classifier` is Softmax")
         else:
             self.fc_classifier.add_module("pred_activation", nn.Sigmoid())

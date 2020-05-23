@@ -52,10 +52,10 @@ class EncoderEmbedderClassifier(torch.nn.Module):
         y_pred = self._classifier.forward(embeddings)
         if "LOGITS" in self.hparams.loss_type:
             if "SOFTMAX" in self.hparams.loss_type:
-                print("Applied softmax to predictions")
+                print("INFO: Applied softmax to predictions")
                 y_pred = torch.softmax(y_pred, 1)
             else:
-                print("Applied sigmoid to predictions")
+                print("INFO: Applied sigmoid to predictions")
                 y_pred = torch.sigmoid(y_pred)
 
         return y_pred.detach().cpu().numpy()
