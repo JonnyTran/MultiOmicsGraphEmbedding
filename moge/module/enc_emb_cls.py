@@ -56,7 +56,7 @@ class EncoderEmbedderClassifier(torch.nn.Module):
                 y_pred = torch.softmax(y_pred, 1)
             else:
                 print("Applied sigmoid to predictions")
-                torch.sigmoid(y_pred)
+                y_pred = torch.sigmoid(y_pred)
 
         return y_pred.detach().cpu().numpy()
 
