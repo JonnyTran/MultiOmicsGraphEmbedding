@@ -70,11 +70,13 @@ class ClassificationLoss(nn.Module):
         elif loss_type == "SIGMOID_FOCAL_CROSS_ENTROPY":
             self.criterion = FocalLoss(n_classes, "SIGMOID")
         elif loss_type == "BCE_WITH_LOGITS":
-            self.criterion = torch.nn.BCEWithLogitsLoss()
+            self.criterion = torch.nn.BCEWithLogitsLoss(weight=class_weight)
         elif loss_type == "BCE":
-            self.criterion = torch.nn.BCELoss()
+            self.criterion = torch.nn.BCELoss(weight=class_weight)
         elif loss_type == "MULTI_LABEL_MARGIN":
-            self.criterion = torch.nn.MultiLabelSoftMarginLoss()
+            self.criterion = torch.nn.MultiLabelSoftMarginLoss(weight=class_weight)
+        elif loss_type == "NLLLoss":
+            self.criterion = torch.nn.NLLLoss2d(weight=class_weight)
         else:
             raise TypeError(
                 "Unsupported loss type: %s." % (

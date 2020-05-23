@@ -86,6 +86,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
 
         self.criterion = ClassificationLoss(
             n_classes=hparams.n_classes,
+            class_weight=None if not hasattr(hparams, "class_weight") else torch.tensor(hparams.class_weight),
             loss_type=hparams.loss_type,
             hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
             hierar_relations=hierar_relations if hparams.use_hierar else None

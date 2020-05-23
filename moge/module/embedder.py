@@ -158,7 +158,7 @@ class MultiplexNodeAttention(nn.Module):
     def compute_attention(self, embeddings):
         assert len(embeddings) == len(self.layers)
         batch_size, in_channels = embeddings[0].size()
-        w = torch.zeros((batch_size, len(self.layers), 1), requires_grad=True).type_as(self.weight)
+        w = torch.zeros((batch_size, len(self.layers), 1), requires_grad=False).type_as(self.weight)
 
         for i, layer in enumerate(self.layers):
             x = torch.tanh(torch.matmul(embeddings[i], self.weight) + self.bias)
