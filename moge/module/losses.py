@@ -75,8 +75,8 @@ class ClassificationLoss(nn.Module):
             self.criterion = torch.nn.BCELoss(weight=class_weight)
         elif loss_type == "MULTI_LABEL_MARGIN":
             self.criterion = torch.nn.MultiLabelSoftMarginLoss(weight=class_weight)
-        elif loss_type == "NLLLoss":
-            self.criterion = torch.nn.NLLLoss2d(weight=class_weight)
+        elif loss_type == "KL_DIVERGENCE":
+            self.criterion = torch.nn.KLDivLoss()
         else:
             raise TypeError(
                 "Unsupported loss type: %s." % (
