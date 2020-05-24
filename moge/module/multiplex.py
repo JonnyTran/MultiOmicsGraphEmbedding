@@ -136,22 +136,24 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         :param cuda (bool): whether to run computations in GPUs
         :return (np.array): a numpy array of size (node size, embedding dim)
         """
-        encodings = self.get_encodings(X, node_type="Protein_seqs", batch_size=batch_size)
+        if X["Protein_seqs"].dim() > 2:
+            X["Protein_seqs"] = X["Protein_seqs"].squeeze(0)
+
+        encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"])
+
         multi_embeddings = []
-        for subnetwork_type, _ in self.hparams.embedder.items():
-            if X[subnetwork_type].dim() > 2:
-                X[subnetwork_type] = X[subnetwork_type].squeeze(0)
-            multi_embeddings.append(self.get_embedder(subnetwork_type)(encodings, X[subnetwork_type]))
+        for layer, _ in self.hparams.embedder.items():
+            if X[layer].dim() > 2:
+                X[layer] = X[layer].squeeze(0)
+                X[layer], _ = remove_self_loops(X[layer], None)
+            multi_embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
         if return_multi_emb:
             return multi_embeddings
 
-        if "Multiplex" in self.hparams.multiplex_embedder:
+        if hasattr(self, "_multiplex_embedder"):
             embeddings = self._multiplex_embedder.forward(multi_embeddings)
         else:
             embeddings = torch.cat(multi_embeddings, 1)
 
         return embeddings.detach().cpu().numpy()
-
-
-
