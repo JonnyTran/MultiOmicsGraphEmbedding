@@ -84,7 +84,7 @@ def train(hparams):
                                             layers=list(hparams.embedder.keys()))
     )
 
-    vocab = generator_train.tokenizer[network.node_types[0]].word_index
+    vocab = generator_train.tokenizer[network.modalities[0]].word_index
 
     hparams.n_classes = n_classes
     hparams.classes = classes

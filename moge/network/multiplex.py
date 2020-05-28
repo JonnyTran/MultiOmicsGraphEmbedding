@@ -21,7 +21,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         :param layers:
         :param annotations:
         """
-        self.node_types = modalities
+        self.modalities = modalities
         self.modalities = layers
         self.layers_adj = {}
 
@@ -37,10 +37,10 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.node_to_modality = {}
 
         for source_target, network in self.networks.items():
-            for node_type in self.node_types:
+            for node_type in self.modalities:
                 network.add_nodes_from(self.multiomics[node_type].get_genes_list(), modality=node_type)
 
-        for node_type in self.node_types:
+        for node_type in self.modalities:
             self.nodes[node_type] = self.multiomics[node_type].get_genes_list()
 
             for gene in self.multiomics[node_type].get_genes_list():
@@ -53,7 +53,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
     def process_annotations(self):
         self.annotations = {}
-        for modality in self.node_types:
+        for modality in self.modalities:
             annotation = self.multiomics[modality].get_annotations()
             self.annotations[modality] = annotation
 
@@ -66,7 +66,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         if not hasattr(self, "all_annotations"):
             annotations_list = []
 
-            for modality in self.node_types:
+            for modality in self.modalities:
                 annotation = self.multiomics[modality].get_annotations()
                 annotation["omic"] = modality
                 annotations_list.append(annotation)
