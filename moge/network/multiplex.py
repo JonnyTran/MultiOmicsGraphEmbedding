@@ -3,22 +3,25 @@ from argparse import Namespace
 import networkx as nx
 import numpy as np
 import pandas as pd
-from openomics.utils.df import concat_uniques
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
+from openomics.utils.df import concat_uniques
+from openomics import MultiOmics
+
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics, modalities: list, layers: {(str, str): nx.Graph}, annotations=True, ) -> None:
+    def __init__(self, multiomics: MultiOmics, node_types: list, layers: {(str, str): nx.Graph},
+                 annotations=True, ) -> None:
         """
 
         :param multiomics:
-        :param modalities:
+        :param node_types:
         :param layers:
         :param annotations:
         """
-        self.modalities = modalities
+        self.node_types = node_types
         self.layers = layers
         self.layers_adj = {}
 
@@ -34,23 +37,23 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.node_to_modality = {}
 
         for source_target, network in self.networks.items():
-            for modality in self.modalities:
-                network.add_nodes_from(self.multiomics[modality].get_genes_list(), modality=modality)
+            for node_type in self.node_types:
+                network.add_nodes_from(self.multiomics[node_type].get_genes_list(), modality=node_type)
 
-        for modality in self.modalities:
-            self.nodes[modality] = self.multiomics[modality].get_genes_list()
+        for node_type in self.node_types:
+            self.nodes[node_type] = self.multiomics[node_type].get_genes_list()
 
-            for gene in self.multiomics[modality].get_genes_list():
-                self.node_to_modality[gene] = self.node_to_modality.setdefault(gene, []) + [modality, ]
+            for gene in self.multiomics[node_type].get_genes_list():
+                self.node_to_modality[gene] = self.node_to_modality.setdefault(gene, []) + [node_type, ]
 
-            print(modality, " nodes:", len(self.nodes[modality]), self.multiomics[modality].gene_index)
+            print(node_type, " nodes:", len(self.nodes[node_type]), self.multiomics[node_type].gene_index)
         print("Total nodes:", len(self.get_node_list()))
         self.nodes = pd.Series(self.nodes)
         self.node_to_modality = pd.Series(self.node_to_modality)
 
     def process_annotations(self):
         self.annotations = {}
-        for modality in self.modalities:
+        for modality in self.node_types:
             annotation = self.multiomics[modality].get_annotations()
             self.annotations[modality] = annotation
 
@@ -63,7 +66,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         if not hasattr(self, "all_annotations"):
             annotations_list = []
 
-            for modality in self.modalities:
+            for modality in self.node_types:
                 annotation = self.multiomics[modality].get_annotations()
                 annotation["omic"] = modality
                 annotations_list.append(annotation)

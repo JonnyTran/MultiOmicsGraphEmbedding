@@ -5,8 +5,8 @@ from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 
 from moge.generator.sequences import SEQUENCE_COL
-from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
+from moge.network.base import Network
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"

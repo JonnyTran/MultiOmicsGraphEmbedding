@@ -75,7 +75,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             null_nodes = [network.annotations[modality].loc[network.nodes[modality], SEQUENCE_COL][
                               network.annotations[modality].loc[
                                   network.nodes[modality], SEQUENCE_COL].isnull()].index.tolist() for modality in
-                          network.modalities]
+                          network.node_types]
             null_nodes = [node for nodes in null_nodes for node in nodes]
 
             self.node_list = [node for node in self.node_list if node not in null_nodes]
