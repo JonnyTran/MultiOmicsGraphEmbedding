@@ -12,17 +12,17 @@ from openomics import MultiOmics
 
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics: MultiOmics, node_types: list, layers: {(str, str): nx.Graph},
+    def __init__(self, multiomics: MultiOmics, modalities: list, layers: {(str, str): nx.Graph},
                  annotations=True, ) -> None:
         """
 
         :param multiomics:
-        :param node_types:
+        :param modalities:
         :param layers:
         :param annotations:
         """
-        self.node_types = node_types
-        self.layers = layers
+        self.node_types = modalities
+        self.modalities = layers
         self.layers_adj = {}
 
         networks = {}
@@ -106,7 +106,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             for layer in edge_types:
                 adj[layer] = self.get_layer_adjacency_matrix(layer, node_list)
         else:
-            raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.layers))
+            raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.modalities))
 
         return adj
 
