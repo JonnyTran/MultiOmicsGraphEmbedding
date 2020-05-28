@@ -152,7 +152,6 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         """
         # integer encode
         tokenizer = self.tokenizer[modality]
-
         encoded = tokenizer.texts_to_sequences(texts)
 
         if variable_length:
@@ -165,7 +164,7 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         if batch_maxlen < self.maxlen:
             maxlen = batch_maxlen
 
-        if minlen and len(texts[0]) < minlen:
+        if minlen is not None and len(texts[0]) < minlen:
             maxlen = minlen
 
         # pad encoded sequences

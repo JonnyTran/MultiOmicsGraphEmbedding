@@ -142,9 +142,10 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         # Features
         X = {}
         for modality in self.network.modalities:
-            X["_".join([modality, "seqs"])] = self.get_sequence_encodings(sampled_nodes, modality=modality,
-                                                                          variable_length=variable_length or self.variable_length,
-                                                                          minlen=40)
+            X["_".join([modality, "seqs"])] = self.get_sequence_en
+            codings(sampled_nodes, modality=modality,
+                    variable_length=variable_length or self.variable_length,
+                    minlen=0)
             for variable in self.variables:
                 if "expression" == variable:
                     X["_".join([modality, variable])] = self.get_expressions(sampled_nodes, modality=modality)

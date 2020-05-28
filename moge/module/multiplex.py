@@ -4,7 +4,8 @@ import torch
 from transformers import AlbertConfig
 
 from moge.module.classifier import Dense, HierarchicalAWX
-from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention
+from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention, \
+    HeterogeneousMultiplexAttentionEmbedding
 from moge.module.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss, get_hierar_relations
@@ -157,3 +158,87 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
             embeddings = torch.cat(multi_embeddings, 1)
 
         return embeddings.detach().cpu().numpy()
+
+
+class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
+    def __init__(self, hparams):
+        torch.nn.Module.__init__(self)
+
+        assert isinstance(hparams.encoder,
+                          dict), "hparams.encoder must be a dict. If not multi node types, use MonoplexEmbedder instead."
+        assert isinstance(hparams.embedder,
+                          dict), "hparams.embedder must be a dict. If not multi-layer, use MonoplexEmbedder instead."
+        assert not (len(hparams.encoder) > 1 and not len(hparams.vocab_size) > 1)
+        self.hparams = hparams
+
+        ################### Encoding ####################
+        self.node_types = list(hparams.encoder)
+        for seq_type, encoder in hparams.encoder.items():
+            if encoder == "ConvLSTM":
+                self.set_encoder(seq_type, ConvLSTM(hparams))
+            elif encoder == "Albert":
+                config = AlbertConfig(
+                    vocab_size=hparams.vocab_size,
+                    embedding_size=hparams.word_embedding_size,
+                    hidden_size=hparams.encoding_dim,
+                    num_hidden_layers=hparams.num_hidden_layers,
+                    num_hidden_groups=hparams.num_hidden_groups,
+                    hidden_dropout_prob=hparams.hidden_dropout_prob,
+                    attention_probs_dropout_prob=hparams.attention_probs_dropout_prob,
+                    num_attention_heads=hparams.num_attention_heads,
+                    intermediate_size=hparams.intermediate_size,
+                    type_vocab_size=1,
+                    max_position_embeddings=hparams.max_length,
+                )
+                self.set_encoder(seq_type, AlbertEncoder(config))
+            else:
+                raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
+
+        ################### Layer-specfic Embedding ####################
+        self.layers = list(hparams.embedder)
+        if hparams.multiplex_embedder == "HeterogeneousMultiplexAttentionEmbedding":
+            self._embedder = HeterogeneousMultiplexAttentionEmbedding(in_channels=hparams.encoding_dim,
+                                                                      out_channels=hparams.embedding_dim,
+                                                                      node_types=self.node_types,
+                                                                      layers=self.layers,
+                                                                      attention_dropout=hparams.multiplex_attn_dropout)
+        else:
+            print('"multiplex_embedder"  used. Concatenate multi-layer embeddings instead.')
+
+        ################### Classifier ####################
+        if hparams.classifier == "Dense":
+            self._classifier = Dense(hparams)
+        elif hparams.classifier == "HierarchicalAWX":
+            self._classifier = HierarchicalAWX(hparams)
+        else:
+            raise Exception("hparams.classifier must be one of {'Dense'}")
+
+        if hparams.use_hierar:
+            label_map = pd.Series(range(len(hparams.classes)), index=hparams.classes).to_dict()
+            hierar_relations = get_hierar_relations(hparams.hierar_taxonomy_file,
+                                                    label_map=label_map)
+
+        self.criterion = ClassificationLoss(
+            n_classes=hparams.n_classes,
+            class_weight=None if not hasattr(hparams, "class_weight") else torch.tensor(hparams.class_weight),
+            loss_type=hparams.loss_type,
+            hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
+            hierar_relations=hierar_relations if hparams.use_hierar else None
+        )
+
+    def forward(self, X):
+        X = [X[key].squeeze(0) if X[key].dim() > 2 else X[key] for key in X]
+
+        encodings = {}
+        for node_type in self.node_types:
+            encodings[node_type] = self.get_encoder(node_type).forward(X[node_type])
+
+        edge_index = {}
+        for layer in self.layers:
+            edge_index[layer] = X[layer]
+
+        embeddings = self._embedder.forward(encodings, edge_index)
+        print("embeddings", embeddings.shape)
+
+        y_pred = self._classifier(embeddings)
+        return y_pred

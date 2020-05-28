@@ -16,7 +16,7 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.module.trainer import ModelTrainer
-from moge.module.multiplex import MultiplexEmbedder
+from moge.module.multiplex import HeterogeneousMultiplexEmbedder
 from moge.module.utils import get_multiplex_collate_fn
 from moge.generator.multiplex import MultiplexGenerator
 from moge.generator.dataset import TorchDataset
@@ -95,7 +95,7 @@ def train(hparams):
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
 
     print(hparams)
-    eec = MultiplexEmbedder(hparams)
+    eec = HeterogeneousMultiplexEmbedder(hparams)
     model = ModelTrainer(eec)
 
     trainer = pl.Trainer(
