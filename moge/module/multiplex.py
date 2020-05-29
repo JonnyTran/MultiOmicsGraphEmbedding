@@ -122,11 +122,11 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         else:
             idx = torch.tensor(np.nonzero(weights)[0])
 
-        print("Y_hat", Y_hat.size(0))
+        old = Y_hat.size(0)
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
 
-        print("Y_hat", Y_hat.size(0))
+        print(f"Y_hat {Y_hat.size(0) - old}")
 
         return self.criterion.forward(
             Y_hat, Y,
