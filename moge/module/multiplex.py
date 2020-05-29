@@ -6,7 +6,7 @@ from transformers import AlbertConfig
 
 from moge.module.classifier import Dense, HierarchicalAWX
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention, \
-    HeterogeneousMultiplexAttentionEmbedding
+    ExpandedMultiplexGAT
 from moge.module.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss, get_hierar_relations
@@ -122,8 +122,11 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         else:
             idx = torch.tensor(np.nonzero(weights)[0])
 
+        print("Y_hat", Y_hat.size(0))
         Y = Y[idx, :]
         Y_hat = Y_hat[idx, :]
+
+        print("Y_hat", Y_hat.size(0))
 
         return self.criterion.forward(
             Y_hat, Y,
@@ -197,13 +200,13 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
 
         ################### Layer-specfic Embedding ####################
         self.layers = list(hparams.embedder)
-        if hparams.multiplex_embedder == "HeterogeneousMultiplexAttentionEmbedding":
-            self._embedder = HeterogeneousMultiplexAttentionEmbedding(in_channels=hparams.encoding_dim,
-                                                                      out_channels=int(
-                                                                          hparams.embedding_dim / len(self.node_types)),
-                                                                      node_types=self.node_types,
-                                                                      layers=self.layers,
-                                                                      dropout=hparams.nb_attn_dropout)
+        if hparams.multiplex_embedder == "ExpandedMultiplexGAT":
+            self._embedder = ExpandedMultiplexGAT(in_channels=hparams.encoding_dim,
+                                                  out_channels=int(
+                                                      hparams.embedding_dim / len(self.node_types)),
+                                                  node_types=self.node_types,
+                                                  layers=self.layers,
+                                                  dropout=hparams.nb_attn_dropout)
         else:
             print('"multiplex_embedder"  used. Concatenate multi-layer embeddings instead.')
 

@@ -180,10 +180,10 @@ class MultiplexNodeAttention(nn.Module):
         return parser
 
 
-class HeterogeneousMultiplexAttentionEmbedding(MessagePassing):
+class ExpandedMultiplexGAT(MessagePassing):
     def __init__(self, in_channels, out_channels, node_types: [], layers: [], heads=1, concat=False,
                  negative_slope=0.2, dropout=0, bias=True, **kwargs):
-        super(HeterogeneousMultiplexAttentionEmbedding, self).__init__(aggr='add', **kwargs)
+        super(ExpandedMultiplexGAT, self).__init__(aggr='add', **kwargs)
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -211,7 +211,7 @@ class HeterogeneousMultiplexAttentionEmbedding(MessagePassing):
         glorot(self.att)
         zeros(self.bias)
 
-    def convert_edge_index_multiplex(self, sample_idx_by_type: dict, edge_index: dict):
+    def expand_edge_index_multiplex(self, sample_idx_by_type: dict, edge_index: dict):
         for layer in self.layers:
             if edge_index[layer].size(1) == 0: continue
             nodetype_1 = layer.split("-")[0] + "_seqs"
@@ -220,6 +220,10 @@ class HeterogeneousMultiplexAttentionEmbedding(MessagePassing):
             edge_index[layer][0] = edge_index[layer][0] + sample_idx_by_type[nodetype_1]
             edge_index[layer][1] = edge_index[layer][1] + sample_idx_by_type[nodetype_2]
 
+        expand_index = torch.arange(0, num_nodes, dtype=torch.long,
+                                    device=edge_index[self.layers[0]].device)
+        expand_index = expand_index.unsqueeze(0).repeat(2, 1)
+
         edge_index = torch.cat([edge_index[layer] for layer in self.layers], dim=1)
 
         return edge_index
@@ -227,19 +231,13 @@ class HeterogeneousMultiplexAttentionEmbedding(MessagePassing):
     def forward(self, x: dict, sample_idx_by_type: dict, edge_index: dict, size=None):
         encodings = [torch.matmul(x[node_type], self.weight[i, :, :].squeeze(0)) for i, node_type in
                      enumerate(self.node_types)]
-        # print("encodings", [encoding.shape for encoding in encodings])
-        # print("sample_idx_by_type", sample_idx_by_type)
         x = torch.cat(encodings)
-        # print("x concat", x.shape)
-
-        # print("edge_index", [edges.size() for layer, edges in edge_index.items()])
-        edge_index = self.convert_edge_index_multiplex(sample_idx_by_type, edge_index)
+        edge_index = self.expand_edge_index_multiplex(sample_idx_by_type, edge_index)
 
         if torch.is_tensor(x):
             edge_index, _ = remove_self_loops(edge_index)
             edge_index, _ = add_self_loops(edge_index,
                                            num_nodes=x.size(self.node_dim))
-        # print("edge_index", edge_index.shape, ", max:", torch.max(edge_index), "\n", edge_index)
 
         return self.propagate(edge_index, size=size, x=x)
 

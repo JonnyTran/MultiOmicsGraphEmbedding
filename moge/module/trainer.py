@@ -69,7 +69,7 @@ class ModelTrainer(pl.LightningModule):
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
-        avg_loss = torch.cat([x["val_loss"].item() for x in outputs]).mean().item()
+        avg_loss = torch.cat([x["val_loss"] for x in outputs]).mean().item()
 
         logs = self.metrics.compute_metrics(training=False)
         self.metrics.reset_metrics(training=False)
@@ -82,8 +82,9 @@ class ModelTrainer(pl.LightningModule):
         optimizer = torch.optim.Adam(self._model.parameters(), lr=self.hparams.lr,
                                      weight_decay=self.hparams.weight_decay)
 
-        scheduler = ReduceLROnPlateau(optimizer, )
-        return [optimizer], [scheduler]
+        # scheduler = ReduceLROnPlateau(optimizer, )
+        # return [optimizer], [scheduler]
+        return optimizer
 
     # def prepare_data(self) -> None:
     #     with open(self.data_path, 'rb') as file:
