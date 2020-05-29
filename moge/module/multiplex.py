@@ -141,7 +141,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         if X["Protein_seqs"].dim() > 2:
             X["Protein_seqs"] = X["Protein_seqs"].squeeze(0)
 
-        encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"])
+        encodings = self.get_encodings(X, node_type="Protein_seqs", batch_size=batch_size)
 
         multi_embeddings = []
         for layer, _ in self.hparams.embedder.items():
@@ -169,13 +169,14 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
                           dict), "hparams.encoder must be a dict. If not multi node types, use MonoplexEmbedder instead."
         assert isinstance(hparams.embedder,
                           dict), "hparams.embedder must be a dict. If not multi-layer, use MonoplexEmbedder instead."
-        self.hparams = hparams
+        self.hparams = copy.copy(hparams)
 
         ################### Encoding ####################
         self.node_types = list(hparams.encoder)
-        for seq_type, encoder in hparams.encoder.items():
+        for node_type, encoder in hparams.encoder.items():
             if encoder == "ConvLSTM":
-                self.set_encoder(seq_type, ConvLSTM(hparams))
+                hparams.vocab_size = self.hparams.vocab_size[node_type]
+                self.set_encoder(node_type, ConvLSTM(hparams))
             elif encoder == "Albert":
                 config = AlbertConfig(
                     vocab_size=hparams.vocab_size,
@@ -190,7 +191,7 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
                     type_vocab_size=1,
                     max_position_embeddings=hparams.max_length,
                 )
-                self.set_encoder(seq_type, AlbertEncoder(config))
+                self.set_encoder(node_type, AlbertEncoder(config))
             else:
                 raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
 
@@ -260,3 +261,37 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
 
         y_pred = self._classifier(merge_embeddings)
         return y_pred
+
+    def get_embeddings(self, X, batch_size=100, return_multi_emb=False):
+        """
+        Get embeddings for a set of nodes in `X`.
+        :param X: a dict with keys {"input_seqs", "subnetwork"}
+        :param cuda (bool): whether to run computations in GPUs
+        :return (np.array): a numpy array of size (node size, embedding dim)
+        """
+        X = {key: X[key].squeeze(0) if X[key].dim() > 2 else X[key] for key in X}
+        batch_size = X[self.node_types[0]].size(0)
+
+        encodings = {}
+        for node_type in self.node_types:
+            encodings[node_type] = self.get_encodings(X, node_type, batch_size)
+
+        sample_idx_by_type = {}
+        index = 0
+        for i, node_type in enumerate(self.node_types):
+            sample_idx_by_type[node_type] = index
+            index += encodings[node_type].size(0)
+
+        embeddings = self._embedder.forward(x=encodings,
+                                            sample_idx_by_type=sample_idx_by_type,
+                                            edge_index={layer: X[layer] for layer in self.layers})
+        # print("embeddings", embeddings.shape)
+
+        merge_embeddings = []
+        for i, node_type in enumerate(self.node_types):
+            merge_embeddings.append(
+                embeddings[sample_idx_by_type[node_type]: sample_idx_by_type[node_type] + batch_size])
+
+        merge_embeddings = torch.cat(merge_embeddings, dim=1)
+
+        return merge_embeddings.detach().cpu().numpy()
