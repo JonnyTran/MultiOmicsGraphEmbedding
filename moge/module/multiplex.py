@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pandas as pd
 import torch
@@ -168,7 +169,6 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
                           dict), "hparams.encoder must be a dict. If not multi node types, use MonoplexEmbedder instead."
         assert isinstance(hparams.embedder,
                           dict), "hparams.embedder must be a dict. If not multi-layer, use MonoplexEmbedder instead."
-        assert not (len(hparams.encoder) > 1 and not len(hparams.vocab_size) > 1)
         self.hparams = hparams
 
         ################### Encoding ####################
@@ -198,10 +198,11 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
         self.layers = list(hparams.embedder)
         if hparams.multiplex_embedder == "HeterogeneousMultiplexAttentionEmbedding":
             self._embedder = HeterogeneousMultiplexAttentionEmbedding(in_channels=hparams.encoding_dim,
-                                                                      out_channels=hparams.embedding_dim,
+                                                                      out_channels=int(
+                                                                          hparams.embedding_dim / len(self.node_types)),
                                                                       node_types=self.node_types,
                                                                       layers=self.layers,
-                                                                      attention_dropout=hparams.multiplex_attn_dropout)
+                                                                      dropout=hparams.nb_attn_dropout)
         else:
             print('"multiplex_embedder"  used. Concatenate multi-layer embeddings instead.')
 
@@ -227,18 +228,35 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
         )
 
     def forward(self, X):
-        X = [X[key].squeeze(0) if X[key].dim() > 2 else X[key] for key in X]
+        X = {key: X[key].squeeze(0) if X[key].dim() > 2 else X[key] for key in X}
+        batch_size = X[self.node_types[0]].size(0)
 
         encodings = {}
         for node_type in self.node_types:
+            # nonzero_index = X[node_type].sum(1) > 0
+            # print("nonzero_index", nonzero_index)
+            # inputs = X[node_type][nonzero_index, :]
             encodings[node_type] = self.get_encoder(node_type).forward(X[node_type])
+            # print(f"{node_type}, {encodings[node_type].shape}")
 
-        edge_index = {}
-        for layer in self.layers:
-            edge_index[layer] = X[layer]
+        sample_idx_by_type = {}
+        index = 0
+        for i, node_type in enumerate(self.node_types):
+            sample_idx_by_type[node_type] = index
+            index += encodings[node_type].size(0)
 
-        embeddings = self._embedder.forward(encodings, edge_index)
-        print("embeddings", embeddings.shape)
+        embeddings = self._embedder.forward(x=encodings,
+                                            sample_idx_by_type=sample_idx_by_type,
+                                            edge_index={layer: X[layer] for layer in self.layers})
+        # print("embeddings", embeddings.shape)
 
-        y_pred = self._classifier(embeddings)
+        merge_embeddings = []
+        for i, node_type in enumerate(self.node_types):
+            merge_embeddings.append(
+                embeddings[sample_idx_by_type[node_type]: sample_idx_by_type[node_type] + batch_size])
+
+        merge_embeddings = torch.cat(merge_embeddings, dim=1)
+        # print("merge_embeddings", merge_embeddings.shape)
+
+        y_pred = self._classifier(merge_embeddings)
         return y_pred

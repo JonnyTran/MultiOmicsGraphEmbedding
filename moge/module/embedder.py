@@ -3,10 +3,13 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn import Parameter
 from torch_geometric.nn import GATConv, GCNConv, SAGEConv
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
+
 
 class GAT(nn.Module):
     def __init__(self, hparams) -> None:
@@ -178,20 +181,21 @@ class MultiplexNodeAttention(nn.Module):
 
 
 class HeterogeneousMultiplexAttentionEmbedding(MessagePassing):
-    def __init__(self, in_channels, out_channels, node_types: [], layers: [], concat=False,
+    def __init__(self, in_channels, out_channels, node_types: [], layers: [], heads=1, concat=False,
                  negative_slope=0.2, dropout=0, bias=True, **kwargs):
-        super(GATConv, self).__init__(aggr='add', **kwargs)
+        super(HeterogeneousMultiplexAttentionEmbedding, self).__init__(aggr='add', **kwargs)
 
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.node_types = node_types
         self.layers = layers
+        self.heads = heads
         self.concat = concat
         self.negative_slope = negative_slope
         self.dropout = dropout
 
-        self.weight = Parameter(torch.Tensor(len(node_types), in_channels, out_channels))
-        self.att = Parameter(torch.Tensor(1, len(layers), 2 * out_channels))
+        self.weight = Parameter(torch.Tensor(len(node_types), in_channels, heads * out_channels))
+        self.att = Parameter(torch.Tensor(1, heads, 2 * out_channels))
 
         if bias and concat:
             self.bias = Parameter(torch.Tensor(len(layers) * out_channels))
@@ -207,11 +211,12 @@ class HeterogeneousMultiplexAttentionEmbedding(MessagePassing):
         glorot(self.att)
         zeros(self.bias)
 
-    def convert_edge_index_multiplex(self, sample_idx_by_type, edge_index):
+    def convert_edge_index_multiplex(self, sample_idx_by_type: dict, edge_index: dict):
         for layer in self.layers:
+            if edge_index[layer].size(1) == 0: continue
             nodetype_1 = layer.split("-")[0] + "_seqs"
             nodetype_2 = layer.split("-")[1] + "_seqs"
-
+            # Shift layer edges to the right index based on node type
             edge_index[layer][0] = edge_index[layer][0] + sample_idx_by_type[nodetype_1]
             edge_index[layer][1] = edge_index[layer][1] + sample_idx_by_type[nodetype_2]
 
@@ -219,37 +224,32 @@ class HeterogeneousMultiplexAttentionEmbedding(MessagePassing):
 
         return edge_index
 
-    def forward(self, x: dict, edge_index: dict):
-        """"""
-        sample_idx_by_type = {}
-        index = 0
-        for i, nodetype in enumerate(self.node_types):
-            sample_idx_by_type[nodetype] = index
-            index += x[node_type].size(0)
-
-        encodings = [torch.matmul(x[nodetype], self.weight[i, :, :]) for i, nodetype in enumerate(self.node_types)]
-        print("encodings", [encoding.shape for encoding in encodings])
-        print("sample_idx_by_type", sample_idx_by_type)
+    def forward(self, x: dict, sample_idx_by_type: dict, edge_index: dict, size=None):
+        encodings = [torch.matmul(x[node_type], self.weight[i, :, :].squeeze(0)) for i, node_type in
+                     enumerate(self.node_types)]
+        # print("encodings", [encoding.shape for encoding in encodings])
+        # print("sample_idx_by_type", sample_idx_by_type)
         x = torch.cat(encodings)
-        print("x concat", x.shape)
+        # print("x concat", x.shape)
 
+        # print("edge_index", [edges.size() for layer, edges in edge_index.items()])
         edge_index = self.convert_edge_index_multiplex(sample_idx_by_type, edge_index)
-        print("edge_index", edge_index.shape, ", max:", torch.max(edge_index))
 
         if torch.is_tensor(x):
             edge_index, _ = remove_self_loops(edge_index)
             edge_index, _ = add_self_loops(edge_index,
                                            num_nodes=x.size(self.node_dim))
+        # print("edge_index", edge_index.shape, ", max:", torch.max(edge_index), "\n", edge_index)
 
         return self.propagate(edge_index, size=size, x=x)
 
     def message(self, edge_index_i, x_i, x_j, size_i):
         # Compute attention coefficients.
-        x_j = x_j.view(-1, self.layers, self.out_channels)
+        x_j = x_j.view(-1, self.heads, self.out_channels)
         if x_i is None:
             alpha = (x_j * self.att[:, :, self.out_channels:]).sum(dim=-1)
         else:
-            x_i = x_i.view(-1, self.layers, self.out_channels)
+            x_i = x_i.view(-1, self.heads, self.out_channels)
             alpha = (torch.cat([x_i, x_j], dim=-1) * self.att).sum(dim=-1)
 
         alpha = F.leaky_relu(alpha, self.negative_slope)
@@ -258,7 +258,7 @@ class HeterogeneousMultiplexAttentionEmbedding(MessagePassing):
         # Sample attention coefficients stochastically.
         alpha = F.dropout(alpha, p=self.dropout, training=self.training)
 
-        return x_j * alpha.view(-1, self.layers, 1)
+        return x_j * alpha.view(-1, self.heads, 1)
 
     def update(self, aggr_out):
         if self.concat is True:
