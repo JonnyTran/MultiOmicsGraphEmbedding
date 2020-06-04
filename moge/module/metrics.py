@@ -10,10 +10,10 @@ class Metrics():
         self.loss_type = loss_type
         self.precision = Precision(average=True, is_multilabel=True)
         self.recall = Recall(average=True, is_multilabel=True)
-        self.top_k_train = TopKMulticlassAccuracy(k=100)
+        self.top_k_train = TopKMulticlassAccuracy(k_s=[5, 10, 50, 100, 200])
         self.precision_val = Precision(average=True, is_multilabel=True)
         self.recall_val = Recall(average=True, is_multilabel=True)
-        self.top_k_val = TopKMulticlassAccuracy(k=100)
+        self.top_k_val = TopKMulticlassAccuracy(k_s=[5, 10, 50, 100, 200])
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
@@ -33,12 +33,12 @@ class Metrics():
             logs = {
                 "precision": self.precision.compute(),
                 "recall": self.recall.compute(),
-                "top_k": self.top_k_train.compute()}
+                **self.top_k_train.compute(training)}
         else:
             logs = {
                 "val_precision": self.precision_val.compute(),
                 "val_recall": self.recall_val.compute(),
-                "val_top_k": self.top_k_val.compute()}
+                **self.top_k_val.compute(training)}
         return logs
 
     def reset_metrics(self, training: bool):
@@ -59,31 +59,34 @@ class TopKMulticlassAccuracy(Metric):
     - `update` must receive output of the form `(y_pred, y)` or `{'y_pred': y_pred, 'y': y}` Tensors of size (batch_size, n_classes).
     """
 
-    def __init__(self, k=5, output_transform=lambda x: x, device=None):
+    def __init__(self, k_s=[5, 10, 50, 100, 200], output_transform=lambda x: x, device=None):
         super(TopKMulticlassAccuracy, self).__init__(output_transform, device=device)
-        self._k = k
+        self.k_s = k_s
 
     @reinit__is_reduced
     def reset(self):
-        self._num_correct = 0
+        self._num_correct = {k: 0 for k in [10, 50, 100, 200]}
         self._num_examples = 0
 
     @reinit__is_reduced
     def update(self, outputs):
         y_pred, y_true = outputs
         batch_size, n_classes = y_true.size()
-        _, top_indices = y_pred.topk(k=self._k, dim=1, largest=True, sorted=True)
+        _, top_indices = y_pred.topk(k=max(self.k_s), dim=1, largest=True, sorted=True)
 
-        y_true_select = torch.gather(y_true, 1, top_indices)
-        corrects_in_k = y_true_select.sum(1) * 1.0 / self._k
-        corrects_in_k = corrects_in_k.sum(0)  # sum across all samples (to average at .compute())
-        self._num_correct += corrects_in_k.item()
+        for k in self.k_s:
+            y_true_select = torch.gather(y_true, 1, top_indices[:, :k])
+            corrects_in_k = y_true_select.sum(1) * 1.0 / k
+            corrects_in_k = corrects_in_k.sum(0)  # sum across all samples to get # of true positives
+            self._num_correct[k] += corrects_in_k.item()
         self._num_examples += batch_size
 
     @sync_all_reduce("_num_correct", "_num_examples")
-    def compute(self):
+    def compute(self, training=True) -> dict:
         if self._num_examples == 0:
             raise NotComputableError("TopKCategoricalAccuracy must have at"
                                      "least one example before it can be computed.")
-        return self._num_correct / self._num_examples
-
+        if training:
+            return {f"top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
+        else:
+            return {f"val_top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
