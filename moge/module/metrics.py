@@ -5,7 +5,7 @@ from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
-
+from .utils import filter_samples
 
 class Metrics():
     def __init__(self, loss_type):
@@ -17,7 +17,8 @@ class Metrics():
         self.recall_val = Recall(average=True, is_multilabel=True)
         self.top_k_val = TopKMulticlassAccuracy(k_s=[1, 5, 10])
 
-    def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
+    def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights, training: bool):
+        y_true, y_pred = filter_samples(y_true, y_pred, weights)
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
 

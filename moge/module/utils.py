@@ -1,4 +1,17 @@
 import torch
+import numpy as np
+
+
+def filter_samples(Y, Y_hat, weights):
+    Y = Y.type_as(Y_hat)
+    if isinstance(weights, torch.Tensor):
+        idx = torch.nonzero(weights).view(-1)
+    else:
+        idx = torch.tensor(np.nonzero(weights)[0])
+    Y = Y[idx, :]
+    Y_hat = Y_hat[idx, :]
+    return Y, Y_hat
+
 
 def pad_tensors(sequences):
     num = len(sequences)

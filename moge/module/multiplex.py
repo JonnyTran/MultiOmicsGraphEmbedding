@@ -10,7 +10,7 @@ from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, M
 from moge.module.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss, get_hierar_relations
-
+from moge.module.utils import filter_samples
 
 class MultiplexEmbedder(EncoderEmbedderClassifier):
     def __init__(self, hparams):
@@ -116,14 +116,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         return y_pred
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):
-        Y = Y.type_as(Y_hat)
-        if isinstance(weights, torch.Tensor):
-            idx = torch.nonzero(weights).view(-1)
-        else:
-            idx = torch.tensor(np.nonzero(weights)[0])
-
-        Y = Y[idx, :]
-        Y_hat = Y_hat[idx, :]
+        Y, Y_hat = filter_samples(Y, Y_hat, weights)
 
         return self.criterion.forward(
             Y_hat, Y,

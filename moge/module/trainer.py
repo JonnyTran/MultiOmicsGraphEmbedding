@@ -33,7 +33,7 @@ class ModelTrainer(pl.LightningModule):
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
-        self.metrics.update_metrics(Y_hat, y, training=True)
+        self.metrics.update_metrics(Y_hat, y, weights, training=True)
         logs = self.metrics.compute_metrics(training=True)
         logs = _fix_dp_return_type(logs, device=Y_hat.device)
 
@@ -65,7 +65,7 @@ class ModelTrainer(pl.LightningModule):
         Y_hat = self._model.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
-        self.metrics.update_metrics(Y_hat, y, training=False)
+        self.metrics.update_metrics(Y_hat, y, weights, training=False)
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
