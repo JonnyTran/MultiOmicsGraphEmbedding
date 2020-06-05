@@ -146,7 +146,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
             sampled_nodes = sampled_nodes[:batch_size]
         return sampled_nodes
 
-    def __getdata__(self, sampled_nodes, variable_length=False):
+    def __getdata__(self, sampled_nodes, variable_length=False, training=True):
         # Features
         X = {}
         X["input_seqs"] = self.get_sequence_encodings(sampled_nodes,
@@ -168,9 +168,9 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         targets_vector = self.process_label(self.annotations.loc[sampled_nodes, self.targets[0]])
 
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
-        if self.sparse_target == 1:
+        if self.sparse_target == 1 and training:
             y = self.label_sparsify(y)[[0]]  # Select only a single label
-        elif self.sparse_target == True:
+        elif self.sparse_target == True and training:
             y = self.label_sparsify(y)  # Select all multilabels
 
         # Get a vector of nonnull indicators
@@ -190,7 +190,7 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         else:
             node_list = node_list
 
-        X, y, idx_weights = self.__getdata__(node_list, variable_length=variable_length)
+        X, y, idx_weights = self.__getdata__(node_list, variable_length=variable_length, training=False)
 
         if y_label:
             y_labels = self.get_node_labels(y_label, node_list=node_list)
@@ -198,5 +198,6 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
 
         y = pd.DataFrame(y, index=node_list,
                          columns=self.network.feature_transformer[self.targets[0]].classes_)
+
         return X, y, idx_weights
 

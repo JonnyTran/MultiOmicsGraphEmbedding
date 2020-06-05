@@ -8,14 +8,16 @@ from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from .utils import filter_samples
 
 class Metrics():
-    def __init__(self, loss_type):
+    def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10]):
         self.loss_type = loss_type
-        self.precision = Precision(average=True, is_multilabel=True)
-        self.recall = Recall(average=True, is_multilabel=True)
-        self.top_k_train = TopKMulticlassAccuracy(k_s=[1, 5, 10])
-        self.precision_val = Precision(average=True, is_multilabel=True)
-        self.recall_val = Recall(average=True, is_multilabel=True)
-        self.top_k_val = TopKMulticlassAccuracy(k_s=[1, 5, 10])
+        self.threshold = threshold
+
+        self.precision = Precision(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
+        self.precision_val = Precision(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
+        self.recall = Recall(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
+        self.recall_val = Recall(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
+        self.top_k_train = TopKMulticlassAccuracy(k_s=k_s)
+        self.top_k_val = TopKMulticlassAccuracy(k_s=k_s)
 
     def update_metrics(self, Y_hat: torch.Tensor, Y: torch.Tensor, weights, training: bool):
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
@@ -30,12 +32,12 @@ class Metrics():
             Y = torch.eye(Y_hat.size(1))[Y].type_as(Y_hat)
 
         if training:
-            self.precision.update(((Y_hat > 0.5).type_as(Y), Y))
-            self.recall.update(((Y_hat > 0.5).type_as(Y), Y))
+            self.precision.update(((Y_hat > self.threshold).type_as(Y), Y))
+            self.recall.update(((Y_hat > self.threshold).type_as(Y), Y))
             self.top_k_train.update((Y_hat, Y))
         else:
-            self.precision_val.update(((Y_hat > 0.5).type_as(Y), Y))
-            self.recall_val.update(((Y_hat > 0.5).type_as(Y), Y))
+            self.precision_val.update(((Y_hat > self.threshold).type_as(Y), Y))
+            self.recall_val.update(((Y_hat > self.threshold).type_as(Y), Y))
             self.top_k_val.update((Y_hat, Y))
 
     def compute_metrics(self, training: bool):

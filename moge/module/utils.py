@@ -7,9 +7,8 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
         idx = torch.nonzero(weights).view(-1)
     else:
         idx = torch.tensor(np.nonzero(weights)[0])
-    Y = Y[idx, :]
-    Y_hat = Y_hat[idx, :]
-    return Y_hat, Y
+
+    return Y_hat[idx, :], Y[idx, :]
 
 
 def pad_tensors(sequences):

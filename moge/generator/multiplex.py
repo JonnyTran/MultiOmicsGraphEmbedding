@@ -138,7 +138,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         return X, y, idx_weights
 
-    def __getdata__(self, sampled_nodes, variable_length=False):
+    def __getdata__(self, sampled_nodes, variable_length=False, training=True):
         # Features
         X = {}
         for modality in self.network.modalities:
@@ -166,9 +166,9 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         try:
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
-            if self.sparse_target == 1:
+            if self.sparse_target == 1 and training:
                 y = self.label_sparsify(y)[[0]]  # Select only a single label
-            elif self.sparse_target == True:
+            elif self.sparse_target == True and training:
                 y = self.label_sparsify(y)  # Select all multilabels
 
         except Exception as e:
@@ -195,7 +195,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         else:
             node_list = node_list
 
-        X, y, idx_weights = self.__getdata__(node_list, variable_length=variable_length)
+        X, y, idx_weights = self.__getdata__(node_list, variable_length=variable_length, training=False)
 
         if y_label:
             y_labels = self.get_node_labels(y_label, node_list=node_list)
@@ -203,4 +203,5 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         y = pd.DataFrame(y, index=node_list,
                          columns=self.network.feature_transformer[self.targets[0]].classes_)
+
         return X, y, idx_weights
