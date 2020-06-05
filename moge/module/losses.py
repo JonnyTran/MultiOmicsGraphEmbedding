@@ -99,7 +99,9 @@ class ClassificationLoss(nn.Module):
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
                     target = torch.eye(self.label_size)[target]
-                    print("target", target.shape)
+
+                if target.dim() >= 2:
+                    target = target.squeeze(1)
             return self.criterion(logits, target)
 
     def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):

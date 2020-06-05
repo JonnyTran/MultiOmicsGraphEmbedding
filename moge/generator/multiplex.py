@@ -166,10 +166,10 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         try:
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
-            if self.sparse_target == True:
-                y = self.label_sparsify(y)  # Select all multilabels
-            elif self.sparse_target == 1:
+            if self.sparse_target == 1:
                 y = self.label_sparsify(y)[0]  # Select only a single label
+            elif self.sparse_target == True:
+                y = self.label_sparsify(y)  # Select all multilabels
 
         except Exception as e:
             print("targets_vector", targets_vector.shape, targets_vector.notnull().sum(), targets_vector)
