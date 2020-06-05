@@ -12,7 +12,8 @@ from moge.network.multiplex import MultiplexAttributedNetwork
 
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
-    def __init__(self, network, variables=None, targets=None, method="GAT", adj_output="dense", weighted=False,
+    def __init__(self, network, variables=None, targets=None, method="GAT", adj_output="dense", sparse_target=False,
+                 weighted=False,
                  batch_size=1,
                  replace=True, seed=0,
                  verbose=True, **kwargs):
@@ -37,6 +38,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
 
         self.method = method
         self.adj_output = adj_output
+        self.sparse_target = sparse_target
 
         self.seed = seed
         self.verbose = verbose

@@ -168,6 +168,8 @@ class SubgraphGenerator(SampledDataGenerator, data.Dataset):
         targets_vector = self.process_label(self.annotations.loc[sampled_nodes, self.targets[0]])
 
         y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
+        if self.sparse_target:
+            y = self.label_sparsify(y)
 
         # Get a vector of nonnull indicators
         idx_weights = self.annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1).values * 1

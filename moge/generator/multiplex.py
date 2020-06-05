@@ -166,6 +166,8 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
 
         try:
             y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
+            if self.sparse_target:
+                y = self.label_sparsify(y)
         except Exception as e:
             print("targets_vector", targets_vector.shape, targets_vector.notnull().sum(), targets_vector)
             print("self.network.all_annotations.loc[sampled_nodes, self.targets[0]]",
