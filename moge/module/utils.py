@@ -3,7 +3,6 @@ import numpy as np
 
 
 def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
-    Y = Y.type_as(Y_hat)
     if isinstance(weights, torch.Tensor):
         idx = torch.nonzero(weights).view(-1)
     else:

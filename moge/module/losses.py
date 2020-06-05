@@ -74,7 +74,7 @@ class ClassificationLoss(nn.Module):
         elif loss_type == "BCE":
             self.criterion = torch.nn.BCELoss(weight=class_weight)
         elif loss_type == "MULTI_LABEL_MARGIN":
-            self.criterion = torch.nn.MultiLabelSoftMarginLoss(weight=class_weight)
+            self.criterion = torch.nn.MultiLabelMarginLoss(weight=class_weight)
         elif loss_type == "KL_DIVERGENCE":
             self.criterion = torch.nn.KLDivLoss()
         else:
@@ -99,6 +99,7 @@ class ClassificationLoss(nn.Module):
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
                     target = torch.eye(self.label_size)[target]
+                    print("target", target.shape)
             return self.criterion(logits, target)
 
     def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):

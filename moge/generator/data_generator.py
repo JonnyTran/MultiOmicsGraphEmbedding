@@ -180,8 +180,19 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         if not isinstance(y, pd.DataFrame):
             y = pd.DataFrame(y)
 
-        y = y.apply(lambda x: x.values.nonzero()[0], axis=1)
-        return y
+        nz = pd.Series(np.count_nonzero(y, axis=1))
+        max_nz = nz.max()
+        dfs = []
+        for _nz, nzdf in y.groupby(nz, sort=False):
+            nz = np.apply_along_axis(lambda r: np.nonzero(r)[0], 1, nzdf)
+            mock_result = pd.DataFrame(np.ones(shape=(len(nzdf), max_nz)) - 2, index=nzdf.index).astype(int)
+
+            for i in range(nz.shape[1]):
+                mock_result.iloc[:, i] = nz[:, i]
+            dfs.append(mock_result)
+
+        result = pd.concat(dfs).sort_index()
+        return result
 
     def label_probability(self, y):
         # Make a probability distribution
