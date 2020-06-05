@@ -121,7 +121,7 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
         return y_pred
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):
-        Y, Y_hat = filter_samples(Y, Y_hat, weights)
+        Y_hat, Y = filter_samples(Y_hat, Y, weights)
 
         return self.criterion.forward(Y_hat, Y,
                                       use_hierar=self.hparams.use_hierar, multiclass=True,

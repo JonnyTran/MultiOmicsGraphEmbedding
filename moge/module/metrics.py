@@ -17,19 +17,20 @@ class Metrics():
         self.recall_val = Recall(average=True, is_multilabel=True)
         self.top_k_val = TopKMulticlassAccuracy(k_s=[1, 5, 10])
 
-    def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights, training: bool):
-        y_true, y_pred = filter_samples(y_true, y_pred, weights)
+    def update_metrics(self, Y: torch.Tensor, Y_hat: torch.Tensor, weights, training: bool):
+        Y_hat, Y = filter_samples(Y_hat, Y, weights)
+
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
-            y_pred = torch.softmax(y_pred, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
+            Y = torch.softmax(Y, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(Y)
 
         if training:
-            self.precision.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.recall.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.top_k_train.update((y_pred, y_true))
+            self.precision.update(((Y > 0.5).type_as(Y_hat), Y_hat))
+            self.recall.update(((Y > 0.5).type_as(Y_hat), Y_hat))
+            self.top_k_train.update((Y, Y_hat))
         else:
-            self.precision_val.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.recall_val.update(((y_pred > 0.5).type_as(y_true), y_true))
-            self.top_k_val.update((y_pred, y_true))
+            self.precision_val.update(((Y > 0.5).type_as(Y_hat), Y_hat))
+            self.recall_val.update(((Y > 0.5).type_as(Y_hat), Y_hat))
+            self.top_k_val.update((Y, Y_hat))
 
     def compute_metrics(self, training: bool):
         if training:
