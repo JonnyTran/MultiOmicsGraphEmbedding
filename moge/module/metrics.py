@@ -1,3 +1,5 @@
+import copy
+from collections import OrderedDict
 import torch
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall
@@ -10,10 +12,10 @@ class Metrics():
         self.loss_type = loss_type
         self.precision = Precision(average=True, is_multilabel=True)
         self.recall = Recall(average=True, is_multilabel=True)
-        self.top_k_train = TopKMulticlassAccuracy(k_s=[5, 10, 50, 100, 200])
+        self.top_k_train = TopKMulticlassAccuracy(k_s=[1, 5, 10])
         self.precision_val = Precision(average=True, is_multilabel=True)
         self.recall_val = Recall(average=True, is_multilabel=True)
-        self.top_k_val = TopKMulticlassAccuracy(k_s=[5, 10, 50, 100, 200])
+        self.top_k_val = TopKMulticlassAccuracy(k_s=[1, 5, 10])
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, training: bool):
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
@@ -60,12 +62,12 @@ class TopKMulticlassAccuracy(Metric):
     """
 
     def __init__(self, k_s=[5, 10, 50, 100, 200], output_transform=lambda x: x, device=None):
-        super(TopKMulticlassAccuracy, self).__init__(output_transform, device=device)
         self.k_s = k_s
+        super(TopKMulticlassAccuracy, self).__init__(output_transform, device=device)
 
     @reinit__is_reduced
     def reset(self):
-        self._num_correct = {k: 0 for k in [10, 50, 100, 200]}
+        self._num_correct = {k: 0 for k in self.k_s}
         self._num_examples = 0
 
     @reinit__is_reduced
