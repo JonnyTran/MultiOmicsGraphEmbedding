@@ -100,19 +100,19 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
 
         encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"])
 
-        embeddings = []
-        for layer, _ in self.hparams.embedder.items():
-            if X[layer].dim() > 2:
-                X[layer] = X[layer].squeeze(0)
-                X[layer], _ = remove_self_loops(X[layer], None)
-            embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
+        # embeddings = []
+        # for layer, _ in self.hparams.embedder.items():
+        #     if X[layer].dim() > 2:
+        #         X[layer] = X[layer].squeeze(0)
+        #         X[layer], _ = remove_self_loops(X[layer], None)
+        #     embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
+        #
+        # if hasattr(self, "_multiplex_embedder"):
+        #     embeddings = self._multiplex_embedder.forward(embeddings)
+        # else:
+        #     embeddings = torch.cat(embeddings, dim=1)
 
-        if hasattr(self, "_multiplex_embedder"):
-            embeddings = self._multiplex_embedder.forward(embeddings)
-        else:
-            embeddings = torch.cat(embeddings, dim=1)
-
-        y_pred = self._classifier(embeddings)
+        y_pred = self._classifier(encodings)
         return y_pred
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):

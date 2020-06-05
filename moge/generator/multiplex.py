@@ -161,22 +161,14 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                                                              output=self.adj_output)
 
         # Labels
-        targets_vector = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
-        targets_vector = self.process_label(targets_vector)
+        target_labels = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
+        target_labels = self.process_label(target_labels)
 
-        try:
-            y = self.network.feature_transformer[self.targets[0]].transform(targets_vector)
-            if self.sparse_target == 1 and training:
-                y = self.label_sparsify(y)[[0]]  # Select only a single label
-            elif self.sparse_target == True and training:
-                y = self.label_sparsify(y)  # Select all multilabels
-
-        except Exception as e:
-            print("targets_vector", targets_vector.shape, targets_vector.notnull().sum(), targets_vector)
-            print("self.network.all_annotations.loc[sampled_nodes, self.targets[0]]",
-                  self.network.all_annotations.loc[sampled_nodes, self.targets[0]].shape,
-                  self.network.all_annotations.loc[sampled_nodes, self.targets[0]].notnull().sum())
-            raise e
+        y = self.network.feature_transformer[self.targets[0]].transform(target_labels)
+        if self.sparse_target == 1 and training:
+            y = self.label_sparsify(y)[[0]]  # Select only a single label
+        elif self.sparse_target == True and training:
+            y = self.label_sparsify(y)  # Select all multilabels
 
         # Get a vector of nonnull indicators
         idx_weights = self.network.all_annotations.loc[sampled_nodes, self.targets].notnull().any(axis=1).values * 1

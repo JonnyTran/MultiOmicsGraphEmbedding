@@ -13,9 +13,7 @@ from moge.network.multiplex import MultiplexAttributedNetwork
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
     def __init__(self, network, variables=None, targets=None, method="GAT", adj_output="dense", sparse_target=False,
-                 weighted=False,
-                 batch_size=1,
-                 replace=True, seed=0,
+                 weighted=False, batch_size=1, replace=True, seed=0,
                  verbose=True, **kwargs):
         """
         This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
