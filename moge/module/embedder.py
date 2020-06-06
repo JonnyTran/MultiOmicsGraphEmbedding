@@ -154,9 +154,8 @@ class MultiplexNodeAttention(nn.Module):
     def forward(self, embeddings):
         w = self.compute_attention(embeddings)
 
-        # for i, layer in enumerate(self.layers):
-        #     embeddings[i] = torch.matmul(embeddings[i], self.weight)
-        z = torch.matmul(torch.stack(embeddings, dim=2), w)
+        z = torch.matmul(torch.stack(embeddings, dim=2), self.weight)
+        z = torch.matmul(z, w)
         z = z.squeeze(2)
         return z
 

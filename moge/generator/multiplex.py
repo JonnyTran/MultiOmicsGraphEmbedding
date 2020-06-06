@@ -165,9 +165,9 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         target_labels = self.process_label(target_labels)
 
         y = self.network.feature_transformer[self.targets[0]].transform(target_labels)
-        if self.sparse_target == 1 and training:
+        if self.sparse_target is 1 and training:
             y = self.label_sparsify(y)[[0]]  # Select only a single label
-        elif self.sparse_target == True and training:
+        elif self.sparse_target is True and training:
             y = self.label_sparsify(y)  # Select all multilabels
 
         # Get a vector of nonnull indicators
