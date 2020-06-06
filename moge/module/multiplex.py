@@ -59,16 +59,19 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
 
         ################### Multiplex Embedding ####################
         layers = list(hparams.embedder.keys())
+        self.layers = layers
         if hparams.multiplex_embedder == "MultiplexLayerAttention":
             self._multiplex_embedder = MultiplexLayerAttention(embedding_dim=hparams.embedding_dim,
                                                                hidden_dim=hparams.multiplex_hidden_dim,
                                                                attention_dropout=hparams.multiplex_attn_dropout,
                                                                layers=layers)
+            hparams.embedding_dim = hparams.multiplex_hidden_dim
         elif hparams.multiplex_embedder == "MultiplexNodeAttention":
             self._multiplex_embedder = MultiplexNodeAttention(embedding_dim=hparams.embedding_dim,
                                                               hidden_dim=hparams.multiplex_hidden_dim,
                                                               attention_dropout=hparams.multiplex_attn_dropout,
                                                               layers=layers)
+            hparams.embedding_dim = hparams.multiplex_hidden_dim
         else:
             print('"multiplex_embedder" not used. Concatenate multi-layer embeddings instead.')
             hparams.embedding_dim = hparams.embedding_dim * len(hparams.embedder)
@@ -100,19 +103,19 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
 
         encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"])
 
-        # embeddings = []
-        # for layer, _ in self.hparams.embedder.items():
-        #     if X[layer].dim() > 2:
-        #         X[layer] = X[layer].squeeze(0)
-        #         X[layer], _ = remove_self_loops(X[layer], None)
-        #     embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
-        #
-        # if hasattr(self, "_multiplex_embedder"):
-        #     embeddings = self._multiplex_embedder.forward(embeddings)
-        # else:
-        #     embeddings = torch.cat(embeddings, dim=1)
+        embeddings = []
+        for layer in self.layers:
+            if X[layer].dim() > 2:
+                X[layer] = X[layer].squeeze(0)
+                X[layer], _ = remove_self_loops(X[layer], None)
+            embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
-        y_pred = self._classifier(encodings)
+        if hasattr(self, "_multiplex_embedder"):
+            embeddings = self._multiplex_embedder.forward(embeddings)
+        else:
+            embeddings = torch.cat(embeddings, dim=1)
+
+        y_pred = self._classifier(embeddings)
         return y_pred
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):

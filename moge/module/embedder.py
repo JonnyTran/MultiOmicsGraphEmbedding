@@ -152,16 +152,18 @@ class MultiplexNodeAttention(nn.Module):
         zeros(self.bias)
 
     def forward(self, embeddings):
-        w = self.compute_attention(embeddings)
+        for i, layer in enumerate(self.layers):
+            embeddings[i] = embeddings[i] * 1 / torch.norm(embeddings[i], p=2, dim=-1, keepdim=True)
 
-        z = torch.matmul(torch.stack(embeddings, dim=2), self.weight)
-        z = torch.matmul(z, w)
+        w = self.compute_attention(embeddings)
+        z = torch.matmul(torch.stack(embeddings, dim=1), self.weight)
+        z = torch.matmul(z.permute(0, 2, 1), w)
         z = z.squeeze(2)
         return z
 
     def compute_attention(self, embeddings):
         assert len(embeddings) == len(self.layers)
-        batch_size, in_channels = embeddings[0].size()
+        batch_size, in_channels = embeddings[self.layers[0]].size()
         w = torch.zeros((batch_size, len(self.layers), 1), requires_grad=False).type_as(self.weight)
 
         for i, layer in enumerate(self.layers):
@@ -210,7 +212,7 @@ class ExpandedMultiplexGAT(MessagePassing):
         glorot(self.att)
         zeros(self.bias)
 
-    def expand_edge_index_multiplex(self, sample_idx_by_type: dict, edge_index: dict):
+    def expand_edge_index_multiplex(self, sample_idx_by_type: dict, edge_index: dict, num_nodes):
         for layer in self.layers:
             if edge_index[layer].size(1) == 0: continue
             nodetype_1 = layer.split("-")[0] + "_seqs"
@@ -219,19 +221,23 @@ class ExpandedMultiplexGAT(MessagePassing):
             edge_index[layer][0] = edge_index[layer][0] + sample_idx_by_type[nodetype_1]
             edge_index[layer][1] = edge_index[layer][1] + sample_idx_by_type[nodetype_2]
 
-        expand_index = torch.arange(0, num_nodes, dtype=torch.long,
-                                    device=edge_index[self.layers[0]].device)
-        expand_index = expand_index.unsqueeze(0).repeat(2, 1)
+        # expand_index = torch.arange(0, num_nodes, dtype=torch.long,
+        #                             device=edge_index[self.layers[0]].device)
+        # expand_index = expand_index.unsqueeze(0).repeat(len(self.layers)**2, 1)
+        # print("expand_index", expand_index.shape, expand_index)
 
         edge_index = torch.cat([edge_index[layer] for layer in self.layers], dim=1)
 
         return edge_index
 
     def forward(self, x: dict, sample_idx_by_type: dict, edge_index: dict, size=None):
-        encodings = [torch.matmul(x[node_type], self.weight[i, :, :].squeeze(0)) for i, node_type in
+        encodings = [torch.matmul(x[node_type], self.weight[node_type_id, :, :].squeeze(0)) for node_type_id, node_type
+                     in
                      enumerate(self.node_types)]
         x = torch.cat(encodings)
-        edge_index = self.expand_edge_index_multiplex(sample_idx_by_type, edge_index)
+        # print("encodings", [x.shape for x in encodings])
+        # print("x", x.shape)
+        edge_index = self.expand_edge_index_multiplex(sample_idx_by_type, edge_index, num_nodes=x.size(self.node_dim))
 
         if torch.is_tensor(x):
             edge_index, _ = remove_self_loops(edge_index)
