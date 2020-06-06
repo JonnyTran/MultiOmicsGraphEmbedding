@@ -88,7 +88,8 @@ class ClassificationLoss(nn.Module):
             #     f"WARNING: hparams.loss_type must be one of ['BCE_WITH_LOGITS', 'BCE', 'SIGMOID_FOCAL_CROSS_ENTROPY']")
             if not multiclass:
                 target = torch.eye(self.label_size)[target]
-            return self.criterion(logits, target) + \
+
+            return self.criterion(logits, target.type_as(logits)) + \
                    self.hierar_penalty * self.recursive_regularize(classifier_weight, self.hierar_relations)
         else:
             if multiclass:
@@ -101,8 +102,9 @@ class ClassificationLoss(nn.Module):
                     target = torch.eye(self.label_size)[target]
 
                 if target.dim() >= 2:
-                    target = target.squeeze(1)
-            return self.criterion(logits, target)
+                    target = target.squeeze(-1)
+
+            return self.criterion(logits, target.type_as(logits))
 
     def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):
         """ Only support hierarchical text classification with BCELoss

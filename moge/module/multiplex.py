@@ -117,6 +117,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
 
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
+
         return self.criterion.forward(
             Y_hat, Y,
             use_hierar=self.hparams.use_hierar,
