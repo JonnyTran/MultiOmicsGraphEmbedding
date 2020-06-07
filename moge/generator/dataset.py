@@ -1,42 +1,35 @@
 import numpy as np
-import pandas as pd
 import tensorflow as tf
 import torch
 from torch.utils import data
-from torch.utils.data import BatchSampler, Sampler
 
-from . import DataGenerator, SubgraphGenerator
+from .sampled_generator import SampledDataGenerator
 
 
-class SubgraphDataset(SubgraphGenerator, torch.utils.data.Dataset):
-    def __init__(self, network, variables: list = None, targets: list = None, batch_size=500,
-                 traversal='neighborhood', sampling="log", n_steps=100, directed=True,
-                 maxlen=1400, padding='post', truncating='post', agg_mode=None, tokenizer=None, replace=True,
-                 variable_length=False,
-                 seed=0, verbose=True, **kwargs):
-        super(SubgraphDataset, self).__init__(network=network,
-                                              variables=variables, targets=targets,
-                                              batch_size=batch_size,
-                                              traversal=traversal, sampling=sampling,
-                                              n_steps=n_steps, directed=directed, replace=replace,
-                                              maxlen=maxlen, padding=padding, truncating=truncating,
-                                              agg_mode=agg_mode,
-                                              tokenizer=tokenizer, seed=seed, verbose=verbose, **kwargs)
-
-        self.node_list = pd.Series(self.node_list)
+class TorchDataset(torch.utils.data.Dataset):
+    def __init__(self, generator: SampledDataGenerator):
+        self._generator = generator
+        self.node_list = self._generator.get_connected_nodelist()
+        self.n_steps = self._generator.n_steps
 
     def __len__(self):
-        return len(self.node_list)
+        if self.n_steps is not None:
+            return self.n_steps
+        else:
+            return len(self.node_list)
 
     def __getitem__(self, item=None):
-        sampled_nodes = self.traverse_network(batch_size=self.batch_size)
-        X, y, idx_weights = self.__getdata__(sampled_nodes, variable_length=False)
-        X["subnetwork"] = np.expand_dims(X["subnetwork"], 0)
-        return X, y, idx_weights
+        # seed_node = self.node_list[item]
+        sampled_nodes = self._generator.traverse_network(batch_size=self._generator.batch_size, seed_node=None)
+        X, y, sample_weights = self._generator.__getdata__(sampled_nodes, variable_length=False)
+        X = {k: np.expand_dims(v, 0) for k, v in X.items()}
+        y = np.expand_dims(y, 0)
+        sample_weights = np.expand_dims(sample_weights, 0)
+        return X, y, sample_weights
 
 
-class GeneratorDataset(tf.data.Dataset):
-    def __new__(cls, generator: DataGenerator, output_types=None, output_shapes=None):
+class TFDataset(tf.data.Dataset):
+    def __new__(cls, generator: SampledDataGenerator, output_types=None, output_shapes=None):
         """
         A tf.data wrapper for keras.utils.Sequence generator
         >>> generator = DataGenerator()

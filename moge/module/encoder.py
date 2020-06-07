@@ -9,6 +9,8 @@ from transformers import AlbertConfig
 from .albert import AlbertModel
 
 
+# from transformers import AlbertModel
+
 class AlbertEncoder(nn.Module):
     def __init__(self, config: AlbertConfig):
         super(AlbertEncoder, self).__init__()
@@ -57,7 +59,7 @@ class ConvLSTM(nn.Module):
     def __init__(self, hparams):
         super(ConvLSTM, self).__init__()
 
-        if hparams.word_embedding_size is None:
+        if not hasattr(hparams, "word_embedding_size") or hparams.word_embedding_size is None:
             hparams.word_embedding_size = hparams.vocab_size
 
         self.hparams = hparams

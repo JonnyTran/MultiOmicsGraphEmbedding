@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator.subgraph_generator import SubgraphGenerator
 from moge.module.trainer import ModelTrainer
-from moge.module.model import MonoplexEmebdder
+from moge.module.enc_emb_cls import MonoplexEmbedder
 
 DATASET = '../MultiOmicsGraphEmbedding/moge/data/gtex_string_network.pickle'
 
@@ -75,7 +75,7 @@ def train(hparams):
     logger = WandbLogger()
     # wandb.init(config=hparams, project="multiplex-rna-embedding")
 
-    eec = MonoplexEmebdder(hparams)
+    eec = MonoplexEmbedder(hparams)
     model = ModelTrainer(eec)
 
     trainer = pl.Trainer(
@@ -131,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
     parser.add_argument('--classes_min_count', type=int, default=100)
 
-    parser.add_argument('--nb_weight_decay', type=float, default=0.0)
+    parser.add_argument('--weight_decay', type=float, default=0.0)
     parser.add_argument('--lr', type=float, default=1e-3)
 
     parser.add_argument('--optimizer', type=str, default="adam")

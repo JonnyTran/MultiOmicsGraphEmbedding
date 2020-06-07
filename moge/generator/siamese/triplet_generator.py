@@ -123,7 +123,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
         return X, y
 
     def load_data(self, return_node_name=False):
-        sampled_nodes = self.get_nonzero_nodelist()
+        sampled_nodes = self.get_connected_nodelist()
         X, y = self.__getdata__(sampled_nodes, return_node_name=return_node_name)
 
         return X, y

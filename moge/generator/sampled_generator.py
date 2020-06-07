@@ -3,11 +3,11 @@ from itertools import cycle
 
 import numpy as np
 
-from moge.generator import DataGenerator
+from .data_generator import DataGenerator
 
 
 class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
-    def __init__(self, network, traversal=None, sampling="log", n_steps=100, directed=True,
+    def __init__(self, network, traversal=None, traversal_depth=2, sampling="log", n_steps=100, directed=True,
                  **kwargs):
         """
 
@@ -27,7 +27,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
         if self.traversal == 'all_slices':
             self.nodes_circle = cycle(self.node_list)
             self.n_steps = int(np.ceil(len(self.node_list) / self.batch_size))
-
+        self.traversal_depth = traversal_depth
         self.process_normalized_node_degree(network)
 
     def process_normalized_node_degree(self, network):
@@ -44,7 +44,7 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
             np.count_nonzero(self.node_sampling_freq))) if self.verbose else None
         assert len(self.node_sampling_freq) == len(self.node_list)
 
-    def get_nonzero_nodelist(self):
+    def get_connected_nodelist(self):
         """
         Returns a list of nodes that have an associated edge
         :return:
@@ -89,8 +89,8 @@ class SampledDataGenerator(DataGenerator, metaclass=ABCMeta):
     def traverse_network(self, batch_size, seed_node=None):
         """
         Sample a traversal on the network.
-        :param batch_size (int): size of random walk
-        :param seed_node (str): starting node
+        :param batch_size (int): size of random walk. Each batch outputs must return the exact batch_size.
+        :param seed_node (str, Optional): the starting node. If None, and leaves the traversal method to use the sample_seed_node() method.
         :return: list of nodes in the traversal.
         """
         raise NotImplementedError

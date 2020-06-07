@@ -5,8 +5,8 @@ from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 
 from moge.generator.sequences import SEQUENCE_COL
-from moge.network.base import Network
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
+from moge.network.base import Network
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
@@ -82,7 +82,8 @@ class AttributedNetwork(Network):
                     print("INFO: Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(label,
                                                                                                             delimiter)) if verbose else None
                     features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
-                    features = features.map(lambda x: [term.strip() for term in x] if isinstance(x, list) else x)
+                    features = features.map(
+                        lambda x: [term.strip() for term in x if len(term) > 0] if isinstance(x, list) else x)
                 else:
                     print("INFO: Label {} (of str) is transformed by MultiLabelBinarizer".format(
                         label)) if verbose else None

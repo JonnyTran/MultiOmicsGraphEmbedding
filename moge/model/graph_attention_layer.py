@@ -158,10 +158,10 @@ class GraphAttention(Layer):
 
     def get_config(self):
         config = super().get_config().copy()
-        config.update_metrics({
+        config.update_metrics(, {
             'F_': self.F_,
             'attn_heads': self.attn_heads,
             'attn_heads_reduction': self.attn_heads_reduction,
             'activation': self.activation,
-        })
+        },
         return config

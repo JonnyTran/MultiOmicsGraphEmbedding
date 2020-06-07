@@ -109,8 +109,7 @@ class MultiSequenceTokenizer(SequenceTokenizer):
                 self.tokenizer[modality] = Tokenizer(char_level=True, lower=False)
                 self.tokenizer[modality].fit_on_texts(
                     annotation.loc[annotation[SEQUENCE_COL].notnull(), SEQUENCE_COL])
-                print(
-                    "{} word index: {}".format(modality, self.tokenizer[modality].word_index)) if self.verbose else None
+                print(f"{modality} word index: {self.tokenizer[modality].word_index}") if self.verbose else None
 
     def get_sequence_encodings(self, node_list: list, modality, variable_length=False, minlen=None):
         """
@@ -152,7 +151,6 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         """
         # integer encode
         tokenizer = self.tokenizer[modality]
-
         encoded = tokenizer.texts_to_sequences(texts)
 
         if variable_length:
@@ -165,7 +163,8 @@ class MultiSequenceTokenizer(SequenceTokenizer):
         if batch_maxlen < self.maxlen:
             maxlen = batch_maxlen
 
-        if minlen and len(texts[0]) < minlen:
+        batch_minlen = min([len(x) for x in encoded])
+        if minlen is not None and batch_minlen < minlen and batch_maxlen < minlen:
             maxlen = minlen
 
         # pad encoded sequences

@@ -1,12 +1,10 @@
 from itertools import cycle
 
 import numpy as np
-import pandas as pd
 from plotly import graph_objects as go
-from sklearn.metrics import auc, average_precision_score
 
+from moge.evaluation.classification import *
 from .utils import colors
-from ..evaluation.classification import compute_roc_auc_curve, compute_pr_curve
 
 
 def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.Index), sample_weight=None,

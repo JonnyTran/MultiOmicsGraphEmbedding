@@ -1,12 +1,11 @@
 from argparse import ArgumentParser
+from collections import OrderedDict
 from copy import deepcopy
-import numpy as np
-import networkx as nx
 
+import networkx as nx
+import numpy as np
 import torch
 from torch import nn
-import torch.functional as F
-from torch.autograd import Variable
 from torch_geometric.nn.inits import glorot, zeros
 
 
@@ -15,16 +14,17 @@ class Dense(nn.Module):
         super(Dense, self).__init__()
 
         # Classifier
-        self.fc_classifier = nn.Sequential(
-            nn.Linear(hparams.embedding_dim, hparams.nb_cls_dense_size),
-            nn.ReLU(),
-            nn.Dropout(p=hparams.nb_cls_dropout),
-            nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes),
-        )
+        self.fc_classifier = nn.Sequential(OrderedDict([
+            ("linear_1", nn.Linear(hparams.embedding_dim, hparams.nb_cls_dense_size)),
+            ("relu", nn.ReLU()),
+            ("dropout", nn.Dropout(p=hparams.nb_cls_dropout)),
+            ("linear", nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes))
+        ]))
         if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
             print("INFO: Output of `_classifier` is logits")
+
         elif "SOFTMAX_CROSS_ENTROPY" in hparams.loss_type:
-            self.fc_classifier.add_module("pred_activation", nn.Softmax())
+            self.fc_classifier.add_module("pred_activation", nn.Softmax(dim=1))
             print("INFO: Output of `_classifier` is Softmax")
         else:
             self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
@@ -51,6 +51,7 @@ class HierarchicalAWX(nn.Module):
         units = sum(self.leaves)
         self.A = deepcopy(class_adj)
 
+        print("leaves", units)
         R = np.zeros(class_adj.shape)
         R[self.leaves, self.leaves] = 1
 
@@ -61,33 +62,33 @@ class HierarchicalAWX(nn.Module):
             if ancestors:
                 R[i, ancestors] = 1
 
-        print("units", units)
-        self.kernel = nn.Parameter(torch.Tensor(hparams.embedding_dim, units))
+        print("Child units", units)
+        self.linear = nn.Parameter(torch.Tensor(hparams.embedding_dim, units))
         if bias:
             self.bias = nn.Parameter(torch.Tensor(units))
         else:
             self.register_parameter('bias', None)
 
-        self.R = torch.tensor(R[self.leaves], requires_grad=False).type_as(self.kernel)
-        self.R_t = torch.tensor(R[self.leaves].T, requires_grad=False).type_as(self.kernel)
+        self.R = torch.tensor(R[self.leaves], requires_grad=False).type_as(self.linear)
+        self.R_t = torch.tensor(R[self.leaves].T, requires_grad=False).type_as(self.linear)
 
         self.hparams = hparams
         self.reset_parameters()
 
     def reset_parameters(self):
-        glorot(self.kernel)
+        glorot(self.linear)
         zeros(self.bias)
 
     def forward(self, inputs):
-        output = torch.sigmoid(torch.matmul(inputs, self.kernel) + self.bias)
+        output = torch.sigmoid(torch.matmul(inputs, self.linear) + self.bias)
 
         if self.n > 1:
-            output = self.n_norm(torch.mul(torch.unsqueeze(output, 1), self.R_t).type_as(self.kernel))
+            output = self.n_norm(torch.mul(torch.unsqueeze(output, 1), self.R_t.type_as(self.linear)))
         elif self.n > 0:
-            output = torch.min(torch.mul(torch.unsqueeze(output, 1), self.R_t.type_as(self.kernel)) - 1,
+            output = torch.min(torch.mul(torch.unsqueeze(output, 1), self.R_t.type_as(self.linear)) - 1,
                                other=torch.tensor(1 - 1e-4).type_as(self.bias))
         else:
-            output = torch.max(torch.multiply(torch.unsqueeze(output, 1), self.R_t.type_as(self.kernel)), -1)
+            output = torch.max(torch.multiply(torch.unsqueeze(output, 1), self.R_t.type_as(self.linear)), -1)
 
         return output
 

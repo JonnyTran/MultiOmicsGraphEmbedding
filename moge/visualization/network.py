@@ -77,10 +77,28 @@ def graph_viz(g: nx.Graph,
 
 
 def graph_viz3d(g: nx.Graph,
-                nodelist: list, node_symbol=None, node_color=None, node_color2=None, node_text=None,
+                nodelist: list, node_symbol=None, node_color=None, nodeline_color=None, node_text=None,
                 edge_label: str = None, max_edges=10000,
                 title=None, width=1000, height=800,
                 pos=None, showlegend=True, **kwargs):
+    """
+
+    :param g: 
+    :param nodelist: 
+    :param node_symbol: The symbol of a node.
+    :param node_color (pd.Series): The color of each node markers. A pd.Series indexed by nodelist with values of either categorical string, hex color, or a tuple of RGB colors.
+    :param nodeline_color (pd.Series, Optional): The outline color of each node.
+    :param node_text: 
+    :param edge_label: 
+    :param max_edges: 
+    :param title: 
+    :param width: 
+    :param height: 
+    :param pos: 
+    :param showlegend: 
+    :param kwargs: 
+    :return: 
+    """
     if pos is None:
         raise Exception("Must provide pos as dict, i.e. {<node>:<3d coordinates>}")
 
@@ -91,8 +109,16 @@ def graph_viz3d(g: nx.Graph,
     node_x, node_y, node_z = zip(*[(pos[node][0], pos[node][1], pos[node][2])
                                    for node in nodelist])
 
-    if node_color is not None and node_color.str.contains("#").any():
+    # Select express mode only if node_color is categorical strings
+    if isinstance(node_color, pd.Series) and node_color.str.contains("#").any():
+        # if node_color contains hex colors (e.g. #aaaaa)
         express_mode = False
+    elif isinstance(node_color, pd.Series) and node_color.map(lambda x: isinstance(x, tuple) and len(x) == 3).any():
+        # if node_color are a tuple of RGB values
+        express_mode = False
+        node_color = node_color.map(lambda rgb: [val / (max(rgb)) for val in rgb])  # change values
+        node_color = node_color.map(
+            lambda rgb: f"rgba({int(255 * rgb[0])}, {int(255 * rgb[1])}, {int(255 * rgb[2])}, 1.0)")
     else:
         express_mode = True
 
@@ -111,9 +137,7 @@ def graph_viz3d(g: nx.Graph,
                           text=node_text,
                           marker=dict(color=node_color,
                                       size=5,
-                                      line=dict(
-                                          color=node_color2,
-                                          width=50) if node_color2 is not None else None,
+                                      line=dict(color=nodeline_color, width=50) if nodeline_color is not None else None,
                                       ),
                           **kwargs)
 
