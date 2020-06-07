@@ -4,7 +4,7 @@ from transformers import AlbertConfig
 
 from moge.module.classifier import Dense, HierarchicalAWX
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention
-from moge.module.encoder import ConvLSTM, AlbertEncoder
+from moge.module.encoder import ConvLSTM, AlbertEncoder, NodeIDEmbedding
 from moge.module.losses import ClassificationLoss
 from moge.module.model import EncoderEmbedderClassifier
 
@@ -38,7 +38,11 @@ class MultiplexEmbedder(EncoderEmbedderClassifier, torch.nn.Module):
                     type_vocab_size=1,
                     max_position_embeddings=hparams.max_length,
                 )
-                self._encoder[seq_type] = AlbertEncoder(config)
+                self.__setattr__("_encoder_" + seq_type, AlbertEncoder(config))
+                self._encoder[seq_type] = self.__getattr__("_encoder_" + seq_type)
+            elif isinstance(encoder, dict) and "NodeIDEmbedding" in encoder:
+                self.__setattr__("_encoder_" + seq_type, NodeIDEmbedding(encoder["NodeIDEmbedding"]))
+                self._encoder[seq_type] = self.__getattr__("_encoder_" + seq_type)
             else:
                 raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
 

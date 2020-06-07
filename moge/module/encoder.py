@@ -46,6 +46,13 @@ class AlbertEncoder(nn.Module):
         return parser
 
 
+class NodeIDEmbedding(nn.Module):
+    def __init__(self, hparams) -> None:
+        super(NodeIDEmbedding, self).__init__()
+
+        self.embedding = torch.nn.Embedding()
+
+
 class ConvLSTM(nn.Module):
     def __init__(self, hparams):
         super(ConvLSTM, self).__init__()
