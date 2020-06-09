@@ -153,7 +153,7 @@ class MultiplexNodeAttention(nn.Module):
 
     def forward(self, embeddings):
         for i, layer in enumerate(self.layers):
-            embeddings[i] = embeddings[i] * 1 / torch.norm(embeddings[i], p=2, dim=-1, keepdim=True)
+            embeddings[i] = embeddings[i] / torch.norm(embeddings[i], p=2, dim=-1, keepdim=True)
 
         w = self.compute_attention(embeddings)
         z = torch.matmul(torch.stack(embeddings, dim=1), self.weight)
@@ -163,8 +163,8 @@ class MultiplexNodeAttention(nn.Module):
 
     def compute_attention(self, embeddings):
         assert len(embeddings) == len(self.layers)
-        batch_size, in_channels = embeddings[self.layers[0]].size()
-        w = torch.zeros((batch_size, len(self.layers), 1), requires_grad=False).type_as(self.weight)
+        batch_size, in_channels = embeddings[0].size()
+        w = torch.zeros((batch_size, len(self.layers), 1), requires_grad=True).type_as(self.weight)
 
         for i, layer in enumerate(self.layers):
             x = torch.tanh(torch.matmul(embeddings[i], self.weight) + self.bias)
