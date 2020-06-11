@@ -52,7 +52,12 @@ class NodeIDEmbedding(nn.Module):
     def __init__(self, hparams) -> None:
         super(NodeIDEmbedding, self).__init__()
 
-        self.embedding = torch.nn.Embedding()
+        self.embedding = torch.nn.Embedding(num_embeddings=hparams.num_embeddings,
+                                            embedding_dim=hparams.embedding_dim,
+                                            sparse=True)
+
+    def forward(self, X):
+        return self.embedding.forward(X)
 
 
 class ConvLSTM(nn.Module):

@@ -1,9 +1,40 @@
+import os
+import pandas as pd
 import numpy as np
 import tensorflow as tf
 import torch
 from torch.utils import data
 
 from .sampled_generator import SampledDataGenerator
+from openomics.database.interaction import Interactions
+
+
+class AminerDataset(Interactions):
+    def __init__(self, path, file_resources=None, source_col_name=None, target_col_name=None, source_index=None,
+                 target_index=None, edge_attr=None, filters=None, directed=True, relabel_nodes=None, verbose=False):
+        if file_resources is None:
+            file_resources = {}
+            file_resources["id_author.txt"] = os.path.join(path, "id_author.txt")
+            file_resources["id_conf.txt"] = os.path.join(path, "id_conf.txt")
+            file_resources["paper.txt"] = os.path.join(path, "paper.txt")
+            file_resources["paper_author.txt"] = os.path.join(path, "paper_author.txt")
+            file_resources["paper_conf.txt"] = os.path.join(path, "paper_conf.txt")
+        super(AminerDataset, self).__init__(path, file_resources, source_col_name, target_col_name, source_index,
+                                            target_index, edge_attr,
+                                            filters, directed, relabel_nodes, verbose)
+
+    def load_network(self, file_resources, source_col_name, target_col_name, edge_attr, directed, filters):
+        author = pd.read_table(file_resources["id_author.txt"], names=["id", "name"])
+        conf = pd.read_table(file_resources["id_conf.txt"], names=["id", "name"])
+        paper = pd.read_table(file_resources["paper.txt"], names=["id", "name"])
+        paper_author = pd.read_table(file_resources["paper_author.txt"], names=["source", "target"])
+        paper_conf = pd.read_table(file_resources["paper_conf.txt"], names=["source", "target"])
+
+        print(author.head())
+        print(conf.head())
+        print(paper.head())
+        print(paper_author.head())
+        print(paper_conf.head())
 
 
 class TorchDataset(torch.utils.data.Dataset):

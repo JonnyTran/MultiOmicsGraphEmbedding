@@ -8,7 +8,7 @@ from moge.module.classifier import Dense, HierarchicalAWX
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention, \
     ExpandedMultiplexGAT
 from moge.module.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
-from moge.module.encoder import ConvLSTM, AlbertEncoder
+from moge.module.encoder import ConvLSTM, AlbertEncoder, NodeIDEmbedding
 from moge.module.losses import ClassificationLoss, get_hierar_relations
 from moge.module.utils import filter_samples
 
@@ -20,14 +20,17 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
                           dict), "hparams.encoder must be a dict. If not multi node types, use MonoplexEmbedder instead."
         assert isinstance(hparams.embedder,
                           dict), "hparams.embedder must be a dict. If not multi-layer, use MonoplexEmbedder instead."
-        assert not (len(hparams.encoder) > 1 and not len(hparams.vocab_size) > 1)
         self.hparams = hparams
 
         ################### Encoding ####################
-        for seq_type, encoder in hparams.encoder.items():
+        self.node_types = list(hparams.encoder.keys())
+        for node_type, encoder in hparams.encoder.items():
             if encoder == "ConvLSTM":
-                self.set_encoder(seq_type, ConvLSTM(hparams))
+                assert not (len(hparams.encoder) > 1 and not len(hparams.vocab_size) > 1)
+                self.set_encoder(node_type, ConvLSTM(hparams))
+
             elif encoder == "Albert":
+                assert not (len(hparams.encoder) > 1 and not len(hparams.vocab_size) > 1)
                 config = AlbertConfig(
                     vocab_size=hparams.vocab_size,
                     embedding_size=hparams.word_embedding_size,
@@ -41,9 +44,13 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
                     type_vocab_size=1,
                     max_position_embeddings=hparams.max_length,
                 )
-                self.set_encoder(seq_type, AlbertEncoder(config))
+                self.set_encoder(node_type, AlbertEncoder(config))
+
+            elif "NodeIDEmbedding" in encoder:
+                # `encoder` is a dict with {"NodeIDEmbedding": hparams}
+                self.set_encoder(node_type, NodeIDEmbedding(hparams=encoder["NodeIDEmbedding"]))
             else:
-                raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
+                raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert', 'NodeIDEmbedding'}")
 
         ################### Layer-specfic Embedding ####################
         for subnetwork_type, embedder_model in hparams.embedder.items():
@@ -169,7 +176,7 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
         self.hparams = copy.copy(hparams)
 
         ################### Encoding ####################
-        self.node_types = list(hparams.encoder)
+        self.node_types = list(hparams.encoder.keys())
         for node_type, encoder in hparams.encoder.items():
             if encoder == "ConvLSTM":
                 hparams.vocab_size = self.hparams.vocab_size[node_type]
@@ -189,8 +196,12 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
                     max_position_embeddings=hparams.max_length,
                 )
                 self.set_encoder(node_type, AlbertEncoder(config))
+
+            elif "NodeIDEmbedding" in encoder:
+                # `encoder` is a dict with {"NodeIDEmbedding": hparams}
+                self.set_encoder(node_type, NodeIDEmbedding(hparams=encoder["NodeIDEmbedding"]))
             else:
-                raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert'}")
+                raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert', 'NodeIDEmbedding'}")
 
         ################### Layer-specfic Embedding ####################
         self.layers = list(hparams.embedder)
