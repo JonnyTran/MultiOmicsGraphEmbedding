@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import networkx as nx
 import numpy as np
 import tensorflow as tf
 import torch
@@ -10,8 +11,9 @@ from openomics.database.interaction import Interactions
 
 
 class AminerDataset(Interactions):
-    def __init__(self, path, file_resources=None, source_col_name=None, target_col_name=None, source_index=None,
-                 target_index=None, edge_attr=None, filters=None, directed=True, relabel_nodes=None, verbose=False):
+    def __init__(self, path, file_resources=None, source_col_name="source", target_col_name="target", source_index=None,
+                 target_index=None, edge_attr=["type"], filters=None, directed=False, relabel_nodes=None,
+                 verbose=False):
         if file_resources is None:
             file_resources = {}
             file_resources["id_author.txt"] = os.path.join(path, "id_author.txt")
@@ -20,21 +22,39 @@ class AminerDataset(Interactions):
             file_resources["paper_author.txt"] = os.path.join(path, "paper_author.txt")
             file_resources["paper_conf.txt"] = os.path.join(path, "paper_conf.txt")
         super(AminerDataset, self).__init__(path, file_resources, source_col_name, target_col_name, source_index,
-                                            target_index, edge_attr,
-                                            filters, directed, relabel_nodes, verbose)
+                                            target_index, edge_attr, filters, directed, relabel_nodes, verbose)
 
     def load_network(self, file_resources, source_col_name, target_col_name, edge_attr, directed, filters):
+        # Nodes
         author = pd.read_table(file_resources["id_author.txt"], names=["id", "name"])
+        author["id"] = "a" + author["id"].astype(str)
+        author["type"] = "author"
         conf = pd.read_table(file_resources["id_conf.txt"], names=["id", "name"])
+        conf["id"] = "c" + conf["id"].astype(str)
+        conf["type"] = "conf"
         paper = pd.read_table(file_resources["paper.txt"], names=["id", "name"])
-        paper_author = pd.read_table(file_resources["paper_author.txt"], names=["source", "target"])
-        paper_conf = pd.read_table(file_resources["paper_conf.txt"], names=["source", "target"])
+        paper["id"] = "p" + paper["id"].astype(str)
+        paper["type"] = "paper"
+        nodelist = pd.concat([author, conf, paper])
 
-        print(author.head())
-        print(conf.head())
-        print(paper.head())
-        print(paper_author.head())
-        print(paper_conf.head())
+        # Edgelist
+        paper_author = pd.read_table(file_resources["paper_author.txt"], names=["source", "target"])
+        paper_author["source"] = "p" + paper_author["source"].astype(str)
+        paper_author["target"] = "a" + paper_author["target"].astype(str)
+        paper_author["type"] = "writes"
+
+        paper_conf = pd.read_table(file_resources["paper_conf.txt"], names=["source", "target"])
+        paper_conf["source"] = "p" + paper_conf["source"].astype(str)
+        paper_conf["target"] = "c" + paper_conf["target"].astype(str)
+        paper_conf["type"] = "publishes"
+        edgelist = pd.concat([paper_author, paper_conf])
+
+        network = nx.from_pandas_edgelist(edgelist, source=source_col_name, target=target_col_name,
+                                          edge_attr=edge_attr,
+                                          create_using=nx.DiGraph() if directed else nx.Graph())
+        print("nodes", network.number_of_nodes(), nodelist.shape)
+        nx.set_node_attributes(network, nodelist.set_index("id").to_dict("index"))
+        return network
 
 
 class TorchDataset(torch.utils.data.Dataset):
