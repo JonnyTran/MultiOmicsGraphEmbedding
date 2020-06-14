@@ -19,7 +19,7 @@ from moge.module.trainer import ModelTrainer
 from moge.module.multiplex import HeterogeneousMultiplexEmbedder
 from moge.module.utils import get_multiplex_collate_fn
 from moge.generator.multiplex import MultiplexGenerator
-from moge.generator.datasets import TorchDataset
+from moge.generator.datasets import GeneratorDataset
 
 DATASET = '../MultiOmicsGraphEmbedding/data/proteinatlas_biogrid_multi_network.pickle'
 HIER_TAXONOMY_FILE = "../MultiOmicsGraphEmbedding/data/go_term.taxonomy"
@@ -69,7 +69,7 @@ def train(hparams):
         seed=seed, verbose=True)
 
     train_dataloader = torch.utils.data.DataLoader(
-        TorchDataset(generator_train),
+        GeneratorDataset(generator_train),
         batch_size=n_gpus,
         num_workers=14,
         collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),
@@ -77,7 +77,7 @@ def train(hparams):
     )
 
     test_dataloader = torch.utils.data.DataLoader(
-        TorchDataset(generator_test),
+        GeneratorDataset(generator_test),
         batch_size=n_gpus,
         num_workers=4,
         collate_fn=get_multiplex_collate_fn(node_types=list(hparams.encoder.keys()),

@@ -52,10 +52,24 @@ class NodeIDEmbedding(nn.Module):
     def __init__(self, hparams) -> None:
         super(NodeIDEmbedding, self).__init__()
 
-        self.embedding = torch.nn.Embedding(**hparams)
+        self.node_types = hparams.node_types
+        self.metapath = hparams.metapath
+        self.num_nodes_dict = hparams.num_nodes_dict
 
-    def forward(self, X):
-        return self.embedding.forward(X)
+        count = 0
+        self.start, self.end = {}, {}
+        for node_type in self.node_types:
+            self.start[node_type] = count
+            count += self.num_nodes_dict[node_type]
+            self.end[node_type] = count
+
+        self.embedding = torch.nn.Embedding(count, hparams.embedding_dim, sparse=hparams.sparse)
+
+    def forward(self, node_type: str, batch=None):
+        """Returns the embeddings for the nodes in :obj:`subset` of type
+        :obj:`node_type`."""
+        emb = self.embedding.weight[self.start[node_type]:self.end[node_type]]
+        return emb if batch is None else emb[batch]
 
 
 class ConvLSTM(nn.Module):

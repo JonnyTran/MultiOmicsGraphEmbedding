@@ -9,7 +9,7 @@ from torch_geometric.nn import GATConv, GCNConv, SAGEConv
 from torch_geometric.nn.conv import MessagePassing
 from torch_geometric.nn.inits import glorot, zeros
 from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
-
+from torch_geometric.nn import MetaPath2Vec
 
 class GAT(nn.Module):
     def __init__(self, hparams) -> None:

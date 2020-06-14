@@ -3,8 +3,11 @@ import pandas as pd
 import networkx as nx
 import numpy as np
 import tensorflow as tf
+
 import torch
 from torch.utils import data
+
+from torch_geometric.datasets import AMiner
 
 from .sampled_generator import SampledDataGenerator
 from openomics.database.interaction import Interactions
@@ -14,15 +17,23 @@ class AminerDataset(Interactions):
     def __init__(self, path, file_resources=None, source_col_name="source", target_col_name="target", source_index=None,
                  target_index=None, edge_attr=["type"], filters=None, directed=False, relabel_nodes=None,
                  verbose=False):
-        if file_resources is None:
-            file_resources = {}
-            file_resources["id_author.txt"] = os.path.join(path, "id_author.txt")
-            file_resources["id_conf.txt"] = os.path.join(path, "id_conf.txt")
-            file_resources["paper.txt"] = os.path.join(path, "paper.txt")
-            file_resources["paper_author.txt"] = os.path.join(path, "paper_author.txt")
-            file_resources["paper_conf.txt"] = os.path.join(path, "paper_conf.txt")
-        super(AminerDataset, self).__init__(path, file_resources, source_col_name, target_col_name, source_index,
-                                            target_index, edge_attr, filters, directed, relabel_nodes, verbose)
+        aminer = AMiner("datasets/")
+        data = aminer[0]
+        self.edge_index_dict = data.edge_index_dict
+        self.num_nodes_dict = data.num_nodes_dict
+        self.y_dict = data.y_dict
+        self.y_index_dict = data.y_index_dict
+        self.metapath = list(self.edge_index_dict.keys())
+
+        # if file_resources is None:
+        #     file_resources = {}
+        #     file_resources["id_author.txt"] = os.path.join(path, "id_author.txt")
+        #     file_resources["id_conf.txt"] = os.path.join(path, "id_conf.txt")
+        #     file_resources["paper.txt"] = os.path.join(path, "paper.txt")
+        #     file_resources["paper_author.txt"] = os.path.join(path, "paper_author.txt")
+        #     file_resources["paper_conf.txt"] = os.path.join(path, "paper_conf.txt")
+        # super(AminerDataset, self).__init__(path, file_resources, source_col_name, target_col_name, source_index,
+        #                                     target_index, edge_attr, filters, directed, relabel_nodes, verbose)
 
     def load_network(self, file_resources, source_col_name, target_col_name, edge_attr, directed, filters):
         # Nodes
@@ -36,6 +47,7 @@ class AminerDataset(Interactions):
         paper["id"] = "p" + paper["id"].astype(str)
         paper["type"] = "paper"
         nodelist = pd.concat([author, conf, paper])
+        nodelist["node_index"] = np.expand_dims(np.arange(nodelist.shape[0]), axis=1)
 
         # Edgelist
         paper_author = pd.read_table(file_resources["paper_author.txt"], names=["source", "target"])
@@ -56,8 +68,17 @@ class AminerDataset(Interactions):
         nx.set_node_attributes(network, nodelist.set_index("id").to_dict("index"))
         return network
 
+    def sample(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+        return self.y_index_dict["author"][iloc], self.y_dict["author"][iloc]
 
-class TorchDataset(torch.utils.data.Dataset):
+    def loader(self, **kwargs):
+        return data.DataLoader(range(self.num_nodes_dict["author"]),
+                               collate_fn=self.sample, **kwargs)
+
+
+class GeneratorDataset(torch.utils.data.Dataset):
     def __init__(self, generator: SampledDataGenerator):
         self._generator = generator
         self.node_list = self._generator.get_connected_nodelist()
