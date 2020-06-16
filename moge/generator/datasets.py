@@ -12,6 +12,8 @@ from torch_geometric.datasets import AMiner
 from .sampled_generator import SampledDataGenerator
 from openomics.database.interaction import Interactions
 
+from stellargraph.datasets import FB15k_237, WN18RR, BlogCatalog3, AIFB, MovieLens
+
 
 class AminerDataset(Interactions):
     def __init__(self, path, file_resources=None, source_col_name="source", target_col_name="target", source_index=None,
