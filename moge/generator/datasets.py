@@ -16,15 +16,18 @@ from stellargraph.datasets import FB15k_237, WN18RR, BlogCatalog3, AIFB, MovieLe
 
 
 class AminerDataset(Interactions):
-    def __init__(self, path, file_resources=None, source_col_name="source", target_col_name="target", source_index=None,
+    def __init__(self, batch_size, path=None, file_resources=None, source_col_name="source", target_col_name="target",
+                 source_index=None,
                  target_index=None, edge_attr=["type"], filters=None, directed=False, relabel_nodes=None,
                  verbose=False):
         aminer = AMiner("datasets/")
         data = aminer[0]
+
+        self.batch_size = batch_size
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.y_dict = data.y_dict
-        self.y_index_dict = data.y_index_dict
+        self.y_index_dict = {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
         self.metapath = list(self.edge_index_dict.keys())
 
         # if file_resources is None:
@@ -73,11 +76,15 @@ class AminerDataset(Interactions):
     def sample(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
-        return self.y_index_dict["author"][iloc], self.y_dict["author"][iloc]
+
+        X = {}
+        X["author"] = self.y_index_dict["author"][iloc]
+
+        return X, self.y_dict["author"][iloc]
 
     def loader(self, **kwargs):
-        return data.DataLoader(range(self.num_nodes_dict["author"]),
-                               collate_fn=self.sample, **kwargs)
+        return data.DataLoader(torch.arange(self.y_index_dict["author"].size(0)), batch_size=self.batch_size,
+                               shuffle=True, num_workers=8, collate_fn=self.sample, **kwargs)
 
 
 class GeneratorDataset(torch.utils.data.Dataset):
