@@ -10,7 +10,7 @@ from sklearn.linear_model import LogisticRegression
 
 
 class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
-    def __init__(self, hparams, dataset, metapath, head_node_type="author"):
+    def __init__(self, hparams, dataset, metapath):
         self.data = dataset
         if hasattr(dataset, "num_nodes_dict"):
             num_nodes_dict = dataset.num_nodes_dict
@@ -25,7 +25,7 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         walks_per_node = hparams.walks_per_node
         num_negative_samples = hparams.num_negative_samples
 
-        self.head_node_type = head_node_type
+        self.head_node_type = self.data.head_node_type
         perm = torch.randperm(self.data.y_index_dict[self.head_node_type].size(0))
         self.training_idx = perm[:int(self.data.y_index_dict[self.head_node_type].size(0) * self.train_ratio)]
         self.validation_idx = perm[int(self.data.y_index_dict[self.head_node_type].size(0) * self.train_ratio):]

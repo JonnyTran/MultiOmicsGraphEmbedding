@@ -22,6 +22,7 @@ class BlogCatalog():
         blogcat = BlogCatalog3()
         graph = blogcat.load()
         self.node_types = graph.node_types
+        self.head_node_type = "user"
         self.metapaths = [("user", "belongs", "group"), ("user", "friend", "user")]
 
         self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
