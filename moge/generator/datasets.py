@@ -23,14 +23,14 @@ class BlogCatalog():
         graph = blogcat.load()
         self.node_types = graph.node_types
         self.head_node_type = "user"
-        self.metapaths = [("user", "belongs", "group"), ("user", "friend", "user")]
+        self.metapath = [("user", "belongs", "group"), ("user", "friend", "user")]
 
         self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
 
         edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
-        edge_index_dict = {metapath: [] for metapath in self.metapaths}
+        edge_index_dict = {metapath: [] for metapath in self.metapath}
         for u, v, t in edgelist:
-            edge_index_dict[self.metapaths[t]].append([u, v])
+            edge_index_dict[self.metapath[t]].append([u, v])
         self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
                                 edge_index_dict.items()}
 

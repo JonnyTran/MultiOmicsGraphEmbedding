@@ -10,10 +10,11 @@ from sklearn.linear_model import LogisticRegression
 
 
 class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
-    def __init__(self, hparams, dataset, metapath):
+    def __init__(self, hparams, dataset):
         self.data = dataset
         if hasattr(dataset, "num_nodes_dict"):
             num_nodes_dict = dataset.num_nodes_dict
+        metapath = self.data.metapaths
 
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size
