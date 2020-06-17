@@ -70,10 +70,10 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).sum().item()
-        logs = {"loss": avg_loss,
-                "accuracy": self.node_classification(training=True)}
+        logs = {"loss": avg_loss}
 
-        return {"progress_bar": logs, "log": logs}
+        return {"progress_bar": {"accuracy": self.node_classification(training=True)},
+                "log": logs}
 
     def validation_step(self, batch, batch_nb):
         pos_rw, neg_rw = batch
