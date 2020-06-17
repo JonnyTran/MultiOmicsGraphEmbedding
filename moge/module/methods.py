@@ -11,8 +11,9 @@ from sklearn.linear_model import LogisticRegression
 
 class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
     def __init__(self, hparams, dataset, metapath, num_nodes_dict=None):
+        self.data = dataset
+
         self.train_ratio = hparams.train_ratio
-        self.data = hparams.dataset
         self.batch_size = hparams.batch_size
         self.sparse = hparams.sparse
 
@@ -29,6 +30,7 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         edge_index_dict = dataset.edge_index_dict
         super().__init__(edge_index_dict, embedding_dim, metapath, walk_length, context_size, walks_per_node,
                          num_negative_samples, num_nodes_dict, self.sparse)
+        self.hparams = hparams
 
     def node_classification(self, training=True):
         if training:
@@ -63,9 +65,7 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         pos_rw, neg_rw = batch
-
         loss = self.loss(pos_rw, neg_rw)
-
         return {'loss': loss}
 
     def training_epoch_end(self, outputs):
@@ -73,7 +73,7 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         logs = {"loss": avg_loss,
                 "accuracy": self.node_classification(training=True)}
 
-        return {"log": logs}
+        return {"progress_bar": logs, "log": logs}
 
     def validation_step(self, batch, batch_nb):
         pos_rw, neg_rw = batch
@@ -99,6 +99,6 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
 
     def configure_optimizers(self):
         if self.sparse:
-            return torch.optim.SparseAdam(self.parameters(), lr=0.01)
+            return torch.optim.SparseAdam(self.parameters(), lr=self.hparams.lr)
         else:
-            return torch.optim.Adam(self.parameters(), lr=0.01)
+            return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
