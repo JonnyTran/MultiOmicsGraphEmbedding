@@ -22,7 +22,6 @@ class GAT(nn.Module):
             concat=True,
             dropout=hparams.nb_attn_dropout
         )
-        # self.batchnorm = torch.nn.BatchNorm1d(hparams.embedding_dim)
 
     @staticmethod
     def add_model_specific_args(parent_parser):

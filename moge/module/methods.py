@@ -14,7 +14,9 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         self.data = dataset
         if hasattr(dataset, "num_nodes_dict"):
             num_nodes_dict = dataset.num_nodes_dict
-        metapath = self.data.metapaths
+        else:
+            num_nodes_dict = None
+        metapath = self.data.metapath
 
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size
