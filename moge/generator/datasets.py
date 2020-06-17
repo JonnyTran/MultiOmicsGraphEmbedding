@@ -27,7 +27,8 @@ class AminerDataset(Interactions):
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.y_dict = data.y_dict
-        self.y_index_dict = {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
+        self.y_index_dict = data.y_index_dict
+        # {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
         self.metapath = list(self.edge_index_dict.keys())
 
         # if file_resources is None:
