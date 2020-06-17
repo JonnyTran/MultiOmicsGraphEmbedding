@@ -10,8 +10,10 @@ from sklearn.linear_model import LogisticRegression
 
 
 class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
-    def __init__(self, hparams, dataset, metapath, num_nodes_dict=None):
+    def __init__(self, hparams, dataset, metapath, head_node_type="author"):
         self.data = dataset
+        if hasattr(dataset, "num_nodes_dict"):
+            num_nodes_dict = dataset.num_nodes_dict
 
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size
@@ -23,9 +25,10 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         walks_per_node = hparams.walks_per_node
         num_negative_samples = hparams.num_negative_samples
 
-        perm = torch.randperm(self.data.y_index_dict["author"].size(0))
-        self.training_idx = perm[:int(self.data.y_index_dict["author"].size(0) * self.train_ratio)]
-        self.validation_idx = perm[int(self.data.y_index_dict["author"].size(0) * self.train_ratio):]
+        self.head_node_type = head_node_type
+        perm = torch.randperm(self.data.y_index_dict[self.head_node_type].size(0))
+        self.training_idx = perm[:int(self.data.y_index_dict[self.head_node_type].size(0) * self.train_ratio)]
+        self.validation_idx = perm[int(self.data.y_index_dict[self.head_node_type].size(0) * self.train_ratio):]
 
         edge_index_dict = dataset.edge_index_dict
         super().__init__(edge_index_dict, embedding_dim, metapath, walk_length, context_size, walks_per_node,
@@ -34,8 +37,8 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
 
     def node_classification(self, training=True):
         if training:
-            z = self.forward('author', batch=self.data.y_index_dict['author'][self.training_idx])
-            y = self.data.y_dict['author'][self.training_idx]
+            z = self.forward(self.head_node_type, batch=self.data.y_index_dict[self.head_node_type][self.training_idx])
+            y = self.data.y_dict[self.head_node_type][self.training_idx]
 
             perm = torch.randperm(z.size(0))
             train_perm = perm[:int(z.size(0) * self.train_ratio)]
@@ -48,11 +51,13 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
             accuracy = clf.score(z[test_perm].detach().cpu().numpy(),
                                  y[test_perm].detach().cpu().numpy())
         else:
-            z_train = self.forward('author', batch=self.data.y_index_dict['author'][self.training_idx])
-            y_train = self.data.y_dict['author'][self.training_idx]
+            z_train = self.forward(self.head_node_type,
+                                   batch=self.data.y_index_dict[self.head_node_type][self.training_idx])
+            y_train = self.data.y_dict[self.head_node_type][self.training_idx]
 
-            z_val = self.forward('author', batch=self.data.y_index_dict['author'][self.validation_idx])
-            y_val = self.data.y_dict['author'][self.validation_idx]
+            z_val = self.forward(self.head_node_type,
+                                 batch=self.data.y_index_dict[self.head_node_type][self.validation_idx])
+            y_val = self.data.y_dict[self.head_node_type][self.validation_idx]
 
             clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150) \
                 .fit(z_train.detach().cpu().numpy(),

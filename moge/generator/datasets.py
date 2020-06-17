@@ -1,4 +1,6 @@
 import os
+from typing import Type
+
 import pandas as pd
 import networkx as nx
 import numpy as np
@@ -13,6 +15,38 @@ from .sampled_generator import SampledDataGenerator
 from openomics.database.interaction import Interactions
 
 from stellargraph.datasets import FB15k_237, WN18RR, BlogCatalog3, AIFB, MovieLens
+
+
+class BlogCatalog():
+    def __init__(self, batch_size=128) -> None:
+        blogcat = BlogCatalog3()
+        graph = blogcat.load()
+        self.node_types = graph.node_types
+        self.metapaths = [("user", "belongs", "group"), ("user", "friend", "user")]
+
+        self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
+
+        edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
+        edge_index_dict = {metapath: [] for metapath in self.metapaths}
+        for u, v, t in edgelist:
+            edge_index_dict[self.metapaths[t]].append([u, v])
+        self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
+                                edge_index_dict.items()}
+
+        self.batch_size = batch_size
+
+    def sample(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        X = {}
+        X["user"] = self.y_index_dict["user"][iloc]
+
+        return X, None  # self.y_dict["author"][iloc]
+
+    def loader(self, **kwargs):
+        return data.DataLoader(torch.arange(self.y_index_dict["user"].size(0)), batch_size=self.batch_size,
+                               shuffle=True, num_workers=8, collate_fn=self.sample, **kwargs)
 
 
 class AminerDataset(Interactions):
