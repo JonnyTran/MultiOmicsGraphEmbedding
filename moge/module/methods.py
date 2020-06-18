@@ -8,11 +8,11 @@ from torch.utils.data import DataLoader
 from torch_geometric.nn import MetaPath2Vec
 from sklearn.linear_model import LogisticRegression
 
-from moge.generator.datasets import HeterogeneousNetworkLoader
+from moge.generator.datasets import HeterogeneousNetworkDataset
 
 
 class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
-    def __init__(self, hparams, dataset: HeterogeneousNetworkLoader):
+    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset):
         # Hparams
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size

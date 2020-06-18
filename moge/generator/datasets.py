@@ -19,7 +19,7 @@ from stellargraph.datasets import FB15k_237, WN18RR, BlogCatalog3, AIFB, MovieLe
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset, HANDataset
 
 
-class HeterogeneousNetworkLoader(torch.utils.data.Dataset):
+class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, node_types, metapath=None, head_node_type=None, batch_size=128, train_ratio=0.3):
 
         # StellarGraph Dataset
