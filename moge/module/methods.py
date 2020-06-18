@@ -8,16 +8,12 @@ from torch.utils.data import DataLoader
 from torch_geometric.nn import MetaPath2Vec
 from sklearn.linear_model import LogisticRegression
 
+from moge.generator.datasets import HeterogeneousNetworkLoader
+
 
 class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
-    def __init__(self, hparams, dataset):
-        self.data = dataset
-        if hasattr(dataset, "num_nodes_dict"):
-            num_nodes_dict = dataset.num_nodes_dict
-        else:
-            num_nodes_dict = None
-        metapath = self.data.metapath
-
+    def __init__(self, hparams, dataset: HeterogeneousNetworkLoader):
+        # Hparams
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size
         self.sparse = hparams.sparse
@@ -27,16 +23,20 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         context_size = hparams.context_size
         walks_per_node = hparams.walks_per_node
         num_negative_samples = hparams.num_negative_samples
+        self.hparams = hparams
 
+        # Dataset
+        self.data = dataset
+        if hasattr(dataset, "num_nodes_dict"):
+            num_nodes_dict = dataset.num_nodes_dict
+        else:
+            num_nodes_dict = None
+        metapath = self.data.metapath
         self.head_node_type = self.data.head_node_type
-        perm = torch.randperm(self.data.y_index_dict[self.head_node_type].size(0))
-        self.training_idx = perm[:int(self.data.y_index_dict[self.head_node_type].size(0) * self.train_ratio)]
-        self.validation_idx = perm[int(self.data.y_index_dict[self.head_node_type].size(0) * self.train_ratio):]
-
         edge_index_dict = dataset.edge_index_dict
+
         super().__init__(edge_index_dict, embedding_dim, metapath, walk_length, context_size, walks_per_node,
                          num_negative_samples, num_nodes_dict, self.sparse)
-        self.hparams = hparams
 
     def node_classification(self, training=True):
         if training:
@@ -95,14 +95,10 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         return {"progress_bar": logs, "log": logs}
 
     def train_dataloader(self):
-        loader = DataLoader(self.training_idx, batch_size=self.batch_size,
-                            shuffle=True, collate_fn=self.sample, num_workers=12)
-        return loader
+        return self.data.train_dataloader(self.sample)
 
     def val_dataloader(self):
-        loader = DataLoader(self.validation_idx, batch_size=self.batch_size,
-                            shuffle=False, num_workers=4, collate_fn=self.sample)
-        return loader
+        return self.data.val_dataloader(self.sample)
 
     def configure_optimizers(self):
         if self.sparse:
