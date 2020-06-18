@@ -20,7 +20,7 @@ from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDat
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapath=None, head_node_type=None, batch_size=128, train_ratio=0.3):
+    def __init__(self, dataset, node_types, metapath=None, head_node_type=None, train_ratio=0.3):
 
         # StellarGraph Dataset
         if isinstance(dataset, InMemoryDataset):
@@ -62,7 +62,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.dataset = dataset
         self.metapath = metapath
         self.train_ratio = train_ratio
-        self.batch_size = batch_size
         if self.node_types is not None and len(self.node_types) > 1:
             self.head_node_type = head_node_type
         else:
@@ -72,35 +71,35 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         print("metapath", self.metapath)
         print("edge_types", self.edge_types)
 
-    def train_dataloader(self, collate_fn=None):
+    def train_dataloader(self, batch_size=128, collate_fn=None):
         if isinstance(self.dataset, InMemoryDataset):
-            loader = data.DataLoader(self.training_idx, batch_size=self.batch_size,
+            loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                      shuffle=True, num_workers=12,
                                      collate_fn=collate_fn if collate_fn is not None else self.collate)
         else:
-            loader = data.DataLoader(self.training_idx, batch_size=self.batch_size,
+            loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                      shuffle=True, num_workers=12,
                                      collate_fn=lambda iloc: (self.x[iloc], self.training_target[iloc]))
         return loader
 
-    def val_dataloader(self, collate_fn=None):
+    def val_dataloader(self, batch_size=128, collate_fn=None):
         if isinstance(self.dataset, InMemoryDataset):
-            loader = data.DataLoader(self.validation_idx, batch_size=self.batch_size,
+            loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                      shuffle=False, num_workers=4,
                                      collate_fn=collate_fn if collate_fn is not None else self.collate)
         else:
-            loader = data.DataLoader(self.validation_idx, batch_size=self.batch_size,
+            loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                      shuffle=False, num_workers=4,
                                      collate_fn=lambda iloc: (self.x[iloc], self.validation_target[iloc]))
         return loader
 
-    def test_dataloader(self, collate_fn=None):
+    def test_dataloader(self, batch_size=128, collate_fn=None):
         if isinstance(self.dataset, InMemoryDataset):
-            loader = data.DataLoader(self.testing_idx, batch_size=self.batch_size,
+            loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                      shuffle=False, num_workers=4,
                                      collate_fn=collate_fn if collate_fn is not None else self.collate)
         else:
-            loader = data.DataLoader(self.testing_idx, batch_size=self.batch_size,
+            loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                      shuffle=False, num_workers=4,
                                      collate_fn=lambda iloc: (self.x[iloc], self.testing_target[iloc]))
         return loader

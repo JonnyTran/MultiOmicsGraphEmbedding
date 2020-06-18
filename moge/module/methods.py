@@ -95,10 +95,10 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         return {"progress_bar": logs, "log": logs}
 
     def train_dataloader(self):
-        return self.data.train_dataloader(self.sample)
+        return self.data.train_dataloader(self.hparams.batch_size, collate_fn=self.sample)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(self.sample)
+        return self.data.val_dataloader(self.hparams.batch_size, collate_fn=self.sample)
 
     def configure_optimizers(self):
         if self.sparse:
