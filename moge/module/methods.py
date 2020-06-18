@@ -23,7 +23,6 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         context_size = hparams.context_size
         walks_per_node = hparams.walks_per_node
         num_negative_samples = hparams.num_negative_samples
-        self.hparams = hparams
 
         # Dataset
         self.data = dataset
@@ -37,8 +36,10 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
 
         super().__init__(edge_index_dict, embedding_dim, metapath, walk_length, context_size, walks_per_node,
                          num_negative_samples, num_nodes_dict, self.sparse)
+        self.hparams = hparams
 
     def node_classification(self, training=True):
+        if self.disable_node_classification: return None
         if training:
             z = self.forward(self.head_node_type, batch=self.data.y_index_dict[self.head_node_type][self.training_idx])
             y = self.data.y_dict[self.head_node_type][self.training_idx]
@@ -93,6 +94,11 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
                 "val_accuracy": self.node_classification(training=False)}
 
         return {"progress_bar": logs, "log": logs}
+
+    def sample(self, batch):
+        if not isinstance(batch, torch.Tensor):
+            batch = torch.tensor(batch)
+        return self.pos_sample(batch), self.neg_sample(batch)
 
     def train_dataloader(self):
         return self.data.train_dataloader(self.hparams.batch_size, collate_fn=self.sample)

@@ -15,94 +15,118 @@ from torch_geometric.data import InMemoryDataset
 from .sampled_generator import SampledDataGenerator
 from openomics.database.interaction import Interactions
 
-from stellargraph.datasets import FB15k_237, WN18RR, BlogCatalog3, AIFB, MovieLens
+from stellargraph.datasets import FB15k_237, WN18RR, BlogCatalog3, AIFB, MovieLens, DatasetLoader
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset, HANDataset
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, node_types, metapath=None, head_node_type=None, train_ratio=0.3):
-
-        # StellarGraph Dataset
-        if isinstance(dataset, InMemoryDataset):
-            graph = dataset.load()
-            self.node_types = graph.node_types if node_types is None else node_types
-            self.edge_types = graph.edge_types
-
-            self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
-
-            edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
-            edge_index_dict = {path: [] for path in metapath}
-            for u, v, t in edgelist:
-                edge_index_dict[metapath[t]].append([u, v])
-            self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
-                                    edge_index_dict.items()}
-
-            perm = torch.randperm(self.y_index_dict[self.head_node_type].size(0))
-            self.training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
-            self.validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
-            self.testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
-
-        # PytorchGeometric Dataset
-        elif isinstance(dataset, HANDataset):
-            data = dataset.data
-            self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
-            self.node_types = node_types
-            self.edge_types = list(range(dataset.num_edge))
-            self.x = data["x"]
-
-            self.training_idx = data["train_node"]
-            self.training_target = data["train_target"]
-
-            self.validation_idx = data["valid_node"]
-            self.validation_target = data["valid_target"]
-
-            self.testing_idx = data["test_node"]
-            self.testing_target = data["test_target"]
-
         self.dataset = dataset
         self.metapath = metapath
         self.train_ratio = train_ratio
-        if self.node_types is not None and len(self.node_types) > 1:
-            self.head_node_type = head_node_type
-        else:
-            self.head_node_type = "default"
+        self.head_node_type = head_node_type
 
-        print("node_types", self.node_types)
-        print("metapath", self.metapath)
-        print("edge_types", self.edge_types)
+        # PyTorchGeometric Dataset
+        if isinstance(dataset, InMemoryDataset):
+            self.process_inmemorydataset(dataset, train_ratio)
+
+        # StellarGraph Dataset
+        elif isinstance(dataset, DatasetLoader):
+            self.process_stellargraph(dataset, metapath, node_types, train_ratio)
+
+        # HANDataset Dataset
+        elif isinstance(dataset, HANDataset):
+            self.process_handataset(dataset, metapath, node_types)
+        else:
+            raise Exception(f"Unsupported dataset {dataset}")
+
+    def process_handataset(self, dataset, metapath, node_types):
+        data = dataset.data
+        self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
+        self.node_types = node_types
+        self.edge_types = list(range(dataset.num_edge))
+        self.x = data["x"]
+        self.training_idx = data["train_node"]
+        self.training_target = data["train_target"]
+        self.validation_idx = data["valid_node"]
+        self.validation_target = data["valid_target"]
+        self.testing_idx = data["test_node"]
+        self.testing_target = data["test_target"]
+
+    def process_stellargraph(self, dataset, metapath, node_types, train_ratio):
+        graph = dataset.data
+        self.node_types = graph.node_types if node_types is None else node_types
+        self.edge_types = graph.edge_types
+        self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
+        edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
+        edge_index_dict = {path: [] for path in metapath}
+        for u, v, t in edgelist:
+            edge_index_dict[metapath[t]].append([u, v])
+        self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
+                                edge_index_dict.items()}
+        perm = torch.randperm(self.y_index_dict[self.head_node_type].size(0))
+        self.training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
+        self.validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        self.testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+
+    def process_inmemorydataset(self, dataset, train_ratio):
+        data = dataset[0]
+        self.edge_index_dict = data.edge_index_dict
+        self.num_nodes_dict = data.num_nodes_dict
+        self.node_types = list(data.y_index_dict.keys())
+        self.y_dict = data.y_dict
+        self.y_index_dict = data.y_index_dict
+        # {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
+        self.metapath = list(self.edge_index_dict.keys())
+        perm = torch.randperm(self.y_index_dict[self.head_node_type].size(0))
+        self.training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
+        self.validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        self.testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
 
     def train_dataloader(self, batch_size=128, collate_fn=None):
-        if isinstance(self.dataset, InMemoryDataset):
+        if not isinstance(self.dataset, HANDataset):
             loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                      shuffle=True, num_workers=12,
                                      collate_fn=collate_fn if collate_fn is not None else self.collate)
         else:
-            loader = data.DataLoader(self.training_idx, batch_size=batch_size,
+            loader = data.DataLoader(torch.arange(self.training_idx.size(0)), batch_size=batch_size,
                                      shuffle=True, num_workers=12,
-                                     collate_fn=lambda iloc: (self.x[iloc], self.training_target[iloc]))
+                                     collate_fn=lambda iloc: (
+                                     self.x[self.training_idx[iloc]], self.training_target[iloc]))
         return loader
 
     def val_dataloader(self, batch_size=128, collate_fn=None):
-        if isinstance(self.dataset, InMemoryDataset):
+        if not isinstance(self.dataset, HANDataset):
             loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                      shuffle=False, num_workers=4,
                                      collate_fn=collate_fn if collate_fn is not None else self.collate)
         else:
-            loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
+            loader = data.DataLoader(torch.arange(self.validation_idx.size(0)), batch_size=batch_size,
                                      shuffle=False, num_workers=4,
-                                     collate_fn=lambda iloc: (self.x[iloc], self.validation_target[iloc]))
+                                     collate_fn=lambda iloc: (
+                                     self.x[self.validation_idx[iloc]], self.validation_target[iloc]))
         return loader
 
     def test_dataloader(self, batch_size=128, collate_fn=None):
-        if isinstance(self.dataset, InMemoryDataset):
+        if not isinstance(self.dataset, HANDataset):
             loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                      shuffle=False, num_workers=4,
                                      collate_fn=collate_fn if collate_fn is not None else self.collate)
         else:
-            loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
+            loader = data.DataLoader(torch.arange(self.testing_idx.size(0)), batch_size=batch_size,
                                      shuffle=False, num_workers=4,
-                                     collate_fn=lambda iloc: (self.x[iloc], self.testing_target[iloc]))
+                                     collate_fn=lambda iloc: (
+                                     self.x[self.testing_idx[iloc]], self.testing_target[iloc]))
         return loader
+
+    def collate_node_cls(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        X = {}
+        X[self.head_node_type] = self.y_index_dict[self.head_node_type][iloc]
+
+        return X, self.y_dict[self.head_node_type][iloc]
 
     def collate(self, iloc):
         if not isinstance(iloc, torch.Tensor):
@@ -112,38 +136,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         X[self.head_node_type] = self.y_index_dict[self.head_node_type][iloc]
 
         return X, self.y_dict[self.head_node_type][iloc]
-
-
-
-class AminerDataset(Interactions):
-    def __init__(self, batch_size, path=None, file_resources=None, source_col_name="source", target_col_name="target",
-                 source_index=None,
-                 target_index=None, edge_attr=["type"], filters=None, directed=False, relabel_nodes=None,
-                 verbose=False):
-        aminer = AMiner("datasets/")
-        data = aminer[0]
-
-        self.batch_size = batch_size
-        self.edge_index_dict = data.edge_index_dict
-        self.num_nodes_dict = data.num_nodes_dict
-        self.y_dict = data.y_dict
-        self.y_index_dict = data.y_index_dict
-        # {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
-        self.metapath = list(self.edge_index_dict.keys())
-
-    def sample(self, iloc):
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
-
-        X = {}
-        X["author"] = self.y_index_dict["author"][iloc]
-
-        return X, self.y_dict["author"][iloc]
-
-    def loader(self, **kwargs):
-        return data.DataLoader(torch.arange(self.y_index_dict["author"].size(0)), batch_size=self.batch_size,
-                               shuffle=True, num_workers=8, collate_fn=self.sample, **kwargs)
-
 
 class GeneratorDataset(torch.utils.data.Dataset):
     def __init__(self, generator: SampledDataGenerator):
