@@ -62,11 +62,18 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.y_dict = {
             self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
 
-        # Sort
-        _, indices = torch.sort(self.y_index_dict[self.head_node_type])
-        self.x[self.head_node_type] = self.x[self.head_node_type][indices]
-        self.y_index_dict[self.head_node_type] = self.y_index_dict[self.head_node_type][indices]
-        self.y_dict[self.head_node_type] = self.y_dict[self.head_node_type][indices]
+        # # Sort
+        sorter = np.argsort(self.y_index_dict[self.head_node_type].numpy())
+        self.training_idx = sorter[
+            np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.training_idx.numpy(), sorter=sorter)]
+        self.validation_idx = sorter[
+            np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.validation_idx.numpy(), sorter=sorter)]
+        self.testing_idx = sorter[
+            np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.testing_idx.numpy(), sorter=sorter)]
+
+        self.training_idx = torch.tensor(self.training_idx)
+        self.validation_idx = torch.tensor(self.validation_idx)
+        self.testing_idx = torch.tensor(self.testing_idx)
 
     def process_stellargraph(self, dataset: DatasetLoader, metapath, node_types, train_ratio):
         graph = dataset.load()
