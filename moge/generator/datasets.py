@@ -51,7 +51,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.node_types = node_types
         self.edge_types = list(range(dataset.num_edge))
-        self.x = data["x"]
+        self.x = {self.head_node_type: data["x"]}
 
         self.training_idx = data["train_node"]
         self.training_target = data["train_target"]
@@ -102,31 +102,39 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
     def train_dataloader(self, batch_size=128, collate_fn=None):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=12,
-                                 collate_fn=collate_fn if collate_fn is not None else self.collate)
+                                 collate_fn=collate_fn if collate_fn is not None else self.get_collate_fn(collate_fn))
         return loader
 
     def val_dataloader(self, batch_size=128, collate_fn=None):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=4,
-                                 collate_fn=collate_fn if collate_fn is not None else self.collate)
+                                 collate_fn=collate_fn if collate_fn is not None else self.get_collate_fn(collate_fn))
         return loader
 
     def test_dataloader(self, batch_size=128, collate_fn=None):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=4,
-                                 collate_fn=collate_fn if collate_fn is not None else self.collate)
+                                 collate_fn=collate_fn if collate_fn is not None else self.get_collate_fn(collate_fn))
         return loader
 
-    def collate_node_cls(self, iloc):
+    def get_collate_fn(self, collate_fn: str):
+        if collate_fn == "index_cls":
+            return self.collate_index_cls
+        elif collate_fn == "node_attr_cls":
+            return self.collate_node_attr_cls
+        else:
+            raise Exception(f"Collate function {collate_fn} not found.")
+
+    def collate_node_attr_cls(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
         X = {}
-        X[self.head_node_type] = self.y_index_dict[self.head_node_type][iloc]
+        X[self.head_node_type] = self.x[self.head_node_type][iloc]
 
         return X, self.y_dict[self.head_node_type][iloc]
 
-    def collate(self, iloc):
+    def collate_index_cls(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
