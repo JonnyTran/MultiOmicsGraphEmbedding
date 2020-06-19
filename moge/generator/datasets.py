@@ -24,7 +24,11 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.dataset = dataset
         self.metapath = metapath
         self.train_ratio = train_ratio
-        self.head_node_type = head_node_type
+
+        if head_node_type is None:
+            self.head_node_type = node_types[0]
+        else:
+            self.head_node_type = head_node_type
 
         # PyTorchGeometric Dataset
         if isinstance(dataset, InMemoryDataset):
@@ -40,12 +44,15 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
-    def process_handataset(self, dataset, metapath, node_types):
+        self.name = dataset.__class__.__name__
+
+    def process_handataset(self, dataset: HANDataset, metapath, node_types):
         data = dataset.data
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.node_types = node_types
         self.edge_types = list(range(dataset.num_edge))
         self.x = data["x"]
+
         self.training_idx = data["train_node"]
         self.training_target = data["train_target"]
         self.validation_idx = data["valid_node"]
@@ -53,8 +60,17 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.testing_idx = data["test_node"]
         self.testing_target = data["test_target"]
 
-    def process_stellargraph(self, dataset, metapath, node_types, train_ratio):
-        graph = dataset.data
+        self.y_index_dict = {self.head_node_type: torch.cat([self.training_idx, self.validation_idx, self.testing_idx])}
+        self.y_dict = {
+            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
+
+        # Sort
+        _, indices = torch.sort(self.y_index_dict[self.head_node_type])
+        self.y_index_dict[self.head_node_type] = self.y_index_dict[self.head_node_type][indices]
+        self.y_dict[self.head_node_type] = self.y_dict[self.head_node_type][indices]
+
+    def process_stellargraph(self, dataset: DatasetLoader, metapath, node_types, train_ratio):
+        graph = dataset.load()
         self.node_types = graph.node_types if node_types is None else node_types
         self.edge_types = graph.edge_types
         self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
@@ -69,7 +85,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
         self.testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
 
-    def process_inmemorydataset(self, dataset, train_ratio):
+    def process_inmemorydataset(self, dataset: InMemoryDataset, train_ratio):
         data = dataset[0]
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
@@ -84,39 +100,21 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
 
     def train_dataloader(self, batch_size=128, collate_fn=None):
-        if not isinstance(self.dataset, HANDataset):
-            loader = data.DataLoader(self.training_idx, batch_size=batch_size,
-                                     shuffle=True, num_workers=12,
-                                     collate_fn=collate_fn if collate_fn is not None else self.collate)
-        else:
-            loader = data.DataLoader(torch.arange(self.training_idx.size(0)), batch_size=batch_size,
-                                     shuffle=True, num_workers=12,
-                                     collate_fn=lambda iloc: (
-                                     self.x[self.training_idx[iloc]], self.training_target[iloc]))
+        loader = data.DataLoader(self.training_idx, batch_size=batch_size,
+                                 shuffle=True, num_workers=12,
+                                 collate_fn=collate_fn if collate_fn is not None else self.collate)
         return loader
 
     def val_dataloader(self, batch_size=128, collate_fn=None):
-        if not isinstance(self.dataset, HANDataset):
-            loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
-                                     shuffle=False, num_workers=4,
-                                     collate_fn=collate_fn if collate_fn is not None else self.collate)
-        else:
-            loader = data.DataLoader(torch.arange(self.validation_idx.size(0)), batch_size=batch_size,
-                                     shuffle=False, num_workers=4,
-                                     collate_fn=lambda iloc: (
-                                     self.x[self.validation_idx[iloc]], self.validation_target[iloc]))
+        loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
+                                 shuffle=False, num_workers=4,
+                                 collate_fn=collate_fn if collate_fn is not None else self.collate)
         return loader
 
     def test_dataloader(self, batch_size=128, collate_fn=None):
-        if not isinstance(self.dataset, HANDataset):
-            loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
-                                     shuffle=False, num_workers=4,
-                                     collate_fn=collate_fn if collate_fn is not None else self.collate)
-        else:
-            loader = data.DataLoader(torch.arange(self.testing_idx.size(0)), batch_size=batch_size,
-                                     shuffle=False, num_workers=4,
-                                     collate_fn=lambda iloc: (
-                                     self.x[self.testing_idx[iloc]], self.testing_target[iloc]))
+        loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
+                                 shuffle=False, num_workers=4,
+                                 collate_fn=collate_fn if collate_fn is not None else self.collate)
         return loader
 
     def collate_node_cls(self, iloc):

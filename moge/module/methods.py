@@ -39,14 +39,14 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         self.hparams = hparams
 
     def node_classification(self, training=True):
-        if self.disable_node_classification: return None
         if training:
-            z = self.forward(self.head_node_type, batch=self.data.y_index_dict[self.head_node_type][self.training_idx])
-            y = self.data.y_dict[self.head_node_type][self.training_idx]
+            z = self.forward(self.head_node_type,
+                             batch=self.data.y_index_dict[self.head_node_type][self.data.training_idx])
+            y = self.data.y_dict[self.head_node_type][self.data.training_idx]
 
             perm = torch.randperm(z.size(0))
-            train_perm = perm[:int(z.size(0) * self.train_ratio)]
-            test_perm = perm[int(z.size(0) * self.train_ratio):]
+            train_perm = perm[:int(z.size(0) * self.data.train_ratio)]
+            test_perm = perm[int(z.size(0) * self.data.train_ratio):]
 
             clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150) \
                 .fit(z[train_perm].detach().cpu().numpy(),
@@ -56,12 +56,12 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
                                  y[test_perm].detach().cpu().numpy())
         else:
             z_train = self.forward(self.head_node_type,
-                                   batch=self.data.y_index_dict[self.head_node_type][self.training_idx])
-            y_train = self.data.y_dict[self.head_node_type][self.training_idx]
+                                   batch=self.data.y_index_dict[self.head_node_type][self.data.training_idx])
+            y_train = self.data.y_dict[self.head_node_type][self.data.training_idx]
 
             z_val = self.forward(self.head_node_type,
-                                 batch=self.data.y_index_dict[self.head_node_type][self.validation_idx])
-            y_val = self.data.y_dict[self.head_node_type][self.validation_idx]
+                                 batch=self.data.y_index_dict[self.head_node_type][self.data.validation_idx])
+            y_val = self.data.y_dict[self.head_node_type][self.data.validation_idx]
 
             clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150) \
                 .fit(z_train.detach().cpu().numpy(),
