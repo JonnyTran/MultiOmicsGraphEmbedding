@@ -1,42 +1,15 @@
-from typing import Optional, Union, Sequence, Dict, Tuple, List
-
 import torch
 import pytorch_lightning as pl
-from torch import Tensor
-from torch.utils.data import DataLoader
 
 from torch_geometric.nn import MetaPath2Vec
 from sklearn.linear_model import LogisticRegression
 
 from moge.generator.datasets import HeterogeneousNetworkDataset
 
-
-class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
-    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset):
-        # Hparams
-        self.train_ratio = hparams.train_ratio
-        self.batch_size = hparams.batch_size
-        self.sparse = hparams.sparse
-
-        embedding_dim = hparams.embedding_dim
-        walk_length = hparams.walk_length
-        context_size = hparams.context_size
-        walks_per_node = hparams.walks_per_node
-        num_negative_samples = hparams.num_negative_samples
-
-        # Dataset
-        self.data = dataset
-        if hasattr(dataset, "num_nodes_dict"):
-            num_nodes_dict = dataset.num_nodes_dict
-        else:
-            num_nodes_dict = None
-        metapath = self.data.metapath
-        self.head_node_type = self.data.head_node_type
-        edge_index_dict = dataset.edge_index_dict
-
-        super().__init__(edge_index_dict, embedding_dim, metapath, walk_length, context_size, walks_per_node,
-                         num_negative_samples, num_nodes_dict, self.sparse)
+class EmbeddingMethod(pl.LightningModule, MetaPath2Vec):
+    def __init__(self, hparams):
         self.hparams = hparams
+        super(EmbeddingMethod, self).__init__()
 
     def node_classification(self, training=True):
         if training:
@@ -92,8 +65,36 @@ class MetaPath2Vec(MetaPath2Vec, pl.LightningModule):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
         logs = {"val_loss": avg_loss,
                 "val_accuracy": self.node_classification(training=False)}
-
+        print(logs)
         return {"progress_bar": logs, "log": logs}
+
+
+class MetaPath2Vec(MetaPath2Vec, EmbeddingMethod):
+    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset):
+        # Hparams
+        self.train_ratio = hparams.train_ratio
+        self.batch_size = hparams.batch_size
+        self.sparse = hparams.sparse
+
+        embedding_dim = hparams.embedding_dim
+        walk_length = hparams.walk_length
+        context_size = hparams.context_size
+        walks_per_node = hparams.walks_per_node
+        num_negative_samples = hparams.num_negative_samples
+
+        # Dataset
+        self.data = dataset
+        if hasattr(dataset, "num_nodes_dict"):
+            num_nodes_dict = dataset.num_nodes_dict
+        else:
+            num_nodes_dict = None
+        metapath = self.data.metapath
+        self.head_node_type = self.data.head_node_type
+        edge_index_dict = dataset.edge_index_dict
+
+        super().__init__(edge_index_dict, embedding_dim, metapath, walk_length, context_size, walks_per_node,
+                         num_negative_samples, num_nodes_dict, self.sparse)
+        self.hparams = hparams
 
     def sample(self, batch):
         if not isinstance(batch, torch.Tensor):
