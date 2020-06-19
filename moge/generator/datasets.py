@@ -27,6 +27,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         if head_node_type is None:
             self.head_node_type = node_types[0]
+            if len(node_types) > 1: print(f"INFO: Selected {self.head_node_type} from node_types: {node_types}")
         else:
             self.head_node_type = head_node_type
 
@@ -53,12 +54,9 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.edge_types = list(range(dataset.num_edge))
         self.x = {self.head_node_type: data["x"]}
 
-        self.training_idx = data["train_node"]
-        self.training_target = data["train_target"]
-        self.validation_idx = data["valid_node"]
-        self.validation_target = data["valid_target"]
-        self.testing_idx = data["test_node"]
-        self.testing_target = data["test_target"]
+        self.training_idx, self.training_target = data["train_node"], data["train_target"]
+        self.validation_idx, self.validation_target = data["valid_node"], data["valid_target"]
+        self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
 
         self.y_index_dict = {self.head_node_type: torch.cat([self.training_idx, self.validation_idx, self.testing_idx])}
         self.y_dict = {
@@ -66,6 +64,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         # Sort
         _, indices = torch.sort(self.y_index_dict[self.head_node_type])
+        self.x[self.head_node_type] = self.x[self.head_node_type][indices]
         self.y_index_dict[self.head_node_type] = self.y_index_dict[self.head_node_type][indices]
         self.y_dict[self.head_node_type] = self.y_dict[self.head_node_type][indices]
 
@@ -118,12 +117,12 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         return loader
 
     def get_collate_fn(self, collate_fn: str):
-        if collate_fn == "index_cls":
+        if "index" in collate_fn:
             return self.collate_index_cls
-        elif collate_fn == "node_attr_cls":
+        elif "attr" in collate_fn:
             return self.collate_node_attr_cls
         else:
-            raise Exception(f"Collate function {collate_fn} not found.")
+            raise Exception(f"Correct collate function {collate_fn} not found.")
 
     def collate_node_attr_cls(self, iloc):
         if not isinstance(iloc, torch.Tensor):
@@ -131,6 +130,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         X = {}
         X[self.head_node_type] = self.x[self.head_node_type][iloc]
+        X.update(self.edge_index_dict)
 
         return X, self.y_dict[self.head_node_type][iloc]
 
@@ -139,6 +139,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             iloc = torch.tensor(iloc)
 
         X = {}
+        X.update(self.edge_index_dict)
         X[self.head_node_type] = self.y_index_dict[self.head_node_type][iloc]
 
         return X, self.y_dict[self.head_node_type][iloc]

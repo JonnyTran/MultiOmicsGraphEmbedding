@@ -6,7 +6,7 @@ from sklearn.linear_model import LogisticRegression
 
 from moge.generator.datasets import HeterogeneousNetworkDataset
 
-class EmbeddingMethod(pl.LightningModule, MetaPath2Vec):
+class EmbeddingMethod(pl.LightningModule):
     def __init__(self, hparams):
         self.hparams = hparams
         super(EmbeddingMethod, self).__init__()
