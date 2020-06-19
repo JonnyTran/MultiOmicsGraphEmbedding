@@ -46,16 +46,26 @@ class EmbeddingMethod(pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).sum().item()
+        accuracy = self.node_classification(training=True)
 
-        return {"progress_bar": {"accuracy": self.node_classification(training=True)},
-                "log": {"loss": avg_loss, "accuracy": self.node_classification(training=True)}}
+        return {"progress_bar": {"accuracy": accuracy},
+                "log": {"loss": avg_loss, "accuracy": accuracy}}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
         logs = {"val_loss": avg_loss,
                 "val_accuracy": self.node_classification(training=False)}
         print(logs)
-        return {"progress_bar": logs, "log": logs}
+        return {"progress_bar": logs,
+                "log": logs}
+
+    def test_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
+        logs = {"test_loss": avg_loss,
+                "test_accuracy": self.node_classification(training=False)}
+        print(logs)
+        return {"progress_bar": logs,
+                "log": logs}
 
 
 class MetaPath2Vec(MetaPath2Vec, EmbeddingMethod):
@@ -95,6 +105,11 @@ class MetaPath2Vec(MetaPath2Vec, EmbeddingMethod):
         loss = self.loss(pos_rw, neg_rw)
         return {"val_loss": loss}
 
+    def test_step(self, batch, batch_nb):
+        pos_rw, neg_rw = batch
+        loss = self.loss(pos_rw, neg_rw)
+        return {"test_loss": loss}
+
     def sample(self, batch):
         if not isinstance(batch, torch.Tensor):
             batch = torch.tensor(batch)
@@ -106,8 +121,8 @@ class MetaPath2Vec(MetaPath2Vec, EmbeddingMethod):
     def val_dataloader(self):
         return self.data.val_dataloader(batch_size=self.hparams.batch_size, collate_fn=self.sample)
 
-    # def test_dataloader(self):
-    #     return self.data.test_dataloader(batch_size=self.hparams.batch_size, collate_fn=self.sample)
+    def test_dataloader(self):
+        return self.data.test_dataloader(batch_size=self.hparams.batch_size, collate_fn=self.sample)
 
     def configure_optimizers(self):
         if self.sparse:

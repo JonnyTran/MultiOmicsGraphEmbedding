@@ -58,22 +58,23 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.validation_idx, self.validation_target = data["valid_node"], data["valid_target"]
         self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
 
-        self.y_index_dict = {self.head_node_type: torch.cat([self.training_idx, self.validation_idx, self.testing_idx])}
+        max_node_num = max([v.max().item() for k, v in self.edge_index_dict.items()])
+        self.y_index_dict = {self.head_node_type: torch.arange(max_node_num + 1)}
         self.y_dict = {
             self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
 
         # # Sort
-        sorter = np.argsort(self.y_index_dict[self.head_node_type].numpy())
-        self.training_idx = sorter[
-            np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.training_idx.numpy(), sorter=sorter)]
-        self.validation_idx = sorter[
-            np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.validation_idx.numpy(), sorter=sorter)]
-        self.testing_idx = sorter[
-            np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.testing_idx.numpy(), sorter=sorter)]
-
-        self.training_idx = torch.tensor(self.training_idx)
-        self.validation_idx = torch.tensor(self.validation_idx)
-        self.testing_idx = torch.tensor(self.testing_idx)
+        # sorter = np.argsort(self.y_index_dict[self.head_node_type].numpy())
+        # self.training_idx = sorter[
+        #     np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.training_idx.numpy(), sorter=sorter)]
+        # self.validation_idx = sorter[
+        #     np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.validation_idx.numpy(), sorter=sorter)]
+        # self.testing_idx = sorter[
+        #     np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.testing_idx.numpy(), sorter=sorter)]
+        #
+        # self.training_idx = torch.tensor(self.training_idx)
+        # self.validation_idx = torch.tensor(self.validation_idx)
+        # self.testing_idx = torch.tensor(self.testing_idx)
 
     def process_stellargraph(self, dataset: DatasetLoader, metapath, node_types, train_ratio):
         graph = dataset.load()
