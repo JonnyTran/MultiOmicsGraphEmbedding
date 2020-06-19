@@ -1,5 +1,5 @@
 import copy
-import numpy as np
+
 import pandas as pd
 import torch
 from transformers import AlbertConfig
@@ -11,6 +11,7 @@ from moge.module.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
 from moge.module.encoder import ConvLSTM, AlbertEncoder, NodeIDEmbedding
 from moge.module.losses import ClassificationLoss, get_hierar_relations
 from moge.module.utils import filter_samples
+
 
 class MultiplexEmbedder(EncoderEmbedderClassifier):
     def __init__(self, hparams):
@@ -181,6 +182,7 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             if encoder == "ConvLSTM":
                 hparams.vocab_size = self.hparams.vocab_size[node_type]
                 self.set_encoder(node_type, ConvLSTM(hparams))
+
             elif encoder == "Albert":
                 config = AlbertConfig(
                     vocab_size=hparams.vocab_size,
@@ -200,6 +202,12 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             elif "NodeIDEmbedding" in encoder:
                 # `encoder` is a dict with {"NodeIDEmbedding": hparams}
                 self.set_encoder(node_type, NodeIDEmbedding(hparams=encoder["NodeIDEmbedding"]))
+
+            elif "Linear" in encoder:
+                encoder_hparams = encoder["Linear"]
+                self.set_encoder(node_type, torch.nn.Linear(in_features=encoder_hparams["in_features"],
+                                                            out_features=hparams.encoding_dim))
+
             else:
                 raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert', 'NodeIDEmbedding'}")
 

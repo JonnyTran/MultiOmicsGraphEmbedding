@@ -43,17 +43,21 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.node_types = node_types
         self.edge_types = list(range(dataset.num_edge))
         self.x = {self.head_node_type: data["x"]}
+        self.in_features = data["x"].size(1)
 
         self.training_idx, self.training_target = data["train_node"], data["train_target"]
         self.validation_idx, self.validation_target = data["valid_node"], data["valid_target"]
         self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
 
         self.y_index_dict = {self.head_node_type: torch.arange(self.x[self.head_node_type].size(0))}
+        self.num_nodes_dict = {self.head_node_type: self.x[self.head_node_type].size(0)}
 
         _, indices = torch.sort(torch.cat([self.training_idx, self.validation_idx, self.testing_idx]))
         self.y_dict = {
             self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])[
                 indices]}
+        self.classes = self.y_dict[self.head_node_type].unique()
+        self.n_classes = self.classes.size(0)
 
         # # Sort
         # sorter = np.argsort(self.y_index_dict[self.head_node_type].numpy())
