@@ -112,7 +112,6 @@ class MetaPath2Vec(MetaPath2Vec, EmbeddingMethod):
         return {"test_loss": loss}
 
     def sample(self, batch):
-        print("batch", batch)
         if not isinstance(batch, torch.Tensor):
             batch = torch.tensor(batch)
         return self.pos_sample(batch), self.neg_sample(batch)
