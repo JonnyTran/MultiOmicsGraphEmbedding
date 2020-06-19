@@ -98,22 +98,22 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
         self.testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
 
-    def train_dataloader(self, batch_size=128, collate_fn=None):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
-                                 shuffle=True, num_workers=12,
-                                 collate_fn=collate_fn if collate_fn is not None else self.get_collate_fn(collate_fn))
+                                 shuffle=True, num_workers=num_workers,
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn))
         return loader
 
-    def val_dataloader(self, batch_size=128, collate_fn=None):
+    def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
-                                 shuffle=False, num_workers=4,
-                                 collate_fn=collate_fn if collate_fn is not None else self.get_collate_fn(collate_fn))
+                                 shuffle=False, num_workers=num_workers,
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn))
         return loader
 
-    def test_dataloader(self, batch_size=128, collate_fn=None):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
-                                 shuffle=False, num_workers=4,
-                                 collate_fn=collate_fn if collate_fn is not None else self.get_collate_fn(collate_fn))
+                                 shuffle=False, num_workers=num_workers,
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn))
         return loader
 
     def get_collate_fn(self, collate_fn: str):

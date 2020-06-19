@@ -1,10 +1,10 @@
-import torch
 import pytorch_lightning as pl
-
-from torch_geometric.nn import MetaPath2Vec
+import torch
 from sklearn.linear_model import LogisticRegression
+from torch_geometric.nn import MetaPath2Vec
 
 from moge.generator.datasets import HeterogeneousNetworkDataset
+
 
 class EmbeddingMethod(pl.LightningModule):
     def __init__(self):
@@ -96,6 +96,7 @@ class MetaPath2Vec(MetaPath2Vec, EmbeddingMethod):
         self.hparams = hparams
 
     def training_step(self, batch, batch_nb):
+
         pos_rw, neg_rw = batch
         loss = self.loss(pos_rw, neg_rw)
         return {'loss': loss}
@@ -111,18 +112,19 @@ class MetaPath2Vec(MetaPath2Vec, EmbeddingMethod):
         return {"test_loss": loss}
 
     def sample(self, batch):
+        print("batch", batch)
         if not isinstance(batch, torch.Tensor):
             batch = torch.tensor(batch)
         return self.pos_sample(batch), self.neg_sample(batch)
 
     def train_dataloader(self):
-        return self.data.train_dataloader(batch_size=self.hparams.batch_size, collate_fn=self.sample)
+        return self.data.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(batch_size=self.hparams.batch_size, collate_fn=self.sample)
+        return self.data.val_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.data.test_dataloader(batch_size=self.hparams.batch_size, collate_fn=self.sample)
+        return self.data.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         if self.sparse:
