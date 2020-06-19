@@ -1,22 +1,12 @@
-import os
-from typing import Type
-
-import pandas as pd
-import networkx as nx
 import numpy as np
 import tensorflow as tf
-
 import torch
+from cogdl.datasets.han_data import HANDataset
+from stellargraph.datasets import DatasetLoader
 from torch.utils import data
-
-from torch_geometric.datasets import AMiner
 from torch_geometric.data import InMemoryDataset
 
 from .sampled_generator import SampledDataGenerator
-from openomics.database.interaction import Interactions
-
-from stellargraph.datasets import FB15k_237, WN18RR, BlogCatalog3, AIFB, MovieLens, DatasetLoader
-from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset, HANDataset
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
@@ -41,13 +31,13 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         # HANDataset Dataset
         elif isinstance(dataset, HANDataset):
-            self.process_handataset(dataset, metapath, node_types)
+            self.process_HANdataset(dataset, metapath, node_types)
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
         self.name = dataset.__class__.__name__
 
-    def process_handataset(self, dataset: HANDataset, metapath, node_types):
+    def process_HANdataset(self, dataset: HANDataset, metapath, node_types):
         data = dataset.data
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.node_types = node_types
@@ -58,10 +48,12 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.validation_idx, self.validation_target = data["valid_node"], data["valid_target"]
         self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
 
-        max_node_num = max([v.max().item() for k, v in self.edge_index_dict.items()])
-        self.y_index_dict = {self.head_node_type: torch.arange(max_node_num + 1)}
+        self.y_index_dict = {self.head_node_type: torch.arange(self.x[self.head_node_type].size(0))}
+
+        _, indices = torch.sort(torch.cat([self.training_idx, self.validation_idx, self.testing_idx]))
         self.y_dict = {
-            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
+            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])[
+                indices]}
 
         # # Sort
         # sorter = np.argsort(self.y_index_dict[self.head_node_type].numpy())
@@ -147,8 +139,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             iloc = torch.tensor(iloc)
 
         X = {}
-        X.update(self.edge_index_dict)
         X[self.head_node_type] = self.y_index_dict[self.head_node_type][iloc]
+        X.update(self.edge_index_dict)
 
         return X, self.y_dict[self.head_node_type][iloc]
 
