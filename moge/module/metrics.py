@@ -1,16 +1,19 @@
-import copy
-from collections import OrderedDict
 import torch
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
+
 from .utils import filter_samples
 
+
 class Metrics():
-    def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10]):
+    def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None):
         self.loss_type = loss_type
         self.threshold = threshold
+
+        if n_classes:
+            k_s = [k for k in k_s if k < n_classes]
 
         self.precision = Precision(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
         self.precision_val = Precision(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)

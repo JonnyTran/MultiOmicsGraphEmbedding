@@ -10,7 +10,7 @@ class ModelTrainer(pl.LightningModule):
 
         self._model = model
         self.hparams = self._model.hparams
-        self.metrics = Metrics(loss_type=self.hparams.loss_type)
+        self.metrics = Metrics(loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes)
 
         self.n_gpus = gpus
         self.data_path = data_path
@@ -55,8 +55,6 @@ class ModelTrainer(pl.LightningModule):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-        print("X", X)
-        print("y", y)
         if y.dim() > 2:
             assert y.size(0) == 1
             y = y.squeeze(0)

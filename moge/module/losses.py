@@ -104,7 +104,7 @@ class ClassificationLoss(nn.Module):
                 if target.dim() >= 2:
                     target = target.squeeze(-1)
 
-            return self.criterion(logits, target.type_as(logits))
+            return self.criterion(logits, target)
 
     def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):
         """ Only support hierarchical text classification with BCELoss
