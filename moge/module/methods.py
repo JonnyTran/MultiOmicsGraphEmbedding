@@ -20,7 +20,7 @@ class EmbeddingMethod(pl.LightningModule):
             train_perm = perm[:int(z.size(0) * self.data.train_ratio)]
             test_perm = perm[int(z.size(0) * self.data.train_ratio):]
 
-            clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150) \
+            clf = LogisticRegression(solver="lbfgs", multi_class="ovr", max_iter=150) \
                 .fit(z[train_perm].detach().cpu().numpy(),
                      y[train_perm].detach().cpu().numpy())
 
@@ -35,7 +35,7 @@ class EmbeddingMethod(pl.LightningModule):
                                  batch=self.data.y_index_dict[self.head_node_type][self.data.validation_idx])
             y_val = self.data.y_dict[self.head_node_type][self.data.validation_idx]
 
-            clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150) \
+            clf = LogisticRegression(solver="lbfgs", multi_class="ovr", max_iter=150) \
                 .fit(z_train.detach().cpu().numpy(),
                      y_train.detach().cpu().numpy())
 
