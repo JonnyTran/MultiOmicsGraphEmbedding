@@ -11,7 +11,7 @@ from .sampled_generator import SampledDataGenerator
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapath=None, head_node_type=None, train_ratio=0.3):
+    def __init__(self, dataset, node_types, metapath=None, head_node_type=None, train_ratio=0.7):
         self.dataset = dataset
         self.metapath = metapath
         self.train_ratio = train_ratio
