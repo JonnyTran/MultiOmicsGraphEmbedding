@@ -5,6 +5,7 @@ from cogdl.datasets.han_data import HANDataset
 from stellargraph.datasets import DatasetLoader
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
+from scipy.io import loadmat
 
 from .sampled_generator import SampledDataGenerator
 
@@ -32,10 +33,29 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         # HANDataset Dataset
         elif isinstance(dataset, HANDataset):
             self.process_HANdataset(dataset, metapath, node_types)
+
+        elif "blogcatalog6k.mat" in dataset:
+            data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
+            self.y_index_dict = {"user": torch.arange(data["friendship"].shape[0]),
+                                 "tag": torch.arange(data["tagnetwork"].shape[0])}
+            self.node_types = ["user", "tag"]
+            self.head_node_type = "user"
+            self.y_dict = {self.head_node_type: torch.tensor(data["usercategory"].toarray().astype(int))}
+
+            self.metapath = [("user", "usertag", "tag"),
+                             ("tag", "tagnetwork", "tag"),
+                             ("user", "friendship", "user"), ]
+            self.edge_index_dict = {
+                ("user", "friendship", "user"): self.adj_to_edgeindex(data["friendship"]),
+                ("user", "usertag", "tag"): self.adj_to_edgeindex(data["usertag"]),
+                ("tag", "tagnetwork", "tag"): self.adj_to_edgeindex(data["tagnetwork"])}
+
+            self.split_train_val_test(train_ratio)
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
         self.name = dataset.__class__.__name__
+
 
     def process_HANdataset(self, dataset: HANDataset, metapath, node_types):
         data = dataset.data
@@ -83,6 +103,9 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             edge_index_dict[metapath[t]].append([u, v])
         self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
                                 edge_index_dict.items()}
+        self.split_train_val_test(train_ratio)
+
+    def split_train_val_test(self, train_ratio):
         perm = torch.randperm(self.y_index_dict[self.head_node_type].size(0))
         self.training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
         self.validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
@@ -97,10 +120,11 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.y_index_dict = data.y_index_dict
         # {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
         self.metapath = list(self.edge_index_dict.keys())
-        perm = torch.randperm(self.y_index_dict[self.head_node_type].size(0))
-        self.training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
-        self.validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
-        self.testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        self.split_train_val_test(train_ratio)
+
+    def adj_to_edgeindex(self, adj):
+        adj = adj.tocoo(copy=False)
+        return torch.tensor(np.vstack((adj.row, adj.col)).astype("long"))
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,

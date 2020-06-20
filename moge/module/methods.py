@@ -1,6 +1,7 @@
 import pytorch_lightning as pl
 import torch
 from sklearn.linear_model import LogisticRegression
+from sklearn.multiclass import OneVsRestClassifier
 from torch_geometric.nn import MetaPath2Vec
 
 from moge.generator.datasets import HeterogeneousNetworkDataset
@@ -20,9 +21,13 @@ class EmbeddingMethod(pl.LightningModule):
             train_perm = perm[:int(z.size(0) * self.data.train_ratio)]
             test_perm = perm[int(z.size(0) * self.data.train_ratio):]
 
-            clf = LogisticRegression(solver="lbfgs", multi_class="ovr", max_iter=150) \
-                .fit(z[train_perm].detach().cpu().numpy(),
-                     y[train_perm].detach().cpu().numpy())
+            if y.dim() > 1 and y.size(1) > 1:
+                clf = OneVsRestClassifier(LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150))
+            else:
+                clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150)
+
+            clf.fit(z[train_perm].detach().cpu().numpy(),
+                    y[train_perm].detach().cpu().numpy())
 
             accuracy = clf.score(z[test_perm].detach().cpu().numpy(),
                                  y[test_perm].detach().cpu().numpy())
@@ -35,9 +40,13 @@ class EmbeddingMethod(pl.LightningModule):
                                  batch=self.data.y_index_dict[self.head_node_type][self.data.validation_idx])
             y_val = self.data.y_dict[self.head_node_type][self.data.validation_idx]
 
-            clf = LogisticRegression(solver="lbfgs", multi_class="ovr", max_iter=150) \
-                .fit(z_train.detach().cpu().numpy(),
-                     y_train.detach().cpu().numpy())
+            if y_train.dim() > 1 and y_train.size(1) > 1:
+                clf = OneVsRestClassifier(LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150))
+            else:
+                clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150)
+
+            clf.fit(z_train.detach().cpu().numpy(),
+                    y_train.detach().cpu().numpy())
 
             accuracy = clf.score(z_val.detach().cpu().numpy(),
                                  y_val.detach().cpu().numpy())
@@ -55,7 +64,6 @@ class EmbeddingMethod(pl.LightningModule):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
         logs = {"val_loss": avg_loss,
                 "val_accuracy": self.node_classification(training=False)}
-        print(logs)
         return {"progress_bar": logs,
                 "log": logs}
 
