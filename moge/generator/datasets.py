@@ -136,7 +136,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         X[self.head_node_type] = self.x[self.head_node_type][iloc]
         X.update(self.edge_index_dict)
 
-        return X, self.y_dict[self.head_node_type][iloc]
+        return X, self.y_dict[self.head_node_type][iloc], None
 
     def collate_index_cls(self, iloc):
         if not isinstance(iloc, torch.Tensor):
@@ -146,7 +146,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         X[self.head_node_type] = self.y_index_dict[self.head_node_type][iloc]
         X.update(self.edge_index_dict)
 
-        return X, self.y_dict[self.head_node_type][iloc]
+        return X, self.y_dict[self.head_node_type][iloc], None
 
 class GeneratorDataset(torch.utils.data.Dataset):
     def __init__(self, generator: SampledDataGenerator):

@@ -1,8 +1,11 @@
-import torch
 import numpy as np
+import torch
 
 
 def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
+    if weights is None:
+        return Y_hat, Y
+
     if isinstance(weights, torch.Tensor):
         idx = torch.nonzero(weights).view(-1)
     else:

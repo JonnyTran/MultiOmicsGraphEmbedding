@@ -50,6 +50,11 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
             elif "NodeIDEmbedding" in encoder:
                 # `encoder` is a dict with {"NodeIDEmbedding": hparams}
                 self.set_encoder(node_type, NodeIDEmbedding(hparams=encoder["NodeIDEmbedding"]))
+            elif "Linear" in encoder:
+                encoder_hparams = encoder["Linear"]
+                self.set_encoder(node_type, torch.nn.Linear(in_features=encoder_hparams["in_features"],
+                                                            out_features=hparams.encoding_dim))
+
             else:
                 raise Exception("hparams.encoder must be one of {'ConvLSTM', 'Albert', 'NodeIDEmbedding'}")
 
@@ -106,10 +111,10 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         )
 
     def forward(self, X):
-        if X["Protein_seqs"].dim() > 2:
-            X["Protein_seqs"] = X["Protein_seqs"].squeeze(0)
+        if X[self.node_types[0]].dim() > 2:
+            X[self.node_types[0]] = X[self.node_types[0]].squeeze(0)
 
-        encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"])
+        encodings = self.get_encoder(self.node_types[0]).forward(X[self.node_types[0]])
 
         embeddings = []
         for layer in self.layers:
@@ -221,7 +226,7 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
                                                   layers=self.layers,
                                                   dropout=hparams.nb_attn_dropout)
         else:
-            print('"multiplex_embedder"  used. Concatenate multi-layer embeddings instead.')
+            print('"multiplex_embedder" used. Concatenate multi-layer embeddings instead.')
 
         ################### Classifier ####################
         if hparams.classifier == "Dense":
