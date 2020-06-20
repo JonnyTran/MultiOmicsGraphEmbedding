@@ -11,14 +11,16 @@ class Metrics():
     def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None):
         self.loss_type = loss_type
         self.threshold = threshold
+        self.n_classes = n_classes
+        is_multilabel = False if "SOFTMAX" in loss_type else True
 
         if n_classes:
             k_s = [k for k in k_s if k < n_classes]
 
-        self.precision = Precision(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
-        self.precision_val = Precision(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
-        self.recall = Recall(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
-        self.recall_val = Recall(average=True, is_multilabel=False if "SOFTMAX" in loss_type else True)
+        self.precision = Precision(average=True, is_multilabel=is_multilabel)
+        self.precision_val = Precision(average=True, is_multilabel=is_multilabel)
+        self.recall = Recall(average=True, is_multilabel=is_multilabel)
+        self.recall_val = Recall(average=True, is_multilabel=is_multilabel)
         self.top_k_train = TopKMulticlassAccuracy(k_s=k_s)
         self.top_k_val = TopKMulticlassAccuracy(k_s=k_s)
 
@@ -32,7 +34,7 @@ class Metrics():
                               "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
             if Y.dim() >= 2:
                 Y = Y.squeeze(1)
-            Y = torch.eye(Y_hat.size(1))[Y].type_as(Y_hat)
+            Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)
 
         if training:
             self.precision.update(((Y_hat > self.threshold).type_as(Y), Y))

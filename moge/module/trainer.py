@@ -69,7 +69,7 @@ class ModelTrainer(pl.LightningModule):
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
-        avg_loss = torch.cat([x["val_loss"] for x in outputs]).mean().item()
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
 
         logs = self.metrics.compute_metrics(training=False)
         self.metrics.reset_metrics(training=False)
