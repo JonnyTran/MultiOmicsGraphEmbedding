@@ -5,12 +5,15 @@ from .metrics import Metrics
 
 
 class ModelTrainer(pl.LightningModule):
-    def __init__(self, model: torch.nn.Module, gpus=1, data_path=None):
+    def __init__(self, model: torch.nn.Module, gpus=1, data_path=None, metrics=["precision", "recall", "top_k"]):
         super(ModelTrainer, self).__init__()
 
         self._model = model
         self.hparams = self._model.hparams
-        self.metrics = Metrics(loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes)
+        self.training_metrics = Metrics(loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes,
+                                        metrics=metrics, prefix=None)
+        self.validation_metrics = Metrics(loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes,
+                                          metrics=metrics, prefix="val_")
 
         self.n_gpus = gpus
         self.data_path = data_path
@@ -33,19 +36,19 @@ class ModelTrainer(pl.LightningModule):
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
-        self.metrics.update_metrics(Y_hat, y, weights, training=True)
-        logs = self.metrics.compute_metrics(training=True)
+        self.training_metrics.update_metrics(Y_hat, y, weights, training=True)
+        logs = self.training_metrics.compute_metrics(training=True)
         logs = _fix_dp_return_type(logs, device=Y_hat.device)
 
         return {'loss': loss, 'progress_bar': logs, }
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.metrics.compute_metrics(training=True)
+        logs = self.training_metrics.compute_metrics(training=True)
         logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
 
         logs.update({"loss": avg_loss})
-        self.metrics.reset_metrics(training=True)
+        self.training_metrics.reset_metrics(training=True)
 
         return {"log": logs}
 
@@ -65,14 +68,14 @@ class ModelTrainer(pl.LightningModule):
         Y_hat = self._model.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
-        self.metrics.update_metrics(Y_hat, y, weights, training=False)
+        self.validation_metrics.update_metrics(Y_hat, y, weights, training=False)
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
 
-        logs = self.metrics.compute_metrics(training=False)
-        self.metrics.reset_metrics(training=False)
+        logs = self.validation_metrics.compute_metrics(training=False)
+        self.validation_metrics.reset_metrics(training=False)
         logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
         logs.update({"val_loss": avg_loss})
         print_logs(logs)

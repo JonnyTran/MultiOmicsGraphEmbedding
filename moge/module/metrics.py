@@ -8,7 +8,8 @@ from .utils import filter_samples
 
 
 class Metrics():
-    def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None):
+    def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None,
+                 metrics=["precision", "recall", "top_k"], prefix="train"):
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes
@@ -17,14 +18,19 @@ class Metrics():
         if n_classes:
             k_s = [k for k in k_s if k < n_classes]
 
-        self.precision = Precision(average=True, is_multilabel=is_multilabel)
-        self.precision_val = Precision(average=True, is_multilabel=is_multilabel)
-        self.recall = Recall(average=True, is_multilabel=is_multilabel)
-        self.recall_val = Recall(average=True, is_multilabel=is_multilabel)
-        self.top_k_train = TopKMulticlassAccuracy(k_s=k_s)
-        self.top_k_val = TopKMulticlassAccuracy(k_s=k_s)
+        self.prefix = prefix
+        self.metrics = {}
+        for metric in metrics:
+            if "precision" in metric:
+                self.metrics[metric] = Precision(average=True, is_multilabel=is_multilabel)
+            elif "recall" in metric:
+                self.metrics[metric] = Recall(average=True, is_multilabel=is_multilabel)
+            elif "top_k" in metric:
+                self.metrics[metric] = TopKMulticlassAccuracy(k_s=k_s)
+            else:
+                print(f"WARNING: metric {metric} doesn't exist")
 
-    def update_metrics(self, Y_hat: torch.Tensor, Y: torch.Tensor, weights, training: bool):
+    def update_metrics(self, Y_hat: torch.Tensor, Y: torch.Tensor, weights):
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
 
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
@@ -36,37 +42,26 @@ class Metrics():
                 Y = Y.squeeze(1)
             Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)
 
-        if training:
-            self.precision.update(((Y_hat > self.threshold).type_as(Y), Y))
-            self.recall.update(((Y_hat > self.threshold).type_as(Y), Y))
-            self.top_k_train.update((Y_hat, Y))
-        else:
-            self.precision_val.update(((Y_hat > self.threshold).type_as(Y), Y))
-            self.recall_val.update(((Y_hat > self.threshold).type_as(Y), Y))
-            self.top_k_val.update((Y_hat, Y))
+        for metric in self.metrics:
+            if "precision" in metric or "recall" in metric:
+                self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
+            elif metric == "top_k":
+                self.metrics[metric].update((Y_hat, Y))
 
-    def compute_metrics(self, training: bool):
-        if training:
-            logs = {
-                "precision": self.precision.compute(),
-                "recall": self.recall.compute(),
-                **self.top_k_train.compute(training)}
-        else:
-            logs = {
-                "val_precision": self.precision_val.compute(),
-                "val_recall": self.recall_val.compute(),
-                **self.top_k_val.compute(training)}
+    def compute_metrics(self):
+        logs = {}
+        for metric in self.metrics:
+            if metric == "top_k":
+                logs.update(self.metrics[metric].compute(prefix=self.prefix))
+            else:
+                metric_name = metric if self.prefix is None else self.prefix + metric
+                logs[metric_name] = self.metrics[metric].compute()
+
         return logs
 
-    def reset_metrics(self, training: bool):
-        if training:
-            self.precision.reset()
-            self.recall.reset()
-            self.top_k_train.reset()
-        else:
-            self.precision_val.reset()
-            self.recall_val.reset()
-            self.top_k_val.reset()
+    def reset_metrics(self):
+        for metric in self.metrics:
+            self.metrics[metric].reset()
 
 
 class TopKMulticlassAccuracy(Metric):
@@ -99,11 +94,11 @@ class TopKMulticlassAccuracy(Metric):
         self._num_examples += batch_size
 
     @sync_all_reduce("_num_correct", "_num_examples")
-    def compute(self, training=True) -> dict:
+    def compute(self, prefix=None) -> dict:
         if self._num_examples == 0:
             raise NotComputableError("TopKCategoricalAccuracy must have at"
                                      "least one example before it can be computed.")
-        if training:
+        if prefix is None:
             return {f"top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
         else:
-            return {f"val_top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
+            return {f"{prefix}top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}

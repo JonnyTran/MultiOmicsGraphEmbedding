@@ -56,7 +56,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         self.name = dataset.__class__.__name__
 
-
     def process_HANdataset(self, dataset: HANDataset, metapath, node_types):
         data = dataset.data
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
@@ -79,6 +78,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.classes = self.y_dict[self.head_node_type].unique()
         self.n_classes = self.classes.size(0)
 
+        self.data = data
         # # Sort
         # sorter = np.argsort(self.y_index_dict[self.head_node_type].numpy())
         # self.training_idx = sorter[
@@ -149,8 +149,21 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             return self.collate_index_cls
         elif "attr" in collate_fn:
             return self.collate_node_attr_cls
+        elif "HAN" in collate_fn:
+            return self.collate_HAN_node_adj_attr_idx_cls
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
+
+    def collate_HAN_node_adj_attr_idx_cls(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        X = {"adj": self.data["adj"],
+             "x": self.data["x"],
+             "idx": self.y_index_dict[self.head_node_type][iloc]}
+
+        y = self.y_dict[self.head_node_type][iloc]
+        return X, y, None
 
     def collate_node_attr_cls(self, iloc):
         if not isinstance(iloc, torch.Tensor):

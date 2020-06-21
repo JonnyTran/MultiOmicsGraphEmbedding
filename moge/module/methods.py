@@ -1,5 +1,6 @@
 import pytorch_lightning as pl
 import torch
+from cogdl.models.nn.han import HAN
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch_geometric.nn import MetaPath2Vec
@@ -71,9 +72,48 @@ class EmbeddingMethod(pl.LightningModule):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
         logs = {"test_loss": avg_loss,
                 "test_accuracy": self.node_classification(training=False)}
-        print(logs)
         return {"progress_bar": logs,
                 "log": logs}
+
+
+class HAN(HAN, EmbeddingMethod):
+    def __init__(self, num_edge, w_in, w_out, num_class, num_nodes, num_layers):
+        super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
+
+    def forward(self, A, X, target_x):
+        for i in range(self.num_layers):
+            X = self.layers[i](X, A)
+
+        y = self.linear(X[target_x])
+        return y
+
+    def loss(self, y_hat, y):
+        loss = self.cross_entropy_loss(y_hat, y)
+        return loss
+
+    def training_step(self, batch, batch_nb):
+        X, y, weights = batch
+        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+
+        loss = self.loss(y_hat, y)
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_nb):
+        X, y, weights = batch
+        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+
+        loss = self.loss(y_hat, y)
+
+        return {"val_loss": loss}
+
+    def train_dataloader(self):
+        return self.data.train_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.data.val_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+
+    def test_dataloader(self):
+        return self.data.test_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
 
 
 class MetaPath2Vec(MetaPath2Vec, EmbeddingMethod):
