@@ -6,11 +6,16 @@ from sklearn.multiclass import OneVsRestClassifier
 from torch_geometric.nn import MetaPath2Vec
 
 from moge.generator.datasets import HeterogeneousNetworkDataset
+from .metrics import Metrics
 
 
 class EmbeddingMethod(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, metrics=["accuracy"]):
         super(EmbeddingMethod, self).__init__()
+        self.training_metrics = Metrics(loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes,
+                                        metrics=metrics, prefix=None)
+        self.validation_metrics = Metrics(loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes,
+                                          metrics=metrics, prefix="val_")
 
     def node_classification(self, training=True):
         if training:

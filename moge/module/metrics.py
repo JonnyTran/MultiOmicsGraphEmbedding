@@ -1,6 +1,6 @@
 import torch
 from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall
+from ignite.metrics import Precision, Recall, Accuracy
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 
@@ -27,6 +27,8 @@ class Metrics():
                 self.metrics[metric] = Recall(average=True, is_multilabel=is_multilabel)
             elif "top_k" in metric:
                 self.metrics[metric] = TopKMulticlassAccuracy(k_s=k_s)
+            elif "accuracy" in metric:
+                self.metrics[metric] = Accuracy(is_multilabel=is_multilabel)
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
