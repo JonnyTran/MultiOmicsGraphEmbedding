@@ -9,7 +9,7 @@ from .utils import filter_samples
 
 class Metrics():
     def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None,
-                 metrics=["precision", "recall", "top_k"], prefix="train"):
+                 metrics=["precision", "recall", "top_k"], prefix=None):
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes

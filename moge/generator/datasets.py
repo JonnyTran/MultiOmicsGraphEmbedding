@@ -158,7 +158,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        X = {"adj": self.data["adj"],
+        X = {"adj": self.data["adj"][:len(self.metapath)],
              "x": self.data["x"],
              "idx": self.y_index_dict[self.head_node_type][iloc]}
 

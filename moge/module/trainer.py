@@ -20,7 +20,6 @@ class ModelTrainer(pl.LightningModule):
         if self.data_path is not None:
             self.prepare_data()
 
-
     def forward(self, X):
         return self._model.forward(X)
 
@@ -36,19 +35,19 @@ class ModelTrainer(pl.LightningModule):
         Y_hat = self.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
-        self.training_metrics.update_metrics(Y_hat, y, weights, training=True)
-        logs = self.training_metrics.compute_metrics(training=True)
+        self.training_metrics.update_metrics(Y_hat, y, weights)
+        logs = self.training_metrics.compute_metrics()
         logs = _fix_dp_return_type(logs, device=Y_hat.device)
 
         return {'loss': loss, 'progress_bar': logs, }
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.training_metrics.compute_metrics(training=True)
+        logs = self.training_metrics.compute_metrics()
         logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
 
         logs.update({"loss": avg_loss})
-        self.training_metrics.reset_metrics(training=True)
+        self.training_metrics.reset_metrics()
 
         return {"log": logs}
 
@@ -68,14 +67,14 @@ class ModelTrainer(pl.LightningModule):
         Y_hat = self._model.forward(X)
         loss = self._model.loss(Y_hat, y, weights)
 
-        self.validation_metrics.update_metrics(Y_hat, y, weights, training=False)
+        self.validation_metrics.update_metrics(Y_hat, y, weights, )
         return {"val_loss": loss}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
 
-        logs = self.validation_metrics.compute_metrics(training=False)
-        self.validation_metrics.reset_metrics(training=False)
+        logs = self.validation_metrics.compute_metrics()
+        self.validation_metrics.reset_metrics()
         logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
         logs.update({"val_loss": avg_loss})
         print_logs(logs)
