@@ -8,3 +8,8 @@
 /wandb/
 /result/
 /MultiOmicsGraphEmbedding-hparams_opt/
+/Enrichr/
+/graphviz-output/
+/lightning_logs/
+/logs/
+/archive_ipynbs/
