@@ -150,11 +150,11 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         elif "attr" in collate_fn:
             return self.collate_node_attr_cls
         elif "HAN" in collate_fn:
-            return self.collate_HAN_node_adj_attr_idx_cls
+            return self.collate_HAN
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def collate_HAN_node_adj_attr_idx_cls(self, iloc):
+    def collate_HAN(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 

@@ -7,7 +7,7 @@ from torch_geometric.nn import MetaPath2Vec
 
 from moge.generator.datasets import HeterogeneousNetworkDataset
 from .metrics import Metrics
-
+from .trainer import _fix_dp_return_type
 
 class MetricsComparison(pl.LightningModule):
     def __init__(self):
@@ -16,19 +16,20 @@ class MetricsComparison(pl.LightningModule):
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).sum().item()
         logs = self.training_metrics.compute_metrics()
-        logs.update({"loss": avg_loss})
+        logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
 
+        logs.update({"loss": avg_loss})
         self.training_metrics.reset_metrics()
         return {"log": logs}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
         logs = self.validation_metrics.compute_metrics()
-        logs.update({"val_loss": avg_loss})
+        logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
 
+        logs.update({"val_loss": avg_loss})
         self.validation_metrics.reset_metrics()
         return {"progress_bar": logs,
-                "val_loss": avg_loss,
                 "log": logs}
 
     def test_epoch_end(self, outputs):
