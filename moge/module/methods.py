@@ -28,6 +28,7 @@ class MetricsComparison(pl.LightningModule):
 
         self.validation_metrics.reset_metrics()
         return {"progress_bar": logs,
+                "val_loss": avg_loss,
                 "log": logs}
 
     def test_epoch_end(self, outputs):

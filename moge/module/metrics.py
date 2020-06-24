@@ -9,7 +9,7 @@ from .utils import filter_samples
 
 class Metrics():
     def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None,
-                 metrics=["precision", "recall", "top_k"], prefix=None):
+                 metrics=["precision", "recall", "top_k", "accuracy"], prefix=None):
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes
@@ -45,10 +45,12 @@ class Metrics():
             Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)
 
         for metric in self.metrics:
-            if "precision" in metric or "recall" in metric:
+            if "precision" in metric or "recall" in metric or "accuracy" in metric:
                 self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
             elif metric == "top_k":
                 self.metrics[metric].update((Y_hat, Y))
+            else:
+                raise Exception(f"Update {metric} metric unsuccessful.")
 
     def compute_metrics(self):
         logs = {}
