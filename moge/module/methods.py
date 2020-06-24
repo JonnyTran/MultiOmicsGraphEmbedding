@@ -1,6 +1,8 @@
 import pytorch_lightning as pl
 import torch
+from torch.nn import functional as F
 from cogdl.models.nn.han import HAN
+from cogdl.models.nn.gtn import GTN
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch_geometric.nn import MetaPath2Vec
@@ -37,6 +39,94 @@ class MetricsComparison(pl.LightningModule):
         logs = {"test_loss": avg_loss}
         return {"progress_bar": logs,
                 "log": logs}
+
+
+class GTN(GTN, MetricsComparison):
+    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]):
+        num_edge = len(dataset.edge_index_dict)
+        num_layers = len(dataset.edge_index_dict)
+        if dataset.y_dict[dataset.head_node_type].dim() > 1:
+            num_class = dataset.y_dict[dataset.head_node_type].size(1)
+        else:
+            num_class = len(dataset.y_dict[dataset.head_node_type].unique())
+
+        num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
+
+        w_in = dataset.in_features
+        w_out = hparams.embedding_dim
+        num_channels = hparams.num_channels
+
+        self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
+                                        metrics=metrics, prefix=None)
+        self.validation_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
+                                          metrics=metrics, prefix="val_")
+        self.hparams = hparams
+        self.data = dataset
+        self.head_node_type = self.data.head_node_type
+
+        super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
+
+    def forward(self, A, X, x_idx):
+        Ws = []
+        for i in range(self.num_layers):
+            if i == 0:
+                H, W = self.layers[i](A)
+            else:
+                H = self.normalization(H)
+                H, W = self.layers[i](A, H)
+            Ws.append(W)
+        for i in range(self.num_channels):
+            if i == 0:
+                edge_index, edge_weight = H[i][0], H[i][1]
+                X_ = self.gcn(X, edge_index=edge_index.detach(), edge_weight=edge_weight)
+                X_ = F.relu(X_)
+            else:
+                edge_index, edge_weight = H[i][0], H[i][1]
+                X_ = torch.cat((X_, F.relu(self.gcn(X, edge_index=edge_index.detach(), edge_weight=edge_weight))),
+                               dim=1)
+        X_ = self.linear1(X_)
+        X_ = F.relu(X_)
+        # X_ = F.dropout(X_, p=0.5)
+        y = self.linear2(X_[x_idx])
+        return y
+
+    def loss(self, y_hat, y):
+        loss = self.cross_entropy_loss(y_hat, y)
+        return loss
+
+    def training_step(self, batch, batch_nb):
+        X, y, weights = batch
+        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.loss(y_hat, y)
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_nb):
+        X, y, weights = batch
+        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.loss(y_hat, y)
+
+        return {"val_loss": loss}
+
+    def test_step(self, batch, batch_nb):
+        X, y, weights = batch
+        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        loss = self.loss(y_hat, y)
+
+        return {"test_loss": loss}
+
+    def train_dataloader(self):
+        return self.data.train_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.data.val_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+
+    def test_dataloader(self):
+        return self.data.test_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
 class HAN(HAN, MetricsComparison):
@@ -110,7 +200,7 @@ class HAN(HAN, MetricsComparison):
 
 
 class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
-    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset):
+    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=None):
         # Hparams
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size

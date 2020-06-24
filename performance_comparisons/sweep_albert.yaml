@@ -1,0 +1,10 @@
+program: performance_comparisons/test_performance.py
+method: grid
+metric:
+  name: val_accuracy
+  goal: maximize
+parameters:
+  dataset:
+    values: ["ACM", "DBLP", "IMDB", "AMiner", "BlogCatalog"]
+  method:
+    values: ["HAN", "GTN", "MetaPath2Vec"]
