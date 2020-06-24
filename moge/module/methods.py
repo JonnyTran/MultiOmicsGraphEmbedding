@@ -3,6 +3,10 @@ import torch
 from torch.nn import functional as F
 from cogdl.models.nn.han import HAN
 from cogdl.models.nn.gtn import GTN
+from cogdl.models.emb.hin2vec import Hin2vec
+from cogdl.models.emb.gatne import GATNE
+from cogdl.models.emb.pte import PTE
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch_geometric.nn import MetaPath2Vec
@@ -10,6 +14,7 @@ from torch_geometric.nn import MetaPath2Vec
 from moge.generator.datasets import HeterogeneousNetworkDataset
 from .metrics import Metrics
 from .trainer import _fix_dp_return_type
+
 
 class MetricsComparison(pl.LightningModule):
     def __init__(self):

@@ -41,30 +41,30 @@ def train(hparams):
         dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat", node_types=["user", "tag"])
         dataset.name = "BlogCatalog3"
 
-    num_gpus = 1
-    metrics = ["accuracy", "precision", "recall"]
+    NUM_GPUS = 1
+    METRICS = ["accuracy", "precision", "recall"]
 
     if hparams.method == "HAN":
         model_hparams = {
             "embedding_dim": 32,
-            "batch_size": 64 * num_gpus,
+            "batch_size": 64 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "loss_type": "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.001 * num_gpus,
+            "lr": 0.001 * NUM_GPUS,
         }
-        model = HAN(Namespace(**model_hparams), dataset, metrics=metrics)
+        model = HAN(Namespace(**model_hparams), dataset, metrics=METRICS)
     elif hparams.method == "GTN":
         model_hparams = {
             "embedding_dim": 128,
             "num_channels": 1,
-            "batch_size": 128 * num_gpus,
+            "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "loss_type": "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.001 * num_gpus,
+            "lr": 0.001 * NUM_GPUS,
         }
-        model = GTN(Namespace(**model_hparams), dataset, metrics=metrics)
+        model = GTN(Namespace(**model_hparams), dataset, metrics=METRICS)
     elif hparams.method == "MetaPath2Vec":
         model_hparams = {
             "embedding_dim": 128,
@@ -73,24 +73,24 @@ def train(hparams):
             "walks_per_node": 5,
             "num_negative_samples": 5,
             "sparse": True,
-            "batch_size": 512 * num_gpus,
+            "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "n_classes": dataset.n_classes,
-            "lr": 0.01 * num_gpus,
+            "lr": 0.01 * NUM_GPUS,
         }
-        model = MetaPath2Vec(Namespace(**model_hparams), dataset, metrics=metrics)
+        model = MetaPath2Vec(Namespace(**model_hparams), dataset, metrics=METRICS)
 
-    max_epochs = 250
+    MAX_EPOCHS = 250
     wandb_logger = WandbLogger(name=model.__class__.__name__,
                                tags=[dataset.name],
                                project="multiplex-comparison")
     wandb_logger.log_hyperparams(hparams)
 
     trainer = Trainer(
-        gpus=num_gpus,
+        gpus=NUM_GPUS,
         #     distributed_backend='dp',
         #     auto_lr_find=True,
-        max_epochs=max_epochs,
+        max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='loss', patience=2, min_delta=0.0001),
                    EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0001), ],
         logger=wandb_logger,
