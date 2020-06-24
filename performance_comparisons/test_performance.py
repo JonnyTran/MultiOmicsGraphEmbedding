@@ -55,7 +55,7 @@ def train(hparams):
     METRICS = ["accuracy", "precision", "recall"]
 
     if hparams.method == "HAN":
-        USE_AMP = True
+        USE_AMP = False
         model_hparams = {
             "embedding_dim": 128,
             "batch_size": 128 * NUM_GPUS,
