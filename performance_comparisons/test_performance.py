@@ -30,31 +30,43 @@ from pytorch_lightning.loggers import WandbLogger
 
 def train(hparams):
     if hparams.dataset == "ACM":
-        dataset = HeterogeneousNetworkDataset(ACM_HANDataset(), node_types=["P"], metapath=["PAP", "PLP"])
+        dataset = HeterogeneousNetworkDataset(ACM_HANDataset(),
+                                              node_types=["P"], metapath=["PAP", "PLP"],
+                                              train_ratio=hparams.train_ratio)
     elif hparams.dataset == "DBLP":
-        dataset = HeterogeneousNetworkDataset(DBLP_HANDataset(), node_types=["A"], metapath=["APA", "ACA", "ATA"])
+        dataset = HeterogeneousNetworkDataset(DBLP_HANDataset(),
+                                              node_types=["A"], metapath=["APA", "ACA", "ATA"],
+                                              train_ratio=hparams.train_ratio)
     elif hparams.dataset == "IMDB":
-        dataset = HeterogeneousNetworkDataset(IMDB_HANDataset(), node_types=["M"], metapath=["MAM", "MDM", "MYM"])
+        dataset = HeterogeneousNetworkDataset(IMDB_HANDataset(),
+                                              node_types=["M"], metapath=["MAM", "MDM", "MYM"],
+                                              train_ratio=hparams.train_ratio)
     elif hparams.dataset == "AMiner":
-        dataset = HeterogeneousNetworkDataset(AMiner("datasets/aminer"), node_types=None, head_node_type="author")
+        dataset = HeterogeneousNetworkDataset(AMiner("datasets/aminer"),
+                                              node_types=None, head_node_type="author",
+                                              train_ratio=hparams.train_ratio)
     elif hparams.dataset == "BlogCatalog":
-        dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat", node_types=["user", "tag"])
+        dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat",
+                                              node_types=["user", "tag"],
+                                              train_ratio=hparams.train_ratio)
         dataset.name = "BlogCatalog3"
 
     NUM_GPUS = 1
     METRICS = ["accuracy", "precision", "recall"]
 
     if hparams.method == "HAN":
+        USE_AMP = True
         model_hparams = {
-            "embedding_dim": 32,
-            "batch_size": 64 * NUM_GPUS,
+            "embedding_dim": 128,
+            "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "loss_type": "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "lr": 0.001 * NUM_GPUS,
         }
-        model = HAN(Namespace(**model_hparams), dataset, metrics=METRICS)
+        model = HAN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "GTN":
+        USE_AMP = True
         model_hparams = {
             "embedding_dim": 128,
             "num_channels": 1,
@@ -64,8 +76,9 @@ def train(hparams):
             "n_classes": dataset.n_classes,
             "lr": 0.001 * NUM_GPUS,
         }
-        model = GTN(Namespace(**model_hparams), dataset, metrics=METRICS)
+        model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "MetaPath2Vec":
+        USE_AMP = False
         model_hparams = {
             "embedding_dim": 128,
             "walk_length": 50,
@@ -76,9 +89,9 @@ def train(hparams):
             "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "n_classes": dataset.n_classes,
-            "lr": 0.01 * NUM_GPUS,
+            "lr": 0.001 * NUM_GPUS,
         }
-        model = MetaPath2Vec(Namespace(**model_hparams), dataset, metrics=METRICS)
+        model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
 
     MAX_EPOCHS = 250
     wandb_logger = WandbLogger(name=model.__class__.__name__,
@@ -88,7 +101,7 @@ def train(hparams):
 
     trainer = Trainer(
         gpus=NUM_GPUS,
-        #     distributed_backend='dp',
+        distributed_backend='dp' if NUM_GPUS > 1 else None,
         #     auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='loss', patience=2, min_delta=0.0001),
@@ -96,7 +109,8 @@ def train(hparams):
         logger=wandb_logger,
         #     regularizers=regularizers,
         weights_summary='top',
-        amp_level='O1', precision=16
+        use_amp=USE_AMP,
+        amp_level='O1' if USE_AMP else None, precision=16 if USE_AMP else 32
     )
 
     trainer.fit(model)
@@ -107,6 +121,7 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ACM_HANDataset")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
+    parser.add_argument('--train_ratio', type=float, default=0.7)
 
     # add all the available options to the trainer
     parser = pl.Trainer.add_argparse_args(parser)

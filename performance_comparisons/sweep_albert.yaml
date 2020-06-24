@@ -8,3 +8,5 @@ parameters:
     values: ["ACM", "DBLP", "IMDB", "AMiner", "BlogCatalog"]
   method:
     values: ["HAN", "GTN", "MetaPath2Vec"]
+  train_ratio:
+    values: [0.3, 0.5, 0.7, 0.9]

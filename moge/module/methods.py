@@ -60,6 +60,11 @@ class GTN(GTN, MetricsComparison):
         w_in = dataset.in_features
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
+        super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
+        for i, l in enumerate(self.layers):
+            self.layers[i] = self.layers[i].cuda(i % 3 + 1)
+
+        self.gcn = self.gcn.cpu()
 
         self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
                                         metrics=metrics, prefix=None)
@@ -69,7 +74,6 @@ class GTN(GTN, MetricsComparison):
         self.data = dataset
         self.head_node_type = self.data.head_node_type
 
-        super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
 
     def forward(self, A, X, x_idx):
         Ws = []
@@ -149,6 +153,8 @@ class HAN(HAN, MetricsComparison):
         w_out = hparams.embedding_dim
 
         super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
+        for i, l in enumerate(self.layers):
+            self.layers[i] = self.layers[i].cuda(i % 3 + 1)
 
         self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
                                         metrics=metrics, prefix=None)
