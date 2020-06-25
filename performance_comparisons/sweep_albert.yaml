@@ -4,10 +4,8 @@ metric:
   name: val_accuracy
   goal: maximize
 parameters:
-  embedding_dim:
-    values: [64]
   dataset:
-    values: ["ACM", "DBLP", "IMDB", "AMiner", "BlogCatalog"]
+    values: ["ACM", "DBLP", "IMDB", "BlogCatalog"]
   method:
     values: ["HAN", "GTN", "MetaPath2Vec"]
   train_ratio:

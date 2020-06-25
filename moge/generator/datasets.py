@@ -177,8 +177,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                  "x": self.data["x"] if hasattr(self.data, "x") else None,
                  "idx": self.y_index_dict[self.head_node_type][iloc]}
         else:
-            X = {"adj": [(self.edge_index_dict[i], None) for i in self.metapath],
-                 # torch.ones(self.edge_index_dict[i].size(1))
+            X = {"adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapath],
                  "x": None,
                  "idx": self.y_index_dict[self.head_node_type][iloc]}
 
