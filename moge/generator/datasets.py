@@ -32,7 +32,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         # HANDataset Dataset
         elif isinstance(dataset, HANDataset):
-            self.process_HANdataset(dataset, metapath, node_types)
+            self.process_HANdataset(dataset, metapath, node_types, train_ratio)
 
         elif "blogcatalog6k" in dataset:
             data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
@@ -56,7 +56,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         self.name = dataset.__class__.__name__
 
-    def process_HANdataset(self, dataset: HANDataset, metapath, node_types):
+    def process_HANdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
         data = dataset.data
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.node_types = node_types
@@ -78,32 +78,23 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.classes = self.y_dict[self.head_node_type].unique()
         self.n_classes = self.classes.size(0)
 
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
+
         self.data = data
-        # # Sort
-        # sorter = np.argsort(self.y_index_dict[self.head_node_type].numpy())
-        # self.training_idx = sorter[
-        #     np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.training_idx.numpy(), sorter=sorter)]
-        # self.validation_idx = sorter[
-        #     np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.validation_idx.numpy(), sorter=sorter)]
-        # self.testing_idx = sorter[
-        #     np.searchsorted(self.y_index_dict[self.head_node_type].numpy(), self.testing_idx.numpy(), sorter=sorter)]
-        #
-        # self.training_idx = torch.tensor(self.training_idx)
-        # self.validation_idx = torch.tensor(self.validation_idx)
-        # self.testing_idx = torch.tensor(self.testing_idx)
 
     def process_stellargraph(self, dataset: DatasetLoader, metapath, node_types, train_ratio):
         graph = dataset.load()
         self.node_types = graph.node_types if node_types is None else node_types
         self.edge_types = graph.edge_types
         self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
+
         edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
         edge_index_dict = {path: [] for path in metapath}
         for u, v, t in edgelist:
             edge_index_dict[metapath[t]].append([u, v])
         self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
                                 edge_index_dict.items()}
-        self.split_train_val_test(train_ratio)
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def process_inmemorydataset(self, dataset: InMemoryDataset, train_ratio):
         data = dataset[0]
@@ -114,13 +105,14 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.y_index_dict = data.y_index_dict
         # {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
         self.metapath = list(self.edge_index_dict.keys())
-        self.split_train_val_test(train_ratio)
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def split_train_val_test(self, train_ratio):
         perm = torch.randperm(self.y_index_dict[self.head_node_type].size(0))
-        self.training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
-        self.validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
-        self.testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
+        validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        return training_idx, validation_idx, testing_idx
 
     def adj_to_edgeindex(self, adj):
         adj = adj.tocoo(copy=False)

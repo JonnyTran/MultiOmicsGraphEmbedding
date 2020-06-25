@@ -1,14 +1,10 @@
 import pytorch_lightning as pl
 import torch
-from torch.nn import functional as F
-from cogdl.models.nn.han import HAN
 from cogdl.models.nn.gtn import GTN
-from cogdl.models.emb.hin2vec import Hin2vec
-from cogdl.models.emb.gatne import GATNE
-from cogdl.models.emb.pte import PTE
-
+from cogdl.models.nn.han import HAN
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
+from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec
 
 from moge.generator.datasets import HeterogeneousNetworkDataset
@@ -63,8 +59,6 @@ class GTN(GTN, MetricsComparison):
         super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
         for i, l in enumerate(self.layers):
             self.layers[i] = self.layers[i].cuda(i % 3 + 1)
-
-        self.gcn = self.gcn.cpu()
 
         self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
                                         metrics=metrics, prefix=None)
