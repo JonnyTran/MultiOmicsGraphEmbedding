@@ -53,12 +53,17 @@ class GTN(GTN, MetricsComparison):
 
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
-        w_in = dataset.in_features
+        if hasattr(dataset, "x"):
+            w_in = dataset.in_features
+            self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
+        else:
+            w_in = hparams.embedding_dim
+
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
         super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
         for i, l in enumerate(self.layers):
-            self.layers[i] = self.layers[i].cuda(i % 3 + 1)
+            self.layers[i] = self.layers[i].cuda(i % 4)
 
         self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
                                         metrics=metrics, prefix=None)
@@ -68,8 +73,10 @@ class GTN(GTN, MetricsComparison):
         self.data = dataset
         self.head_node_type = self.data.head_node_type
 
-
     def forward(self, A, X, x_idx):
+        if X is None:
+            X = self.embedding.weight[x_idx]
+
         Ws = []
         for i in range(self.num_layers):
             if i == 0:
@@ -143,12 +150,17 @@ class HAN(HAN, MetricsComparison):
 
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
-        w_in = dataset.in_features
+        if hasattr(dataset, "x"):
+            w_in = dataset.in_features
+            self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
+        else:
+            w_in = hparams.embedding_dim
+
         w_out = hparams.embedding_dim
 
         super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
         for i, l in enumerate(self.layers):
-            self.layers[i] = self.layers[i].cuda(i % 3 + 1)
+            self.layers[i] = self.layers[i].cuda(i % 4)
 
         self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
                                         metrics=metrics, prefix=None)
@@ -159,6 +171,9 @@ class HAN(HAN, MetricsComparison):
         self.head_node_type = self.data.head_node_type
 
     def forward(self, A, X, x_idx):
+        if X is None:
+            X = self.embedding.weight[x_idx]
+
         for i in range(self.num_layers):
             X = self.layers[i](X, A)
 
@@ -271,8 +286,8 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
     def node_classification(self, training=True):
         if training:
             z = self.forward(self.head_node_type,
-                             batch=self.data.y_index_dict[self.head_node_type][self.data.training_idx])
-            y = self.data.y_dict[self.head_node_type][self.data.training_idx]
+                             batch=self.data.y_index_dict[self.head_node_type][self.data.training_node])
+            y = self.data.y_dict[self.head_node_type][self.data.training_node]
 
             perm = torch.randperm(z.size(0))
             train_perm = perm[:int(z.size(0) * self.data.train_ratio)]
@@ -290,12 +305,12 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
                                  y[test_perm].detach().cpu().numpy())
         else:
             z_train = self.forward(self.head_node_type,
-                                   batch=self.data.y_index_dict[self.head_node_type][self.data.training_idx])
-            y_train = self.data.y_dict[self.head_node_type][self.data.training_idx]
+                                   batch=self.data.y_index_dict[self.head_node_type][self.data.training_node])
+            y_train = self.data.y_dict[self.head_node_type][self.data.training_node]
 
             z_val = self.forward(self.head_node_type,
-                                 batch=self.data.y_index_dict[self.head_node_type][self.data.validation_idx])
-            y_val = self.data.y_dict[self.head_node_type][self.data.validation_idx]
+                                 batch=self.data.y_index_dict[self.head_node_type][self.data.validation_node])
+            y_val = self.data.y_dict[self.head_node_type][self.data.validation_node]
 
             if y_train.dim() > 1 and y_train.size(1) > 1:
                 clf = OneVsRestClassifier(LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150))
