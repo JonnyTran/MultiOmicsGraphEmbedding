@@ -35,22 +35,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             self.process_HANdataset(dataset, metapath, node_types, train_ratio)
 
         elif "blogcatalog6k" in dataset:
-            data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
-            self.y_index_dict = {"user": torch.arange(data["friendship"].shape[0]),
-                                 "tag": torch.arange(data["tagnetwork"].shape[0])}
-            self.node_types = ["user", "tag"]
-            self.head_node_type = "user"
-            self.y_dict = {self.head_node_type: torch.tensor(data["usercategory"].toarray().astype(int))}
-
-            self.metapath = [("user", "usertag", "tag"),
-                             ("tag", "tagnetwork", "tag"),
-                             ("user", "friendship", "user"), ]
-            self.edge_index_dict = {
-                ("user", "friendship", "user"): self.adj_to_edgeindex(data["friendship"]),
-                ("user", "usertag", "tag"): self.adj_to_edgeindex(data["usertag"]),
-                ("tag", "tagnetwork", "tag"): self.adj_to_edgeindex(data["tagnetwork"])}
-
-            self.split_train_val_test(train_ratio)
+            self.process_BlogCatalog6k(dataset, train_ratio)
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
@@ -58,6 +43,22 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             self.classes = self.y_dict[self.head_node_type].unique()
             self.n_classes = self.classes.size(0)
         self.name = dataset.__class__.__name__
+
+    def process_BlogCatalog6k(self, dataset, train_ratio):
+        data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
+        self.y_index_dict = {"user": torch.arange(data["friendship"].shape[0]),
+                             "tag": torch.arange(data["tagnetwork"].shape[0])}
+        self.node_types = ["user", "tag"]
+        self.head_node_type = "user"
+        self.y_dict = {self.head_node_type: torch.tensor(data["usercategory"].toarray().astype(int))}
+        self.metapath = [("user", "usertag", "tag"),
+                         ("tag", "tagnetwork", "tag"),
+                         ("user", "friendship", "user"), ]
+        self.edge_index_dict = {
+            ("user", "friendship", "user"): self.adj_to_edgeindex(data["friendship"]),
+            ("user", "usertag", "tag"): self.adj_to_edgeindex(data["usertag"]),
+            ("tag", "tagnetwork", "tag"): self.adj_to_edgeindex(data["tagnetwork"])}
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def process_HANdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
         data = dataset.data
@@ -157,9 +158,14 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        X = {"adj": self.data["adj"][:len(self.metapath)],
-             "x": self.data["x"] if hasattr(self.data, "x") else None,
-             "idx": self.y_index_dict[self.head_node_type][iloc]}
+        if isinstance(self.dataset, HANDataset):
+            X = {"adj": self.data["adj"][:len(self.metapath)],
+                 "x": self.data["x"] if hasattr(self.data, "x") else None,
+                 "idx": self.y_index_dict[self.head_node_type][iloc]}
+        else:
+            X = {"adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapath],
+                 "x": None,
+                 "idx": self.y_index_dict[self.head_node_type][iloc]}
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None

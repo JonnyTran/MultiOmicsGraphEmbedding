@@ -55,7 +55,6 @@ class GTN(GTN, MetricsComparison):
 
         if hasattr(dataset, "x"):
             w_in = dataset.in_features
-            self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
         else:
             w_in = hparams.embedding_dim
 
@@ -64,6 +63,8 @@ class GTN(GTN, MetricsComparison):
         super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
         for i, l in enumerate(self.layers):
             self.layers[i] = self.layers[i].cuda(i % 4)
+
+        self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
         self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
                                         metrics=metrics, prefix=None)
@@ -152,15 +153,15 @@ class HAN(HAN, MetricsComparison):
 
         if hasattr(dataset, "x"):
             w_in = dataset.in_features
-            self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
         else:
             w_in = hparams.embedding_dim
 
         w_out = hparams.embedding_dim
 
         super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
-        for i, l in enumerate(self.layers):
-            self.layers[i] = self.layers[i].cuda(i % 4)
+        # for i, l in enumerate(self.layers):
+        #     self.layers[i] = self.layers[i].cuda(i % 4)
+        self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
         self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
                                         metrics=metrics, prefix=None)
