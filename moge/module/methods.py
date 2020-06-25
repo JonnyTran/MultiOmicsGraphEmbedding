@@ -48,8 +48,17 @@ class GTN(GTN, MetricsComparison):
         num_layers = len(dataset.edge_index_dict)
         if dataset.y_dict[dataset.head_node_type].dim() > 1:
             num_class = dataset.y_dict[dataset.head_node_type].size(1)
+            self.multilabel = True
         else:
             num_class = len(dataset.y_dict[dataset.head_node_type].unique())
+            self.multilabel = False
+
+        if self.multilabel:
+            self.loss_type = "BCE"
+            self.criterion = torch.nn.BCELoss()
+        else:
+            self.loss_type = "SOFTMAX"
+            self.criterion = self.cross_entropy_loss
 
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
@@ -66,10 +75,8 @@ class GTN(GTN, MetricsComparison):
 
         self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
-        self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
-                                        metrics=metrics, prefix=None)
-        self.validation_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
-                                          metrics=metrics, prefix="val_")
+        self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class, metrics=metrics, prefix=None)
+        self.validation_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class, metrics=metrics, prefix="val_")
         self.hparams = hparams
         self.data = dataset
         self.head_node_type = self.data.head_node_type
@@ -102,7 +109,7 @@ class GTN(GTN, MetricsComparison):
         return y
 
     def loss(self, y_hat, y):
-        loss = self.cross_entropy_loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
         return loss
 
     def training_step(self, batch, batch_nb):
@@ -146,8 +153,17 @@ class HAN(HAN, MetricsComparison):
         num_layers = len(dataset.edge_index_dict)
         if dataset.y_dict[dataset.head_node_type].dim() > 1:
             num_class = dataset.y_dict[dataset.head_node_type].size(1)
+            self.multilabel = True
         else:
             num_class = len(dataset.y_dict[dataset.head_node_type].unique())
+            self.multilabel = False
+
+        if self.multilabel:
+            self.loss_type = "BCE"
+            self.criterion = torch.nn.BCELoss()
+        else:
+            self.loss_type = "SOFTMAX"
+            self.criterion = self.cross_entropy_loss
 
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
@@ -163,10 +179,10 @@ class HAN(HAN, MetricsComparison):
         #     self.layers[i] = self.layers[i].cuda(i % 4)
         self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
-        self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
-                                        metrics=metrics, prefix=None)
-        self.validation_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class,
-                                          metrics=metrics, prefix="val_")
+        self.training_metrics = Metrics(loss_type=self.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
+                                        multilabel=self.multilabel)
+        self.validation_metrics = Metrics(loss_type=self.loss_type, n_classes=num_class, metrics=metrics, prefix="val_",
+                                          multilabel=self.multilabel)
         self.hparams = hparams
         self.data = dataset
         self.head_node_type = self.data.head_node_type
@@ -182,7 +198,7 @@ class HAN(HAN, MetricsComparison):
         return y
 
     def loss(self, y_hat, y):
-        loss = self.cross_entropy_loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
         return loss
 
     def training_step(self, batch, batch_nb):

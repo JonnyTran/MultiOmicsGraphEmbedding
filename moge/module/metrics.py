@@ -8,12 +8,12 @@ from .utils import filter_samples
 
 
 class Metrics():
-    def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None,
+    def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None, multilabel=None,
                  metrics=["precision", "recall", "top_k", "accuracy"], prefix=None):
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes
-        is_multilabel = False if "SOFTMAX" in loss_type else True
+        is_multilabel = False if "SOFTMAX" in loss_type or multilabel is not None else multilabel
 
         if n_classes:
             k_s = [k for k in k_s if k < n_classes]
