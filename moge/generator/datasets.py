@@ -125,7 +125,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.y_index_dict = data.y_index_dict
         # {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
         self.metapath = list(self.edge_index_dict.keys())
-        self.training_node, self.validation_node, self.testing_node = self.split_train_val_test(train_ratio)
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def split_train_val_test(self, train_ratio, sample_indices=None):
         perm = torch.randperm(self.y_index_dict[self.head_node_type].size(0))

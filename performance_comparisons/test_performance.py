@@ -21,6 +21,10 @@ from pytorch_lightning.loggers import WandbLogger
 
 
 def train(hparams):
+    EMBEDDING_DIM = 128
+    NUM_GPUS = 1
+    METRICS = ["accuracy", "precision", "recall"]
+
     if hparams.dataset == "ACM":
         dataset = HeterogeneousNetworkDataset(ACM_HANDataset(),
                                               node_types=["P"], metapath=["PAP", "PLP"],
@@ -41,15 +45,13 @@ def train(hparams):
         dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat",
                                               node_types=["user", "tag"],
                                               train_ratio=hparams.train_ratio)
+        EMBEDDING_DIM = 32
         dataset.name = "BlogCatalog3"
-
-    NUM_GPUS = 1
-    METRICS = ["accuracy", "precision", "recall"]
 
     if hparams.method == "HAN":
         USE_AMP = False
         model_hparams = {
-            "embedding_dim": 64,
+            "embedding_dim": EMBEDDING_DIM,
             "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
@@ -60,7 +62,7 @@ def train(hparams):
     elif hparams.method == "GTN":
         USE_AMP = True
         model_hparams = {
-            "embedding_dim": 64,
+            "embedding_dim": EMBEDDING_DIM,
             "num_channels": 1,
             "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
@@ -72,7 +74,7 @@ def train(hparams):
     elif hparams.method == "MetaPath2Vec":
         USE_AMP = False
         model_hparams = {
-            "embedding_dim": 64,
+            "embedding_dim": EMBEDDING_DIM,
             "walk_length": 50,
             "context_size": 7,
             "walks_per_node": 5,
@@ -96,13 +98,14 @@ def train(hparams):
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         #     auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        callbacks=[EarlyStopping(monitor='loss', patience=2, min_delta=0.0001),
-                   EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0001), ],
+        callbacks=[EarlyStopping(monitor='loss', patience=1, min_delta=0.0001),
+                   EarlyStopping(monitor='val_loss', patience=2, min_delta=0.0001), ],
         logger=wandb_logger,
         #     regularizers=regularizers,
         weights_summary='top',
         use_amp=USE_AMP,
-        amp_level='O1' if USE_AMP else None, precision=16 if USE_AMP else 32
+        amp_level='O1' if USE_AMP else None,
+        precision=16 if USE_AMP else 32
     )
 
     trainer.fit(model)
