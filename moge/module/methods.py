@@ -76,7 +76,7 @@ class GTN(GTN, MetricsComparison):
 
     def forward(self, A, X, x_idx):
         if X is None:
-            X = self.embedding.weight[x_idx]
+            X = self.embedding.weight
 
         Ws = []
         for i in range(self.num_layers):
@@ -173,7 +173,7 @@ class HAN(HAN, MetricsComparison):
 
     def forward(self, A, X, x_idx):
         if X is None:
-            X = self.embedding.weight[x_idx]
+            X = self.embedding.weight
 
         for i in range(self.num_layers):
             X = self.layers[i](X, A)

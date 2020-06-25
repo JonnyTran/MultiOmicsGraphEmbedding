@@ -43,7 +43,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             self.classes = self.y_dict[self.head_node_type].unique()
             self.n_classes = self.classes.size(0)
 
-        assert hasattr(self, "num_node_dict")
+        assert hasattr(self, "num_nodes_dict")
         assert hasattr(self, "head_node_type")
         assert hasattr(self, "y_index_dict")
         assert hasattr(self, "y_dict")
@@ -172,6 +172,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                  "idx": self.y_index_dict[self.head_node_type][iloc]}
         else:
             X = {"adj": [(self.edge_index_dict[i], None) for i in self.metapath],
+                 # torch.ones(self.edge_index_dict[i].size(1))
                  "x": None,
                  "idx": self.y_index_dict[self.head_node_type][iloc]}
 
