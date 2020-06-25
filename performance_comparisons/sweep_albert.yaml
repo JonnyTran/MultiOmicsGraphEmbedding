@@ -4,6 +4,8 @@ metric:
   name: val_accuracy
   goal: maximize
 parameters:
+  embedding_dim:
+    values: [64]
   dataset:
     values: ["ACM", "DBLP", "IMDB", "AMiner", "BlogCatalog"]
   method:

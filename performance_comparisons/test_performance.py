@@ -1,9 +1,6 @@
 import logging
-import pickle
-import random
 import sys
 from argparse import ArgumentParser, Namespace
-import wandb
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -12,17 +9,12 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 import pytorch_lightning as pl
 from pytorch_lightning.trainer import Trainer
-import torch
-from torch_geometric.datasets import PPI, CoraFull, AMiner
+from torch_geometric.datasets import AMiner
 
-from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
-from cogdl.datasets.matlab_matrix import BlogcatalogDataset
 
-from moge.module.multiplex import MultiplexEmbedder, HeterogeneousMultiplexEmbedder
-from moge.module.trainer import ModelTrainer
 from moge.module.methods import MetaPath2Vec, HAN, GTN
 from moge.generator.datasets import HeterogeneousNetworkDataset
 from pytorch_lightning.loggers import WandbLogger
@@ -57,10 +49,10 @@ def train(hparams):
     if hparams.method == "HAN":
         USE_AMP = False
         model_hparams = {
-            "embedding_dim": 128,
+            "embedding_dim": 64,
             "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
-            "loss_type": "SOFTMAX_CROSS_ENTROPY",
+            "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "lr": 0.001 * NUM_GPUS,
         }
@@ -68,11 +60,11 @@ def train(hparams):
     elif hparams.method == "GTN":
         USE_AMP = True
         model_hparams = {
-            "embedding_dim": 128,
+            "embedding_dim": 64,
             "num_channels": 1,
             "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
-            "loss_type": "SOFTMAX_CROSS_ENTROPY",
+            "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "lr": 0.001 * NUM_GPUS,
         }
@@ -80,7 +72,7 @@ def train(hparams):
     elif hparams.method == "MetaPath2Vec":
         USE_AMP = False
         model_hparams = {
-            "embedding_dim": 128,
+            "embedding_dim": 64,
             "walk_length": 50,
             "context_size": 7,
             "walks_per_node": 5,
@@ -119,6 +111,8 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
+    parser.add_argument('--embedding_dim', type=int, default=64)
+
     parser.add_argument('--dataset', type=str, default="ACM_HANDataset")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
     parser.add_argument('--train_ratio', type=float, default=0.7)

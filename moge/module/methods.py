@@ -46,20 +46,8 @@ class GTN(GTN, MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
-        if dataset.y_dict[dataset.head_node_type].dim() > 1:
-            num_class = dataset.y_dict[dataset.head_node_type].size(1)
-            self.multilabel = True
-        else:
-            num_class = len(dataset.y_dict[dataset.head_node_type].unique())
-            self.multilabel = False
-
-        if self.multilabel:
-            self.loss_type = "BCE"
-            self.criterion = torch.nn.BCELoss()
-        else:
-            self.loss_type = "SOFTMAX"
-            self.criterion = self.cross_entropy_loss
-
+        num_class = dataset.n_classes
+        self.multilabel = dataset.multilabel
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
         if hasattr(dataset, "x"):
@@ -70,13 +58,14 @@ class GTN(GTN, MetricsComparison):
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
         super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
-        # for i, l in enumerate(self.layers):
-        #     self.layers[i] = self.layers[i].cuda(i % 4)
+        for i, l in enumerate(self.layers):
+            self.layers[i] = self.layers[i].cuda(i % 4)
+        self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim).cpu()
 
-        self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
-
-        self.training_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class, metrics=metrics, prefix=None)
-        self.validation_metrics = Metrics(loss_type="SOFTMAX", n_classes=num_class, metrics=metrics, prefix="val_")
+        self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
+                                        multilabel=dataset.multilabel)
+        self.validation_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics,
+                                          prefix="val_", multilabel=dataset.multilabel)
         self.hparams = hparams
         self.data = dataset
         self.head_node_type = self.data.head_node_type
@@ -109,7 +98,11 @@ class GTN(GTN, MetricsComparison):
         return y
 
     def loss(self, y_hat, y):
-        loss = self.criterion(y_hat, y)
+        if not self.multilabel:
+            loss = self.cross_entropy_loss(y_hat, y)
+        else:
+            loss = F.binary_cross_entropy_with_logits(y_hat, y.type_as(y_hat))
+
         return loss
 
     def training_step(self, batch, batch_nb):
@@ -151,20 +144,8 @@ class HAN(HAN, MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
-        if dataset.y_dict[dataset.head_node_type].dim() > 1:
-            num_class = dataset.y_dict[dataset.head_node_type].size(1)
-            self.multilabel = True
-        else:
-            num_class = len(dataset.y_dict[dataset.head_node_type].unique())
-            self.multilabel = False
-
-        if self.multilabel:
-            self.loss_type = "BCE"
-            self.criterion = torch.nn.BCELoss()
-        else:
-            self.loss_type = "SOFTMAX"
-            self.criterion = self.cross_entropy_loss
-
+        num_class = dataset.n_classes
+        self.multilabel = dataset.multilabel
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
         if hasattr(dataset, "x"):
@@ -175,14 +156,16 @@ class HAN(HAN, MetricsComparison):
         w_out = hparams.embedding_dim
 
         super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
-        # for i, l in enumerate(self.layers):
-        #     self.layers[i] = self.layers[i].cuda(i % 4)
-        self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
+        for i, l in enumerate(self.layers):
+            self.layers[i] = self.layers[i].cuda(i % 4)
 
-        self.training_metrics = Metrics(loss_type=self.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
-                                        multilabel=self.multilabel)
-        self.validation_metrics = Metrics(loss_type=self.loss_type, n_classes=num_class, metrics=metrics, prefix="val_",
-                                          multilabel=self.multilabel)
+        self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim).cpu()
+
+        self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
+                                        multilabel=dataset.multilabel)
+        self.validation_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics,
+                                          prefix="val_",
+                                          multilabel=dataset.multilabel)
         self.hparams = hparams
         self.data = dataset
         self.head_node_type = self.data.head_node_type
@@ -198,7 +181,10 @@ class HAN(HAN, MetricsComparison):
         return y
 
     def loss(self, y_hat, y):
-        loss = self.criterion(y_hat, y)
+        if not self.multilabel:
+            loss = self.cross_entropy_loss(y_hat, y)
+        else:
+            loss = F.binary_cross_entropy_with_logits(y_hat, y.type_as(y_hat))
         return loss
 
     def training_step(self, batch, batch_nb):

@@ -40,8 +40,14 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             raise Exception(f"Unsupported dataset {dataset}")
 
         if hasattr(self, "y_dict"):
-            self.classes = self.y_dict[self.head_node_type].unique()
-            self.n_classes = self.classes.size(0)
+            if self.y_dict[self.head_node_type].dim() > 1:
+                self.classes = self.y_dict[self.head_node_type].unique()
+                self.n_classes = self.y_dict[self.head_node_type].size(1)
+                self.multilabel = True
+            else:
+                self.classes = self.y_dict[self.head_node_type].unique()
+                self.n_classes = self.classes.size(0)
+                self.multilabel = False
 
         assert hasattr(self, "num_nodes_dict")
         assert hasattr(self, "head_node_type")
