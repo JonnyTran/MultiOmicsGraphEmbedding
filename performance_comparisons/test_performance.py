@@ -39,11 +39,13 @@ def train(hparams):
         dataset = HeterogeneousNetworkDataset(IMDB_HANDataset(),
                                               node_types=["M"], metapath=["MAM", "MDM", "MYM"],
                                               train_ratio=hparams.train_ratio)
+        EMBEDDING_DIM = 64
     elif hparams.dataset == "AMiner":
         dataset = HeterogeneousNetworkDataset(AMiner("datasets/aminer"), node_types=None, head_node_type="author",
                                               metapath=[('paper', 'written by', 'author'),
                                                         ('venue', 'published', 'paper')],
                                               train_ratio=hparams.train_ratio)
+        EMBEDDING_DIM = 32
     elif hparams.dataset == "BlogCatalog":
         dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat",
                                               node_types=["user", "tag"],
@@ -71,7 +73,7 @@ def train(hparams):
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.001 * NUM_GPUS,
+            "lr": 0.0005 * NUM_GPUS,
         }
         model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "MetaPath2Vec":
@@ -101,7 +103,7 @@ def train(hparams):
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2, min_delta=0.01),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01),
         # callbacks=[EarlyStopping(monitor='loss', patience=1, min_delta=0.0001),
         #            EarlyStopping(monitor='val_loss', patience=2, min_delta=0.0001), ],
         logger=wandb_logger,

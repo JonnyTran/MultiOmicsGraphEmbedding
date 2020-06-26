@@ -293,8 +293,8 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
     def node_classification(self, training=True):
         if training:
             z = self.forward(self.head_node_type,
-                             batch=self.data.y_index_dict[self.head_node_type][self.data.training_node])
-            y = self.data.y_dict[self.head_node_type][self.data.training_node]
+                             batch=self.data.y_index_dict[self.head_node_type][self.data.training_idx])
+            y = self.data.y_dict[self.head_node_type][self.data.training_idx]
 
             perm = torch.randperm(z.size(0))
             train_perm = perm[:int(z.size(0) * self.data.train_ratio)]
@@ -312,12 +312,12 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
                                  y[test_perm].detach().cpu().numpy())
         else:
             z_train = self.forward(self.head_node_type,
-                                   batch=self.data.y_index_dict[self.head_node_type][self.data.training_node])
-            y_train = self.data.y_dict[self.head_node_type][self.data.training_node]
+                                   batch=self.data.y_index_dict[self.head_node_type][self.data.training_idx])
+            y_train = self.data.y_dict[self.head_node_type][self.data.training_idx]
 
             z_val = self.forward(self.head_node_type,
-                                 batch=self.data.y_index_dict[self.head_node_type][self.data.validation_node])
-            y_val = self.data.y_dict[self.head_node_type][self.data.validation_node]
+                                 batch=self.data.y_index_dict[self.head_node_type][self.data.validation_idx])
+            y_val = self.data.y_dict[self.head_node_type][self.data.validation_idx]
 
             if y_train.dim() > 1 and y_train.size(1) > 1:
                 clf = OneVsRestClassifier(LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150))
