@@ -61,7 +61,9 @@ class GTN(GTN, MetricsComparison):
         for i, l in enumerate(self.layers):
             self.layers[i] = self.layers[i].cuda(i % 3 + 1)
 
-        self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
+        if not hasattr(dataset, "x"):
+            self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
+                                                sparse=True).cpu()
 
         self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
                                         multilabel=dataset.multilabel)
@@ -160,7 +162,8 @@ class HAN(HAN, MetricsComparison):
         # for i, l in enumerate(self.layers):
         #     self.layers[i] = self.layers[i].cuda(i % 4)
 
-        self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
+        if not hasattr(dataset, "x"):
+            self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
         self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
                                         multilabel=dataset.multilabel)

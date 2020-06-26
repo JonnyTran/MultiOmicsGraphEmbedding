@@ -29,11 +29,12 @@ def train(hparams):
         dataset = HeterogeneousNetworkDataset(ACM_HANDataset(),
                                               node_types=["P"], metapath=["PAP", "PLP"],
                                               train_ratio=hparams.train_ratio)
+        EMBEDDING_DIM = 128
     elif hparams.dataset == "DBLP":
         dataset = HeterogeneousNetworkDataset(DBLP_HANDataset(),
                                               node_types=["A"], metapath=["APA", "ACA", "ATA"],
                                               train_ratio=hparams.train_ratio)
-        EMBEDDING_DIM = 64
+        EMBEDDING_DIM = 8
     elif hparams.dataset == "IMDB":
         dataset = HeterogeneousNetworkDataset(IMDB_HANDataset(),
                                               node_types=["M"], metapath=["MAM", "MDM", "MYM"],
@@ -46,7 +47,7 @@ def train(hparams):
         dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat",
                                               node_types=["user", "tag"],
                                               train_ratio=hparams.train_ratio)
-        EMBEDDING_DIM = 32
+        EMBEDDING_DIM = 64
         dataset.name = "BlogCatalog3"
 
     if hparams.method == "HAN":

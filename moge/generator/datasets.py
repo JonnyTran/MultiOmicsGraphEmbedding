@@ -82,21 +82,29 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.x = {self.head_node_type: data["x"]}
         self.in_features = data["x"].size(1)
 
-        self.training_node, self.training_target = data["train_node"], data["train_target"]
-        self.validation_node, self.validation_target = data["valid_node"], data["valid_target"]
-        self.testing_node, self.testing_target = data["test_node"], data["test_target"]
+        self.training_idx, self.training_target = data["train_node"], data["train_target"]
+        self.validation_idx, self.validation_target = data["valid_node"], data["valid_target"]
+        self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
 
-        node_indices = torch.cat([self.training_node, self.validation_node, self.testing_node])
-        self.y_index_dict = {self.head_node_type: node_indices}
-        self.num_nodes_dict = {self.head_node_type: node_indices.size(0)}
-        # _, indices = torch.sort(sample_indices)
+        node_indices = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
+        # self.y_index_dict = {self.head_node_type: node_indices}
+        # self.num_nodes_dict = {self.head_node_type: node_indices.size(0)}
+        # # _, indices = torch.sort(sample_indices)
+        # self.y_dict = {
+        #     self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
+
+        self.y_index_dict = {self.head_node_type: torch.arange(self.x[self.head_node_type].size(0))}
+        self.num_nodes_dict = {self.head_node_type: self.x[self.head_node_type].size(0)}
+
+        _, indices = torch.sort(node_indices)
         self.y_dict = {
-            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
+            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])[
+                indices]}
 
-        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio=train_ratio)
-        assert self.y_index_dict[self.head_node_type].size(0) == self.y_dict[self.head_node_type].size(0)
-        assert (self.y_dict[self.head_node_type][:self.training_node.size(0)] == self.training_target).all()
-        assert (self.y_index_dict[self.head_node_type][:self.training_node.size(0)] == self.training_node).all()
+        # self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio=train_ratio)
+        # assert self.y_index_dict[self.head_node_type].size(0) == self.y_dict[self.head_node_type].size(0)
+        # assert (self.y_dict[self.head_node_type][:self.training_node.size(0)] == self.training_target).all()
+        # assert (self.y_index_dict[self.head_node_type][:self.training_node.size(0)] == self.training_node).all()
         self.data = data
 
     def process_stellargraph(self, dataset: DatasetLoader, metapath, node_types, train_ratio):
