@@ -1,3 +1,4 @@
+import networkx as nx
 import numpy as np
 import tensorflow as tf
 import torch
@@ -48,6 +49,12 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                 self.classes = self.y_dict[self.head_node_type].unique()
                 self.n_classes = self.classes.size(0)
                 self.multilabel = False
+        else:
+            print("WARNING: Dataset doesn't have node label (y_dict attribute).")
+
+        self.graphs = {}
+        for metapath in self.metapath:
+            self.graphs[metapath] = nx.from_edgelist(self.edge_index_dict[metapath].t().numpy(), create_using=nx.Graph)
 
         assert hasattr(self, "num_nodes_dict")
         assert hasattr(self, "head_node_type")
@@ -87,21 +94,21 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
 
         node_indices = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-        # self.y_index_dict = {self.head_node_type: node_indices}
-        # self.num_nodes_dict = {self.head_node_type: node_indices.size(0)}
-        # # _, indices = torch.sort(sample_indices)
-        # self.y_dict = {
-        #     self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
-
-        self.y_index_dict = {self.head_node_type: torch.arange(self.x[self.head_node_type].size(0))}
-        self.num_nodes_dict = {self.head_node_type: self.x[self.head_node_type].size(0)}
-
-        _, indices = torch.sort(node_indices)
+        self.y_index_dict = {self.head_node_type: node_indices}
+        self.num_nodes_dict = {self.head_node_type: node_indices.size(0)}
+        # _, indices = torch.sort(sample_indices)
         self.y_dict = {
-            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])[
-                indices]}
+            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
 
-        # self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio=train_ratio)
+        # self.y_index_dict = {self.head_node_type: torch.arange(self.x[self.head_node_type].size(0))}
+        # self.num_nodes_dict = {self.head_node_type: self.x[self.head_node_type].size(0)}
+        #
+        # _, indices = torch.sort(node_indices)
+        # self.y_dict = {
+        #     self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])[
+        #         indices]}
+
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio=train_ratio)
         # assert self.y_index_dict[self.head_node_type].size(0) == self.y_dict[self.head_node_type].size(0)
         # assert (self.y_dict[self.head_node_type][:self.training_node.size(0)] == self.training_target).all()
         # assert (self.y_index_dict[self.head_node_type][:self.training_node.size(0)] == self.training_node).all()
@@ -168,6 +175,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             return self.collate_index_cls
         elif "attr" in collate_fn:
             return self.collate_node_attr_cls
+        elif "HAN_batch" in collate_fn:
+            return self.collate_HAN_batch
         elif "HAN" in collate_fn:
             return self.collate_HAN
         else:
@@ -188,6 +197,25 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
+
+    def collate_HAN_batch(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        node_index = self.y_index_dict[self.head_node_type][iloc]
+
+        X = {"adj": [(self.get_adj_edgelist(self.graphs[i], node_index),
+                      torch.ones(self.get_adj_edgelist(self.graphs[i], node_index).size(1))) for i in self.metapath],
+             "x": self.data["x"][node_index] if isinstance(self.dataset, HANDataset) else None,
+             "idx": node_index}
+
+        y = self.y_dict[self.head_node_type][iloc]
+        return X, y, None
+
+    def get_adj_edgelist(self, graph, nodes):
+        adj = nx.adj_matrix(graph, nodelist=nodes.numpy() if isinstance(nodes, torch.Tensor) else nodes).tocoo()
+        edge_index = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long)
+        return edge_index
 
     def collate_node_attr_cls(self, iloc):
         if not isinstance(iloc, torch.Tensor):

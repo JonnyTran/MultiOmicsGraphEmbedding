@@ -2,6 +2,8 @@ import pytorch_lightning as pl
 import torch
 from cogdl.models.nn.gtn import GTN
 from cogdl.models.nn.han import HAN
+from cogdl.models.emb.hin2vec import Hin2vec
+from cogdl.models.emb.pte import PTE
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
@@ -48,6 +50,7 @@ class GTN(GTN, MetricsComparison):
         num_layers = len(dataset.edge_index_dict)
         num_class = dataset.n_classes
         self.multilabel = dataset.multilabel
+        self.collate_fn = hparams.collate_fn
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
         if hasattr(dataset, "x"):
@@ -58,8 +61,8 @@ class GTN(GTN, MetricsComparison):
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
         super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
-        for i, l in enumerate(self.layers):
-            self.layers[i] = self.layers[i].cuda(i % 3 + 1)
+        # for i, l in enumerate(self.layers):
+        #     self.layers[i] = self.layers[i].cuda(i % 3 + 1)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
@@ -74,7 +77,9 @@ class GTN(GTN, MetricsComparison):
         self.head_node_type = self.data.head_node_type
 
     def forward(self, A, X, x_idx):
-        if X is None:
+        if X is None and "batch" in self.collate_fn:
+            X = self.embedding.weight[x_idx]
+        elif X is None:
             X = self.embedding.weight
 
         Ws = []
@@ -131,13 +136,13 @@ class GTN(GTN, MetricsComparison):
         return {"test_loss": loss}
 
     def train_dataloader(self):
-        return self.data.train_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+        return self.data.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+        return self.data.val_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.data.test_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+        return self.data.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -148,6 +153,7 @@ class HAN(HAN, MetricsComparison):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
         num_class = dataset.n_classes
+        self.collate_fn = hparams.collate_fn
         self.multilabel = dataset.multilabel
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
@@ -159,8 +165,6 @@ class HAN(HAN, MetricsComparison):
         w_out = hparams.embedding_dim
 
         super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
-        # for i, l in enumerate(self.layers):
-        #     self.layers[i] = self.layers[i].cuda(i % 4)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
@@ -175,7 +179,9 @@ class HAN(HAN, MetricsComparison):
         self.head_node_type = self.data.head_node_type
 
     def forward(self, A, X, x_idx):
-        if X is None:
+        if X is None and "batch" in self.collate_fn:
+            X = self.embedding.weight[x_idx]
+        elif X is None:
             X = self.embedding.weight
 
         for i in range(self.num_layers):
@@ -214,13 +220,13 @@ class HAN(HAN, MetricsComparison):
         return {"test_loss": loss}
 
     def train_dataloader(self):
-        return self.data.train_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+        return self.data.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+        return self.data.val_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.data.test_dataloader(collate_fn="HAN", batch_size=self.hparams.batch_size)
+        return self.data.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)

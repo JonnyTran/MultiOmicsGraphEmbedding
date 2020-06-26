@@ -13,7 +13,10 @@ class Metrics():
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes
-        is_multilabel = False if "SOFTMAX" in loss_type or multilabel is not None else multilabel
+        is_multilabel = False if "SOFTMAX" in loss_type else True
+        if multilabel is not None:
+            is_multilabel = multilabel
+        self.is_multilabel = is_multilabel
 
         if n_classes:
             k_s = [k for k in k_s if k < n_classes]
@@ -38,8 +41,7 @@ class Metrics():
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
             Y_hat = torch.softmax(Y_hat, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(Y_hat)
 
-        if self.loss_type in ["SOFTMAX_CROSS_ENTROPY",
-                              "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
+        if not self.is_multilabel:
             if Y.dim() >= 2:
                 Y = Y.squeeze(1)
             Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)

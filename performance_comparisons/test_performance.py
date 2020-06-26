@@ -29,35 +29,30 @@ def train(hparams):
         dataset = HeterogeneousNetworkDataset(ACM_HANDataset(),
                                               node_types=["P"], metapath=["PAP", "PLP"],
                                               train_ratio=hparams.train_ratio)
-        EMBEDDING_DIM = 128
     elif hparams.dataset == "DBLP":
         dataset = HeterogeneousNetworkDataset(DBLP_HANDataset(),
                                               node_types=["A"], metapath=["APA", "ACA", "ATA"],
                                               train_ratio=hparams.train_ratio)
-        EMBEDDING_DIM = 16
     elif hparams.dataset == "IMDB":
         dataset = HeterogeneousNetworkDataset(IMDB_HANDataset(),
                                               node_types=["M"], metapath=["MAM", "MDM", "MYM"],
                                               train_ratio=hparams.train_ratio)
-        EMBEDDING_DIM = 64
     elif hparams.dataset == "AMiner":
         dataset = HeterogeneousNetworkDataset(AMiner("datasets/aminer"), node_types=None, head_node_type="author",
                                               metapath=[('paper', 'written by', 'author'),
                                                         ('venue', 'published', 'paper')],
                                               train_ratio=hparams.train_ratio)
-        EMBEDDING_DIM = 32
     elif hparams.dataset == "BlogCatalog":
         dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat",
                                               node_types=["user", "tag"],
                                               train_ratio=hparams.train_ratio)
-        EMBEDDING_DIM = 64
         dataset.name = "BlogCatalog3"
 
     if hparams.method == "HAN":
         USE_AMP = False
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "batch_size": 128 * NUM_GPUS,
+            "batch_size": 512 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
@@ -67,9 +62,9 @@ def train(hparams):
     elif hparams.method == "GTN":
         USE_AMP = True
         model_hparams = {
-            "embedding_dim": int(EMBEDDING_DIM / 2),
+            "embedding_dim": EMBEDDING_DIM,
             "num_channels": 1,
-            "batch_size": 128 * NUM_GPUS,
+            "batch_size": 512 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
