@@ -86,20 +86,17 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.validation_node, self.validation_target = data["valid_node"], data["valid_target"]
         self.testing_node, self.testing_target = data["test_node"], data["test_target"]
 
-        self.y_index_dict = {self.head_node_type: torch.arange(self.x[self.head_node_type].size(0))}
-        self.num_nodes_dict = {self.head_node_type: self.x[self.head_node_type].size(0)}
-
-        sample_indices = torch.cat([self.training_node, self.validation_node, self.testing_node])
-        _, indices = torch.sort(sample_indices)
+        node_indices = torch.cat([self.training_node, self.validation_node, self.testing_node])
+        self.y_index_dict = {self.head_node_type: node_indices}
+        self.num_nodes_dict = {self.head_node_type: node_indices.size(0)}
+        # _, indices = torch.sort(sample_indices)
         self.y_dict = {
-            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])[
-                indices]}
+            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
 
-        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio=train_ratio,
-                                                                                             sample_indices=sample_indices)
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio=train_ratio)
         assert self.y_index_dict[self.head_node_type].size(0) == self.y_dict[self.head_node_type].size(0)
-        assert (self.y_dict[self.head_node_type][self.training_node] == self.training_target).all()
-        assert (self.y_index_dict[self.head_node_type][self.training_node] == self.training_node).all()
+        assert (self.y_dict[self.head_node_type][:self.training_node.size(0)] == self.training_target).all()
+        assert (self.y_index_dict[self.head_node_type][:self.training_node.size(0)] == self.training_node).all()
         self.data = data
 
     def process_stellargraph(self, dataset: DatasetLoader, metapath, node_types, train_ratio):
@@ -128,7 +125,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def split_train_val_test(self, train_ratio, sample_indices=None):
-        perm = torch.randperm(self.y_index_dict[self.head_node_type].size(0))
+        perm = torch.randperm(self.num_nodes_dict[self.head_node_type])
         if sample_indices is not None:
             perm = sample_indices[perm]
         training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]

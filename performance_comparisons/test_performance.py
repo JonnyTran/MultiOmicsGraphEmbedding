@@ -33,6 +33,7 @@ def train(hparams):
         dataset = HeterogeneousNetworkDataset(DBLP_HANDataset(),
                                               node_types=["A"], metapath=["APA", "ACA", "ATA"],
                                               train_ratio=hparams.train_ratio)
+        EMBEDDING_DIM = 64
     elif hparams.dataset == "IMDB":
         dataset = HeterogeneousNetworkDataset(IMDB_HANDataset(),
                                               node_types=["M"], metapath=["MAM", "MDM", "MYM"],
