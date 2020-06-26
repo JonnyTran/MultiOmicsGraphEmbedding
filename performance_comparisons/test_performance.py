@@ -53,6 +53,7 @@ def train(hparams):
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
             "batch_size": 512 * NUM_GPUS,
+            "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
@@ -65,6 +66,7 @@ def train(hparams):
             "embedding_dim": EMBEDDING_DIM,
             "num_channels": 1,
             "batch_size": 512 * NUM_GPUS,
+            "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,

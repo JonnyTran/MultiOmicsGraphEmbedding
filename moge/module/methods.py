@@ -102,7 +102,10 @@ class GTN(GTN, MetricsComparison):
         X_ = self.linear1(X_)
         X_ = F.relu(X_)
         # X_ = F.dropout(X_, p=0.5)
-        y = self.linear2(X_[x_idx])
+        if "batch" in self.collate_fn:
+            y = self.linear2(X_)
+        else:
+            y = self.linear2(X_[x_idx])
         return y
 
     def loss(self, y_hat, y):
@@ -187,7 +190,10 @@ class HAN(HAN, MetricsComparison):
         for i in range(self.num_layers):
             X = self.layers[i](X, A)
 
-        y = self.linear(X[x_idx])
+        if "batch" in self.collate_fn:
+            y = self.linear(X)
+        else:
+            y = self.linear(X[x_idx])
         return y
 
     def loss(self, y_hat, y):

@@ -44,7 +44,7 @@ class Metrics():
         if not self.is_multilabel:
             if Y.dim() >= 2:
                 Y = Y.squeeze(1)
-            Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)
+            Y = torch.eye(self.n_classes, dtype=Y_hat.dtype)[Y.type(torch.long)]
 
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric or "accuracy" in metric:
