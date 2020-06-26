@@ -103,7 +103,7 @@ def train(hparams):
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001),
         # callbacks=[EarlyStopping(monitor='loss', patience=1, min_delta=0.0001),
         #            EarlyStopping(monitor='val_loss', patience=2, min_delta=0.0001), ],
         logger=wandb_logger,
