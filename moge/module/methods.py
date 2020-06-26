@@ -63,7 +63,7 @@ class GTN(GTN, MetricsComparison):
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
-                                                sparse=True).cpu()
+                                                sparse=True)
 
         self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
                                         multilabel=dataset.multilabel)
