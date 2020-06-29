@@ -51,6 +51,7 @@ class GTN(GTN, MetricsComparison):
         num_class = dataset.n_classes
         self.multilabel = dataset.multilabel
         self.collate_fn = hparams.collate_fn
+        self.val_collate_fn = hparams.val_collate_fn
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
         if hasattr(dataset, "x"):
@@ -142,10 +143,10 @@ class GTN(GTN, MetricsComparison):
         return self.data.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.data.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.data.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.data.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -157,6 +158,7 @@ class HAN(HAN, MetricsComparison):
         num_layers = len(dataset.edge_index_dict)
         num_class = dataset.n_classes
         self.collate_fn = hparams.collate_fn
+        self.val_collate_fn = hparams.val_collate_fn
         self.multilabel = dataset.multilabel
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
@@ -229,10 +231,10 @@ class HAN(HAN, MetricsComparison):
         return self.data.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.data.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.data.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.data.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -253,10 +255,7 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
 
         # Dataset
         self.data = dataset
-        if hasattr(dataset, "num_nodes_dict"):
-            num_nodes_dict = dataset.num_nodes_dict
-        else:
-            num_nodes_dict = None
+        num_nodes_dict = None
         metapath = self.data.metapath
         self.head_node_type = self.data.head_node_type
         edge_index_dict = dataset.edge_index_dict

@@ -12,7 +12,7 @@ from .sampled_generator import SampledDataGenerator
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapath=None, head_node_type=None, train_ratio=0.7):
+    def __init__(self, dataset, node_types, metapath=None, head_node_type=None, directed=False, train_ratio=0.7):
         self.dataset = dataset
         self.metapath = metapath
         self.train_ratio = train_ratio
@@ -54,7 +54,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         self.graphs = {}
         for metapath in self.metapath:
-            self.graphs[metapath] = nx.from_edgelist(self.edge_index_dict[metapath].t().numpy(), create_using=nx.Graph)
+            self.graphs[metapath] = nx.from_edgelist(self.edge_index_dict[metapath].t().numpy(),
+                                                     create_using=nx.Graph if not directed else nx.DiGraph)
 
         assert hasattr(self, "num_nodes_dict")
         assert hasattr(self, "head_node_type")
