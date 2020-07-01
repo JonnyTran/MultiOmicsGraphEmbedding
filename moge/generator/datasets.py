@@ -2,6 +2,7 @@ import networkx as nx
 import numpy as np
 import tensorflow as tf
 import torch
+from cogdl.datasets.gtn_data import GTNDataset
 from cogdl.datasets.han_data import HANDataset
 from scipy.io import loadmat
 from stellargraph.datasets import DatasetLoader
@@ -32,7 +33,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             self.process_stellargraph(dataset, metapath, node_types, train_ratio)
 
         # HANDataset Dataset
-        elif isinstance(dataset, HANDataset):
+        elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             self.process_HANdataset(dataset, metapath, node_types, train_ratio)
 
         elif "blogcatalog6k" in dataset:
