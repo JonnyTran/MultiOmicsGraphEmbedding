@@ -23,7 +23,7 @@ class MetricsComparison(pl.LightningModule):
 
         logs.update({"loss": avg_loss})
         self.training_metrics.reset_metrics()
-        return {"progress_bar": logs, "log": logs}
+        return {"log": logs}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
@@ -124,6 +124,7 @@ class GTN(GTN, MetricsComparison):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
+
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)

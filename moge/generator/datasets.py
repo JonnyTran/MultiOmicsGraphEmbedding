@@ -98,7 +98,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         node_indices = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
         self.y_index_dict = {self.head_node_type: node_indices}
         self.num_nodes_dict = {self.head_node_type: node_indices.size(0)}
-        # _, indices = torch.sort(sample_indices)
         self.y_dict = {
             self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
 
@@ -111,9 +110,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         #         indices]}
 
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio=train_ratio)
-        # assert self.y_index_dict[self.head_node_type].size(0) == self.y_dict[self.head_node_type].size(0)
-        # assert (self.y_dict[self.head_node_type][:self.training_node.size(0)] == self.training_target).all()
-        # assert (self.y_index_dict[self.head_node_type][:self.training_node.size(0)] == self.training_node).all()
+        assert self.y_index_dict[self.head_node_type].size(0) == self.y_dict[self.head_node_type].size(0)
+        assert torch.max(self.training_idx) < node_indices.shape[0]
         self.data = data
 
     def process_stellargraph(self, dataset: DatasetLoader, metapath, node_types, train_ratio):
@@ -137,7 +135,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.node_types = list(data.y_index_dict.keys())
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
-        # {k: v.unsqueeze(1) for k, v in data.y_index_dict.items()}
         self.metapath = list(self.edge_index_dict.keys())
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
@@ -208,7 +205,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         X = {"adj": [(self.get_adj_edgelist(self.graphs[i], node_index),
                       torch.ones(self.get_adj_edgelist(self.graphs[i], node_index).size(1))) for i in self.metapath],
-             "x": self.data["x"][node_index] if isinstance(self.dataset, HANDataset) else None,
+             "x": self.data["x"][node_index] if hasattr(self.data, "x") else None,
              "idx": node_index}
 
         y = self.y_dict[self.head_node_type][iloc]
