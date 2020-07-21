@@ -211,6 +211,7 @@ class HAN(HAN, MetricsComparison):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
+
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
