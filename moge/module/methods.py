@@ -60,8 +60,6 @@ class GTN(GTN, MetricsComparison):
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
         super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
-        # for i, l in enumerate(self.layers):
-        #     self.layers[i] = self.layers[i].cuda(i % 3 + 1)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
