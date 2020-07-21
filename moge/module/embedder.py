@@ -13,11 +13,17 @@ from torch_geometric.nn import MetaPath2Vec
 
 
 class NUGAT(nn.Module):
-    def __init__(self, node_types, metapaths) -> None:
+    def __init__(self, embedding_dim, node_types, edge_types) -> None:
         super(NUGAT, self).__init__()
 
-        self.attns = torch.nn.ModuleDict()
-        self.weights = torch.nn.ModuleDict()
+        self.attns = torch.nn.ModuleDict(
+            {node_type: torch.nn.Linear(attr_dim, embedding_dim) \
+             for node_type, attr_dim in node_types.items()}
+        )
+        self.weights = torch.nn.ModuleDict(
+            {edge_type: torch.nn.Linear(1, 2 * embedding_dim) \
+             for edge_type in edge_types.items()}
+        )
 
 
 class GAT(nn.Module):
