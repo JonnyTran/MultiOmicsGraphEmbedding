@@ -23,12 +23,10 @@ class LATTE(MessagePassing):
              for node_type, in_channels in attr_node_types.items()}
         )
         self.attn_l = torch.nn.ModuleDict(
-            {edge_type: Parameter(torch.Tensor(1, 2 * embedding_dim)) \
-             for edge_type in edge_types.items()}
+            {edge_type: torch.nn.Linear(1, 2 * embedding_dim) for edge_type in edge_types}
         )
         self.attn_r = torch.nn.ModuleDict(
-            {edge_type: Parameter(torch.Tensor(1, 2 * embedding_dim)) \
-             for edge_type in edge_types.items()}
+            {edge_type: torch.nn.Linear(1, 2 * embedding_dim) for edge_type in edge_types}
         )
 
         if attr_node_types < num_nodes_dict:  # If some node type are not attributed
@@ -40,9 +38,9 @@ class LATTE(MessagePassing):
 
     def reset_parameters(self):
         for node_type in self.attn_l:
-            glorot(self.attn_l[node_type])
+            glorot(self.attn_l[node_type].weight)
         for node_type in self.attn_r:
-            glorot(self.attn_r[node_type])
+            glorot(self.attn_r[node_type].weight)
         for edge_type in self.linear:
             glorot(self.linear[node_type].weight)
         for node_type in self.embeddings:
