@@ -117,7 +117,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
     def process_stellargraph(self, dataset: DatasetLoader, metapath, node_types, train_ratio):
         graph = dataset.load()
         self.node_types = graph.node_types if node_types is None else node_types
-        self.edge_types = graph.edge_types
+        self.edge_types = graph.metapaths
         self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
 
         edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
