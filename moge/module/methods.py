@@ -45,11 +45,17 @@ class MetricsComparison(pl.LightningModule):
 
 class LATTE(LATTELayer, MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]) -> None:
-        super().__init__(t_order=1,
-                         embedding_dim=hparams.embedding_dim,
-                         num_nodes_dict=dataset.num_nodes_dict,
-                         node_attr_shape=dataset.node_attr_shape,
-                         metapaths=dataset.metapaths)
+        super(LATTE, self).__init__(t_order=1,
+                                    embedding_dim=hparams.embedding_dim,
+                                    num_nodes_dict=dataset.num_nodes_dict,
+                                    node_attr_shape=dataset.node_attr_shape,
+                                    metapaths=dataset.metapaths)
+
+    def forward(self, x_dict, x_index_dict, edge_index_dict):
+        pass
+
+    def loss(self, y_hat, y):
+        pass
 
 
 class GTN(GTN, MetricsComparison):

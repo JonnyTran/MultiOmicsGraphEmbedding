@@ -20,9 +20,10 @@ from torch_geometric.data import InMemoryDataset
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
+    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=False, train_ratio=0.7,
                  add_reverse_metapaths=True):
         self.dataset = dataset
+        self.directed = directed
         self.train_ratio = train_ratio
         self.add_reverse_metapaths = add_reverse_metapaths
 
@@ -74,29 +75,24 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             cpus = 2  # arbitrary default
 
         self.graphs = {}
-
-        def create_graphs(metapath):
-            edgelist = self.edge_index_dict[metapath].t().numpy()
-            edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist.astype(str))
-            graph = nx.from_edgelist(edgelist, create_using=nx.Graph if not directed else nx.DiGraph)
-            return (metapath, graph)
-
-        # for metapaths in self.metapath:
-        #     edgelist = self.edge_index_dict[metapaths].t().numpy()
-        #     edgelist = np.core.defchararray.add([metapaths[0][0], metapaths[-1][0]], edgelist.astype(str))
-        #     self.graphs[metapaths] = nx.from_edgelist(edgelist,
-        #                                               create_using=nx.Graph if not directed else nx.DiGraph)
-
         pool = multiprocessing.Pool(processes=cpus)
-        output = pool.map(create_graphs, self.metapaths.keys())
+        output = pool.map(self.create_graph, self.metapaths)
         for (metapath, graph) in output:
             self.graphs[metapath] = graph
+        pool.close()
 
         assert hasattr(self, "num_nodes_dict")
         assert hasattr(self, "head_node_type")
         assert hasattr(self, "y_index_dict")
         assert hasattr(self, "y_dict")
         self.name = dataset.__class__.__name__
+
+    def create_graph(self, metapath):
+        edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
+        edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
+        graph = nx.from_edgelist(edgelist,
+                                 create_using=nx.DiGraph if not self.add_reverse_metapaths and self.directed else nx.Graph)
+        return (metapath, graph)
 
     @staticmethod
     def add_reverse_edge_index(edge_index_dict) -> None:
@@ -105,6 +101,14 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
             reverse_edge_index_dict[reverse_metapath] = edge_index_dict[metapath][[1, 0], :]
         edge_index_dict.update(reverse_edge_index_dict)
+
+    @staticmethod
+    def get_reverse_metapath(metapaths) -> None:
+        reverse_metapaths = []
+        for metapath in metapaths:
+            reverse = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
+            reverse_metapaths.append(reverse)
+        return reverse_metapaths
 
     def process_BlogCatalog6k(self, dataset, train_ratio):
         data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
@@ -184,8 +188,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
     def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
         data = dataset[0]
-        if self.add_reverse_metapaths:
-            self.add_reverse_edge_index(data.edge_index_dict)
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.node_types = list(data.num_nodes_dict.keys())
@@ -195,6 +197,10 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
                              data.y_dict.keys()}
         self.metapaths = list(self.edge_index_dict.keys())
+
+        if self.add_reverse_metapaths:
+            self.original_metapaths = list(self.edge_index_dict.keys())
+            self.metapaths = self.metapaths + self.get_reverse_metapath(self.metapaths)
 
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
@@ -266,7 +272,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
              "x_dict": self.x_dict[self.head_node_type][node_index] if hasattr(self, "x_dict") else None,
              "x_index_dict": {self.head_node_type: node_index}}
 
-        for metapath in self.metapaths:
+        for metapath in (self.original_metapaths if self.add_reverse_metapaths else self.metapaths):
             if len(sampled_nodes[metapath[0]]) == 0 or sampled_nodes[metapath[-1]] == 0:
                 continue
             try:
@@ -275,6 +281,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                                                                        nodes_B=sampled_nodes[metapath[-1]])
             except:
                 X["edge_index_dict"][metapath] = None
+        self.add_reverse_edge_index(X["edge_index_dict"])
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
