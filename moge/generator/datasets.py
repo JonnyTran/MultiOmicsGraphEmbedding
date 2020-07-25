@@ -17,10 +17,11 @@ from torch_geometric.data import InMemoryDataset
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7):
+    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=False, train_ratio=0.7,
+                 add_reverse_metapaths=True):
         self.dataset = dataset
-        self.metapath = metapaths
         self.train_ratio = train_ratio
+        self.add_reverse_metapaths = add_reverse_metapaths
 
         if head_node_type is None:
             self.head_node_type = node_types[0]
@@ -29,12 +30,12 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             self.head_node_type = head_node_type
 
         # PyTorchGeometric Dataset
-        if isinstance(dataset, InMemoryDataset):
-            print("InMemoryDataset")
-            self.process_inmemorydataset(dataset, train_ratio)
-
-        elif isinstance(dataset, PygNodePropPredDataset):
+        if isinstance(dataset, PygNodePropPredDataset):
             print("PygNodePropPredDataset")
+            self.process_PygNodeDataset(dataset, train_ratio)
+
+        elif isinstance(dataset, InMemoryDataset):
+            print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio)
 
         # StellarGraph Dataset
@@ -76,6 +77,14 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         assert hasattr(self, "y_index_dict")
         assert hasattr(self, "y_dict")
         self.name = dataset.__class__.__name__
+
+    @staticmethod
+    def add_reverse_edge_index(edge_index_dict) -> None:
+        reverse_edge_index_dict = {}
+        for metapath in edge_index_dict:
+            reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
+            reverse_edge_index_dict[reverse_metapath] = edge_index_dict[metapath][[1, 0], :]
+        edge_index_dict.update(reverse_edge_index_dict)
 
     def process_BlogCatalog6k(self, dataset, train_ratio):
         data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
@@ -143,6 +152,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
     def process_inmemorydataset(self, dataset: InMemoryDataset, train_ratio):
         data = dataset[0]
+        if self.add_reverse_metapaths:
+            self.add_reverse_edge_index(data.edge_index_dict)
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.node_types = list(data.y_index_dict.keys())
@@ -153,9 +164,11 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
     def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
         data = dataset[0]
+        if self.add_reverse_metapaths:
+            self.add_reverse_edge_index(data.edge_index_dict)
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
-        self.node_types = list(data.y_index_dict.keys())
+        self.node_types = list(data.num_nodes_dict.keys())
         self.x_dict = data.x_dict
         self.y_dict = data.y_dict
         self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
@@ -167,7 +180,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                                                                    split_idx["valid"][self.head_node_type], \
                                                                    split_idx["test"][self.head_node_type]
         self.train_ratio = self.training_idx.numel() / \
-                           (self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel())
+                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
 
     def split_train_val_test(self, train_ratio, sample_indices=None):
         perm = torch.randperm(self.num_nodes_dict[self.head_node_type])
@@ -197,10 +210,12 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn))
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        batch_size))
         return loader
 
-    def get_collate_fn(self, collate_fn: str):
+    def get_collate_fn(self, collate_fn: str, batch_size=None):
+        self.batch_size = batch_size
         if "index" in collate_fn:
             return self.collate_index_cls
         elif "attr" in collate_fn:
@@ -221,16 +236,18 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         seed_head_nodes = {self.head_node_type:
                                np.core.defchararray.add(self.head_node_type[0], iloc.numpy().astype(str))}
 
-        sampled_nodes = self.bfs_traversal(batch_size=0, seed_nodes=seed_head_nodes)
+        sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_head_nodes)
         print("sampled_nodes", sampled_nodes)
         node_index = self.y_index_dict[self.head_node_type][iloc]
 
-        X = {"edge_index": {},
+        X = {"edge_index_dict": {},
              "x_dict": self.x_dict[self.head_node_type][node_index] if hasattr(self, "x_dict") else None,
              "x_index_dict": {self.head_node_type: node_index}}
 
         for metapath in self.metapath:
-            pass
+            X["edge_index_dict"][metapath] = self.get_adj_edgelist(self.graphs[metapath],
+                                                                   nodes_A=sampled_nodes[metapath[0]],
+                                                                   nodes_B=sampled_nodes[metapath[-1]])
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
@@ -301,7 +318,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         return sampled_nodes_dict
 
     def get_adj_edgelist(self, graph, nodes_A, nodes_B=None):
-        if nodes_B is None:
+        if nodes_B == None:
             adj = nx.adj_matrix(graph, nodelist=nodes_A.numpy() if isinstance(nodes_A, torch.Tensor) else nodes_A)
         else:
             adj = nx.algorithms.bipartite.biadjacency_matrix(graph, row_order=nodes_A, column_order=nodes_B)

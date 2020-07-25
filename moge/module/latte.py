@@ -32,14 +32,6 @@ class LATTE(nn.Module):
                     metapaths.append(new_relation)
         return metapaths
 
-    @staticmethod
-    def add_reverse_relations(edge_index_dict) -> None:
-        reverse_edge_index_dict = {}
-        for metapath in edge_index_dict:
-            reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
-            reverse_edge_index_dict[reverse_metapath] = edge_index_dict[metapath][[1, 0], :]
-        edge_index_dict.update(reverse_edge_index_dict)
-
     def forward(self, x_dict, x_index_dict, edge_index_dict):
         pass
 
