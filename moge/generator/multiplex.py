@@ -93,7 +93,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                                           self.traversal_depth) for node in successors]
 
                 if len(layer_neighbors) > batch_size / len(self.network.networks):
-                    layer_neighbors = layer_neighbors[:int(batch_size // len(self.network.networks))]
+                    layer_neighbors = layer_neighbors[:int(batch_size / len(self.network.networks))]
                 successor_nodes.extend(layer_neighbors)
 
             sampled_nodes.extend([start_node] + successor_nodes)

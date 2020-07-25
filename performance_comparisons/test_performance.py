@@ -27,20 +27,20 @@ def train(hparams):
 
     if hparams.dataset == "ACM":
         dataset = HeterogeneousNetworkDataset(ACM_HANDataset(),
-                                              node_types=["P"], metapath=["PAP", "PLP"],
+                                              node_types=["P"], metapaths=["PAP", "PLP"],
                                               train_ratio=hparams.train_ratio)
     elif hparams.dataset == "DBLP":
         dataset = HeterogeneousNetworkDataset(DBLP_HANDataset(),
-                                              node_types=["A"], metapath=["APA", "ACA", "ATA"],
+                                              node_types=["A"], metapaths=["APA", "ACA", "ATA"],
                                               train_ratio=hparams.train_ratio)
     elif hparams.dataset == "IMDB":
         dataset = HeterogeneousNetworkDataset(IMDB_HANDataset(),
-                                              node_types=["M"], metapath=["MAM", "MDM", "MYM"],
+                                              node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
                                               train_ratio=hparams.train_ratio)
     elif hparams.dataset == "AMiner":
         dataset = HeterogeneousNetworkDataset(AMiner("datasets/aminer"), node_types=None, head_node_type="author",
-                                              metapath=[('paper', 'written by', 'author'),
-                                                        ('venue', 'published', 'paper')],
+                                              metapaths=[('paper', 'written by', 'author'),
+                                                         ('venue', 'published', 'paper')],
                                               train_ratio=hparams.train_ratio)
     elif hparams.dataset == "BlogCatalog":
         dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat",

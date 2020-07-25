@@ -1,21 +1,25 @@
+from collections import OrderedDict
+from itertools import islice
 import networkx as nx
 import numpy as np
+from scipy.io import loadmat
 import tensorflow as tf
 import torch
 from cogdl.datasets.gtn_data import GTNDataset
 from cogdl.datasets.han_data import HANDataset
-from scipy.io import loadmat
+
+from ogb.linkproppred import PygLinkPropPredDataset
+from ogb.nodeproppred import PygNodePropPredDataset
+
 from stellargraph.datasets import DatasetLoader
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
 
-from .sampled_generator import SampledDataGenerator
-
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapath=None, head_node_type=None, directed=False, train_ratio=0.7):
+    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7):
         self.dataset = dataset
-        self.metapath = metapath
+        self.metapath = metapaths
         self.train_ratio = train_ratio
 
         if head_node_type is None:
@@ -26,15 +30,22 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         # PyTorchGeometric Dataset
         if isinstance(dataset, InMemoryDataset):
+            print("InMemoryDataset")
+            self.process_inmemorydataset(dataset, train_ratio)
+
+        elif isinstance(dataset, PygNodePropPredDataset):
+            print("PygNodePropPredDataset")
             self.process_inmemorydataset(dataset, train_ratio)
 
         # StellarGraph Dataset
         elif isinstance(dataset, DatasetLoader):
-            self.process_stellargraph(dataset, metapath, node_types, train_ratio)
+            print("InMemoryDataset")
+            self.process_stellargraph(dataset, metapaths, node_types, train_ratio)
 
         # HANDataset Dataset
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
-            self.process_HANdataset(dataset, metapath, node_types, train_ratio)
+            print("InMemoryDataset")
+            self.process_HANdataset(dataset, metapaths, node_types, train_ratio)
 
         elif "blogcatalog6k" in dataset:
             self.process_BlogCatalog6k(dataset, train_ratio)
@@ -54,9 +65,11 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
         self.graphs = {}
-        for metapath in self.metapath:
-            self.graphs[metapath] = nx.from_edgelist(self.edge_index_dict[metapath].t().numpy(),
-                                                     create_using=nx.Graph if not directed else nx.DiGraph)
+        for metapaths in self.metapath:
+            edgelist = self.edge_index_dict[metapaths].t().numpy()
+            edgelist = np.core.defchararray.add([metapaths[0][0], metapaths[-1][0]], edgelist.astype(str))
+            self.graphs[metapaths] = nx.from_edgelist(edgelist,
+                                                      create_using=nx.Graph if not directed else nx.DiGraph)
 
         assert hasattr(self, "num_nodes_dict")
         assert hasattr(self, "head_node_type")
@@ -88,7 +101,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.node_types = node_types
         self.edge_types = list(range(dataset.num_edge))
-        self.x = {self.head_node_type: data["x"]}
+        self.x_dict = {self.head_node_type: data["x"]}
         self.in_features = data["x"].size(1)
 
         self.training_idx, self.training_target = data["train_node"], data["train_target"]
@@ -138,6 +151,24 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.metapath = list(self.edge_index_dict.keys())
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
+    def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
+        data = dataset[0]
+        self.edge_index_dict = data.edge_index_dict
+        self.num_nodes_dict = data.num_nodes_dict
+        self.node_types = list(data.y_index_dict.keys())
+        self.x_dict = data.x_dict
+        self.y_dict = data.y_dict
+        self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
+                             data.y_dict.keys()}
+        self.metapath = list(self.edge_index_dict.keys())
+
+        split_idx = dataset.get_idx_split()
+        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
+                                                                   split_idx["valid"][self.head_node_type], \
+                                                                   split_idx["test"][self.head_node_type]
+        self.train_ratio = self.training_idx.numel() / \
+                           (self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel())
+
     def split_train_val_test(self, train_ratio, sample_indices=None):
         perm = torch.randperm(self.num_nodes_dict[self.head_node_type])
         if sample_indices is not None:
@@ -178,8 +209,31 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             return self.collate_HAN_batch
         elif "HAN" in collate_fn:
             return self.collate_HAN
+        elif "PyGNodeDataset_batch" in collate_fn:
+            return self.collate_PyGNodeDataset_batch
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
+
+    def collate_PyGNodeDataset_batch(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        seed_head_nodes = {self.head_node_type:
+                               np.core.defchararray.add(self.head_node_type[0], iloc.numpy().astype(str))}
+
+        sampled_nodes = self.bfs_traversal(batch_size=0, seed_nodes=seed_head_nodes)
+        print("sampled_nodes", sampled_nodes)
+        node_index = self.y_index_dict[self.head_node_type][iloc]
+
+        X = {"edge_index": {},
+             "x_dict": self.x_dict[self.head_node_type][node_index] if hasattr(self, "x_dict") else None,
+             "x_index_dict": {self.head_node_type: node_index}}
+
+        for metapath in self.metapath:
+            pass
+
+        y = self.y_dict[self.head_node_type][iloc]
+        return X, y, None
 
     def collate_HAN(self, iloc):
         if not isinstance(iloc, torch.Tensor):
@@ -211,8 +265,48 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
 
-    def get_adj_edgelist(self, graph, nodes):
-        adj = nx.adj_matrix(graph, nodelist=nodes.numpy() if isinstance(nodes, torch.Tensor) else nodes).tocoo()
+    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}):
+        sampled_nodes_dict = {node_type: [] for node_type in self.node_types}
+        for node_type in seed_nodes:
+            sampled_nodes_dict[node_type] = seed_nodes[node_type]
+
+        while sum([len(sampled_nodes_dict[node_type]) for node_type in self.node_types]) < batch_size:
+            new_nodes_dict = {node_type: [] for node_type in self.node_types}
+            for metapath, subnetwork in self.graphs.items():
+                head_type, tail_type = metapath[0], metapath[-1]
+                if head_type not in seed_nodes:
+                    continue
+                start_node = seed_nodes[head_type]
+
+                if start_node not in subnetwork.nodes:
+                    continue
+                neighbors = [node for source, successors in
+                             islice(nx.traversal.bfs_successors(subnetwork, source=start_node),
+                                    2) for node in successors]
+                if len(neighbors) > batch_size / len(self.node_types):
+                    neighbors = neighbors[:int(batch_size / len(self.graphs))]
+
+                new_nodes_dict[tail_type].extend(neighbors)
+
+            for node_type, new_nodes in new_nodes_dict.items():
+                sampled_nodes_dict[node_type].extend(new_nodes)
+                sampled_nodes_dict[node_type] = list(OrderedDict.fromkeys(sampled_nodes_dict[node_type]))
+
+        if sum([len(sampled_nodes_dict[node_type]) for node_type in self.node_types]) > batch_size:
+            largest_node_type = max(sampled_nodes_dict, key=len)
+            np.random.shuffle(sampled_nodes_dict[largest_node_type])
+            num_node_remove = sum([len(sampled_nodes_dict[node_type]) for node_type in self.node_types]) - batch_size
+            sampled_nodes_dict[largest_node_type] = sampled_nodes_dict[largest_node_type][:-num_node_remove]
+
+        return sampled_nodes_dict
+
+    def get_adj_edgelist(self, graph, nodes_A, nodes_B=None):
+        if nodes_B is None:
+            adj = nx.adj_matrix(graph, nodelist=nodes_A.numpy() if isinstance(nodes_A, torch.Tensor) else nodes_A)
+        else:
+            adj = nx.algorithms.bipartite.biadjacency_matrix(graph, row_order=nodes_A, column_order=nodes_B)
+
+        adj = adj.tocoo()
         edge_index = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long)
         return edge_index
 
@@ -221,7 +315,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             iloc = torch.tensor(iloc)
 
         X = {}
-        X[self.head_node_type] = self.x[self.head_node_type][iloc]
+        X[self.head_node_type] = self.x_dict[self.head_node_type][iloc]
         X.update(self.edge_index_dict)
 
         return X, self.y_dict[self.head_node_type][iloc], None
@@ -237,7 +331,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         return X, self.y_dict[self.head_node_type][iloc], None
 
 class GeneratorDataset(torch.utils.data.Dataset):
-    def __init__(self, generator: SampledDataGenerator):
+    def __init__(self, generator):
         self._generator = generator
         self.node_list = self._generator.get_connected_nodelist()
         self.n_steps = self._generator.n_steps
@@ -259,7 +353,7 @@ class GeneratorDataset(torch.utils.data.Dataset):
 
 
 class TFDataset(tf.data.Dataset):
-    def __new__(cls, generator: SampledDataGenerator, output_types=None, output_shapes=None):
+    def __new__(cls, generator, output_types=None, output_shapes=None):
         """
         A tf.data wrapper for keras.utils.Sequence generator
         >>> generator = DataGenerator()

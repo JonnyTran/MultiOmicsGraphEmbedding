@@ -1,3 +1,5 @@
+import copy, random
+import numpy as np
 import torch
 from torch import nn as nn
 from torch.nn import Parameter
@@ -13,10 +15,12 @@ class LATTE(nn.Module):
         self.metapaths = metapaths
 
         layers = []
+        t_order_metapaths = copy.copy(metapaths)
         for t in range(1, t_order + 1):
-            t_order_metapaths = metapaths
             layers.append(LATTELayer(t_order=t, embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                                     node_attr_shape=node_attr_shape, metapaths=metapaths))
+                                     node_attr_shape=node_attr_shape, metapaths=t_order_metapaths))
+            t_order_metapaths = self.join_relations(t_order_metapaths, metapaths)
+
         self.layers = nn.ModuleList(layers)
 
     def join_relations(self, metapath_A, metapath_B):
@@ -27,6 +31,14 @@ class LATTE(nn.Module):
                     new_relation = relation_a + relation_b[1:]
                     metapaths.append(new_relation)
         return metapaths
+
+    @staticmethod
+    def add_reverse_relations(edge_index_dict) -> None:
+        reverse_edge_index_dict = {}
+        for metapath in edge_index_dict:
+            reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
+            reverse_edge_index_dict[reverse_metapath] = edge_index_dict[metapath][[1, 0], :]
+        edge_index_dict.update(reverse_edge_index_dict)
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
         pass
@@ -46,11 +58,12 @@ class LATTELayer(MessagePassing):
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = embedding_dim
 
+        #
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
                 in_channels=node_attr_shape[
                     node_type] if self.t_order == 1 and node_type in node_attr_shape else self.embedding_dim,
-                out_channels=len(self.get_head_relations(node_type)),
+                out_channels=self.get_relation_size(node_type),
                 kernel_size=1) \
                 for node_type in self.node_types})
 
@@ -69,9 +82,13 @@ class LATTELayer(MessagePassing):
             )
         self.reset_parameters()
 
-    def get_head_relations(self, head_node_type):
+    def get_head_relations(self, head_node_type) -> dict:
         relations = {metapath for metapath in self.metapaths if metapath[0] == head_node_type}
         return relations
+
+    def get_relation_size(self, node_type) -> int:
+        relations = self.get_head_relations(node_type)
+        return 1 + len(relations)
 
     def reset_parameters(self):
         for metapath in self.attn_l:
@@ -108,8 +125,6 @@ class LATTELayer(MessagePassing):
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[x_index_dict[node_type]]
 
-        print("\n h_dict", {k: v.shape for k, v in h_dict.items()})
-
         beta = {}
         for node_type in self.node_types:
             if node_type in x_dict:
@@ -119,52 +134,80 @@ class LATTELayer(MessagePassing):
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         # print("\n beta", {k:v.shape for k,v in beta.items()})
 
-        alpha_l, alpha_r = {}, {}
+        score_l, score_r = {}, {}
         for metapath in self.metapaths:
             head_type, tail_type = metapath[0], metapath[-1]
-            alpha_l[metapath] = (h_dict[head_type] * self.attn_l[metapath]).sum(dim=-1)
-            alpha_r[metapath] = (h_dict[tail_type] * self.attn_l[metapath]).sum(dim=-1)
+            score_l[metapath] = (h_dict[head_type] * self.attn_l[metapath]).sum(dim=-1)
+            score_r[metapath] = (h_dict[tail_type] * self.attn_l[metapath]).sum(dim=-1)
         # print("\n alpha_l", {k: v.shape for k, v in alpha_l.items()})
 
-        emb = {}
-        output = {}
+        emb_relation_agg = {}
+        emb_output = {}
         for node_type in self.node_types:
-            emb[node_type] = torch.zeros(size=(x_index_dict[node_type].size(0),
-                                               len(self.get_head_relations(node_type)),
-                                               self.embedding_dim))  # (num_nodes, num_relations, embedding_dim)
+            emb_relation_agg[node_type] = torch.zeros(
+                size=(x_index_dict[node_type].size(0), self.get_relation_size(node_type),
+                      self.embedding_dim))  # (num_nodes, num_relations, embedding_dim)
+
             for i, metapath in enumerate(self.get_head_relations(node_type)):
                 head_type, tail_type = metapath[0], metapath[-1]
                 head_num_node, tail_num_node = len(x_index_dict[head_type]), len(x_index_dict[tail_type])
-                # print("metapath", metapath)
-                # print("head_num_node, tail_num_node", head_num_node, tail_num_node)
-                # print(f"{head_type}: {h_dict[head_type].shape}, {tail_type}: {h_dict[tail_type].shape}")
-                # print(f"alpha_l: {alpha_l[metapath].shape}, alpha_r: {alpha_r[metapath].shape}")
 
-                emb[head_type][:, i] = self.propagate(edge_index_dict[metapath],
-                                                      size=(tail_num_node, head_num_node),
-                                                      x=(h_dict[tail_type], h_dict[head_type]),
-                                                      alpha=(alpha_r[metapath], alpha_l[metapath]))
+                emb_relation_agg[head_type][:, i] = self.propagate(
+                    edge_index_dict[metapath], size=(tail_num_node, head_num_node),
+                    x=(h_dict[tail_type], h_dict[head_type]), alpha=(score_r[metapath], score_l[metapath]))
+            emb_relation_agg[head_type][:, -1] = h_dict[head_type]
+            emb_output[node_type] = torch.matmul(emb_relation_agg[head_type].permute(0, 2, 1), beta[head_type]).squeeze(
+                -1)
 
-            output[node_type] = torch.matmul(emb[head_type].permute(0, 2, 1), beta[head_type]).unsqueeze(-1)
-            print(f"{head_type} output emb", output[head_type].shape)
+        proximity_loss = self.loss(edge_index_dict, score_l, score_r, x_index_dict)
 
-        print("output", {k: v.shape for k, v in output.items()})
-
-        # proximity_loss = self.loss(edge_index_dict, alpha_l, alpha_r)
-
-        return output
+        return emb_output, proximity_loss
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         # alpha = F.leaky_relu(alpha, self.negative_slope)
-        alpha = softmax(alpha, index, ptr, size_i)
+        alpha = softmax(alpha, index=index, num_nodes=size_i)
         # alpha = F.dropout(alpha, p=self.dropout, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
     @staticmethod
-    def negative_sample(edge_index, m_nodes, n_nodes, num_neg_samples):
-        return edge_index
+    def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
+        num_neg_samples = min(num_neg_samples,
+                              M * N - edge_index.size(1))
 
-    def loss(self, edge_index_dict, alpha_l, alpha_r):
-        for (head, tail), edge_index in edge_index_dict.items():
-            pass
+        rng = range(M * N)
+        idx = (edge_index[0] * N + edge_index[1]).to('cpu')  # idx = N * i + j
+
+        perm = torch.tensor(random.sample(rng, num_neg_samples))
+        mask = torch.from_numpy(np.isin(perm, idx)).to(torch.bool)
+        rest = mask.nonzero().view(-1)
+        while rest.numel() > 0:  # pragma: no cover
+            tmp = torch.tensor(random.sample(rng, rest.size(0)))
+            mask = torch.from_numpy(np.isin(tmp, idx)).to(torch.bool)
+            perm[rest] = tmp
+            rest = rest[mask.nonzero().view(-1)]
+
+        row = perm / N
+        col = perm % N
+        neg_edge_index = torch.stack([row, col], dim=0).long()
+
+        return neg_edge_index.to(edge_index.device)
+
+    def loss(self, edge_index_dict, score_l, score_r, x_index_dict):
+        loss = torch.tensor(0, dtype=torch.float)
+
+        # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
+        for metapath, edge_index in edge_index_dict.items():
+            e_ij = score_l[metapath][edge_index[0]] + score_r[metapath][edge_index[1]]
+            loss += -torch.sum(1 * torch.log(torch.sigmoid(e_ij)), dim=-1)
+
+        # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
+        for metapath, edge_index in edge_index_dict.items():
+            neg_edge_index = self.negative_sample(edge_index,
+                                                  M=x_index_dict[metapath[0]].size(0),
+                                                  N=x_index_dict[metapath[-1]].size(0),
+                                                  num_neg_samples=edge_index.size(1))
+            e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
+            loss += -torch.sum(1 * torch.log(torch.sigmoid(-e_ij)), dim=-1)
+
+        return loss
