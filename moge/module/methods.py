@@ -10,6 +10,7 @@ from torch_geometric.nn import MetaPath2Vec
 from moge.generator.datasets import HeterogeneousNetworkDataset
 from .metrics import Metrics
 from .trainer import _fix_dp_return_type
+from .latte import LATTELayer
 
 
 class MetricsComparison(pl.LightningModule):
@@ -42,6 +43,15 @@ class MetricsComparison(pl.LightningModule):
                 "log": logs}
 
 
+class LATTE(LATTELayer, MetricsComparison):
+    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]) -> None:
+        super().__init__(t_order=1,
+                         embedding_dim=hparams.embedding_dim,
+                         num_nodes_dict=dataset.num_nodes_dict,
+                         node_attr_shape=dataset.node_attr_shape,
+                         metapaths=dataset.metapaths)
+
+
 class GTN(GTN, MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
@@ -70,8 +80,8 @@ class GTN(GTN, MetricsComparison):
         self.validation_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics,
                                           prefix="val_", multilabel=dataset.multilabel)
         self.hparams = hparams
-        self.data = dataset
-        self.head_node_type = self.data.head_node_type
+        self.dataset = dataset
+        self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
         if X is None and "batch" in self.collate_fn:
@@ -137,13 +147,13 @@ class GTN(GTN, MetricsComparison):
         return {"test_loss": loss}
 
     def train_dataloader(self):
-        return self.data.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.data.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -177,8 +187,8 @@ class HAN(HAN, MetricsComparison):
                                           prefix="val_",
                                           multilabel=dataset.multilabel)
         self.hparams = hparams
-        self.data = dataset
-        self.head_node_type = self.data.head_node_type
+        self.dataset = dataset
+        self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
         if X is None and "batch" in self.collate_fn:
@@ -226,13 +236,13 @@ class HAN(HAN, MetricsComparison):
         return {"test_loss": loss}
 
     def train_dataloader(self):
-        return self.data.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.data.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -252,10 +262,10 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
         num_negative_samples = hparams.num_negative_samples
 
         # Dataset
-        self.data = dataset
+        self.dataset = dataset
         num_nodes_dict = None
-        metapath = self.data.metapath
-        self.head_node_type = self.data.head_node_type
+        metapath = self.dataset.metapaths
+        self.head_node_type = self.dataset.head_node_type
         edge_index_dict = dataset.edge_index_dict
 
         super().__init__(edge_index_dict, embedding_dim, metapath, walk_length, context_size, walks_per_node,
@@ -302,12 +312,12 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
     def node_classification(self, training=True):
         if training:
             z = self.forward(self.head_node_type,
-                             batch=self.data.y_index_dict[self.head_node_type][self.data.training_idx])
-            y = self.data.y_dict[self.head_node_type][self.data.training_idx]
+                             batch=self.dataset.y_index_dict[self.head_node_type][self.dataset.training_idx])
+            y = self.dataset.y_dict[self.head_node_type][self.dataset.training_idx]
 
             perm = torch.randperm(z.size(0))
-            train_perm = perm[:int(z.size(0) * self.data.train_ratio)]
-            test_perm = perm[int(z.size(0) * self.data.train_ratio):]
+            train_perm = perm[:int(z.size(0) * self.dataset.train_ratio)]
+            test_perm = perm[int(z.size(0) * self.dataset.train_ratio):]
 
             if y.dim() > 1 and y.size(1) > 1:
                 clf = OneVsRestClassifier(LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150))
@@ -321,12 +331,12 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
                                  y[test_perm].detach().cpu().numpy())
         else:
             z_train = self.forward(self.head_node_type,
-                                   batch=self.data.y_index_dict[self.head_node_type][self.data.training_idx])
-            y_train = self.data.y_dict[self.head_node_type][self.data.training_idx]
+                                   batch=self.dataset.y_index_dict[self.head_node_type][self.dataset.training_idx])
+            y_train = self.dataset.y_dict[self.head_node_type][self.dataset.training_idx]
 
             z_val = self.forward(self.head_node_type,
-                                 batch=self.data.y_index_dict[self.head_node_type][self.data.validation_idx])
-            y_val = self.data.y_dict[self.head_node_type][self.data.validation_idx]
+                                 batch=self.dataset.y_index_dict[self.head_node_type][self.dataset.validation_idx])
+            y_val = self.dataset.y_dict[self.head_node_type][self.dataset.validation_idx]
 
             if y_train.dim() > 1 and y_train.size(1) > 1:
                 clf = OneVsRestClassifier(LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150))
@@ -342,13 +352,13 @@ class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
         return accuracy
 
     def train_dataloader(self):
-        return self.data.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.data.val_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+        return self.dataset.val_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.data.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         if self.sparse:

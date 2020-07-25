@@ -161,7 +161,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
             e.args += (pointer.shape, array.shape)
             raise
         print("Initialize PyTorch weight {} from {}".format(name, original_name))
-        pointer.data = torch.from_numpy(array)
+        pointer.dataset = torch.from_numpy(array)
 
     return model
 

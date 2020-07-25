@@ -11,7 +11,7 @@ from moge.network.heterogeneous import HeterogeneousNetwork, EPSILON
 def sparse_matrix_to_sparse_tensor(X):
     coo = X.tocoo()
     indices = np.mat([coo.row, coo.col]).transpose()
-    return tf.SparseTensor(indices, coo.data, coo.shape)
+    return tf.SparseTensor(indices, coo.dataset, coo.shape)
 
 
 class SampledTripletDataGenerator(SampledDataGenerator):

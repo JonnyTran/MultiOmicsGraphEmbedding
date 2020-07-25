@@ -61,13 +61,13 @@ dataset_test = network.get_test_generator(
     maxlen=max_length, padding='post', truncating='post', variable_length=False,
     seed=seed, verbose=False)
 
-train_dataloader = torch.utils.data.DataLoader(
+train_dataloader = torch.utils.dataset.DataLoader(
     dataset_train,
     batch_size=None,
     num_workers=10
 )
 
-test_dataloader = torch.utils.data.DataLoader(
+test_dataloader = torch.utils.dataset.DataLoader(
     dataset_test,
     batch_size=None,
     num_workers=10

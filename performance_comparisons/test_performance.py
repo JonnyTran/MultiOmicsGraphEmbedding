@@ -65,7 +65,7 @@ def train(hparams):
         USE_AMP = True
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "num_channels": len(dataset.metapath),
+            "num_channels": len(dataset.metapaths),
             "batch_size": 512 * NUM_GPUS,
             "collate_fn": "HAN_batch",
             "val_collate_fn": "HAN_batch",

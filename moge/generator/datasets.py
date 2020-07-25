@@ -1,8 +1,11 @@
 from collections import OrderedDict
 from itertools import islice
+import multiprocessing
+from scipy.io import loadmat
+
 import networkx as nx
 import numpy as np
-from scipy.io import loadmat
+
 import tensorflow as tf
 import torch
 from cogdl.datasets.gtn_data import GTNDataset
@@ -17,7 +20,7 @@ from torch_geometric.data import InMemoryDataset
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=False, train_ratio=0.7,
+    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True):
         self.dataset = dataset
         self.train_ratio = train_ratio
@@ -65,12 +68,29 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
+        try:
+            cpus = multiprocessing.cpu_count()
+        except NotImplementedError:
+            cpus = 2  # arbitrary default
+
         self.graphs = {}
-        for metapaths in self.metapath:
-            edgelist = self.edge_index_dict[metapaths].t().numpy()
-            edgelist = np.core.defchararray.add([metapaths[0][0], metapaths[-1][0]], edgelist.astype(str))
-            self.graphs[metapaths] = nx.from_edgelist(edgelist,
-                                                      create_using=nx.Graph if not directed else nx.DiGraph)
+
+        def create_graphs(metapath):
+            edgelist = self.edge_index_dict[metapath].t().numpy()
+            edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist.astype(str))
+            graph = nx.from_edgelist(edgelist, create_using=nx.Graph if not directed else nx.DiGraph)
+            return (metapath, graph)
+
+        # for metapaths in self.metapath:
+        #     edgelist = self.edge_index_dict[metapaths].t().numpy()
+        #     edgelist = np.core.defchararray.add([metapaths[0][0], metapaths[-1][0]], edgelist.astype(str))
+        #     self.graphs[metapaths] = nx.from_edgelist(edgelist,
+        #                                               create_using=nx.Graph if not directed else nx.DiGraph)
+
+        pool = multiprocessing.Pool(processes=cpus)
+        output = pool.map(create_graphs, self.metapaths.keys())
+        for (metapath, graph) in output:
+            self.graphs[metapath] = graph
 
         assert hasattr(self, "num_nodes_dict")
         assert hasattr(self, "head_node_type")
@@ -96,9 +116,9 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.num_nodes_dict = {"user": data["friendship"].shape[0],
                                "tag": data["tagnetwork"].shape[0]}
 
-        self.metapath = [("user", "usertag", "tag"),
-                         ("tag", "tagnetwork", "tag"),
-                         ("user", "friendship", "user"), ]
+        self.metapaths = [("user", "usertag", "tag"),
+                          ("tag", "tagnetwork", "tag"),
+                          ("user", "friendship", "user"), ]
         self.edge_index_dict = {
             ("user", "friendship", "user"): self.adj_to_edgeindex(data["friendship"]),
             ("user", "usertag", "tag"): self.adj_to_edgeindex(data["usertag"]),
@@ -159,7 +179,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.node_types = list(data.y_index_dict.keys())
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
-        self.metapath = list(self.edge_index_dict.keys())
+        self.metapaths = list(self.edge_index_dict.keys())
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
@@ -170,10 +190,11 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.num_nodes_dict = data.num_nodes_dict
         self.node_types = list(data.num_nodes_dict.keys())
         self.x_dict = data.x_dict
+        self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
         self.y_dict = data.y_dict
         self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
                              data.y_dict.keys()}
-        self.metapath = list(self.edge_index_dict.keys())
+        self.metapaths = list(self.edge_index_dict.keys())
 
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
@@ -229,41 +250,80 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
+    def convert_index_nodes(self, iloc: torch.Tensor, node_type):
+        return np.core.defchararray.add(node_type[0], iloc.numpy().astype(str)).tolist()
+
     def collate_PyGNodeDataset_batch(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        seed_head_nodes = {self.head_node_type:
-                               np.core.defchararray.add(self.head_node_type[0], iloc.numpy().astype(str))}
-
-        sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_head_nodes)
-        print("sampled_nodes", sampled_nodes)
+        seed_nodes = {self.head_node_type: self.convert_index_nodes(iloc, self.head_node_type)}
+        sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_nodes)
+        print("sampled_nodes", {k: len(v) for k, v, in sampled_nodes.items()})
         node_index = self.y_index_dict[self.head_node_type][iloc]
 
         X = {"edge_index_dict": {},
              "x_dict": self.x_dict[self.head_node_type][node_index] if hasattr(self, "x_dict") else None,
              "x_index_dict": {self.head_node_type: node_index}}
 
-        for metapath in self.metapath:
-            X["edge_index_dict"][metapath] = self.get_adj_edgelist(self.graphs[metapath],
-                                                                   nodes_A=sampled_nodes[metapath[0]],
-                                                                   nodes_B=sampled_nodes[metapath[-1]])
+        for metapath in self.metapaths:
+            if len(sampled_nodes[metapath[0]]) == 0 or sampled_nodes[metapath[-1]] == 0:
+                continue
+            try:
+                X["edge_index_dict"][metapath] = self.get_adj_edgelist(self.graphs[metapath],
+                                                                       nodes_A=sampled_nodes[metapath[0]],
+                                                                       nodes_B=sampled_nodes[metapath[-1]])
+            except:
+                X["edge_index_dict"][metapath] = None
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
+
+    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}):
+        num_nodes = sum([len(nodes) for node_type, nodes in seed_nodes.items()])
+        while num_nodes < batch_size:
+            for metapath, G in self.graphs.items():
+                head_type, tail_type = metapath[0], metapath[-1]
+                if head_type not in seed_nodes or tail_type == self.head_node_type: continue
+
+                source_nodes = seed_nodes[head_type]
+                if not any([node in G for node in source_nodes]): continue
+
+                neighbors = [v for u, v in nx.traversal.edge_bfs(G, source=source_nodes)]
+
+                if len(neighbors) > batch_size / len(self.node_types):
+                    neighbors = neighbors[: int(batch_size / len(self.node_types))]
+
+                if tail_type in seed_nodes:
+                    seed_nodes[tail_type].extend(neighbors)
+                else:
+                    seed_nodes[tail_type] = neighbors
+
+            for node_type in seed_nodes.keys():
+                seed_nodes[node_type] = list(OrderedDict.fromkeys(seed_nodes[node_type]))
+            num_nodes = sum([len(nodes) for node_type, nodes in seed_nodes.items()])
+
+        if num_nodes > batch_size:
+            largest_node_type = max({k: v for k, v in seed_nodes.items() if k != self.head_node_type}, key=len)
+            np.random.shuffle(seed_nodes[largest_node_type])
+            num_node_remove = num_nodes - batch_size
+            seed_nodes[largest_node_type] = seed_nodes[largest_node_type][:-num_node_remove]
+
+        return seed_nodes
 
     def collate_HAN(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
         if isinstance(self.dataset, HANDataset):
-            X = {"adj": self.data["adj"][:len(self.metapath)],
+            X = {"adj": self.data["adj"][:len(self.metapaths)],
                  "x": self.data["x"] if hasattr(self.data, "x") else None,
                  "idx": self.y_index_dict[self.head_node_type][iloc]}
         else:
-            X = {"adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapath],
-                 "x": None,
-                 "idx": self.y_index_dict[self.head_node_type][iloc]}
+            X = {
+                "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapaths],
+                "x": None,
+                "idx": self.y_index_dict[self.head_node_type][iloc]}
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
@@ -275,47 +335,12 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         node_index = self.y_index_dict[self.head_node_type][iloc]
 
         X = {"adj": [(self.get_adj_edgelist(self.graphs[i], node_index),
-                      torch.ones(self.get_adj_edgelist(self.graphs[i], node_index).size(1))) for i in self.metapath],
+                      torch.ones(self.get_adj_edgelist(self.graphs[i], node_index).size(1))) for i in self.metapaths],
              "x": self.data["x"][node_index] if hasattr(self.data, "x") else None,
              "idx": node_index}
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
-
-    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}):
-        sampled_nodes_dict = {node_type: [] for node_type in self.node_types}
-        for node_type in seed_nodes:
-            sampled_nodes_dict[node_type] = seed_nodes[node_type]
-
-        while sum([len(sampled_nodes_dict[node_type]) for node_type in self.node_types]) < batch_size:
-            new_nodes_dict = {node_type: [] for node_type in self.node_types}
-            for metapath, subnetwork in self.graphs.items():
-                head_type, tail_type = metapath[0], metapath[-1]
-                if head_type not in seed_nodes:
-                    continue
-                start_node = seed_nodes[head_type]
-
-                if start_node not in subnetwork.nodes:
-                    continue
-                neighbors = [node for source, successors in
-                             islice(nx.traversal.bfs_successors(subnetwork, source=start_node),
-                                    2) for node in successors]
-                if len(neighbors) > batch_size / len(self.node_types):
-                    neighbors = neighbors[:int(batch_size / len(self.graphs))]
-
-                new_nodes_dict[tail_type].extend(neighbors)
-
-            for node_type, new_nodes in new_nodes_dict.items():
-                sampled_nodes_dict[node_type].extend(new_nodes)
-                sampled_nodes_dict[node_type] = list(OrderedDict.fromkeys(sampled_nodes_dict[node_type]))
-
-        if sum([len(sampled_nodes_dict[node_type]) for node_type in self.node_types]) > batch_size:
-            largest_node_type = max(sampled_nodes_dict, key=len)
-            np.random.shuffle(sampled_nodes_dict[largest_node_type])
-            num_node_remove = sum([len(sampled_nodes_dict[node_type]) for node_type in self.node_types]) - batch_size
-            sampled_nodes_dict[largest_node_type] = sampled_nodes_dict[largest_node_type][:-num_node_remove]
-
-        return sampled_nodes_dict
 
     def get_adj_edgelist(self, graph, nodes_A, nodes_B=None):
         if nodes_B == None:

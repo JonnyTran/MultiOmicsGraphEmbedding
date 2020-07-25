@@ -68,7 +68,7 @@ def train(hparams):
         maxlen=max_length, padding='post', truncating='post',
         seed=seed, verbose=True)
 
-    train_dataloader = torch.utils.data.DataLoader(
+    train_dataloader = torch.utils.dataset.DataLoader(
         GeneratorDataset(generator_train),
         batch_size=n_gpus,
         num_workers=14,
@@ -76,7 +76,7 @@ def train(hparams):
                                             layers=list(hparams.embedder.keys()))
     )
 
-    test_dataloader = torch.utils.data.DataLoader(
+    test_dataloader = torch.utils.dataset.DataLoader(
         GeneratorDataset(generator_test),
         batch_size=n_gpus,
         num_workers=4,

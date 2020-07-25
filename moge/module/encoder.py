@@ -53,7 +53,7 @@ class NodeIDEmbedding(nn.Module):
         super(NodeIDEmbedding, self).__init__()
 
         self.node_types = hparams.node_types
-        self.metapath = hparams.metapath
+        self.metapath = hparams.metapaths
         self.num_nodes_dict = hparams.num_nodes_dict
 
         count = 0
