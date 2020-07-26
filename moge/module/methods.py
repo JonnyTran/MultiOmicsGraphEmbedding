@@ -87,9 +87,10 @@ class LATTE(MetricsComparison):
                                              weights=weights)
 
         logs = None
-        if "ogbn" in self.training_metrics.metrics:
-            logs = self.training_metrics.evaluate_metric(Y_hat=Y_hat, Y=Y, metric="ogbn")
-            print("logs", logs)
+        for metric in self.training_metrics.metrics:
+            if "ogbn" in metric:
+                logs = self.training_metrics.evaluate_metric(Y_hat=y_hat, Y=y, metric=metric)
+                break
 
         loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
@@ -99,7 +100,7 @@ class LATTE(MetricsComparison):
 
         outputs = {'loss': loss}
         if logs is not None:
-            outputs.update({'progress_bar': logs})
+            outputs.update({'progress_bar': logs, "logs": logs})
         return outputs
 
     def validation_step(self, batch, batch_nb):
@@ -109,32 +110,32 @@ class LATTE(MetricsComparison):
 
         self.validation_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y, weights=weights)
 
+        loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
-            loss = self.loss(y_hat, y) + proximity_loss
-        else:
-            loss = self.loss(y_hat, y)
+            loss = loss + proximity_loss
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
+        loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
-            loss = self.loss(y_hat, y) + proximity_loss
-            logs["proximity_loss"] = proximity_loss
-        else:
-            loss = self.loss(y_hat, y)
+            loss = loss + proximity_loss
 
         return {"test_loss": loss}
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch", batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch",
+                                             batch_size=self.hparams.batch_size, num_workers=16)
 
     def val_dataloader(self):
-        return self.dataset.val_dataloader(collate_fn="PyGNodeDataset_batch", batch_size=self.hparams.batch_size)
+        return self.dataset.val_dataloader(collate_fn="PyGNodeDataset_batch",
+                                           batch_size=self.hparams.batch_size, num_workers=4)
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn="PyGNodeDataset_batch", batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn="PyGNodeDataset_batch",
+                                            batch_size=self.hparams.batch_size, num_workers=4)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)

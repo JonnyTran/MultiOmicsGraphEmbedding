@@ -40,21 +40,17 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         if isinstance(dataset, PygNodePropPredDataset):
             print("PygNodePropPredDataset")
             self.process_PygNodeDataset(dataset, train_ratio)
-
         elif isinstance(dataset, InMemoryDataset):
             print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio)
-
         # StellarGraph Dataset
         elif isinstance(dataset, DatasetLoader):
             print("InMemoryDataset")
             self.process_stellargraph(dataset, metapaths, node_types, train_ratio)
-
         # HANDataset Dataset
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             print("InMemoryDataset")
             self.process_HANdataset(dataset, metapaths, node_types, train_ratio)
-
         elif "blogcatalog6k" in dataset:
             self.process_BlogCatalog6k(dataset, train_ratio)
         else:
@@ -62,13 +58,13 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         if hasattr(self, "y_dict"):
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
+                self.multilabel = True
                 self.classes = self.y_dict[self.head_node_type].unique()
                 self.n_classes = self.y_dict[self.head_node_type].size(1)
-                self.multilabel = True
             else:
+                self.multilabel = False
                 self.classes = self.y_dict[self.head_node_type].unique()
                 self.n_classes = self.classes.size(0)
-                self.multilabel = False
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 

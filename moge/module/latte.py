@@ -43,7 +43,7 @@ class LATTE(nn.Module):
 
 
 class LATTELayer(MessagePassing, pl.LightningModule):
-    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, node_attr_shape: dict,
+    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int},
                  metapaths: list, use_proximity_loss=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         assert t_order > 0, "t_order must start from 1"
@@ -57,8 +57,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # Computes beta
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
-                in_channels=node_attr_shape[
-                    node_type] if self.t_order == 1 and node_type in node_attr_shape else self.embedding_dim,
+                in_channels=node_attr_shape[node_type] if node_type in node_attr_shape else self.embedding_dim,
                 out_channels=self.get_relation_size(node_type),
                 kernel_size=1) \
                 for node_type in self.node_types})
@@ -204,7 +203,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for metapath, edge_index in edge_index_dict.items():
             if edge_index is None: continue
             e_ij = score_l[metapath][edge_index[0]] + score_r[metapath][edge_index[1]]
-            loss += -torch.sum(1 * torch.log(torch.sigmoid(e_ij)), dim=-1)
+            loss += -torch.mean(torch.log(torch.sigmoid(e_ij)), dim=-1)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
         for metapath, edge_index in edge_index_dict.items():
@@ -214,6 +213,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                   N=x_index_dict[metapath[-1]].size(0),
                                                   num_neg_samples=edge_index.size(1))
             e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
-            loss += -torch.sum(1 * torch.log(torch.sigmoid(-e_ij)), dim=-1)
+            loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
         return loss
