@@ -11,7 +11,7 @@ from moge.generator.datasets import HeterogeneousNetworkDataset
 from .metrics import Metrics
 from .trainer import _fix_dp_return_type
 from .latte import LATTELayer
-
+from .classifier import Dense
 
 class MetricsComparison(pl.LightningModule):
     def __init__(self):
@@ -43,13 +43,18 @@ class MetricsComparison(pl.LightningModule):
                 "log": logs}
 
 
-class LATTE(LATTELayer, MetricsComparison):
+class LATTE(MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["accuracy"]) -> None:
-        super(LATTE, self).__init__(t_order=1,
-                                    embedding_dim=hparams.embedding_dim,
-                                    num_nodes_dict=dataset.num_nodes_dict,
-                                    node_attr_shape=dataset.node_attr_shape,
-                                    metapaths=dataset.metapaths)
+        set.head_node_type
+        self.dataset = dataset
+
+        self.latte = LATTELayer(t_order=1,
+                                embedding_dim=hparams.embedding_dim,
+                                num_nodes_dict=dataset.num_nodes_dict,
+                                node_attr_shape=dataset.node_attr_shape,
+                                metapaths=dataset.metapaths)
+        self.classifier = Dense(hparams)
+
         num_class = dataset.n_classes
         self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
                                         multilabel=dataset.multilabel)
@@ -57,7 +62,13 @@ class LATTE(LATTELayer, MetricsComparison):
                                           prefix="val_",
                                           multilabel=dataset.multilabel)
         self.hparams = hparams
-        self.dataset = dataset
+        self.head_node_type = data
+
+    def forward(self, x_dict, x_index_dict, edge_index_dict):
+        embeddings, proximity_loss = self.latte.forward(x_dict, x_index_dict, edge_index_dict)
+        y_hat = self.classifier.forward(embeddings[self.head_node_type])
+
+        return y_hat, proximity_loss
 
     def loss(self, y_hat, y):
         if not self.multilabel:
@@ -70,23 +81,25 @@ class LATTE(LATTELayer, MetricsComparison):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.loss(y_hat, y) + proximity_loss
+        self.training_metrics.update_metrics(Y_hat=y_hat[self.head_node_type], Y=y[self.head_node_type],
+                                             weights=weights)
+        loss = self.loss(y_hat[self.head_node_type], y[self.head_node_type]) + proximity_loss
         return {'loss': loss}
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.loss(y_hat, y) + proximity_loss
+        self.validation_metrics.update_metrics(Y_hat=y_hat[self.head_node_type], Y=y[self.head_node_type],
+                                               weights=weights)
+        loss = self.loss(y_hat[self.head_node_type], y[self.head_node_type]) + proximity_loss
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        loss = self.loss(y_hat, y) + proximity_loss
+        loss = self.loss(y_hat[self.head_node_type], [self.head_node_type]) + proximity_loss
 
         return {"test_loss": loss}
 
