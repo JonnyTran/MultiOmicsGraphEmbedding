@@ -77,7 +77,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         except NotImplementedError:
             cpus = 2  # arbitrary default
 
-        # Self
+        # Using multiprocessing to create_graph() for each metapath
         self.graphs = {}
         pool = multiprocessing.Pool(processes=cpus)
         output = pool.map(self.create_graph, self.original_metapaths if self.use_reverse else self.metapaths)

@@ -55,7 +55,7 @@ class LATTE(MetricsComparison):
                                 embedding_dim=hparams.embedding_dim,
                                 num_nodes_dict=dataset.num_nodes_dict,
                                 node_attr_shape=dataset.node_attr_shape,
-                                metapaths=dataset.metapaths)
+                                metapaths=dataset.metapaths, use_proximity_loss=hparams.use_proximity_loss)
         self.classifier = Dense(hparams)
 
         num_class = dataset.n_classes
@@ -86,26 +86,38 @@ class LATTE(MetricsComparison):
         self.training_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y.squeeze(-1),
                                              weights=weights)
         logs = self.training_metrics.compute_metrics()
-        logs["proximity_loss"] = proximity_loss
 
-        loss_combine = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
-        return {'loss': loss_combine, 'progress_bar': logs}
+        if self.hparams.use_proximity_loss:
+            loss = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
+            logs["proximity_loss"] = proximity_loss
+        else:
+            loss = self.loss(y_hat, y.squeeze(-1))
+
+        return {'loss': loss, 'progress_bar': logs}
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
         self.validation_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y.squeeze(-1), weights=weights)
-        loss_combine = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
+        if self.hparams.use_proximity_loss:
+            loss = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
+            logs["proximity_loss"] = proximity_loss
+        else:
+            loss = self.loss(y_hat, y.squeeze(-1))
 
-        return {"val_loss": loss_combine}
+        return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        loss_combine = self.loss(y_hat, y) + proximity_loss
+        if self.hparams.use_proximity_loss:
+            loss = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
+            logs["proximity_loss"] = proximity_loss
+        else:
+            loss = self.loss(y_hat, y.squeeze(-1))
 
-        return {"test_loss": loss_combine}
+        return {"test_loss": loss}
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch", batch_size=self.hparams.batch_size)

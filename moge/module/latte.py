@@ -11,9 +11,11 @@ import pytorch_lightning as pl
 
 
 class LATTE(nn.Module):
-    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list):
+    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list,
+                 use_proximity_loss=True):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
+        self.use_proximity_loss = use_proximity_loss
 
         layers = []
         t_order_metapaths = copy.copy(metapaths)
@@ -42,7 +44,7 @@ class LATTE(nn.Module):
 
 class LATTELayer(MessagePassing, pl.LightningModule):
     def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, node_attr_shape: dict,
-                 metapaths: list) -> None:
+                 metapaths: list, use_proximity_loss=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         assert t_order > 0, "t_order must start from 1"
         self.t_order = t_order
@@ -50,6 +52,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.metapaths = list(metapaths)
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = embedding_dim
+        self.use_proximity_loss = use_proximity_loss
 
         # Computes beta
         self.conv = torch.nn.ModuleDict(
@@ -155,7 +158,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             emb_output[node_type] = torch.matmul(emb_relation_agg[head_type].permute(0, 2, 1),
                                                  beta[head_type]).squeeze(-1)
 
-        proximity_loss = self.proximity_loss(edge_index_dict, score_l, score_r, x_index_dict)
+        if self.use_proximity_loss:
+            proximity_loss = self.proximity_loss(edge_index_dict, score_l, score_r, x_index_dict)
+        else:
+            proximity_loss = None
 
         return emb_output, proximity_loss
 
