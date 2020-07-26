@@ -44,7 +44,7 @@ class LATTE(nn.Module):
 
 class LATTELayer(MessagePassing, pl.LightningModule):
     def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int},
-                 metapaths: list, use_proximity_loss=True) -> None:
+                 metapaths: list, use_proximity_loss=True, neg_sampling_ratio=1.0) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         assert t_order > 0, "t_order must start from 1"
         self.t_order = t_order
@@ -53,6 +53,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = embedding_dim
         self.use_proximity_loss = use_proximity_loss
+        self.neg_sampling_ratio = neg_sampling_ratio
 
         # Computes beta
         self.conv = torch.nn.ModuleDict(
@@ -211,7 +212,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             neg_edge_index = self.negative_sample(edge_index,
                                                   M=x_index_dict[metapath[0]].size(0),
                                                   N=x_index_dict[metapath[-1]].size(0),
-                                                  num_neg_samples=edge_index.size(1))
+                                                  num_neg_samples=self.neg_sampling_ratio * edge_index.size(1))
             e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
             loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
