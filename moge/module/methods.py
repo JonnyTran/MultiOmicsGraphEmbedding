@@ -45,7 +45,8 @@ class MetricsComparison(pl.LightningModule):
 
 class LATTE(MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["accuracy"]) -> None:
-        set.head_node_type
+        super(LATTE, self).__init__()
+        self.head_node_type = dataset.head_node_type
         self.dataset = dataset
 
         self.latte = LATTELayer(t_order=1,
@@ -62,7 +63,6 @@ class LATTE(MetricsComparison):
                                           prefix="val_",
                                           multilabel=dataset.multilabel)
         self.hparams = hparams
-        self.head_node_type = data
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
         embeddings, proximity_loss = self.latte.forward(x_dict, x_index_dict, edge_index_dict)
@@ -81,25 +81,25 @@ class LATTE(MetricsComparison):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        self.training_metrics.update_metrics(Y_hat=y_hat[self.head_node_type], Y=y[self.head_node_type],
+        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y,
                                              weights=weights)
-        loss = self.loss(y_hat[self.head_node_type], y[self.head_node_type]) + proximity_loss
+        loss = self.loss(y_hat, y) + proximity_loss
         return {'loss': loss}
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        self.validation_metrics.update_metrics(Y_hat=y_hat[self.head_node_type], Y=y[self.head_node_type],
+        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y,
                                                weights=weights)
-        loss = self.loss(y_hat[self.head_node_type], y[self.head_node_type]) + proximity_loss
+        loss = self.loss(y_hat, y) + proximity_loss
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        loss = self.loss(y_hat[self.head_node_type], [self.head_node_type]) + proximity_loss
+        loss = self.loss(y_hat, y) + proximity_loss
 
         return {"test_loss": loss}
 
