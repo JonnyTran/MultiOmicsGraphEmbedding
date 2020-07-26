@@ -65,6 +65,17 @@ class Metrics():
             else:
                 raise Exception(f"Update {metric} metric unsuccessful.")
 
+    def evaluate_metric(self, Y_hat: torch.Tensor, Y: torch.Tensor, metric):
+        if "ogbn" in metric:
+            Y_hat = Y_hat.argmax(axis=1)
+            if Y_hat.dim() <= 1:
+                Y_hat = Y_hat.unsqueeze(-1)
+            if Y.dim() <= 1:
+                Y = Y.unsqueeze(-1)
+            return self.metrics[metric].eval({"y_pred": Y_hat, "y_true": Y})
+        else:
+            return {}
+
     def compute_metrics(self):
         logs = {}
         for metric in self.metrics:

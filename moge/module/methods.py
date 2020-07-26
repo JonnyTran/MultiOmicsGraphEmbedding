@@ -87,6 +87,9 @@ class LATTE(MetricsComparison):
                                              weights=weights)
         logs = self.training_metrics.compute_metrics()
 
+        if "ogbn" in self.training_metrics.metrics:
+            logs.update(self.training_metrics.evaluate_metric(Y_hat=Y_hat, Y=Y, metric="ogbn"))
+
         if self.hparams.use_proximity_loss:
             loss = self.loss(y_hat, y) + proximity_loss
             logs["proximity_loss"] = proximity_loss
