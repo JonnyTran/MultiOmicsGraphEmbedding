@@ -14,6 +14,8 @@ from cogdl.datasets.han_data import HANDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset
 from torch_geometric.utils.hetero import group_hetero_graph
+from torch_geometric.data import NeighborSampler
+import deepsnap
 
 from stellargraph.datasets import DatasetLoader
 from torch.utils import data
@@ -310,21 +312,29 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         while num_nodes < batch_size and i < max_iter:
             for metapath, G in self.graphs.items():
                 head_type, tail_type = metapath[0], metapath[-1]
-
-                source_nodes = seed_nodes[head_type]
+                print("metapath", metapath)
+                if head_type in seed_nodes:
+                    source_nodes = seed_nodes[head_type]
+                    neighbor_type = tail_type
+                elif tail_type in seed_nodes:
+                    source_nodes = seed_nodes[tail_type]
+                    neighbor_type = head_type
+                else:
+                    continue
                 # if not any([node in G for node in source_nodes]): continue
 
-                neighbors = [v for u, v in nx.traversal.edge_bfs(G, source=source_nodes)]
-                print("metapath", metapath, len(neighbors))
+                neighbors = [node for source, successors in
+                             islice(nx.traversal.bfs_successors(G, source=set(source_nodes)), 1) for node in successors]
+                print("neighbors", len(neighbors))
 
                 # Ensure that no node_type becomes the majority of the batch_size
                 if len(neighbors) > (batch_size / (len(self.node_types) - 1)):
                     neighbors = neighbors[: int(batch_size / (len(self.node_types) - 1))]
 
-                if tail_type in seed_nodes:
-                    seed_nodes[tail_type].extend(neighbors)
+                if neighbor_type in seed_nodes:
+                    seed_nodes[neighbor_type].extend(neighbors)
                 else:
-                    seed_nodes[tail_type] = neighbors
+                    seed_nodes[neighbor_type] = neighbors
 
             # Remove duplicate
             for node_type in seed_nodes.keys():
