@@ -94,13 +94,14 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
         edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
         graph = nx.from_edgelist(edgelist,
-                                 create_using=nx.DiGraph if not self.use_reverse and self.directed else nx.Graph)
+                                 create_using=nx.Graph)
         return (metapath, graph)
 
     @staticmethod
     def add_reverse_edge_index(edge_index_dict) -> None:
         reverse_edge_index_dict = {}
         for metapath in edge_index_dict:
+            if edge_index_dict[metapath] == None: continue
             reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
             reverse_edge_index_dict[reverse_metapath] = edge_index_dict[metapath][[1, 0], :]
         edge_index_dict.update(reverse_edge_index_dict)
@@ -280,7 +281,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         seed_nodes = {self.head_node_type: self.convert_index2name(iloc, self.head_node_type)}
         sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_nodes)
-        print("sampled_nodes", {k: len(v) for k, v, in sampled_nodes.items()})
+        # print("sampled_nodes", {k: len(v) for k, v, in sampled_nodes.items()})
         node_index = self.y_index_dict[self.head_node_type][self.convert_name2index(sampled_nodes[self.head_node_type])]
 
         assert len(node_index) == len(seed_nodes[self.head_node_type])
@@ -306,30 +307,27 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
 
-    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=5):
+    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):
         num_nodes = sum([len(nodes) for node_type, nodes in seed_nodes.items()])
         i = 0
         while num_nodes < batch_size and i < max_iter:
             for metapath, G in self.graphs.items():
                 head_type, tail_type = metapath[0], metapath[-1]
-                print("metapath", metapath)
+
                 if head_type in seed_nodes:
-                    source_nodes = seed_nodes[head_type]
+                    source_nodes = [node for node in seed_nodes[head_type] if node in G]
                     neighbor_type = tail_type
                 elif tail_type in seed_nodes:
-                    source_nodes = seed_nodes[tail_type]
+                    source_nodes = [node for node in seed_nodes[tail_type] if node in G]
                     neighbor_type = head_type
                 else:
                     continue
-                # if not any([node in G for node in source_nodes]): continue
 
-                neighbors = [node for source, successors in
-                             islice(nx.traversal.bfs_successors(G, source=set(source_nodes)), 1) for node in successors]
-                print("neighbors", len(neighbors))
+                neighbors = [neighbor for source_node in source_nodes for neighbor in nx.neighbors(G, source_node)]
 
                 # Ensure that no node_type becomes the majority of the batch_size
-                if len(neighbors) > (batch_size / (len(self.node_types) - 1)):
-                    neighbors = neighbors[: int(batch_size / (len(self.node_types) - 1))]
+                if len(neighbors) > (batch_size / len(self.node_types)):
+                    neighbors = neighbors[: int(batch_size / len(self.node_types))]
 
                 if neighbor_type in seed_nodes:
                     seed_nodes[neighbor_type].extend(neighbors)
@@ -346,7 +344,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         # Remove excess node if exceeds batch_size
         if num_nodes > batch_size:
-            largest_node_type = max({k: v for k, v in seed_nodes.items() if k != self.head_node_type}, key=len)
+            largest_node_type = max({k: v for k, v in seed_nodes.items()}, key=len)
             np.random.shuffle(seed_nodes[largest_node_type])
             num_node_remove = num_nodes - batch_size
             seed_nodes[largest_node_type] = seed_nodes[largest_node_type][:-num_node_remove]

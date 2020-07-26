@@ -141,6 +141,8 @@ class LATTELayer(MessagePassing):
                       self.embedding_dim))  # (num_nodes, num_relations, embedding_dim)
 
             for i, metapath in enumerate(self.get_head_relations(node_type)):
+                if x_index_dict[metapath] == None:
+                    continue
                 head_type, tail_type = metapath[0], metapath[-1]
                 head_num_node, tail_num_node = len(x_index_dict[head_type]), len(x_index_dict[tail_type])
 
@@ -151,7 +153,7 @@ class LATTELayer(MessagePassing):
             emb_output[node_type] = torch.matmul(emb_relation_agg[head_type].permute(0, 2, 1), beta[head_type]).squeeze(
                 -1)
 
-        proximity_loss = self.loss(edge_index_dict, score_l, score_r, x_index_dict)
+        proximity_loss = self.proximity_loss(edge_index_dict, score_l, score_r, x_index_dict)
 
         return emb_output, proximity_loss
 
@@ -185,16 +187,18 @@ class LATTELayer(MessagePassing):
 
         return neg_edge_index.to(edge_index.device)
 
-    def loss(self, edge_index_dict, score_l, score_r, x_index_dict):
+    def proximity_loss(self, edge_index_dict, score_l, score_r, x_index_dict):
         loss = torch.tensor(0, dtype=torch.float)
 
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
+            if edge_index is None: continue
             e_ij = score_l[metapath][edge_index[0]] + score_r[metapath][edge_index[1]]
             loss += -torch.sum(1 * torch.log(torch.sigmoid(e_ij)), dim=-1)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
         for metapath, edge_index in edge_index_dict.items():
+            if edge_index is None: continue
             neg_edge_index = self.negative_sample(edge_index,
                                                   M=x_index_dict[metapath[0]].size(0),
                                                   N=x_index_dict[metapath[-1]].size(0),

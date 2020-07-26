@@ -59,12 +59,48 @@ class LATTE(LATTELayer, MetricsComparison):
         self.hparams = hparams
         self.dataset = dataset
 
-    def forward(self, x_dict, x_index_dict, edge_index_dict):
-        pass
-
     def loss(self, y_hat, y):
-        pass
+        if not self.multilabel:
+            loss = self.cross_entropy_loss(y_hat, y)
+        else:
+            loss = F.binary_cross_entropy_with_logits(y_hat, y.type_as(y_hat))
+        return loss
 
+    def training_step(self, batch, batch_nb):
+        X, y, weights = batch
+
+        y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
+        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.loss(y_hat, y) + proximity_loss
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_nb):
+        X, y, weights = batch
+
+        y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
+        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.loss(y_hat, y) + proximity_loss
+
+        return {"val_loss": loss}
+
+    def test_step(self, batch, batch_nb):
+        X, y, weights = batch
+        y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
+        loss = self.loss(y_hat, y) + proximity_loss
+
+        return {"test_loss": loss}
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch", batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.dataset.val_dataloader(collate_fn="PyGNodeDataset_batch", batch_size=self.hparams.batch_size)
+
+    def test_dataloader(self):
+        return self.dataset.test_dataloader(collate_fn="PyGNodeDataset_batch", batch_size=self.hparams.batch_size)
+
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 class GTN(GTN, MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]):
