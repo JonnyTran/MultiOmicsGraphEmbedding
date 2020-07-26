@@ -87,8 +87,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def reset_parameters(self):
         for i, metapath in enumerate(self.metapaths):
-            glorot(self.attn_l[i])
-            glorot(self.attn_r[i])
+            glorot(self.attn_l[i].weight)
+            glorot(self.attn_r[i].weight)
 
         for node_type in self.linear:
             glorot(self.linear[node_type].weight)
