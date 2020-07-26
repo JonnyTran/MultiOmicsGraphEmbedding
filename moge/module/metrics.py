@@ -12,7 +12,7 @@ from .utils import filter_samples
 
 class Metrics():
     def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None, multilabel=None,
-                 metrics=["precision", "recall", "top_k", "accuracy"], prefix=None, obg_dataset=None):
+                 metrics=["precision", "recall", "top_k", "accuracy"], prefix=None):
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes
@@ -36,11 +36,11 @@ class Metrics():
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=is_multilabel)
             elif "ogbn" in metric:
-                self.metrics[metric] = NodeEvaluator(obg_dataset)
+                self.metrics[metric] = NodeEvaluator(metric)
             elif "ogbg" in metric:
-                self.metrics[metric] = GraphEvaluator(obg_dataset)
+                self.metrics[metric] = GraphEvaluator(metric)
             elif "ogbl" in metric:
-                self.metrics[metric] = LinkEvaluator(obg_dataset)
+                self.metrics[metric] = LinkEvaluator(metric)
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
@@ -62,8 +62,6 @@ class Metrics():
                 self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
             elif metric == "top_k":
                 self.metrics[metric].update((Y_hat, Y))
-            else:
-                raise Exception(f"Update {metric} metric unsuccessful.")
 
     def evaluate_metric(self, Y_hat: torch.Tensor, Y: torch.Tensor, metric):
         if "ogbn" in metric:

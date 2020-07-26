@@ -85,14 +85,16 @@ class LATTE(MetricsComparison):
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
         self.training_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y,
                                              weights=weights)
-        logs = self.training_metrics.compute_metrics()
 
         if "ogbn" in self.training_metrics.metrics:
-            logs.update(self.training_metrics.evaluate_metric(Y_hat=Y_hat, Y=Y, metric="ogbn"))
+            logs = self.training_metrics.evaluate_metric(Y_hat=Y_hat, Y=Y, metric="ogbn")
+        else:
+            logs = None
 
         if self.hparams.use_proximity_loss:
             loss = self.loss(y_hat, y) + proximity_loss
-            logs["proximity_loss"] = proximity_loss
+            if logs is not None:
+                logs["proximity_loss"] = proximity_loss
         else:
             loss = self.loss(y_hat, y)
 
@@ -104,9 +106,9 @@ class LATTE(MetricsComparison):
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
 
         self.validation_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y, weights=weights)
+
         if self.hparams.use_proximity_loss:
             loss = self.loss(y_hat, y) + proximity_loss
-            logs["proximity_loss"] = proximity_loss
         else:
             loss = self.loss(y_hat, y)
 
