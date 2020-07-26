@@ -18,9 +18,9 @@ class MetricsComparison(pl.LightningModule):
         super(MetricsComparison, self).__init__()
 
     def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["batch_loss"] for x in outputs]).mean().item()
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
         logs = self.training_metrics.compute_metrics()
-        logs = _fix_dp_return_type(logs, device=outputs[0]["batch_loss"].device)
+        logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
 
         logs.update({"loss": avg_loss})
         self.training_metrics.reset_metrics()
