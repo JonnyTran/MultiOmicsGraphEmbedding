@@ -48,6 +48,8 @@ class LATTE(MetricsComparison):
         super(LATTE, self).__init__()
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
+        self.multilabel = dataset.multilabel
+        self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
 
         self.latte = LATTELayer(t_order=1,
                                 embedding_dim=hparams.embedding_dim,
@@ -81,18 +83,17 @@ class LATTE(MetricsComparison):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y,
+        self.training_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y.squeeze(-1),
                                              weights=weights)
-        loss = self.loss(y_hat, y) + proximity_loss
+        loss = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
         return {'loss': loss}
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y,
-                                               weights=weights)
-        loss = self.loss(y_hat, y) + proximity_loss
+        self.validation_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y.squeeze(-1), weights=weights)
+        loss = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
 
         return {"val_loss": loss}
 

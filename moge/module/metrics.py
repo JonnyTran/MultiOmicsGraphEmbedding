@@ -41,7 +41,7 @@ class Metrics():
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
             Y_hat = torch.softmax(Y_hat, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(Y_hat)
 
-        if not self.is_multilabel:
+        if not self.is_multilabel or "SOFTMAX" in self.loss_type:
             if Y.dim() >= 2:
                 Y = Y.squeeze(1)
             Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)

@@ -61,7 +61,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             raise Exception(f"Unsupported dataset {dataset}")
 
         if hasattr(self, "y_dict"):
-            if self.y_dict[self.head_node_type].dim() > 1:
+            if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.classes = self.y_dict[self.head_node_type].unique()
                 self.n_classes = self.y_dict[self.head_node_type].size(1)
                 self.multilabel = True
@@ -306,7 +306,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         for node_type in self.node_types:
             X["x_index_dict"][node_type] = self.convert_name2index(sampled_nodes[node_type])
 
-        y = self.y_dict[self.head_node_type][iloc]
+        y = self.y_dict[self.head_node_type][node_index]
         return X, y, None
 
     def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):
