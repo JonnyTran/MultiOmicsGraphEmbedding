@@ -13,6 +13,7 @@ from cogdl.datasets.han_data import HANDataset
 
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset
+from torch_geometric.utils.hetero import group_hetero_graph
 
 from stellargraph.datasets import DatasetLoader
 from torch.utils import data
@@ -25,7 +26,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.dataset = dataset
         self.directed = directed
         self.train_ratio = train_ratio
-        self.add_reverse_metapaths = add_reverse_metapaths
+        self.use_reverse = add_reverse_metapaths
 
         if head_node_type is None:
             self.head_node_type = node_types[0]
@@ -76,7 +77,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         self.graphs = {}
         pool = multiprocessing.Pool(processes=cpus)
-        output = pool.map(self.create_graph, self.metapaths)
+        output = pool.map(self.create_graph, self.original_metapaths if self.use_reverse else self.metapaths)
         for (metapath, graph) in output:
             self.graphs[metapath] = graph
         pool.close()
@@ -91,7 +92,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
         edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
         graph = nx.from_edgelist(edgelist,
-                                 create_using=nx.DiGraph if not self.add_reverse_metapaths and self.directed else nx.Graph)
+                                 create_using=nx.DiGraph if not self.use_reverse and self.directed else nx.Graph)
         return (metapath, graph)
 
     @staticmethod
@@ -176,7 +177,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
     def process_inmemorydataset(self, dataset: InMemoryDataset, train_ratio):
         data = dataset[0]
-        if self.add_reverse_metapaths:
+        if self.use_reverse:
             self.add_reverse_edge_index(data.edge_index_dict)
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
@@ -196,9 +197,10 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.y_dict = data.y_dict
         self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
                              data.y_dict.keys()}
-        self.metapaths = list(self.edge_index_dict.keys())
+        self.multilabel = False
 
-        if self.add_reverse_metapaths:
+        self.metapaths = list(self.edge_index_dict.keys())
+        if self.use_reverse:
             self.original_metapaths = list(self.edge_index_dict.keys())
             self.metapaths = self.metapaths + self.get_reverse_metapath(self.metapaths)
 
@@ -225,13 +227,15 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn))
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        batch_size))
         return loader
 
     def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn))
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        batch_size))
         return loader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
@@ -242,7 +246,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         return loader
 
     def get_collate_fn(self, collate_fn: str, batch_size=None):
-        self.batch_size = batch_size
+        if batch_size is not None and "PyGNodeDataset_batch" in collate_fn:
+            self.batch_size = batch_size * len(self.node_types)
         if "index" in collate_fn:
             return self.collate_index_cls
         elif "attr" in collate_fn:
@@ -256,23 +261,33 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def convert_index_nodes(self, iloc: torch.Tensor, node_type):
-        return np.core.defchararray.add(node_type[0], iloc.numpy().astype(str)).tolist()
+    def convert_index2name(self, node_idx: torch.Tensor, node_type):
+        return np.core.defchararray.add(node_type[0], node_idx.numpy().astype(str)).tolist()
+
+    def convert_name2index(self, node_names: list):
+        """
+        Strip letter from node names
+        :param node_names:
+        :return:
+        """
+        return torch.tensor([int(name[1:]) for name in node_names], dtype=torch.long)
 
     def collate_PyGNodeDataset_batch(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        seed_nodes = {self.head_node_type: self.convert_index_nodes(iloc, self.head_node_type)}
+        seed_nodes = {self.head_node_type: self.convert_index2name(iloc, self.head_node_type)}
         sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_nodes)
         print("sampled_nodes", {k: len(v) for k, v, in sampled_nodes.items()})
-        node_index = self.y_index_dict[self.head_node_type][iloc]
+        node_index = self.y_index_dict[self.head_node_type][self.convert_name2index(sampled_nodes[self.head_node_type])]
+
+        assert len(node_index) == len(seed_nodes[self.head_node_type])
 
         X = {"edge_index_dict": {},
              "x_dict": self.x_dict[self.head_node_type][node_index] if hasattr(self, "x_dict") else None,
-             "x_index_dict": {self.head_node_type: node_index}}
+             "x_index_dict": {}}
 
-        for metapath in (self.original_metapaths if self.add_reverse_metapaths else self.metapaths):
+        for metapath in self.original_metapaths if self.use_reverse else self.metapaths:
             if len(sampled_nodes[metapath[0]]) == 0 or sampled_nodes[metapath[-1]] == 0:
                 continue
             try:
@@ -283,33 +298,43 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                 X["edge_index_dict"][metapath] = None
         self.add_reverse_edge_index(X["edge_index_dict"])
 
+        for node_type in self.node_types:
+            X["x_index_dict"][node_type] = self.convert_name2index(sampled_nodes[node_type])
+
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
 
-    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}):
+    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=5):
         num_nodes = sum([len(nodes) for node_type, nodes in seed_nodes.items()])
-        while num_nodes < batch_size:
+        i = 0
+        while num_nodes < batch_size and i < max_iter:
             for metapath, G in self.graphs.items():
                 head_type, tail_type = metapath[0], metapath[-1]
-                if head_type not in seed_nodes or tail_type == self.head_node_type: continue
 
                 source_nodes = seed_nodes[head_type]
-                if not any([node in G for node in source_nodes]): continue
+                # if not any([node in G for node in source_nodes]): continue
 
                 neighbors = [v for u, v in nx.traversal.edge_bfs(G, source=source_nodes)]
+                print("metapath", metapath, len(neighbors))
 
-                if len(neighbors) > batch_size / len(self.node_types):
-                    neighbors = neighbors[: int(batch_size / len(self.node_types))]
+                # Ensure that no node_type becomes the majority of the batch_size
+                if len(neighbors) > (batch_size / (len(self.node_types) - 1)):
+                    neighbors = neighbors[: int(batch_size / (len(self.node_types) - 1))]
 
                 if tail_type in seed_nodes:
                     seed_nodes[tail_type].extend(neighbors)
                 else:
                     seed_nodes[tail_type] = neighbors
 
+            # Remove duplicate
             for node_type in seed_nodes.keys():
                 seed_nodes[node_type] = list(OrderedDict.fromkeys(seed_nodes[node_type]))
-            num_nodes = sum([len(nodes) for node_type, nodes in seed_nodes.items()])
 
+            # Check whether to gather more nodes to fill batch_size
+            num_nodes = sum([len(nodes) for node_type, nodes in seed_nodes.items()])
+            i += 1
+
+        # Remove excess node if exceeds batch_size
         if num_nodes > batch_size:
             largest_node_type = max({k: v for k, v in seed_nodes.items() if k != self.head_node_type}, key=len)
             np.random.shuffle(seed_nodes[largest_node_type])
