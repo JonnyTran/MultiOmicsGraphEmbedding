@@ -43,7 +43,7 @@ class MetricsComparison(pl.LightningModule):
                 "log": logs}
 
 
-class LATTE(pl.LightningModule, LATTELayer, MetricsComparison):
+class LATTE(LATTELayer, MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["accuracy"]) -> None:
         super(LATTE, self).__init__(t_order=1,
                                     embedding_dim=hparams.embedding_dim,
