@@ -192,6 +192,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
     def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
         data = dataset[0]
+        self.name = dataset.dir_name
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.node_types = list(data.num_nodes_dict.keys())
@@ -287,7 +288,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         assert len(node_index) == len(seed_nodes[self.head_node_type])
 
         X = {"edge_index_dict": {},
-             "x_dict": self.x_dict[self.head_node_type][node_index] if hasattr(self, "x_dict") else None,
+             "x_dict": {self.head_node_type: self.x_dict[self.head_node_type][node_index]} if hasattr(self,
+                                                                                                      "x_dict") else None,
              "x_index_dict": {}}
 
         for metapath in self.original_metapaths if self.use_reverse else self.metapaths:
