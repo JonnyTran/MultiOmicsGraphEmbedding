@@ -190,7 +190,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return neg_edge_index.to(edge_index.device)
 
     def proximity_loss(self, edge_index_dict, score_l, score_r, x_index_dict):
-        loss = torch.tensor(0, dtype=torch.float)
+        loss = torch.tensor(0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
 
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
