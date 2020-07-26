@@ -64,8 +64,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=False) \
              for node_type, in_channels in node_attr_shape.items()}
         )
-        self.attn_l = {edge_type: torch.nn.Linear(1, embedding_dim) for edge_type in self.metapaths}
-        self.attn_r = {edge_type: torch.nn.Linear(1, embedding_dim) for edge_type in self.metapaths}
+        self.attn_l = torch.nn.ModuleList(
+            [torch.nn.Linear(1, embedding_dim) for metapath in self.metapaths])
+        self.attn_r = torch.nn.ModuleList(
+            [torch.nn.Linear(1, embedding_dim) for metapath in self.metapaths])
 
         # If some node type are not attributed, assign h_1 embeddings for them
         if node_attr_shape.keys() < num_nodes_dict.keys():
@@ -84,10 +86,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return 1 + len(relations)
 
     def reset_parameters(self):
-        for metapath in self.attn_l:
-            glorot(self.attn_l[metapath])
-        for metapath in self.attn_r:
-            glorot(self.attn_r[metapath])
+        for i, metapath in enumerate(self.metapaths):
+            glorot(self.attn_l[i])
+            glorot(self.attn_r[i])
+
         for node_type in self.linear:
             glorot(self.linear[node_type].weight)
         for node_type in self.conv:
@@ -128,12 +130,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # print("\n beta", {k:v.shape for k,v in beta.items()})
 
         score_l, score_r = {}, {}
-        for metapath in self.metapaths:
+        for i, metapath in enumerate(self.metapaths):
             head_type, tail_type = metapath[0], metapath[-1]
             print("h_dict[head_type]", h_dict[head_type].device)
             print("self.attn_l[metapath]", self.attn_l[metapath].device)
-            score_l[metapath] = (h_dict[head_type] * self.attn_l[metapath]).sum(dim=-1)
-            score_r[metapath] = (h_dict[tail_type] * self.attn_r[metapath]).sum(dim=-1)
+            score_l[metapath] = (h_dict[head_type] * self.attn_l[i]).sum(dim=-1)
+            score_r[metapath] = (h_dict[tail_type] * self.attn_r[i]).sum(dim=-1)
         # print("\n alpha_l", {k: v.shape for k, v in alpha_l.items()})
 
         emb_relation_agg = {}
