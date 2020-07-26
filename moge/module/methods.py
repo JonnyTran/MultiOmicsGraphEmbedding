@@ -86,19 +86,21 @@ class LATTE(MetricsComparison):
         self.training_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y,
                                              weights=weights)
 
+        logs = None
         if "ogbn" in self.training_metrics.metrics:
             logs = self.training_metrics.evaluate_metric(Y_hat=Y_hat, Y=Y, metric="ogbn")
-        else:
-            logs = None
+            print("logs", logs)
 
+        loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
-            loss = self.loss(y_hat, y) + proximity_loss
+            loss = loss + proximity_loss
             if logs is not None:
                 logs["proximity_loss"] = proximity_loss
-        else:
-            loss = self.loss(y_hat, y)
 
-        return {'loss': loss, 'progress_bar': logs}
+        outputs = {'loss': loss}
+        if logs is not None:
+            outputs.update({'progress_bar': logs})
+        return outputs
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch

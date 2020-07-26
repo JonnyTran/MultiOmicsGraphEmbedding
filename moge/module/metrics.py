@@ -79,6 +79,8 @@ class Metrics():
         for metric in self.metrics:
             if metric == "top_k":
                 logs.update(self.metrics[metric].compute(prefix=self.prefix))
+            elif "ogb" in metric:
+                continue
             else:
                 metric_name = metric if self.prefix is None else self.prefix + metric
                 logs[metric_name] = self.metrics[metric].compute()
@@ -87,6 +89,8 @@ class Metrics():
 
     def reset_metrics(self):
         for metric in self.metrics:
+            if "ogb" in metric:
+                continue
             self.metrics[metric].reset()
 
 
