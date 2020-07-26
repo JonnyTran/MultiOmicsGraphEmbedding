@@ -212,7 +212,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             neg_edge_index = self.negative_sample(edge_index,
                                                   M=x_index_dict[metapath[0]].size(0),
                                                   N=x_index_dict[metapath[-1]].size(0),
-                                                  num_neg_samples=self.neg_sampling_ratio * edge_index.size(1))
+                                                  num_neg_samples=edge_index.size(1))
             e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
             loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
