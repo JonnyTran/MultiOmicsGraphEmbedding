@@ -77,6 +77,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         except NotImplementedError:
             cpus = 2  # arbitrary default
 
+        # Self
         self.graphs = {}
         pool = multiprocessing.Pool(processes=cpus)
         output = pool.map(self.create_graph, self.original_metapaths if self.use_reverse else self.metapaths)
@@ -91,10 +92,14 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.name = dataset.__class__.__name__
 
     def create_graph(self, metapath):
+        """
+        A hashable function that forks a
+        :param metapath:
+        :return: (metapath:str, graph:networkx.Graph)
+        """
         edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
         edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
-        graph = nx.from_edgelist(edgelist,
-                                 create_using=nx.Graph)
+        graph = nx.from_edgelist(edgelist, create_using=nx.Graph)
         return (metapath, graph)
 
     @staticmethod
@@ -252,7 +257,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
     def get_collate_fn(self, collate_fn: str, batch_size=None):
         if batch_size is not None and "PyGNodeDataset_batch" in collate_fn:
             self.batch_size = batch_size * len(self.node_types)
-            print(f"Actual batch_size = {self.batch_size}")
         if "index" in collate_fn:
             return self.collate_index_cls
         elif "attr" in collate_fn:

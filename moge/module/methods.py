@@ -85,24 +85,27 @@ class LATTE(MetricsComparison):
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
         self.training_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y.squeeze(-1),
                                              weights=weights)
-        loss = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
-        return {'loss': loss}
+        logs = self.training_metrics.compute_metrics()
+        logs["proximity_loss"] = proximity_loss
+
+        loss_combine = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
+        return {'loss': loss_combine, 'progress_bar': logs}
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
         self.validation_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y.squeeze(-1), weights=weights)
-        loss = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
+        loss_combine = self.loss(y_hat, y.squeeze(-1)) + proximity_loss
 
-        return {"val_loss": loss}
+        return {"val_loss": loss_combine}
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        loss = self.loss(y_hat, y) + proximity_loss
+        loss_combine = self.loss(y_hat, y) + proximity_loss
 
-        return {"test_loss": loss}
+        return {"test_loss": loss_combine}
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch", batch_size=self.hparams.batch_size)
