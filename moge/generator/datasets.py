@@ -311,7 +311,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         for node_type in self.node_types:
             X["x_index_dict"][node_type] = self.convert_name2index(sampled_nodes[node_type])
 
-        y = self.y_dict[self.head_node_type][iloc]
+        y = self.y_dict[self.head_node_type][iloc].squeeze(-1)
         return X, y, None
 
     def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):

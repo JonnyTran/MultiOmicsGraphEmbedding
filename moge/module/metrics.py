@@ -59,9 +59,7 @@ class Metrics():
             if "precision" in metric or "recall" in metric:
                 self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
             elif "accuracy" in metric:
-                print("Y_hat", Y_hat.shape, Y_hat[:5])
-                print("Y", Y.shape, Y[:5])
-                self.metrics[metric].update((Y_hat, Y))
+                self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
             elif metric == "top_k":
                 self.metrics[metric].update((Y_hat, Y))
             else:
