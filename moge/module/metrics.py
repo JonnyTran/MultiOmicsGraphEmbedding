@@ -3,13 +3,16 @@ from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, Accuracy
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
+from ogb.graphproppred import Evaluator as GraphEvaluator
+from ogb.nodeproppred import Evaluator as NodeEvaluator
+from ogb.linkproppred import Evaluator as LinkEvaluator
 
 from .utils import filter_samples
 
 
 class Metrics():
     def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None, multilabel=None,
-                 metrics=["precision", "recall", "top_k", "accuracy"], prefix=None):
+                 metrics=["precision", "recall", "top_k", "accuracy"], prefix=None, obg_dataset=None):
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes
@@ -32,6 +35,12 @@ class Metrics():
                 self.metrics[metric] = TopKMulticlassAccuracy(k_s=k_s)
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=is_multilabel)
+            elif "ogbn" in metric:
+                self.metrics[metric] = NodeEvaluator(obg_dataset)
+            elif "ogbg" in metric:
+                self.metrics[metric] = GraphEvaluator(obg_dataset)
+            elif "ogbl" in metric:
+                self.metrics[metric] = LinkEvaluator(obg_dataset)
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
@@ -47,8 +56,12 @@ class Metrics():
             Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)
 
         for metric in self.metrics:
-            if "precision" in metric or "recall" in metric or "accuracy" in metric:
+            if "precision" in metric or "recall" in metric:
                 self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
+            elif "accuracy" in metric:
+                print("Y_hat", Y_hat.shape, Y_hat[:5])
+                print("Y", Y.shape, Y[:5])
+                self.metrics[metric].update((Y_hat, Y))
             elif metric == "top_k":
                 self.metrics[metric].update((Y_hat, Y))
             else:

@@ -99,6 +99,7 @@ class LATTE(MetricsComparison):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
+
         self.validation_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y.squeeze(-1), weights=weights)
         if self.hparams.use_proximity_loss:
             loss = self.loss(y_hat, y.squeeze(-1)) + proximity_loss

@@ -4,7 +4,7 @@ requirements = [
     'numpy', 'pandas', 'cmake', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph',
     'openomics', "tensorflow",
     'chart-studio', "fa2", "scikit-multilearn", "MulticoreTSNE", "gseapy", "focal-loss", "obonet", "wandb",
-    "pytorch-lightning", "pytorch_ignite"
+    "pytorch-lightning", "pytorch_ignite", "ogb"
 ]
 
 setup(

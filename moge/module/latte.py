@@ -152,8 +152,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 head_num_node, tail_num_node = len(x_index_dict[head_type]), len(x_index_dict[tail_type])
 
                 emb_relation_agg[head_type][:, i] = self.propagate(
-                    edge_index_dict[metapath], size=(tail_num_node, head_num_node),
-                    x=(h_dict[tail_type], h_dict[head_type]), alpha=(score_r[metapath], score_l[metapath]))
+                    edge_index_dict[metapath],
+                    size=(tail_num_node, head_num_node),
+                    x=(h_dict[tail_type], h_dict[head_type]),
+                    alpha=(score_r[metapath], score_l[metapath]))
             emb_relation_agg[head_type][:, -1] = h_dict[head_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[head_type].permute(0, 2, 1),
                                                  beta[head_type]).squeeze(-1)
