@@ -68,9 +68,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
              for node_type, in_channels in node_attr_shape.items()}
         )
         self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, 1, bias=False) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, 1, bias=False) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
 
         # If some node type are not attributed, assign h_1 embeddings for them
         if node_attr_shape.keys() < num_nodes_dict.keys():
