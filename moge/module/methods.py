@@ -10,7 +10,7 @@ from torch_geometric.nn import MetaPath2Vec
 from moge.generator.datasets import HeterogeneousNetworkDataset
 from .metrics import Metrics
 from .trainer import _fix_dp_return_type
-from .latte import LATTELayer
+from .latte import LATTELayer, LATTE
 from .classifier import Dense
 
 class MetricsComparison(pl.LightningModule):
@@ -38,25 +38,29 @@ class MetricsComparison(pl.LightningModule):
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
-        logs = {"test_loss": avg_loss}
+        if hasattr(self, "test_metrics"):
+            logs = self.test_metrics.compute_metrics()
+            self.test_metrics.reset_metrics()
+        else:
+            logs = {}
+        logs.update({"test_loss": avg_loss})
 
         return {"progress_bar": logs,
                 "log": logs}
 
 
-class LATTE(MetricsComparison):
+class LATTEMethod(MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["accuracy"]) -> None:
-        super(LATTE, self).__init__()
+        super(LATTEMethod, self).__init__()
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
 
-        self.latte = LATTELayer(t_order=1,
-                                embedding_dim=hparams.embedding_dim,
-                                num_nodes_dict=dataset.num_nodes_dict,
-                                node_attr_shape=dataset.node_attr_shape,
-                                metapaths=dataset.metapaths, use_proximity_loss=hparams.use_proximity_loss)
+        self.latte = LATTE(embedding_dim=hparams.embedding_dim, t_order=hparams.t_order,
+                           num_nodes_dict=dataset.num_nodes_dict,
+                           node_attr_shape=dataset.node_attr_shape, metapaths=dataset.metapaths,
+                           use_proximity_loss=hparams.use_proximity_loss, )
         self.classifier = Dense(hparams)
 
         num_class = dataset.n_classes

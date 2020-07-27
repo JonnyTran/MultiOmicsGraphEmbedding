@@ -7,27 +7,41 @@ import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.inits import glorot
 from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
+import torch_sparse
+from torch_sparse.tensor import SparseTensor
+from torch_sparse.matmul import matmul
+
 import pytorch_lightning as pl
 
 
 class LATTE(nn.Module):
-    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list,
+    def __init__(self, embedding_dim: int, t_order: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list,
                  use_proximity_loss=True):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
+        self.node_types = list(num_nodes_dict.keys())
+        self.embedding_dim = embedding_dim * t_order
         self.use_proximity_loss = use_proximity_loss
         self.t_order = t_order
 
         layers = []
         t_order_metapaths = copy.copy(metapaths)
-        for t in range(1, t_order + 1):
-            layers.append(LATTELayer(t_order=t, embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                                     node_attr_shape=node_attr_shape, metapaths=t_order_metapaths))
-            t_order_metapaths = self.join_relations(t_order_metapaths, metapaths)
+        for t in range(t_order):
+            if t == 0:
+                layers.append(
+                    LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
+                               node_attr_shape=node_attr_shape,
+                               metapaths=t_order_metapaths, first=True))
+            else:
+                layers.append(
+                    LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
+                               node_attr_shape=node_attr_shape,
+                               metapaths=t_order_metapaths, first=False))
+            t_order_metapaths = self.join_metapaths(t_order_metapaths, metapaths)
 
         self.layers = nn.ModuleList(layers)
 
-    def join_relations(self, metapath_A, metapath_B):
+    def join_metapaths(self, metapath_A, metapath_B):
         metapaths = []
         for relation_a in metapath_A:
             for relation_b in metapath_B:
@@ -36,30 +50,67 @@ class LATTE(nn.Module):
                     metapaths.append(new_relation)
         return metapaths
 
+    def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, x_index_dict):
+        output_dict = {}
+        for metapath_a, edge_index_a in edge_index_dict_A.items():
+            if edge_index_a is None: continue
+            for metapath_b, edge_index_b in edge_index_dict_B.items():
+                if edge_index_b is None: continue
+
+                if metapath_a[-1] == metapath_b[0]:
+                    metapath_join = metapath_a + metapath_b[1:]
+                    if isinstance(edge_index_a, tuple):
+                        edge_index_a = edge_index_a[0]
+                        values_a = edge_index_a[1]
+                    else:
+                        values_a = torch.ones(edge_index_a.size(1))
+
+                    if isinstance(edge_index_b, tuple):
+                        edge_index_b = edge_index_b[0]
+                        values_b = edge_index_b[1]
+                    else:
+                        values_b = torch.ones(edge_index_b.size(1))
+
+                    new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                         indexB=edge_index_b, valueB=values_b,
+                                                         m=x_index_dict[metapath_a[0]].size(0),
+                                                         k=x_index_dict[metapath_a[-1]].size(0),
+                                                         n=x_index_dict[metapath_b[-1]].size(0))
+                    output_dict[metapath_join] = new_edge_index
+        return output_dict
+
     def forward(self, x_dict, x_index_dict, edge_index_dict):
-        t_order_metapaths = edge_index_dict
-        proximity_loss = 0
-        for t in range(1, self.t_order + 1):
-            h_dict, t_order_loss = self.layers[t - 1].forward(x_dict, x_index_dict, edge_index_dict)
-            t_order_metapaths = self.join_relations(t_order_metapaths, edge_index_dict.keys())
+        proximity_loss = torch.tensor(0.0, device=x_index_dict[
+            self.node_types[0]].device) if self.use_proximity_loss else None
+
+        h_all_dict = {node_type: [] for node_type in self.node_types}
+
+        for t in range(self.t_order):
+            if t == 0:
+                h_dict, t_proximity_loss = self.layers[t].forward(x_dict, x_index_dict, edge_index_dict)
+                t_order_edge_index_dict = {k: v.detach().clone() for k, v in edge_index_dict.items()}
+            else:
+                h_dict, t_proximity_loss = self.layers[t].forward(x_dict, t_order_edge_index_dict, edge_index_dict,
+                                                                  h_dict)
 
             if self.use_proximity_loss:
-                proximity_loss += t_order_loss
+                proximity_loss += t_proximity_loss
 
-        embedding_output = None
+            for node_type in self.node_types:
+                h_all_dict[node_type].append(h_dict[node_type])
 
+            t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
+
+        embedding_output = {node_type: torch.cat(h_t_list, dim=1) for node_type, h_t_list in h_all_dict.items()}
         return embedding_output, proximity_loss
-
-    def loss(self):
-        pass
 
 
 class LATTELayer(MessagePassing, pl.LightningModule):
-    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int},
-                 metapaths: list, use_proximity_loss=True, neg_sampling_ratio=1.0) -> None:
+    def __init__(self, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int}, metapaths: list,
+                 use_proximity_loss=True, neg_sampling_ratio=1.0, first=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
-        assert t_order > 0, "t_order must start from 1"
-        self.t_order = t_order
+        assert first > 0, "t_order must start from 1"
+        self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
         self.num_nodes_dict = num_nodes_dict
@@ -70,25 +121,26 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # Computes beta
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
-                in_channels=node_attr_shape[node_type] if node_type in node_attr_shape else self.embedding_dim,
+                in_channels=node_attr_shape[
+                    node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
                 out_channels=self.get_relation_size(node_type),
                 kernel_size=1) \
-                for node_type in self.node_types})
+                for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
 
         self.linear = torch.nn.ModuleDict(
             {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=False) \
-             for node_type, in_channels in node_attr_shape.items()}
-        )
+             for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
 
-        # If some node type are not attributed, assign h_1 embeddings for them
-        if node_attr_shape.keys() < num_nodes_dict.keys():
+        # If some node type are not attributed, assign embeddings for them
+        non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
+        if len(non_attr_node_types) > 0:
             self.embeddings = torch.nn.ModuleDict(
                 {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type], embedding_dim=embedding_dim) \
-                 for node_type in (num_nodes_dict.keys() - node_attr_shape.keys())}
+                 for node_type in non_attr_node_types}
             )
         self.reset_parameters()
 
@@ -120,14 +172,16 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                               self.attn_l.items()},
                                                              self.embedding_dim)
 
-    def forward(self, x_dict, x_index_dict, edge_index_dict):
+    def forward(self, x_dict, x_index_dict, edge_index_dict, h1_dict=None):
         """
 
         :param x_dict: a dict of node attributes indexed node_type
-        :param x_index_dict: a dict of index values indexed by node_type in this mini-batch sampling
-        :param edge_index_dict: a dict of edge_index indexed by metapath
+        :param x_index_dict: A dict of index values indexed by node_type in this mini-batch sampling
+        :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
+        :param h1_dict: Embeddings of the previous order. Default: None (if first order). A dict of edge_index indexed by metapath
         :return: output_emb, loss
         """
+        # H_t = W_t * x
         h_dict = {}
         for node_type in self.node_types:
             if node_type in x_dict.keys():
@@ -135,10 +189,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[x_index_dict[node_type]]
 
+        # Compute relations attention coefficients
         beta = {}
         for node_type in self.node_types:
             if node_type in x_dict:
                 beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+            elif not self.first:
+                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
             else:
                 beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
@@ -151,16 +208,23 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                          enumerate(self.get_head_relations(node_type) + ["self"])}
 
         score_l, score_r = {}, {}
+
+        # Compute node-level attention coefficients
         for i, metapath in enumerate(self.metapaths):
             head_type, tail_type = metapath[0], metapath[-1]
-            score_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)
-            score_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)
+            if self.first:
+                score_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # score_l = attn_l * W * x_1
+            else:
+                score_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # score_l = attn_l * h_1
 
+            score_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # score_r = attn_r * W * x_1
+
+        # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         emb_relation_agg = {}
         emb_output = {}
         for node_type in self.node_types:
             emb_relation_agg[node_type] = torch.zeros(
-                size=(x_index_dict[node_type].size(0),  # (num_nodes, num_relations, embedding_dim)
+                size=(x_index_dict[node_type].size(0),  # X_m = (num_nodes, num_relations, embedding_dim)
                       self.get_relation_size(node_type),
                       self.embedding_dim),
                 device=self.conv[node_type].weight.device)
@@ -171,8 +235,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 head_type, tail_type = metapath[0], metapath[-1]
                 head_num_node, tail_num_node = len(x_index_dict[head_type]), len(x_index_dict[tail_type])
 
+                if isinstance(edge_index_dict[metapath], tuple):
+                    edge_index, _ = edge_index_dict[metapath]
+                else:
+                    edge_index = edge_index_dict[metapath]
+
                 emb_relation_agg[head_type][:, i] = self.propagate(
-                    edge_index_dict[metapath],
+                    edge_index,
                     size=(tail_num_node, head_num_node),
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(score_r[metapath], score_l[metapath]))
@@ -224,17 +293,52 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index is None: continue
+
+            if isinstance(edge_index, tuple):  # Weighted edges
+                edge_index, values = edge_index
+            else:
+                values = 1
+
             e_ij = score_l[metapath][edge_index[0]] + score_r[metapath][edge_index[1]]
-            loss += -torch.mean(torch.log(torch.sigmoid(e_ij)), dim=-1)
+            loss += -torch.mean(values * torch.log(torch.sigmoid(e_ij)), dim=-1)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index is None: continue
+            if isinstance(edge_index, tuple):  # Weighted edges
+                edge_index, values = edge_index
+            else:
+                values = 1
+
             neg_edge_index = self.negative_sample(edge_index,
                                                   M=x_index_dict[metapath[0]].size(0),
                                                   N=x_index_dict[metapath[-1]].size(0),
                                                   num_neg_samples=edge_index.size(1))
             e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
-            loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
+            loss += -torch.mean(values * torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
         return loss
+
+    def get_relation_weights(self):
+        return {"-".join(k) if isinstance(k, tuple) else node_type: v for node_type in self.node_types for k, v in
+                self._beta[node_type].items()}
+
+
+def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
+    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
+                     sparse_sizes=(m, k), is_sorted=not coalesced)
+    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
+                     sparse_sizes=(k, n), is_sorted=not coalesced)
+
+    deg_A = A.storage.colcount()
+    deg_B = B.storage.rowcount()
+    deg_normalized = 1 / (deg_A + deg_B).to(torch.float)
+    D = SparseTensor(row=torch.arange(deg_normalized.size(0)),
+                     col=torch.arange(deg_normalized.size(0)),
+                     value=deg_normalized,
+                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
+
+    C = matmul(matmul(A, D), B)
+    row, col, value = C.coo()
+
+    return torch.stack([row, col], dim=0), value
