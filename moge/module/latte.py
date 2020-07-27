@@ -16,6 +16,7 @@ class LATTE(nn.Module):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.use_proximity_loss = use_proximity_loss
+        self.t_order = t_order
 
         layers = []
         t_order_metapaths = copy.copy(metapaths)
@@ -36,7 +37,18 @@ class LATTE(nn.Module):
         return metapaths
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
-        pass
+        t_order_metapaths = edge_index_dict
+        proximity_loss = 0
+        for t in range(1, self.t_order + 1):
+            h_dict, t_order_loss = self.layers[t - 1].forward(x_dict, x_index_dict, edge_index_dict)
+            t_order_metapaths = self.join_relations(t_order_metapaths, edge_index_dict.keys())
+
+            if self.use_proximity_loss:
+                proximity_loss += t_order_loss
+
+        embedding_output = None
+
+        return embedding_output, proximity_loss
 
     def loss(self):
         pass
@@ -119,7 +131,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = {}
         for node_type in self.node_types:
             if node_type in x_dict.keys():
-                h_dict[node_type] = torch.tanh(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
+                h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[x_index_dict[node_type]]
 
@@ -130,6 +142,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
+        self._beta = {node_type: beta[node_type].mean(dim=1) for node_type in self.node_types}
 
         score_l, score_r = {}, {}
         for i, metapath in enumerate(self.metapaths):
@@ -141,9 +154,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         emb_output = {}
         for node_type in self.node_types:
             emb_relation_agg[node_type] = torch.zeros(
-                size=(x_index_dict[node_type].size(0), self.get_relation_size(node_type),
+                size=(x_index_dict[node_type].size(0),  # (num_nodes, num_relations, embedding_dim)
+                      self.get_relation_size(node_type),
                       self.embedding_dim),
-                device=self.conv[node_type].weight.device)  # (num_nodes, num_relations, embedding_dim)
+                device=self.conv[node_type].weight.device)
 
             for i, metapath in enumerate(self.get_head_relations(node_type)):
                 if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
@@ -156,6 +170,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     size=(tail_num_node, head_num_node),
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(score_r[metapath], score_l[metapath]))
+
             emb_relation_agg[head_type][:, -1] = h_dict[head_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[head_type].permute(0, 2, 1),
                                                  beta[head_type]).squeeze(-1)
