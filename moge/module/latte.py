@@ -92,8 +92,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             )
         self.reset_parameters()
 
-    def get_head_relations(self, head_node_type) -> dict:
-        relations = {metapath for metapath in self.metapaths if metapath[0] == head_node_type}
+    def get_head_relations(self, head_node_type) -> list:
+        relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
         return relations
 
     def get_relation_size(self, node_type) -> int:
@@ -142,7 +142,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
-        self._beta = {node_type: beta[node_type].mean(dim=1) for node_type in self.node_types}
+
+        if not self.training:
+            self._beta = {}
+            for node_type in self.node_types:
+                _beta = beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy()
+                self._beta[node_type] = {metapath: _beta[i] for i, metapath in
+                                         enumerate(self.get_head_relations(node_type) + ["self"])}
 
         score_l, score_r = {}, {}
         for i, metapath in enumerate(self.metapaths):

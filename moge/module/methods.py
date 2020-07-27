@@ -39,6 +39,7 @@ class MetricsComparison(pl.LightningModule):
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
         logs = {"test_loss": avg_loss}
+
         return {"progress_bar": logs,
                 "log": logs}
 
@@ -59,11 +60,12 @@ class LATTE(MetricsComparison):
         self.classifier = Dense(hparams)
 
         num_class = dataset.n_classes
-        self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
-                                        multilabel=dataset.multilabel)
-        self.validation_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics,
-                                          prefix="val_",
-                                          multilabel=dataset.multilabel)
+        self.training_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
+                                        multilabel=dataset.multilabel, metrics=metrics)
+        self.validation_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
+                                          multilabel=dataset.multilabel, metrics=metrics)
+        self.validation_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
+                                          multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
@@ -123,16 +125,19 @@ class LATTE(MetricsComparison):
         if self.hparams.use_proximity_loss:
             loss = loss + proximity_loss
 
-        return {"test_loss": loss}
+        for metric in self.training_metrics.metrics:
+            if "ogbn" in metric:
+                logs = self.training_metrics.evaluate_metric(Y_hat=y_hat, Y=y, metric=metric)
+                break
+
+        return {"test_loss": loss, **logs}
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch",
                                              batch_size=self.hparams.batch_size, num_workers=16)
-
     def val_dataloader(self):
         return self.dataset.val_dataloader(collate_fn="PyGNodeDataset_batch",
                                            batch_size=self.hparams.batch_size, num_workers=4)
-
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn="PyGNodeDataset_batch",
                                             batch_size=self.hparams.batch_size, num_workers=4)
@@ -163,10 +168,10 @@ class GTN(GTN, MetricsComparison):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
                                                 sparse=True)
 
-        self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
-                                        multilabel=dataset.multilabel)
-        self.validation_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics,
-                                          prefix="val_", multilabel=dataset.multilabel)
+        self.training_metrics = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
+                                        multilabel=dataset.multilabel, metrics=metrics)
+        self.validation_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
+                                          multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
@@ -269,11 +274,10 @@ class HAN(HAN, MetricsComparison):
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
-        self.training_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics, prefix=None,
-                                        multilabel=dataset.multilabel)
-        self.validation_metrics = Metrics(loss_type=hparams.loss_type, n_classes=num_class, metrics=metrics,
-                                          prefix="val_",
-                                          multilabel=dataset.multilabel)
+        self.training_metrics = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
+                                        multilabel=dataset.multilabel, metrics=metrics)
+        self.validation_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
+                                          multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type

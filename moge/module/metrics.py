@@ -1,3 +1,5 @@
+from typing import Callable, Optional, Union
+
 import torch
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, Accuracy
@@ -11,8 +13,8 @@ from .utils import filter_samples
 
 
 class Metrics():
-    def __init__(self, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None, multilabel=None,
-                 metrics=["precision", "recall", "top_k", "accuracy"], prefix=None):
+    def __init__(self, prefix, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None, multilabel=None,
+                 metrics=["precision", "recall", "top_k", "accuracy"]):
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes
@@ -60,27 +62,16 @@ class Metrics():
                 self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
             elif "accuracy" in metric:
                 self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
-            elif metric == "top_k":
+            elif metric == "top_k" or "ogb" in metric:
                 self.metrics[metric].update((Y_hat, Y))
-
-    def evaluate_metric(self, Y_hat: torch.Tensor, Y: torch.Tensor, metric):
-        if "ogbn" in metric:
-            Y_hat = Y_hat.argmax(axis=1)
-            if Y_hat.dim() <= 1:
-                Y_hat = Y_hat.unsqueeze(-1)
-            if Y.dim() <= 1:
-                Y = Y.unsqueeze(-1)
-            return self.metrics[metric].eval({"y_pred": Y_hat, "y_true": Y})
-        else:
-            return {}
+            else:
+                raise Exception(f"Metric {metric} has problem at .update()")
 
     def compute_metrics(self):
         logs = {}
         for metric in self.metrics:
-            if metric == "top_k":
+            if metric == "top_k" or "ogb" in metric:
                 logs.update(self.metrics[metric].compute(prefix=self.prefix))
-            elif "ogb" in metric:
-                continue
             else:
                 metric_name = metric if self.prefix is None else self.prefix + metric
                 logs[metric_name] = self.metrics[metric].compute()
@@ -92,6 +83,41 @@ class Metrics():
             if "ogb" in metric:
                 continue
             self.metrics[metric].reset()
+
+
+class OGBEvaluator(Metric):
+
+    def __init__(self, evaluator, output_transform=lambda x: x, device=None):
+        super().__init__(output_transform, device)
+
+        self.evaluator = evaluator
+        self.y_pred = torch.tensor([])
+        self.y_true = torch.tensor([])
+
+    @reinit__is_reduced
+    def reset(self):
+        self.y_pred = torch.tensor([])
+        self.y_true = torch.tensor([])
+
+    @reinit__is_reduced
+    def update(self, outputs):
+        y_pred, y_true = outputs
+        y_pred = y_pred.argmax(axis=1)
+        if y_pred.dim() <= 1:
+            y_pred = y_pred.unsqueeze(-1)
+        if y_true.dim() <= 1:
+            y_true = y_true.unsqueeze(-1)
+
+        self.y_true = torch.cat([self.y_true, y_true], dim=0)
+        self.y_pred = torch.cat([self.y_pred, y_pred], dim=0)
+
+    def compute(self, prefix=None):
+        output = self.evaluator.eval({"y_pred": self.y_pred, "y_true": self.y_true})
+
+        if prefix is None:
+            return {f"{k}": v for k, v in output.items()}
+        else:
+            return {f"{prefix}{k}": v for k, v in output.items()}
 
 
 class TopKMulticlassAccuracy(Metric):

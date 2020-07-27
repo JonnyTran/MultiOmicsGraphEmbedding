@@ -10,10 +10,10 @@ class ModelTrainer(pl.LightningModule):
 
         self._model = model
         self.hparams = self._model.hparams
-        self.training_metrics = Metrics(loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes,
-                                        metrics=metrics, prefix=None)
-        self.validation_metrics = Metrics(loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes,
-                                          metrics=metrics, prefix="val_")
+        self.training_metrics = Metrics(prefix=None, loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes,
+                                        metrics=metrics)
+        self.validation_metrics = Metrics(prefix="val_", loss_type=self.hparams.loss_type,
+                                          n_classes=self.hparams.n_classes, metrics=metrics)
 
         self.n_gpus = gpus
         self.data_path = data_path
