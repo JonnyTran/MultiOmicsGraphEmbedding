@@ -64,8 +64,8 @@ class LATTE(MetricsComparison):
                                         multilabel=dataset.multilabel, metrics=metrics)
         self.validation_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
                                           multilabel=dataset.multilabel, metrics=metrics)
-        self.validation_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
-                                          multilabel=dataset.multilabel, metrics=metrics)
+        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
+                                    multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
@@ -89,16 +89,10 @@ class LATTE(MetricsComparison):
                                              weights=weights)
 
         logs = None
-        for metric in self.training_metrics.metrics:
-            if "ogbn" in metric:
-                logs = self.training_metrics.evaluate_metric(Y_hat=y_hat, Y=y, metric=metric)
-                break
-
         loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
             loss = loss + proximity_loss
-            if logs is not None:
-                logs["proximity_loss"] = proximity_loss
+            logs = {"proximity_loss": proximity_loss}
 
         outputs = {'loss': loss}
         if logs is not None:
@@ -121,16 +115,14 @@ class LATTE(MetricsComparison):
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
+
+        self.test_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y, weights=weights)
+
         loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
             loss = loss + proximity_loss
 
-        for metric in self.training_metrics.metrics:
-            if "ogbn" in metric:
-                logs = self.training_metrics.evaluate_metric(Y_hat=y_hat, Y=y, metric=metric)
-                break
-
-        return {"test_loss": loss, **logs}
+        return {"test_loss": loss}
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch",
