@@ -38,34 +38,44 @@ class Metrics():
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=is_multilabel)
             elif "ogbn" in metric:
-                self.metrics[metric] = NodeEvaluator(metric)
+                self.metrics[metric] = OGBEvaluator(NodeEvaluator(metric))
             elif "ogbg" in metric:
-                self.metrics[metric] = GraphEvaluator(metric)
+                self.metrics[metric] = OGBEvaluator(GraphEvaluator(metric))
             elif "ogbl" in metric:
-                self.metrics[metric] = LinkEvaluator(metric)
+                self.metrics[metric] = OGBEvaluator(LinkEvaluator(metric))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
     def update_metrics(self, Y_hat: torch.Tensor, Y: torch.Tensor, weights):
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
 
+        # Apply softmax/sigmoid activation if needed
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
             Y_hat = torch.softmax(Y_hat, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(Y_hat)
 
-        if not self.is_multilabel or "SOFTMAX" in self.loss_type:
-            if Y.dim() >= 2:
-                Y = Y.squeeze(1)
-            Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)
-
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric:
-                self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
+                if not self.is_multilabel or "SOFTMAX" in self.loss_type:
+                    self.metrics[metric].update(
+                        ((Y_hat > self.threshold).type_as(Y), self.convert_labels_to_matrix(Y, Y_hat)))
+                else:
+                    self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
             elif "accuracy" in metric:
-                self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
+                if not self.is_multilabel or "SOFTMAX" in self.loss_type:
+                    self.metrics[metric].update(
+                        ((Y_hat > self.threshold).type_as(Y), self.convert_labels_to_matrix(Y, Y_hat)))
+                else:
+                    self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
             elif metric == "top_k" or "ogb" in metric:
                 self.metrics[metric].update((Y_hat, Y))
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
+
+    def convert_labels_to_matrix(self, Y, Y_hat):
+        if Y.dim() == 2:
+            Y = Y.squeeze(1)
+        Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)
+        return Y
 
     def compute_metrics(self):
         logs = {}
@@ -89,15 +99,14 @@ class OGBEvaluator(Metric):
 
     def __init__(self, evaluator, output_transform=lambda x: x, device=None):
         super().__init__(output_transform, device)
-
         self.evaluator = evaluator
-        self.y_pred = torch.tensor([])
-        self.y_true = torch.tensor([])
+        self.y_pred = []
+        self.y_true = []
 
     @reinit__is_reduced
     def reset(self):
-        self.y_pred = torch.tensor([])
-        self.y_true = torch.tensor([])
+        self.y_pred.data = []
+        self.y_true.data = []
 
     @reinit__is_reduced
     def update(self, outputs):
@@ -107,12 +116,12 @@ class OGBEvaluator(Metric):
             y_pred = y_pred.unsqueeze(-1)
         if y_true.dim() <= 1:
             y_true = y_true.unsqueeze(-1)
-
-        self.y_true = torch.cat([self.y_true, y_true], dim=0)
-        self.y_pred = torch.cat([self.y_pred, y_pred], dim=0)
+        self.y_true.append(y_true)
+        self.y_pred.append(y_pred)
 
     def compute(self, prefix=None):
-        output = self.evaluator.eval({"y_pred": self.y_pred, "y_true": self.y_true})
+        output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
+                                      "y_true": torch.cat(self.y_true, dim=0)})
 
         if prefix is None:
             return {f"{k}": v for k, v in output.items()}
