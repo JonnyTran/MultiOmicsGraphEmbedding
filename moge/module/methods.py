@@ -79,7 +79,7 @@ class LATTEMethod(MetricsComparison):
                                     multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
 
-        self._name = f"LATTE_{hparams.t_order}-order{'_proximity' if hparams.use_proximity_loss else None}"
+        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
         embeddings, proximity_loss = self.latte.forward(x_dict, x_index_dict, edge_index_dict)

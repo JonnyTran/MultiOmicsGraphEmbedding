@@ -92,8 +92,7 @@ class LATTE(nn.Module):
                                                              coalesced=True)
                     except Exception as e:
                         print(metapath_a, metapath_b)
-                        print("sizes", x_index_dict[metapath_a[0]].size(0),
-                              x_index_dict[metapath_a[-1]].size(0), x_index_dict[metapath_b[-1]].size(0), )
+                        print("sizes", {node_type: idx.size(0) for node_type, idx in x_index_dict.items()})
                         print("edge_index_a", edge_index_a.size(1), edge_index_a.dtype)
                         print("values_a", values_a.size(), values_a.dtype)
                         print("edge_index_b", edge_index_b.size(1), edge_index_b.dtype)
@@ -299,54 +298,30 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         alpha = F.dropout(alpha, p=0.2, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
-    @staticmethod
-    def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
-        num_neg_samples = min(num_neg_samples,
-                              M * N - edge_index.size(1))
-
-        rng = range(M * N)
-        idx = (edge_index[0] * N + edge_index[1]).to('cpu')  # idx = N * i + j
-
-        perm = torch.tensor(random.sample(rng, num_neg_samples))
-        mask = torch.from_numpy(np.isin(perm, idx)).to(torch.bool)
-        rest = mask.nonzero().view(-1)
-        while rest.numel() > 0:  # pragma: no cover
-            tmp = torch.tensor(random.sample(rng, rest.size(0)))
-            mask = torch.from_numpy(np.isin(tmp, idx)).to(torch.bool)
-            perm[rest] = tmp
-            rest = rest[mask.nonzero().view(-1)]
-
-        row = perm / N
-        col = perm % N
-        neg_edge_index = torch.stack([row, col], dim=0).long()
-
-        return neg_edge_index.to(edge_index.device)
-
     def proximity_loss(self, edge_index_dict, score_l, score_r, x_index_dict):
         loss = torch.tensor(0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
 
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
-            if edge_index is None: continue
-
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, values = edge_index
             else:
                 values = 1
+            if edge_index is None: continue
 
             e_ij = score_l[metapath][edge_index[0]] + score_r[metapath][edge_index[1]]
             loss += -torch.mean(values * torch.log(torch.sigmoid(e_ij)), dim=-1)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
         for metapath, edge_index in edge_index_dict.items():
-            if edge_index is None: continue
             if isinstance(edge_index, tuple):  # Weighted edges
-                edge_index, values = edge_index
+                edge_index, _ = edge_index
+            if edge_index is None or edge_index.size(1) <= 5: continue
 
-            neg_edge_index = self.negative_sample(edge_index,
-                                                  M=x_index_dict[metapath[0]].size(0),
-                                                  N=x_index_dict[metapath[-1]].size(0),
-                                                  num_neg_samples=edge_index.size(1))
+            neg_edge_index = negative_sample(edge_index,
+                                             M=x_index_dict[metapath[0]].size(0),
+                                             N=x_index_dict[metapath[-1]].size(0),
+                                             num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
             e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
             loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
@@ -380,3 +355,26 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
     row, col, value = C.coo()
 
     return torch.stack([row, col], dim=0), value
+
+
+def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
+    num_neg_samples = min(num_neg_samples,
+                          M * N - edge_index.size(1))
+
+    rng = range(M * N)
+    idx = (edge_index[0] * N + edge_index[1]).to('cpu')  # idx = N * i + j
+
+    perm = torch.tensor(random.sample(rng, num_neg_samples))
+    mask = torch.from_numpy(np.isin(perm, idx)).to(torch.bool)
+    rest = mask.nonzero().view(-1)
+    while rest.numel() > 0:  # pragma: no cover
+        tmp = torch.tensor(random.sample(rng, rest.size(0)))
+        mask = torch.from_numpy(np.isin(tmp, idx)).to(torch.bool)
+        perm[rest] = tmp
+        rest = rest[mask.nonzero().view(-1)]
+
+    row = perm / N
+    col = perm % N
+    neg_edge_index = torch.stack([row, col], dim=0).long()
+
+    return neg_edge_index.to(edge_index.device)
