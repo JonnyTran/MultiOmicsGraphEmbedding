@@ -98,10 +98,10 @@ class LATTE(nn.Module):
                         print("values_a", values_a.size(), values_a.dtype)
                         print("edge_index_b", edge_index_b.size(1), edge_index_b.dtype)
                         print("values_b", values_b.size(), values_b.dtype)
-                        print(e)
+                        raise e
 
                     if new_edge_index[0].size(1) <= 5: continue
-                    print(new_edge_index[0].size(1), new_edge_index[1].min(), new_edge_index[1].max())
+                    # print(new_edge_index[0].size(1), new_edge_index[1].min().cpu().numpy(), new_edge_index[1].max().cpu().numpy())
                     output_dict[metapath_join] = new_edge_index
         return output_dict
 
@@ -348,16 +348,15 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
 
     deg_A = A.storage.colcount()
     deg_B = B.storage.rowcount()
-    deg_normalized = 1 / (deg_A + deg_B).to(torch.float)
-    deg_normalized = deg_normalized[deg_normalized == float('inf')] = 0.0
-    D = SparseTensor(row=torch.arange(deg_normalized.size(0)),
-                     col=torch.arange(deg_normalized.size(0)),
-                     value=deg_normalized,
+    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
+    deg_normalized[deg_normalized == float('inf')] = 0.0
+
+    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
+                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
+                     value=deg_normalized.type_as(valueA),
                      sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
 
     C = matmul(matmul(A, D), B)
     row, col, value = C.coo()
 
     return torch.stack([row, col], dim=0), value
-
-
