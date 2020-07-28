@@ -17,6 +17,12 @@ class MetricsComparison(pl.LightningModule):
     def __init__(self):
         super(MetricsComparison, self).__init__()
 
+    def name(self):
+        if hasattr(self, "name"):
+            return self.name
+        else:
+            return self.__class__.__name__
+
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
         logs = self.training_metrics.compute_metrics()
@@ -72,6 +78,8 @@ class LATTEMethod(MetricsComparison):
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
                                     multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
+
+        self.name = f"LATTE_{hparams.t_order}-order{'_proximity' if hparams.use_proximity_loss else None}"
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
         embeddings, proximity_loss = self.latte.forward(x_dict, x_index_dict, edge_index_dict)
