@@ -134,10 +134,10 @@ class LATTEMethod(MetricsComparison):
                                              batch_size=self.hparams.batch_size, num_workers=16)
     def val_dataloader(self):
         return self.dataset.val_dataloader(collate_fn="PyGNodeDataset_batch",
-                                           batch_size=self.hparams.batch_size, num_workers=4)
+                                           batch_size=self.hparams.batch_size, num_workers=6)
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn="PyGNodeDataset_batch",
-                                            batch_size=self.hparams.batch_size, num_workers=4)
+                                            batch_size=self.hparams.batch_size, num_workers=6)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)

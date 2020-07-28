@@ -54,40 +54,53 @@ class LATTE(nn.Module):
         output_dict = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if edge_index_a is None or (isinstance(edge_index_a, tuple) and edge_index_a[0] is None): continue
+
+            # Preprocess edge_index_a
+            if isinstance(edge_index_a, tuple):
+                edge_index_a = edge_index_a[0]
+                values_a = edge_index_a[1]
+            else:
+                values_a = torch.ones_like(edge_index_a[0].detach(), dtype=torch.float)
+            if edge_index_a.size(1) <= 1: continue
+            if values_a.dtype != torch.int:
+                values_a = values_a.to(torch.float)
+
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if edge_index_b is None or (isinstance(edge_index_b, tuple) and edge_index_b[0] is None): continue
 
                 if metapath_a[-1] == metapath_b[0]:
                     metapath_join = metapath_a + metapath_b[1:]
-                    if isinstance(edge_index_a, tuple):
-                        edge_index_a = edge_index_a[0]
-                        values_a = edge_index_a[1]
-                    else:
-                        values_a = torch.ones_like(edge_index_a[0], dtype=torch.float)
 
+                    # Preprocess edge_index_a
                     if isinstance(edge_index_b, tuple):
                         edge_index_b = edge_index_b[0]
                         values_b = edge_index_b[1]
                     else:
-                        values_b = torch.ones_like(edge_index_b[0], dtype=torch.float)
+                        values_b = torch.ones_like(edge_index_b[0].detach(), dtype=torch.float)
+                    if edge_index_b.size(1) <= 1: continue
+                    if values_b.dtype != torch.int:
+                        values_b = values_b.to(torch.float)
 
-                    # print("A", metapath_a)
-                    # print(metapath_b)
-                    # print("sizes", x_index_dict[metapath_a[0]].size(0),
-                    #                                      x_index_dict[metapath_a[-1]].size(0),
-                    #                                      x_index_dict[metapath_b[-1]].size(0),)
-                    # print("edge_index_a", edge_index_a.size(1))
-                    # print("edge_index_b", edge_index_b.size(1))
                     try:
-                        new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
-                                                             indexB=edge_index_b, valueB=values_b,
+                        new_edge_index = torch_sparse.spspmm(indexA=edge_index_a,
+                                                             valueA=values_a,
+                                                             indexB=edge_index_b,
+                                                             valueB=values_b,
                                                              m=x_index_dict[metapath_a[0]].size(0),
                                                              k=x_index_dict[metapath_a[-1]].size(0),
                                                              n=x_index_dict[metapath_b[-1]].size(0),
                                                              coalesced=True)
                     except Exception as e:
-                        continue
+                        print(metapath_a, metapath_b)
+                        print("sizes", x_index_dict[metapath_a[0]].size(0),
+                              x_index_dict[metapath_a[-1]].size(0), x_index_dict[metapath_b[-1]].size(0), )
+                        print("edge_index_a", edge_index_a.size(1), edge_index_a.dtype)
+                        print("values_a", values_a.size(), values_a.dtype)
+                        print("edge_index_b", edge_index_b.size(1), edge_index_b.dtype)
+                        print("values_b", values_b.size(), values_b.dtype)
+                        print(e)
 
+                    if new_edge_index[0].size(1) <= 1: continue
                     # print("new_edge_index", new_edge_index[0].shape)
                     output_dict[metapath_join] = new_edge_index
         return output_dict
@@ -212,10 +225,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # Compute relations attention coefficients
         beta = {}
         for node_type in self.node_types:
-            if node_type in x_dict:
+            if node_type in x_dict and self.first:
                 beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
             elif not self.first:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
+
+            # Use self.embeddings when first layer and node_type is not attributed
             else:
                 beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
