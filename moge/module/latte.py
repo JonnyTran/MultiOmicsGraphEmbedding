@@ -63,13 +63,13 @@ class LATTE(nn.Module):
                         edge_index_a = edge_index_a[0]
                         values_a = edge_index_a[1]
                     else:
-                        values_a = torch.ones(edge_index_a.size(1))
+                        values_a = torch.ones(edge_index_a.size(1), dtype=torch.float, device=edge_index_a.device)
 
                     if isinstance(edge_index_b, tuple):
                         edge_index_b = edge_index_b[0]
                         values_b = edge_index_b[1]
                     else:
-                        values_b = torch.ones(edge_index_b.size(1))
+                        values_b = torch.ones(edge_index_b.size(1), dtype=torch.float, device=edge_index_b.device)
 
                     new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
                                                          indexB=edge_index_b, valueB=values_b,
@@ -88,7 +88,7 @@ class LATTE(nn.Module):
         for t in range(self.t_order):
             if t == 0:
                 h_dict, t_proximity_loss = self.layers[t].forward(x_dict, x_index_dict, edge_index_dict)
-                t_order_edge_index_dict = {k: v.detach().clone() for k, v in edge_index_dict.items()}
+                t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict, x_index_dict)
             else:
                 h_dict, t_proximity_loss = self.layers[t].forward(x_dict, t_order_edge_index_dict, edge_index_dict,
                                                                   h_dict)
@@ -109,7 +109,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int}, metapaths: list,
                  use_proximity_loss=True, neg_sampling_ratio=1.0, first=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
-        assert first > 0, "t_order must start from 1"
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
