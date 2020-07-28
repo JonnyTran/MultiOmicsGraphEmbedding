@@ -124,8 +124,6 @@ class LATTE(nn.Module):
                                                                   h1_dict=h_dict)
                 t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
 
-            # print("t_order_edge_index_dict", {k:v for k,v in t_order_edge_index_dict.items()})
-
             if self.t_order > 1:
                 for node_type in self.node_types:
                     h_all_dict[node_type].append(h_dict[node_type])
@@ -229,12 +227,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
             elif not self.first:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
-
-            # Use self.embeddings when first layer and node_type is not attributed
-            else:
+            else:  # Use self.embeddings when first layer and node_type is not attributed
                 beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
 
+        # Compute beta from testing samples
         if not self.training:
             self._beta = {}
             for node_type in self.node_types:
@@ -242,9 +239,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 self._beta[node_type] = {metapath: _beta[i] for i, metapath in
                                          enumerate(self.get_head_relations(node_type) + ["self"])}
 
-        score_l, score_r = {}, {}
-
         # Compute node-level attention coefficients
+        score_l, score_r = {}, {}
         for i, metapath in enumerate(self.metapaths):
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
@@ -294,9 +290,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        # alpha = F.leaky_relu(alpha, self.negative_slope)
+        alpha = F.leaky_relu(alpha, 0.2)
         alpha = softmax(alpha, index=index, num_nodes=size_i)
-        # alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+        alpha = F.dropout(alpha, p=0.2, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
     @staticmethod
@@ -342,8 +338,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, values = edge_index
-            else:
-                values = 1
 
             neg_edge_index = self.negative_sample(edge_index,
                                                   M=x_index_dict[metapath[0]].size(0),

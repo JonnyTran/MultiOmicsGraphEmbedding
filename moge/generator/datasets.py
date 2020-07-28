@@ -284,13 +284,13 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         seed_nodes = {self.head_node_type: self.convert_index2name(iloc, self.head_node_type)}
         sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_nodes)
 
-        # node_index = self.y_index_dict[self.head_node_type][self.convert_name2index(sampled_nodes[self.head_node_type])]
+        node_index = self.y_index_dict[self.head_node_type][self.convert_name2index(sampled_nodes[self.head_node_type])]
 
-        assert len(iloc) == len(seed_nodes[self.head_node_type])
+        # assert len(iloc) == len(seed_nodes[self.head_node_type])
 
         X = {"edge_index_dict": {},
-             "x_dict": {self.head_node_type: self.x_dict[self.head_node_type][iloc]} if hasattr(self,
-                                                                                                "x_dict") else None,
+             "x_dict": {self.head_node_type: self.x_dict[self.head_node_type][node_index]} if hasattr(self,
+                                                                                                      "x_dict") else None,
              "x_index_dict": {}}
 
         for metapath in self.original_metapaths if self.use_reverse else self.metapaths:
@@ -307,7 +307,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         for node_type in self.node_types:
             X["x_index_dict"][node_type] = self.convert_name2index(sampled_nodes[node_type])
 
-        y = self.y_dict[self.head_node_type][iloc].squeeze(-1)
+        y = self.y_dict[self.head_node_type][node_index].squeeze(-1)
         return X, y, None
 
     def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):

@@ -18,8 +18,8 @@ class MetricsComparison(pl.LightningModule):
         super(MetricsComparison, self).__init__()
 
     def name(self):
-        if hasattr(self, "name"):
-            return self.name
+        if hasattr(self, "_name"):
+            return self._name
         else:
             return self.__class__.__name__
 
@@ -79,7 +79,7 @@ class LATTEMethod(MetricsComparison):
                                     multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
 
-        self.name = f"LATTE_{hparams.t_order}-order{'_proximity' if hparams.use_proximity_loss else None}"
+        self._name = f"LATTE_{hparams.t_order}-order{'_proximity' if hparams.use_proximity_loss else None}"
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
         embeddings, proximity_loss = self.latte.forward(x_dict, x_index_dict, edge_index_dict)
