@@ -63,19 +63,28 @@ class LATTE(nn.Module):
                         edge_index_a = edge_index_a[0]
                         values_a = edge_index_a[1]
                     else:
-                        values_a = torch.ones(edge_index_a.size(1), dtype=torch.float, device=edge_index_a.device)
+                        values_a = torch.ones_like(edge_index_a[0], dtype=torch.float)
 
                     if isinstance(edge_index_b, tuple):
                         edge_index_b = edge_index_b[0]
                         values_b = edge_index_b[1]
                     else:
-                        values_b = torch.ones(edge_index_b.size(1), dtype=torch.float, device=edge_index_b.device)
+                        values_b = torch.ones_like(edge_index_b[0], dtype=torch.float)
 
+                    print("A", metapath_a)
+                    print(metapath_b)
+                    # print("sizes", x_index_dict[metapath_a[0]].size(0),
+                    #                                      x_index_dict[metapath_a[-1]].size(0),
+                    #                                      x_index_dict[metapath_b[-1]].size(0),)
+                    # print("edge_index_a", edge_index_a.size(1))
+                    # print("edge_index_b", edge_index_b.size(1))
                     new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
                                                          indexB=edge_index_b, valueB=values_b,
                                                          m=x_index_dict[metapath_a[0]].size(0),
                                                          k=x_index_dict[metapath_a[-1]].size(0),
-                                                         n=x_index_dict[metapath_b[-1]].size(0))
+                                                         n=x_index_dict[metapath_b[-1]].size(0),
+                                                         coalesced=True)
+                    # print("new_edge_index", new_edge_index[0].shape)
                     output_dict[metapath_join] = new_edge_index
         return output_dict
 
@@ -88,20 +97,25 @@ class LATTE(nn.Module):
         for t in range(self.t_order):
             if t == 0:
                 h_dict, t_proximity_loss = self.layers[t].forward(x_dict, x_index_dict, edge_index_dict)
-                t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict, x_index_dict)
+                if self.t_order > 1:
+                    t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict, x_index_dict)
             else:
                 h_dict, t_proximity_loss = self.layers[t].forward(x_dict, t_order_edge_index_dict, edge_index_dict,
                                                                   h_dict)
+                t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
 
+            # print("t_order_edge_index_dict", {k:v for k,v in t_order_edge_index_dict.items()})
+
+            if self.t_order > 1:
+                for node_type in self.node_types:
+                    h_all_dict[node_type].append(h_dict[node_type])
             if self.use_proximity_loss:
                 proximity_loss += t_proximity_loss
 
-            for node_type in self.node_types:
-                h_all_dict[node_type].append(h_dict[node_type])
-
-            t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
-
-        embedding_output = {node_type: torch.cat(h_t_list, dim=1) for node_type, h_t_list in h_all_dict.items()}
+        if self.t_order > 1:
+            embedding_output = {node_type: torch.cat(h_t_list, dim=1) for node_type, h_t_list in h_all_dict.items()}
+        else:
+            embedding_output = h_dict
         return embedding_output, proximity_loss
 
 
