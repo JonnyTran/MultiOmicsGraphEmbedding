@@ -1,3 +1,4 @@
+import multiprocessing
 import pytorch_lightning as pl
 import torch
 from cogdl.models.nn.gtn import GTN
@@ -62,6 +63,9 @@ class LATTEMethod(MetricsComparison):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
+        self.hparams = hparams
+        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
+        num_class = dataset.n_classes
 
         self.latte = LATTE(embedding_dim=hparams.embedding_dim, t_order=hparams.t_order,
                            num_nodes_dict=dataset.num_nodes_dict,
@@ -71,16 +75,13 @@ class LATTEMethod(MetricsComparison):
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
         self.classifier = Dense(hparams)
 
-        num_class = dataset.n_classes
         self.training_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
                                         multilabel=dataset.multilabel, metrics=metrics)
         self.validation_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
                                           multilabel=dataset.multilabel, metrics=metrics)
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.hparams = hparams
 
-        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
 
     def forward(self, x_dict, x_index_dict, edge_index_dict):
         embeddings, proximity_loss = self.latte.forward(x_dict, x_index_dict, edge_index_dict)
@@ -140,15 +141,18 @@ class LATTEMethod(MetricsComparison):
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch",
-                                             batch_size=self.hparams.batch_size, num_workers=16)
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=min(16, multiprocessing.cpu_count()))
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn="PyGNodeDataset_batch",
-                                           batch_size=self.hparams.batch_size, num_workers=6)
+                                           batch_size=self.hparams.batch_size,
+                                           num_workers=min(16, multiprocessing.cpu_count()))
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn="PyGNodeDataset_batch",
-                                            batch_size=self.hparams.batch_size, num_workers=6)
+                                            batch_size=self.hparams.batch_size,
+                                            num_workers=min(16, multiprocessing.cpu_count()))
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)

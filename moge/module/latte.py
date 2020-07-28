@@ -121,7 +121,9 @@ class LATTE(nn.Module):
                 h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict,
                                                                   x_index_dict=x_index_dict,
                                                                   edge_index_dict=t_order_edge_index_dict,
-                                                                  h1_dict=h_dict)
+                                                                  h1_dict={node_type: h_emb.detach() \
+                                                                           for node_type, h_emb in
+                                                                           h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
                 t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
 
             if self.t_order > 1:
@@ -131,7 +133,7 @@ class LATTE(nn.Module):
                 proximity_loss += t_proximity_loss
 
         if self.t_order > 1:
-            embedding_output = {node_type: torch.cat(h_t_list, dim=1) for node_type, h_t_list in h_all_dict.items()}
+            embedding_output = {node_type: torch.cat(h_emb_list, dim=1) for node_type, h_emb_list in h_all_dict.items()}
         else:
             embedding_output = h_dict
         return embedding_output, proximity_loss
