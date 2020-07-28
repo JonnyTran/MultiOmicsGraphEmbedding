@@ -85,7 +85,12 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         assert hasattr(self, "head_node_type")
         assert hasattr(self, "y_index_dict")
         assert hasattr(self, "y_dict")
-        self.name = dataset.__class__.__name__
+
+    def name(self):
+        if not hasattr(self, "_name"):
+            return self.dataset.__class__.__name__
+        else:
+            return self._name
 
     def create_graph(self, metapath):
         """
@@ -193,7 +198,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
     def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
         data = dataset[0]
-        self.name = dataset.name
+        self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.node_types = list(data.num_nodes_dict.keys())

@@ -16,13 +16,14 @@ import pytorch_lightning as pl
 
 class LATTE(nn.Module):
     def __init__(self, embedding_dim: int, t_order: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list,
-                 use_proximity_loss=True):
+                 use_proximity_loss=True, neg_sampling_ratio=1.0):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
         self.embedding_dim = embedding_dim * t_order
         self.use_proximity_loss = use_proximity_loss
         self.t_order = t_order
+        self.neg_sampling_ratio = neg_sampling_ratio
 
         layers = []
         t_order_metapaths = copy.copy(metapaths)
@@ -30,12 +31,12 @@ class LATTE(nn.Module):
             if t == 0:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                               node_attr_shape=node_attr_shape,
+                               node_attr_shape=node_attr_shape, neg_sampling_ratio=neg_sampling_ratio,
                                metapaths=t_order_metapaths, first=True))
             else:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                               node_attr_shape=node_attr_shape,
+                               node_attr_shape=node_attr_shape, neg_sampling_ratio=neg_sampling_ratio,
                                metapaths=t_order_metapaths, first=False))
             t_order_metapaths = self.join_metapaths(t_order_metapaths, metapaths)
 
@@ -360,6 +361,8 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
 def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
     num_neg_samples = min(num_neg_samples,
                           M * N - edge_index.size(1))
+    if not isinstance(num_neg_samples, int):
+        num_neg_samples = int(num_neg_samples)
 
     rng = range(M * N)
     idx = (edge_index[0] * N + edge_index[1]).to('cpu')  # idx = N * i + j
