@@ -71,19 +71,23 @@ class LATTE(nn.Module):
                     else:
                         values_b = torch.ones_like(edge_index_b[0], dtype=torch.float)
 
-                    print("A", metapath_a)
-                    print(metapath_b)
+                    # print("A", metapath_a)
+                    # print(metapath_b)
                     # print("sizes", x_index_dict[metapath_a[0]].size(0),
                     #                                      x_index_dict[metapath_a[-1]].size(0),
                     #                                      x_index_dict[metapath_b[-1]].size(0),)
                     # print("edge_index_a", edge_index_a.size(1))
                     # print("edge_index_b", edge_index_b.size(1))
-                    new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
-                                                         indexB=edge_index_b, valueB=values_b,
-                                                         m=x_index_dict[metapath_a[0]].size(0),
-                                                         k=x_index_dict[metapath_a[-1]].size(0),
-                                                         n=x_index_dict[metapath_b[-1]].size(0),
-                                                         coalesced=True)
+                    try:
+                        new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                             indexB=edge_index_b, valueB=values_b,
+                                                             m=x_index_dict[metapath_a[0]].size(0),
+                                                             k=x_index_dict[metapath_a[-1]].size(0),
+                                                             n=x_index_dict[metapath_b[-1]].size(0),
+                                                             coalesced=True)
+                    except Exception as e:
+                        continue
+
                     # print("new_edge_index", new_edge_index[0].shape)
                     output_dict[metapath_join] = new_edge_index
         return output_dict

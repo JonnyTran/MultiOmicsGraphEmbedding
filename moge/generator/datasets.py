@@ -193,7 +193,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
     def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
         data = dataset[0]
-        self.name = dataset.dir_name
+        self.name = dataset.name
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.node_types = list(data.num_nodes_dict.keys())
