@@ -233,11 +233,15 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         # Compute beta from testing samples
         if not self.training:
-            self._beta = {}
+            self._beta_avg = {}
+            self._beta_std = {}
             for node_type in self.node_types:
-                _beta = beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy()
-                self._beta[node_type] = {metapath: _beta[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type) + ["self"])}
+                _beta_avg = beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy()
+                _beta_std = beta[node_type].std(dim=0).squeeze(-1).cpu().numpy()
+                self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
+                                             enumerate(self.get_head_relations(node_type) + ["self"])}
+                self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
+                                             enumerate(self.get_head_relations(node_type) + ["self"])}
 
         # Compute node-level attention coefficients
         score_l, score_r = {}, {}
@@ -349,8 +353,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return loss
 
     def get_relation_weights(self):
-        return {"-".join(k) if isinstance(k, tuple) else node_type: v for node_type in self.node_types for k, v in
-                self._beta[node_type].items()}
+        """
+        Get the mean and std of relation attention weights for all nodes in testing/validation steps
+        :return:
+        """
+        return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
+                for node_type in self.node_types for (relation, avg), (relation_b, std) in
+                zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):

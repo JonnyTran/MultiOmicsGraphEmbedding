@@ -140,10 +140,12 @@ class LATTEMethod(MetricsComparison):
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn="PyGNodeDataset_batch",
                                              batch_size=self.hparams.batch_size, num_workers=16)
-    def val_dataloader(self):
+
+    def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn="PyGNodeDataset_batch",
                                            batch_size=self.hparams.batch_size, num_workers=6)
-    def test_dataloader(self):
+
+    def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn="PyGNodeDataset_batch",
                                             batch_size=self.hparams.batch_size, num_workers=6)
 
