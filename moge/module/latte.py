@@ -1,17 +1,17 @@
-import copy, random
-import numpy as np
+import copy
 import torch
 from torch import nn as nn
-from torch.nn import Parameter
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.inits import glorot
-from torch_geometric.utils import remove_self_loops, add_self_loops, softmax
+from torch_geometric.utils import softmax
 import torch_sparse
 from torch_sparse.tensor import SparseTensor
 from torch_sparse.matmul import matmul
 
 import pytorch_lightning as pl
+
+from moge.module.sampling import negative_sample
 
 
 class LATTE(nn.Module):
@@ -83,14 +83,14 @@ class LATTE(nn.Module):
                         values_b = values_b.to(torch.float)
 
                     try:
-                        new_edge_index = torch_sparse.spspmm(indexA=edge_index_a,
-                                                             valueA=values_a,
-                                                             indexB=edge_index_b,
-                                                             valueB=values_b,
-                                                             m=x_index_dict[metapath_a[0]].size(0),
-                                                             k=x_index_dict[metapath_a[-1]].size(0),
-                                                             n=x_index_dict[metapath_b[-1]].size(0),
-                                                             coalesced=True)
+                        new_edge_index = adamic_adar(indexA=edge_index_a,
+                                                     valueA=values_a,
+                                                     indexB=edge_index_b,
+                                                     valueB=values_b,
+                                                     m=x_index_dict[metapath_a[0]].size(0),
+                                                     k=x_index_dict[metapath_a[-1]].size(0),
+                                                     n=x_index_dict[metapath_b[-1]].size(0),
+                                                     coalesced=True)
                     except Exception as e:
                         print(metapath_a, metapath_b)
                         print("sizes", {node_type: idx.size(0) for node_type, idx in x_index_dict.items()})
@@ -101,7 +101,7 @@ class LATTE(nn.Module):
                         print(e)
 
                     if new_edge_index[0].size(1) <= 5: continue
-                    # print("new_edge_index", new_edge_index[0].shape)
+                    print(new_edge_index[0].size(1), new_edge_index[1].min(), new_edge_index[1].max())
                     output_dict[metapath_join] = new_edge_index
         return output_dict
 
@@ -349,6 +349,7 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
     deg_A = A.storage.colcount()
     deg_B = B.storage.rowcount()
     deg_normalized = 1 / (deg_A + deg_B).to(torch.float)
+    deg_normalized = deg_normalized[deg_normalized == float('inf')] = 0.0
     D = SparseTensor(row=torch.arange(deg_normalized.size(0)),
                      col=torch.arange(deg_normalized.size(0)),
                      value=deg_normalized,
@@ -360,26 +361,3 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
     return torch.stack([row, col], dim=0), value
 
 
-def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
-    num_neg_samples = min(num_neg_samples,
-                          M * N - edge_index.size(1))
-    if not isinstance(num_neg_samples, int):
-        num_neg_samples = int(num_neg_samples)
-
-    rng = range(M * N)
-    idx = (edge_index[0] * N + edge_index[1]).to('cpu')  # idx = N * i + j
-
-    perm = torch.tensor(random.sample(rng, num_neg_samples))
-    mask = torch.from_numpy(np.isin(perm, idx)).to(torch.bool)
-    rest = mask.nonzero().view(-1)
-    while rest.numel() > 0:  # pragma: no cover
-        tmp = torch.tensor(random.sample(rng, rest.size(0)))
-        mask = torch.from_numpy(np.isin(tmp, idx)).to(torch.bool)
-        perm[rest] = tmp
-        rest = rest[mask.nonzero().view(-1)]
-
-    row = perm / N
-    col = perm % N
-    neg_edge_index = torch.stack([row, col], dim=0).long()
-
-    return neg_edge_index.to(edge_index.device)
