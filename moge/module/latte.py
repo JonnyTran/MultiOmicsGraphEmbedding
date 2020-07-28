@@ -53,9 +53,9 @@ class LATTE(nn.Module):
     def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, x_index_dict):
         output_dict = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
-            if edge_index_a is None: continue
+            if edge_index_a is None or (isinstance(edge_index_a, tuple) and edge_index_a[0] is None): continue
             for metapath_b, edge_index_b in edge_index_dict_B.items():
-                if edge_index_b is None: continue
+                if edge_index_b is None or (isinstance(edge_index_b, tuple) and edge_index_b[0] is None): continue
 
                 if metapath_a[-1] == metapath_b[0]:
                     metapath_join = metapath_a + metapath_b[1:]
@@ -100,12 +100,15 @@ class LATTE(nn.Module):
 
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_proximity_loss = self.layers[t].forward(x_dict, x_index_dict, edge_index_dict)
+                h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict, x_index_dict=x_index_dict,
+                                                                  edge_index_dict=edge_index_dict)
                 if self.t_order > 1:
                     t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict, x_index_dict)
             else:
-                h_dict, t_proximity_loss = self.layers[t].forward(x_dict, t_order_edge_index_dict, edge_index_dict,
-                                                                  h_dict)
+                h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict,
+                                                                  x_index_dict=x_index_dict,
+                                                                  edge_index_dict=t_order_edge_index_dict,
+                                                                  h1_dict=h_dict)
                 t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
 
             # print("t_order_edge_index_dict", {k:v for k,v in t_order_edge_index_dict.items()})
@@ -332,7 +335,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                   N=x_index_dict[metapath[-1]].size(0),
                                                   num_neg_samples=edge_index.size(1))
             e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
-            loss += -torch.mean(values * torch.log(torch.sigmoid(-e_ij)), dim=-1)
+            loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
         return loss
 
