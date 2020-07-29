@@ -44,11 +44,10 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             self.process_inmemorydataset(dataset, train_ratio)
         # StellarGraph Dataset
         elif isinstance(dataset, DatasetLoader):
-            print("InMemoryDataset")
+            print("StellarGraph Dataset")
             self.process_stellargraph(dataset, metapaths, node_types, train_ratio)
-        # HANDataset Dataset
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
-            print("InMemoryDataset")
+            print("HANDataset/GTNDataset")
             self.process_HANdataset(dataset, metapaths, node_types, train_ratio)
         elif "blogcatalog6k" in dataset:
             self.process_BlogCatalog6k(dataset, train_ratio)
@@ -224,6 +223,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.node_types = list(data.num_nodes_dict.keys())
+        self.node_attr_shape = {}
+        self.multilabel = False
 
         self.metapaths = list(self.edge_index_dict.keys())
         if self.use_reverse:
@@ -257,7 +258,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
         return training_idx, validation_idx, testing_idx
 
-    def adj_to_edgeindex(self, adj):
+    @staticmethod
+    def adj_to_edgeindex(adj):
         adj = adj.tocoo(copy=False)
         return torch.tensor(np.vstack((adj.row, adj.col)).astype("long"))
 
@@ -350,8 +352,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        X = {"edge_index_dict": {},
-             "x_index_dict": {}}
+        X = {"edge_index_dict": {}, "x_index_dict": {}, "x_dict": {}}
 
         triples = {k: v[iloc] for k, v in self.triples.items()}
 

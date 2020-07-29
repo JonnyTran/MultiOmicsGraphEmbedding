@@ -115,15 +115,19 @@ class LATTE(nn.Module):
             if t == 0:
                 h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict, x_index_dict=x_index_dict,
                                                                   edge_index_dict=edge_index_dict)
-                if self.t_order > 1:
-                    t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict, x_index_dict)
+                if self.t_order >= 2:
+                    with torch.no_grad():
+                        t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict, x_index_dict)
             else:
                 h_dict, t_proximity_loss = self.layers[t].forward(
                     x_dict=x_dict, x_index_dict=x_index_dict,
                     edge_index_dict=t_order_edge_index_dict,
                     h1_dict={node_type: h_emb.detach() for node_type, h_emb in
                              h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
-                t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
+
+                with torch.no_grad():
+                    t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict,
+                                                                     x_index_dict)
 
             for node_type in x_index_dict:
                 h_all_dict[node_type].append(h_dict[node_type])
@@ -212,14 +216,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
                                          enumerate(self.get_head_relations(node_type) + ["self"])}
 
-    def __repr__(self):
-        return '{}(linear={}, attn={}, embedding={})'.format(self.__class__.__name__,
-                                                             {nodetype: linear.weight.shape for
-                                                              nodetype, linear in self.linear.items()},
-                                                             {metapath: attn.shape for metapath, attn in
-                                                              self.attn_l.items()},
-                                                             self.embedding_dim)
-
     def get_relation_weights(self):
         """
         Get the mean and std of relation attention weights for all nodes in testing/validation steps
@@ -228,6 +224,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
                 for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
+
+    def __repr__(self):
+        return '{}(linear={}, attn={}, embedding={})'.format(self.__class__.__name__,
+                                                             {nodetype: linear.weight.shape for
+                                                              nodetype, linear in self.linear.items()},
+                                                             {metapath: attn.shape for metapath, attn in
+                                                              self.attn_l.items()},
+                                                             self.embedding_dim)
 
     def forward(self, x_dict, x_index_dict, edge_index_dict, h1_dict=None):
         """
