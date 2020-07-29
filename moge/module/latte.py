@@ -134,7 +134,8 @@ class LATTE(nn.Module):
                 proximity_loss += t_proximity_loss
 
         if self.t_order > 1:
-            embedding_output = {node_type: torch.cat(h_emb_list, dim=1) for node_type, h_emb_list in h_all_dict.items()}
+            embedding_output = {node_type: torch.cat(h_emb_list, dim=1) \
+                                for node_type, h_emb_list in h_all_dict.items() if len(h_emb_list) > 0}
         else:
             embedding_output = h_dict
         return embedding_output, proximity_loss
@@ -235,7 +236,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # H_t = W_t * x
         h_dict = {}
         for node_type in x_index_dict:
-            if node_type in x_dict.keys():
+            if node_type in x_dict:
                 h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[x_index_dict[node_type]]
@@ -272,11 +273,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         emb_relation_agg = {}
         emb_output = {}
         for node_type in x_index_dict:
+            # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
             emb_relation_agg[node_type] = torch.zeros(
                 size=(x_index_dict[node_type].size(0),
                       self.get_relation_size(node_type),
                       self.embedding_dim)).type_as(
-                self.conv[node_type].weight)  # X_m = (num_nodes, num_relations, embedding_dim)
+                self.conv[node_type].weight)
 
             for i, metapath in enumerate(self.get_head_relations(node_type)):
                 if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
@@ -313,7 +315,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # alpha = F.leaky_relu(alpha, 0.2)
         alpha = F.tanh(alpha)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        # alpha = F.dropout(alpha, p=0.2, training=self.training)
+        # alpha = F.dropout(alpha, p=0.5, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
     def proximity_loss(self, edge_index_dict, score_l, score_r, x_index_dict):
@@ -351,7 +353,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         :return:
         """
         return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
-                for node_type in self.node_types for (relation, avg), (relation_b, std) in
+                for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
 

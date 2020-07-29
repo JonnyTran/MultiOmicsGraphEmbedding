@@ -272,7 +272,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def convert_index2name(self, node_idx: torch.Tensor, node_type):
+    def convert_index2name(self, node_idx: torch.Tensor, node_type: str):
         return np.core.defchararray.add(node_type[0], node_idx.numpy().astype(str)).tolist()
 
     def convert_name2index(self, node_names: list):
@@ -289,29 +289,28 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         seed_nodes = {self.head_node_type: [self.convert_index2name(iloc, self.head_node_type)]}
         sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_nodes)
-
         node_index = self.y_index_dict[self.head_node_type][self.convert_name2index(sampled_nodes[self.head_node_type])]
-        # assert len(iloc) == len(seed_nodes[self.head_node_type])
 
+        # assert len(iloc) == len(seed_nodes[self.head_node_type])
         X = {"edge_index_dict": {},
              "x_dict": {self.head_node_type: self.x_dict[self.head_node_type][node_index]} if hasattr(self,
-                                                                                                      "x_dict") else None,
+                                                                                                      "x_dict") else {},
              "x_index_dict": {}}
 
         for metapath in self.original_metapaths if self.use_reverse else self.metapaths:
-            if metapath[0] not in sampled_nodes or len(sampled_nodes[metapath[0]]) == 0 or metapath[
-                1] not in sampled_nodes or len(sampled_nodes[metapath[-1]]) == 0:
-                continue
+            head_type, tail_type = metapath[0], metapath[-1]
+            if head_type not in sampled_nodes or len(sampled_nodes[head_type]) == 0: continue
+            if tail_type not in sampled_nodes or len(sampled_nodes[tail_type]) == 0: continue
             try:
                 X["edge_index_dict"][metapath] = self.get_adj_edgelist(self.graphs[metapath],
-                                                                       nodes_A=sampled_nodes[metapath[0]],
-                                                                       nodes_B=sampled_nodes[metapath[-1]])
-            except:
+                                                                       nodes_A=sampled_nodes[head_type],
+                                                                       nodes_B=sampled_nodes[tail_type])
+            except Exception as e:
+                print(e)
                 continue
         self.add_reverse_edge_index(X["edge_index_dict"])
 
-        for node_type in self.node_types:
-            if node_type not in sampled_nodes: continue
+        for node_type in sampled_nodes:
             X["x_index_dict"][node_type] = self.convert_name2index(sampled_nodes[node_type])
 
         y = self.y_dict[self.head_node_type][node_index].squeeze(-1)
@@ -333,16 +332,17 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                     source_type = tail_type
                 else:
                     continue
-                if source_type == self.head_node_type: continue
+                if neighbor_type == self.head_node_type: continue
 
                 source_nodes = [node for node in seed_nodes[source_type][-1] if node in G]
                 neighbors = [neighbor for source in source_nodes for neighbor in nx.neighbors(G, source)]
 
                 # Ensure that no node_type becomes the majority of the batch_size
-                if len(neighbors) > (batch_size / len(self.node_types)):
+                if len(neighbors) > (batch_size / ((i + 1) * len(self.node_types))):
                     np.random.shuffle(neighbors)
-                    neighbors = neighbors[: int(batch_size / len(self.node_types))]
+                    neighbors = neighbors[: int(batch_size / ((i + 1) * len(self.node_types)))]
 
+                # Add neighbors nodes as a set to the sets in seed_nodes[neighbor_type]
                 seed_nodes.setdefault(neighbor_type, []).append(neighbors)
 
             # Check whether to gather more nodes to fill batch_size
