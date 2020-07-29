@@ -178,14 +178,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.reset_parameters()
         self.relations_dim = 1
 
-    def get_head_relations(self, head_node_type) -> list:
-        relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
-        return relations
-
-    def get_relation_size(self, node_type) -> int:
-        relations = self.get_head_relations(node_type)
-        return 1 + len(relations)
-
     def reset_parameters(self):
         for i, metapath in enumerate(self.metapaths):
             glorot(self.attn_l[i].weight)
@@ -197,6 +189,25 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             glorot(self.conv[node_type].weight)
         for node_type in self.embeddings:
             self.embeddings[node_type].reset_parameters()
+
+    def get_head_relations(self, head_node_type) -> list:
+        relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
+        return relations
+
+    def get_relation_size(self, node_type) -> int:
+        relations = self.get_head_relations(node_type)
+        return 1 + len(relations)
+
+    def save_relation_weights(self, beta):
+        self._beta_avg = {}
+        self._beta_std = {}
+        for node_type in self.node_types:
+            _beta_avg = beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy()
+            _beta_std = beta[node_type].std(dim=0).squeeze(-1).cpu().numpy()
+            self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
+                                         enumerate(self.get_head_relations(node_type) + ["self"])}
+            self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
+                                         enumerate(self.get_head_relations(node_type) + ["self"])}
 
     def __repr__(self):
         return '{}(linear={}, attn={}, embedding={})'.format(self.__class__.__name__,
@@ -228,23 +239,15 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for node_type in self.node_types:
             if node_type in x_dict and self.first:
                 beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+            elif node_type not in x_dict and self.first:  # Use self.embeddings when first layer and node_type is not attributed
+                beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             elif not self.first:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
-            else:  # Use self.embeddings when first layer and node_type is not attributed
-                beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            else:
+                raise Exception()
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
-
         # Compute beta from testing samples
-        if not self.training:
-            self._beta_avg = {}
-            self._beta_std = {}
-            for node_type in self.node_types:
-                _beta_avg = beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy()
-                _beta_std = beta[node_type].std(dim=0).squeeze(-1).cpu().numpy()
-                self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type) + ["self"])}
-                self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type) + ["self"])}
+        if not self.training: self.save_relation_weights(beta)
 
         # Compute node-level attention coefficients
         score_l, score_r = {}, {}
@@ -271,20 +274,16 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
                     continue
                 head_type, tail_type = metapath[0], metapath[-1]
-                head_num_node, tail_num_node = len(x_index_dict[head_type]), len(x_index_dict[tail_type])
+                num_node_head, num_node_tail = len(x_index_dict[head_type]), len(x_index_dict[tail_type])
 
                 if isinstance(edge_index_dict[metapath], tuple):
                     edge_index, _ = edge_index_dict[metapath]
                 else:
                     edge_index = edge_index_dict[metapath]
 
-                # print(head_type, "-", tail_type)
-                # print({k:v.size(0) for k,v in x_index_dict.items()}, "edge_index", edge_index.max(1).values,
-                #       edge_index[[1, 0], :].max(1).values)
-
                 emb_relation_agg[head_type][:, i] = self.propagate(
                     edge_index,
-                    size=(tail_num_node, head_num_node),
+                    size=(num_node_tail, num_node_head),
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(score_r[metapath], score_l[metapath]))
 
@@ -301,10 +300,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        # print("alpha", alpha.shape)
-        # print("x_j", x_j.shape)
-        # print("size_i", size_i)
-        # print("ptr", ptr.shape) if ptr is not None else None
         alpha = F.leaky_relu(alpha, 0.2)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=0.2, training=self.training)
