@@ -56,9 +56,9 @@ class MetricsComparison(pl.LightningModule):
                 "log": logs}
 
 
-class LATTEMethod(MetricsComparison):
+class LATTENodeClassifier(MetricsComparison):
     def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["accuracy"]) -> None:
-        super(LATTEMethod, self).__init__()
+        super(LATTENodeClassifier, self).__init__()
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel

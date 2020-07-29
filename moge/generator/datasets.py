@@ -30,17 +30,15 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.directed = directed
         self.train_ratio = train_ratio
         self.use_reverse = add_reverse_metapaths
-
-        if head_node_type is None:
-            self.head_node_type = node_types[0]
-            if len(node_types) > 1: print(f"INFO: Selected {self.head_node_type} from node_types: {node_types}")
-        else:
-            self.head_node_type = head_node_type
+        self.head_node_type = head_node_type
 
         # PyTorchGeometric Dataset
         if isinstance(dataset, PygNodePropPredDataset):
             print("PygNodePropPredDataset")
             self.process_PygNodeDataset(dataset, train_ratio)
+        elif isinstance(dataset, PygLinkPropPredDataset):
+            print("PygLinkPropPredDataset")
+            self.process_PygLinkDataset(dataset, train_ratio)
         elif isinstance(dataset, InMemoryDataset):
             print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio)
@@ -75,17 +73,15 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             cpus = 2  # arbitrary default
 
         # Using multiprocessing to create_graph() for each metapath
-        self.graphs = {}
-        pool = multiprocessing.Pool(processes=cpus)
-        output = pool.map(self.create_graph, self.original_metapaths if self.use_reverse else self.metapaths)
-        for (metapath, graph) in output:
-            self.graphs[metapath] = graph
-        pool.close()
+        if not isinstance(dataset, PygLinkPropPredDataset):
+            self.graphs = {}
+            pool = multiprocessing.Pool(processes=cpus)
+            output = pool.map(self.create_graph, self.original_metapaths if self.use_reverse else self.metapaths)
+            for (metapath, graph) in output:
+                self.graphs[metapath] = graph
+            pool.close()
 
         assert hasattr(self, "num_nodes_dict")
-        assert hasattr(self, "head_node_type")
-        assert hasattr(self, "y_index_dict")
-        assert hasattr(self, "y_dict")
 
     def name(self):
         if not hasattr(self, "_name"):
@@ -222,6 +218,36 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.train_ratio = self.training_idx.numel() / \
                            sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
 
+    def process_PygLinkDataset(self, dataset: PygLinkPropPredDataset, train_ratio):
+        data = dataset[0]
+        self._name = dataset.name
+        self.edge_index_dict = data.edge_index_dict
+        self.num_nodes_dict = data.num_nodes_dict
+        self.node_types = list(data.num_nodes_dict.keys())
+
+        self.metapaths = list(self.edge_index_dict.keys())
+        if self.use_reverse:
+            self.original_metapaths = list(self.edge_index_dict.keys())
+            self.metapaths = self.metapaths + self.get_reverse_metapath(self.metapaths)
+
+        split_idx = dataset.get_edge_split()
+        train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
+        self.triples = {}
+        for key in train_triples.keys():
+            if isinstance(train_triples[key], torch.Tensor):
+                self.triples[key] = torch.cat([train_triples[key], valid_triples[key], test_triples[key]], dim=0)
+            else:
+                self.triples[key] = np.array(train_triples[key] + valid_triples[key] + test_triples[key])
+
+        self.training_idx = torch.arange(0, len(train_triples["relation"]))
+        self.validation_idx = torch.arange(self.training_idx.size(0),
+                                           self.training_idx.size(0) + len(valid_triples["relation"]))
+        self.testing_idx = torch.arange(self.training_idx.size(0) + self.validation_idx.size(0),
+                                        self.training_idx.size(0) + self.validation_idx.size(0) + len(
+                                            test_triples["relation"]))
+        self.train_ratio = self.training_idx.numel() / \
+                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+
     def split_train_val_test(self, train_ratio, sample_indices=None):
         perm = torch.randperm(self.num_nodes_dict[self.head_node_type])
         if sample_indices is not None:
@@ -269,6 +295,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             return self.collate_HAN
         elif "PyGNodeDataset_batch" in collate_fn:
             return self.collate_PyGNodeDataset_batch
+        elif "PyGLinkDataset_batch" in collate_fn:
+            return self.collate_PyGLinkDataset_batch
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
@@ -308,13 +336,38 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             except Exception as e:
                 print(e)
                 continue
-        self.add_reverse_edge_index(X["edge_index_dict"])
+
+        if self.use_reverse:
+            self.add_reverse_edge_index(X["edge_index_dict"])
 
         for node_type in sampled_nodes:
             X["x_index_dict"][node_type] = self.convert_name2index(sampled_nodes[node_type])
 
         y = self.y_dict[self.head_node_type][node_index].squeeze(-1)
         return X, y, None
+
+    def collate_PyGLinkDataset_batch(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        X = {"edge_index_dict": {},
+             "x_index_dict": {}}
+
+        triples = {k: v[iloc] for k, v in self.triples.items()}
+
+        for metapath_id in triples["relation"].unique():
+            metapath = self.metapaths[metapath_id]
+            head_type, tail_type = metapath[0], metapath[-1]
+            X["edge_index_dict"][metapath] = torch.stack([triples["head"], triples["tail"]], dim=1).t()
+            X["x_index_dict"].setdefault(head_type, []).append(triples["head"])
+            X["x_index_dict"].setdefault(tail_type, []).append(triples["tail"])
+
+        X["x_index_dict"] = {k: torch.cat(v, dim=0).unique() for k, v in X["x_index_dict"].items()}
+
+        if self.use_reverse:
+            self.add_reverse_edge_index(X["edge_index_dict"])
+
+        return X, None, None
 
     def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):
         num_node_all = 0

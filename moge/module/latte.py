@@ -110,8 +110,7 @@ class LATTE(nn.Module):
         proximity_loss = torch.tensor(0.0, device=x_index_dict[
             self.node_types[0]].device) if self.use_proximity_loss else None
 
-        h_all_dict = {node_type: [] for node_type in self.node_types}
-
+        h_all_dict = {node_type: [] for node_type in x_index_dict}
         for t in range(self.t_order):
             if t == 0:
                 h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict, x_index_dict=x_index_dict,
@@ -119,25 +118,20 @@ class LATTE(nn.Module):
                 if self.t_order > 1:
                     t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict, x_index_dict)
             else:
-                h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict,
-                                                                  x_index_dict=x_index_dict,
-                                                                  edge_index_dict=t_order_edge_index_dict,
-                                                                  h1_dict={node_type: h_emb.detach() \
-                                                                           for node_type, h_emb in
-                                                                           h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
+                h_dict, t_proximity_loss = self.layers[t].forward(
+                    x_dict=x_dict, x_index_dict=x_index_dict,
+                    edge_index_dict=t_order_edge_index_dict,
+                    h1_dict={node_type: h_emb.detach() for node_type, h_emb in
+                             h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
                 t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
 
-            if self.t_order > 1:
-                for node_type in x_index_dict:
-                    h_all_dict[node_type].append(h_dict[node_type])
+            for node_type in x_index_dict:
+                h_all_dict[node_type].append(h_dict[node_type])
             if self.use_proximity_loss:
                 proximity_loss += t_proximity_loss
 
-        if self.t_order > 1:
-            embedding_output = {node_type: torch.cat(h_emb_list, dim=1) \
-                                for node_type, h_emb_list in h_all_dict.items() if len(h_emb_list) > 0}
-        else:
-            embedding_output = h_dict
+        embedding_output = {node_type: torch.cat(h_emb_list, dim=1) \
+                            for node_type, h_emb_list in h_all_dict.items() if len(h_emb_list) > 0}
         return embedding_output, proximity_loss
 
 
@@ -205,10 +199,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         relations = self.get_head_relations(node_type)
         return len(relations) + 1
 
-    def save_relation_weights(self, beta, x_index_dict):
+    def save_relation_weights(self, beta):
+        # Only save relation weights if beta has weights for all node_types in the x_index_dict batch
+        if len(beta) < len(self.node_types): return
         self._beta_avg = {}
         self._beta_std = {}
-        for node_type in x_index_dict:
+        for node_type in beta:
             _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
             _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
             self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
@@ -223,6 +219,15 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                              {metapath: attn.shape for metapath, attn in
                                                               self.attn_l.items()},
                                                              self.embedding_dim)
+
+    def get_relation_weights(self):
+        """
+        Get the mean and std of relation attention weights for all nodes in testing/validation steps
+        :return:
+        """
+        return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
+                for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
+                zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
     def forward(self, x_dict, x_index_dict, edge_index_dict, h1_dict=None):
         """
@@ -254,7 +259,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 raise Exception()
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         # Compute beta from testing samples
-        if not self.training: self.save_relation_weights(beta, x_index_dict)
+        if not self.training: self.save_relation_weights(beta)
 
         # Compute node-level attention coefficients
         score_l, score_r = {}, {}
@@ -342,19 +347,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                              M=x_index_dict[metapath[0]].size(0),
                                              N=x_index_dict[metapath[-1]].size(0),
                                              num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
+            if neg_edge_index.size(1) <= 5: continue
+
             e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
             loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
         return loss
-
-    def get_relation_weights(self):
-        """
-        Get the mean and std of relation attention weights for all nodes in testing/validation steps
-        :return:
-        """
-        return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
-                for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
-                zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
