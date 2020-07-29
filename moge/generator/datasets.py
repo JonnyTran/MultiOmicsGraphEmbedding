@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from itertools import islice
+import copy
 import multiprocessing
 from scipy.io import loadmat
 
@@ -286,7 +287,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        seed_nodes = {self.head_node_type: self.convert_index2name(iloc, self.head_node_type)}
+        seed_nodes = {self.head_node_type: [self.convert_index2name(iloc, self.head_node_type)]}
         sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_nodes)
 
         node_index = self.y_index_dict[self.head_node_type][self.convert_name2index(sampled_nodes[self.head_node_type])]
@@ -306,7 +307,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                                                                        nodes_A=sampled_nodes[metapath[0]],
                                                                        nodes_B=sampled_nodes[metapath[-1]])
             except:
-                X["edge_index_dict"][metapath] = None
+                continue
         self.add_reverse_edge_index(X["edge_index_dict"])
 
         for node_type in self.node_types:
@@ -315,51 +316,54 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         y = self.y_dict[self.head_node_type][node_index].squeeze(-1)
         return X, y, None
 
-    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):
-        num_nodes = sum([len(nodes) for node_type, nodes in seed_nodes.items()])
+    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=2):
+        num_node_all = 0
         i = 0
-        while num_nodes < batch_size and i < max_iter:
+
+        while num_node_all < batch_size and i < max_iter:
             for metapath, G in self.graphs.items():
                 head_type, tail_type = metapath[0], metapath[-1]
 
-                if head_type in seed_nodes:
-                    source_nodes = [node for node in seed_nodes[head_type] if node in G]
+                if head_type in seed_nodes and len(seed_nodes[head_type][-1]) > 0:
                     neighbor_type = tail_type
-                elif tail_type in seed_nodes:
-                    source_nodes = [node for node in seed_nodes[tail_type] if node in G]
+                    source_type = head_type
+                elif tail_type in seed_nodes and len(seed_nodes[tail_type][-1]) > 0:
                     neighbor_type = head_type
+                    source_type = tail_type
                 else:
                     continue
 
-                if neighbor_type == self.head_node_type: continue
-
-                neighbors = [neighbor for source_node in source_nodes for neighbor in nx.neighbors(G, source_node)]
+                source_nodes = [node for node in seed_nodes[source_type][-1] if node in G]
+                neighbors = [neighbor for source in source_nodes for neighbor in nx.neighbors(G, source)]
 
                 # Ensure that no node_type becomes the majority of the batch_size
                 if len(neighbors) > (batch_size / len(self.node_types)):
+                    np.random.shuffle(neighbors)
                     neighbors = neighbors[: int(batch_size / len(self.node_types))]
 
-                if neighbor_type in seed_nodes:
-                    seed_nodes[neighbor_type].extend(neighbors)
-                else:
-                    seed_nodes[neighbor_type] = neighbors
-
-            # Remove duplicate
-            for node_type in seed_nodes.keys():
-                seed_nodes[node_type] = list(OrderedDict.fromkeys(seed_nodes[node_type]))
+                seed_nodes.setdefault(neighbor_type, []).append(neighbors)
 
             # Check whether to gather more nodes to fill batch_size
-            num_nodes = sum([len(nodes) for node_type, nodes in seed_nodes.items()])
+            num_node_all = sum([len(nodes) for node_type, node_sets in seed_nodes.items() for nodes in node_sets])
             i += 1
 
-        # Remove excess node if exceeds batch_size
-        if num_nodes > batch_size:
-            largest_node_type = max({k: v for k, v in seed_nodes.items()}, key=len)
-            np.random.shuffle(seed_nodes[largest_node_type])
-            num_node_remove = num_nodes - batch_size
-            seed_nodes[largest_node_type] = seed_nodes[largest_node_type][:-num_node_remove]
+        # Join all sampled node list in each node type
+        sampled_nodes = {}
+        for node_type, lists in seed_nodes.items():
+            sampled_nodes[node_type] = [node for nodelist in lists for node in nodelist]
 
-        return seed_nodes
+        # Remove duplicate
+        for node_type in sampled_nodes.keys():
+            sampled_nodes[node_type] = list(OrderedDict.fromkeys(sampled_nodes[node_type]))
+
+        # Remove excess node if exceeds batch_size
+        if num_node_all > batch_size:
+            largest_node_type = max({k: v for k, v in sampled_nodes.items()}, key=len)
+            np.random.shuffle(sampled_nodes[largest_node_type])
+            num_node_remove = num_node_all - batch_size
+            sampled_nodes[largest_node_type] = sampled_nodes[largest_node_type][:-num_node_remove]
+
+        return sampled_nodes
 
     def collate_HAN(self, iloc):
         if not isinstance(iloc, torch.Tensor):
