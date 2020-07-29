@@ -142,7 +142,7 @@ class LATTE(nn.Module):
 class LATTELayer(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int}, metapaths: list,
                  use_proximity_loss=True, neg_sampling_ratio=1.0, first=True) -> None:
-        super(LATTELayer, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
+        super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
@@ -154,10 +154,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # Computes beta
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
-                in_channels=self.get_relation_size(node_type),
-                out_channels=1,
+                in_channels=node_attr_shape[
+                    node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
+                out_channels=self.get_relation_size(node_type),
                 kernel_size=1) \
-                for node_type in self.node_types})  # (1 x num_relation x 1)
+                for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
 
         self.linear = torch.nn.ModuleDict(
             {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=False) \
@@ -223,27 +224,27 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 h_dict[node_type] = self.embeddings[node_type].weight[x_index_dict[node_type]]
 
         # Compute relations attention coefficients
-        # beta = {}
-        # for node_type in self.node_types:
-        #     if node_type in x_dict and self.first:
-        #         beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-        #     elif not self.first:
-        #         beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
-        #     else:  # Use self.embeddings when first layer and node_type is not attributed
-        #         beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-        #     beta[node_type] = torch.softmax(beta[node_type], dim=1)
+        beta = {}
+        for node_type in self.node_types:
+            if node_type in x_dict and self.first:
+                beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+            elif not self.first:
+                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
+            else:  # Use self.embeddings when first layer and node_type is not attributed
+                beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            beta[node_type] = torch.softmax(beta[node_type], dim=1)
 
         # Compute beta from testing samples
-        # if not self.training:
-        #     self._beta_avg = {}
-        #     self._beta_std = {}
-        #     for node_type in self.node_types:
-        #         _beta_avg = beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy()
-        #         _beta_std = beta[node_type].std(dim=0).squeeze(-1).cpu().numpy()
-        #         self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-        #                                      enumerate(self.get_head_relations(node_type) + ["self"])}
-        #         self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-        #                                      enumerate(self.get_head_relations(node_type) + ["self"])}
+        if not self.training:
+            self._beta_avg = {}
+            self._beta_std = {}
+            for node_type in self.node_types:
+                _beta_avg = beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy()
+                _beta_std = beta[node_type].std(dim=0).squeeze(-1).cpu().numpy()
+                self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
+                                             enumerate(self.get_head_relations(node_type) + ["self"])}
+                self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
+                                             enumerate(self.get_head_relations(node_type) + ["self"])}
 
         # Compute node-level attention coefficients
         score_l, score_r = {}, {}
@@ -278,17 +279,18 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     edge_index = edge_index_dict[metapath]
 
                 # print(head_type, "-", tail_type)
-                # print({k:v.size(0) for k,v in x_index_dict.items()}, "edge_index", edge_index.max(1).values)
+                # print({k:v.size(0) for k,v in x_index_dict.items()}, "edge_index", edge_index.max(1).values,
+                #       edge_index[[1, 0], :].max(1).values)
 
                 emb_relation_agg[head_type][:, i] = self.propagate(
-                    edge_index[[1, 0], :],
-                    size=(head_num_node, tail_num_node),
-                    x=(h_dict[head_type], h_dict[tail_type]),
-                    alpha=(score_l[metapath], score_r[metapath]))
+                    edge_index,
+                    size=(tail_num_node, head_num_node),
+                    x=(h_dict[tail_type], h_dict[head_type]),
+                    alpha=(score_r[metapath], score_l[metapath]))
 
             emb_relation_agg[head_type][:, -1] = h_dict[head_type]
-            emb_output[node_type] = self.conv[node_type].forward(emb_relation_agg[head_type]).squeeze(
-                self.relations_dim)
+            emb_output[node_type] = torch.matmul(emb_relation_agg[head_type].permute(0, 2, 1),
+                                                 beta[head_type]).squeeze(-1)
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(edge_index_dict, score_l, score_r, x_index_dict)
@@ -299,6 +301,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
+        # print("alpha", alpha.shape)
+        # print("x_j", x_j.shape)
+        # print("size_i", size_i)
+        # print("ptr", ptr.shape) if ptr is not None else None
         alpha = F.leaky_relu(alpha, 0.2)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=0.2, training=self.training)
