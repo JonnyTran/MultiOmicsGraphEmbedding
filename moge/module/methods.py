@@ -69,7 +69,7 @@ class LATTENodeClassifier(MetricsComparison):
 
         self.latte = LATTE(embedding_dim=hparams.embedding_dim, t_order=hparams.t_order,
                            num_nodes_dict=dataset.num_nodes_dict,
-                           node_attr_shape=dataset.node_attr_shape, metapaths=dataset.metapaths,
+                           node_attr_shape=dataset.node_attr_shape, metapaths=dataset.get_metapaths(),
                            neg_sampling_ratio=hparams.neg_sampling_ratio,
                            use_proximity_loss=hparams.use_proximity_loss)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
