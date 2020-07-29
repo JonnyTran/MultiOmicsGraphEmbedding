@@ -1,4 +1,5 @@
 import copy
+import numpy as np
 import torch
 from torch import nn as nn
 import torch.nn.functional as F
@@ -203,12 +204,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         relations = self.get_head_relations(node_type)
         return len(relations) + 1
 
-    def save_relation_weights(self, beta):
+    def save_relation_weights(self, beta, x_index_dict):
         self._beta_avg = {}
         self._beta_std = {}
-        for node_type in self.node_types:
-            _beta_avg = beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy()
-            _beta_std = beta[node_type].std(dim=0).squeeze(-1).cpu().numpy()
+        for node_type in x_index_dict:
+            _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
+            _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
             self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
                                          enumerate(self.get_head_relations(node_type) + ["self"])}
             self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
@@ -233,7 +234,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         """
         # H_t = W_t * x
         h_dict = {}
-        for node_type in self.node_types:
+        for node_type in x_index_dict:
             if node_type in x_dict.keys():
                 h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
@@ -241,7 +242,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         # Compute relations attention coefficients
         beta = {}
-        for node_type in self.node_types:
+        for node_type in x_index_dict:
             if node_type in x_dict and self.first:
                 beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
             elif node_type not in x_dict and self.first:  # Use self.embeddings when first layer and node_type is not attributed
@@ -257,6 +258,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # Compute node-level attention coefficients
         score_l, score_r = {}, {}
         for i, metapath in enumerate(self.metapaths):
+            if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
+                continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
                 score_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # score_l = attn_l * W * x_1

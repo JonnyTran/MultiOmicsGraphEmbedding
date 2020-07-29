@@ -291,7 +291,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_nodes)
 
         node_index = self.y_index_dict[self.head_node_type][self.convert_name2index(sampled_nodes[self.head_node_type])]
-
         # assert len(iloc) == len(seed_nodes[self.head_node_type])
 
         X = {"edge_index_dict": {},
@@ -300,7 +299,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
              "x_index_dict": {}}
 
         for metapath in self.original_metapaths if self.use_reverse else self.metapaths:
-            if len(sampled_nodes[metapath[0]]) == 0 or sampled_nodes[metapath[-1]] == 0:
+            if metapath[0] not in sampled_nodes or len(sampled_nodes[metapath[0]]) == 0 or metapath[
+                1] not in sampled_nodes or len(sampled_nodes[metapath[-1]]) == 0:
                 continue
             try:
                 X["edge_index_dict"][metapath] = self.get_adj_edgelist(self.graphs[metapath],
@@ -311,12 +311,13 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.add_reverse_edge_index(X["edge_index_dict"])
 
         for node_type in self.node_types:
+            if node_type not in sampled_nodes: continue
             X["x_index_dict"][node_type] = self.convert_name2index(sampled_nodes[node_type])
 
         y = self.y_dict[self.head_node_type][node_index].squeeze(-1)
         return X, y, None
 
-    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=2):
+    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):
         num_node_all = 0
         i = 0
 
