@@ -86,7 +86,6 @@ class LATTEMethod(MetricsComparison):
     def forward(self, x_dict, x_index_dict, edge_index_dict):
         embeddings, proximity_loss = self.latte.forward(x_dict, x_index_dict, edge_index_dict)
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
-
         return y_hat, proximity_loss
 
     def loss(self, y_hat, y):
@@ -100,11 +99,11 @@ class LATTEMethod(MetricsComparison):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
-        self.training_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y,
-                                             weights=weights)
+        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+
+        loss = self.loss(y_hat, y)
 
         logs = None
-        loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
             loss = loss + proximity_loss
             logs = {"proximity_loss": proximity_loss}
@@ -119,7 +118,7 @@ class LATTEMethod(MetricsComparison):
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
 
-        self.validation_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y, weights=weights)
+        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
 
         loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
@@ -131,7 +130,7 @@ class LATTEMethod(MetricsComparison):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["x_index_dict"], X["edge_index_dict"])
 
-        self.test_metrics.update_metrics(Y_hat=y_hat.squeeze(-1), Y=y, weights=weights)
+        self.test_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
 
         loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:

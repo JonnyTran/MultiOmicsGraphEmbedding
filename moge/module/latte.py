@@ -195,8 +195,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return relations
 
     def get_relation_size(self, node_type) -> int:
+        """
+        Return the number of metapaths with head node type equals to :param node_type: and plus one for none-selection.
+        :param node_type (str):
+        :return:
+        """
         relations = self.get_head_relations(node_type)
-        return 1 + len(relations)
+        return len(relations) + 1
 
     def save_relation_weights(self, beta):
         self._beta_avg = {}
@@ -265,10 +270,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         emb_output = {}
         for node_type in self.node_types:
             emb_relation_agg[node_type] = torch.zeros(
-                size=(x_index_dict[node_type].size(0),  # X_m = (num_nodes, num_relations, embedding_dim)
+                size=(x_index_dict[node_type].size(0),
                       self.get_relation_size(node_type),
-                      self.embedding_dim),
-                device=self.conv[node_type].weight.device)
+                      self.embedding_dim)).type_as(
+                self.conv[node_type].weight)  # X_m = (num_nodes, num_relations, embedding_dim)
 
             for i, metapath in enumerate(self.get_head_relations(node_type)):
                 if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
@@ -292,7 +297,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                  beta[head_type]).squeeze(-1)
 
         if self.use_proximity_loss:
-            proximity_loss = self.proximity_loss(edge_index_dict, score_l, score_r, x_index_dict)
+            proximity_loss = self.proximity_loss(edge_index_dict,
+                                                 score_l=score_l,
+                                                 score_r=score_r, x_index_dict=x_index_dict)
         else:
             proximity_loss = None
 
@@ -300,20 +307,21 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = F.leaky_relu(alpha, 0.2)
+        # alpha = F.leaky_relu(alpha, 0.2)
+        alpha = F.tanh(alpha)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=0.2, training=self.training)
+        # alpha = F.dropout(alpha, p=0.2, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
     def proximity_loss(self, edge_index_dict, score_l, score_r, x_index_dict):
-        loss = torch.tensor(0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
+        loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
 
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, values = edge_index
             else:
-                values = 1
+                values = 1.0
             if edge_index is None: continue
 
             e_ij = score_l[metapath][edge_index[0]] + score_r[metapath][edge_index[1]]
