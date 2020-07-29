@@ -128,7 +128,7 @@ class LATTE(nn.Module):
                 t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict, x_index_dict)
 
             if self.t_order > 1:
-                for node_type in self.node_types:
+                for node_type in x_index_dict:
                     h_all_dict[node_type].append(h_dict[node_type])
             if self.use_proximity_loss:
                 proximity_loss += t_proximity_loss
@@ -253,7 +253,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 raise Exception()
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         # Compute beta from testing samples
-        if not self.training: self.save_relation_weights(beta)
+        if not self.training: self.save_relation_weights(beta, x_index_dict)
 
         # Compute node-level attention coefficients
         score_l, score_r = {}, {}
@@ -271,7 +271,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         emb_relation_agg = {}
         emb_output = {}
-        for node_type in self.node_types:
+        for node_type in x_index_dict:
             emb_relation_agg[node_type] = torch.zeros(
                 size=(x_index_dict[node_type].size(0),
                       self.get_relation_size(node_type),
@@ -295,9 +295,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(score_r[metapath], score_l[metapath]))
 
-            emb_relation_agg[head_type][:, -1] = h_dict[head_type]
-            emb_output[node_type] = torch.matmul(emb_relation_agg[head_type].permute(0, 2, 1),
-                                                 beta[head_type]).squeeze(-1)
+            emb_relation_agg[node_type][:, -1] = h_dict[node_type]
+            emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
+                                                 beta[node_type]).squeeze(-1)
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(edge_index_dict,

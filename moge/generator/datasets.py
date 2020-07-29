@@ -333,6 +333,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                     source_type = tail_type
                 else:
                     continue
+                if source_type == self.head_node_type: continue
 
                 source_nodes = [node for node in seed_nodes[source_type][-1] if node in G]
                 neighbors = [neighbor for source in source_nodes for neighbor in nx.neighbors(G, source)]
