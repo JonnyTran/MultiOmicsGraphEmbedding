@@ -54,6 +54,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
+        self.char_to_node_type = {node_type[0]: node_type for node_type in self.node_types}
+
         if hasattr(self, "y_dict"):
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.multilabel = True
@@ -80,6 +82,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                 self.graphs[metapath] = graph
             pool.close()
 
+        self.join_graph = nx.compose_all([G.to_undirected() for metapath, G in self.graphs.items()])
+
         assert hasattr(self, "num_nodes_dict")
 
     def name(self):
@@ -96,11 +100,20 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         """
         edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
         edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
-        graph = nx.from_edgelist(edgelist, create_using=nx.Graph)
+        graph = nx.from_edgelist(edgelist, create_using=nx.DiGraph if self.directed else nx.Graph)
         return (metapath, graph)
 
     def get_metapaths(self):
         return self.metapaths + self.get_reverse_metapath(self.metapaths)
+
+    def split_train_val_test(self, train_ratio, sample_indices=None):
+        perm = torch.randperm(self.num_nodes_dict[self.head_node_type])
+        if sample_indices is not None:
+            perm = sample_indices[perm]
+        training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
+        validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        return training_idx, validation_idx, testing_idx
 
     @staticmethod
     def add_reverse_edge_index(edge_index_dict) -> None:
@@ -118,6 +131,11 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             reverse = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
             reverse_metapaths.append(reverse)
         return reverse_metapaths
+
+    @staticmethod
+    def adj_to_edgeindex(adj):
+        adj = adj.tocoo(copy=False)
+        return torch.tensor(np.vstack((adj.row, adj.col)).astype("long"))
 
     def process_BlogCatalog6k(self, dataset, train_ratio):
         data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
@@ -185,11 +203,9 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
     def process_inmemorydataset(self, dataset: InMemoryDataset, train_ratio):
         data = dataset[0]
-        if self.use_reverse:
-            self.add_reverse_edge_index(data.edge_index_dict)
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
-        self.node_types = list(data.y_index_dict.keys())
+        self.node_types = list(data.num_nodes_dict.keys())
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
         self.metapaths = list(self.edge_index_dict.keys())
@@ -246,20 +262,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.train_ratio = self.training_idx.numel() / \
                            sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
 
-    def split_train_val_test(self, train_ratio, sample_indices=None):
-        perm = torch.randperm(self.num_nodes_dict[self.head_node_type])
-        if sample_indices is not None:
-            perm = sample_indices[perm]
-        training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
-        validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
-        testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
-        return training_idx, validation_idx, testing_idx
-
-    @staticmethod
-    def adj_to_edgeindex(adj):
-        adj = adj.tocoo(copy=False)
-        return torch.tensor(np.vstack((adj.row, adj.col)).astype("long"))
-
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
@@ -281,28 +283,10 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                                                                                                         batch_size))
         return loader
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None):
-        if batch_size is not None and "PyGNodeDataset_batch" in collate_fn:
-            self.batch_size = batch_size * len(self.node_types)
-        if "index" in collate_fn:
-            return self.collate_index_cls
-        elif "attr" in collate_fn:
-            return self.collate_node_attr_cls
-        elif "HAN_batch" in collate_fn:
-            return self.collate_HAN_batch
-        elif "HAN" in collate_fn:
-            return self.collate_HAN
-        elif "PyGNodeDataset_batch" in collate_fn:
-            return self.collate_PyGNodeDataset_batch
-        elif "PyGLinkDataset_batch" in collate_fn:
-            return self.collate_PyGLinkDataset_batch
-        else:
-            raise Exception(f"Correct collate function {collate_fn} not found.")
-
     def convert_index2name(self, node_idx: torch.Tensor, node_type: str):
         return np.core.defchararray.add(node_type[0], node_idx.numpy().astype(str)).tolist()
 
-    def convert_name2index(self, node_names: list):
+    def strip_node_type_str(self, node_names: list):
         """
         Strip letter from node names
         :param node_names:
@@ -310,67 +294,22 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         """
         return torch.tensor([int(name[1:]) for name in node_names], dtype=torch.long)
 
-    def collate_PyGNodeDataset_batch(self, iloc):
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
+    def convert_to_node_index(self, node_names: list):
+        """
+        Strip letter from node names
+        :param node_names:
+        :return:
+        """
+        node_index_dict = {}
+        for node in node_names:
+            node_index_dict.setdefault(self.char_to_node_type[node[0]], []).extend([int(node[1:])])
 
-        seed_nodes = {self.head_node_type: [self.convert_index2name(iloc, self.head_node_type)]}
-        sampled_nodes = self.bfs_traversal(batch_size=self.batch_size, seed_nodes=seed_nodes)
-        node_index = self.y_index_dict[self.head_node_type][self.convert_name2index(sampled_nodes[self.head_node_type])]
+        node_index_dict = {k: torch.tensor(v, dtype=torch.long) for k, v in node_index_dict.items()}
+        return node_index_dict
 
-        # assert len(iloc) == len(seed_nodes[self.head_node_type])
-        X = {"edge_index_dict": {},
-             "x_dict": {self.head_node_type: self.x_dict[self.head_node_type][node_index]} if hasattr(self,
-                                                                                                      "x_dict") else {},
-             "x_index_dict": {}}
-
-        for metapath in self.metapaths:
-            head_type, tail_type = metapath[0], metapath[-1]
-            if head_type not in sampled_nodes or len(sampled_nodes[head_type]) == 0: continue
-            if tail_type not in sampled_nodes or len(sampled_nodes[tail_type]) == 0: continue
-            try:
-                X["edge_index_dict"][metapath] = self.get_adj_edgelist(self.graphs[metapath],
-                                                                       nodes_A=sampled_nodes[head_type],
-                                                                       nodes_B=sampled_nodes[tail_type])
-            except Exception as e:
-                print(e)
-                continue
-
-        if self.use_reverse:
-            self.add_reverse_edge_index(X["edge_index_dict"])
-
-        for node_type in sampled_nodes:
-            X["x_index_dict"][node_type] = self.convert_name2index(sampled_nodes[node_type])
-
-        y = self.y_dict[self.head_node_type][node_index].squeeze(-1)
-        return X, y, None
-
-    def collate_PyGLinkDataset_batch(self, iloc):
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
-
-        X = {"edge_index_dict": {}, "x_index_dict": {}, "x_dict": {}}
-
-        triples = {k: v[iloc] for k, v in self.triples.items()}
-
-        for metapath_id in triples["relation"].unique():
-            metapath = self.metapaths[metapath_id]
-            head_type, tail_type = metapath[0], metapath[-1]
-            X["edge_index_dict"][metapath] = torch.stack([triples["head"], triples["tail"]], dim=1).t()
-            X["x_index_dict"].setdefault(head_type, []).append(triples["head"])
-            X["x_index_dict"].setdefault(tail_type, []).append(triples["tail"])
-
-        X["x_index_dict"] = {k: torch.cat(v, dim=0).unique() for k, v in X["x_index_dict"].items()}
-
-        if self.use_reverse:
-            self.add_reverse_edge_index(X["edge_index_dict"])
-
-        return X, None, None
-
-    def bfs_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):
+    def neighbors_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):
         num_node_all = 0
         i = 0
-
         while num_node_all < batch_size and i < max_iter:
             for metapath, G in self.graphs.items():
                 head_type, tail_type = metapath[0], metapath[-1]
@@ -418,6 +357,118 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         return sampled_nodes
 
+    def bfs_traversal(self, batch_size: int, seed_nodes: list, traversal_depth=2):
+        sampled_nodes = []
+        while len(sampled_nodes) < batch_size:
+            for start_node in seed_nodes:
+                if start_node is None or start_node not in self.join_graph:
+                    continue
+                successor_nodes = [node for source, successors in
+                                   islice(nx.traversal.bfs_successors(self.join_graph,
+                                                                      source=start_node), traversal_depth) for node in
+                                   successors]
+                if len(successor_nodes) > batch_size:
+                    successor_nodes = successor_nodes[:]
+                sampled_nodes.extend(successor_nodes)
+
+        sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+        if len(sampled_nodes) > batch_size:
+            np.random.shuffle(sampled_nodes)
+            sampled_nodes = sampled_nodes[:batch_size]
+
+        sampled_node_dict = self.convert_to_node_index(sampled_nodes)
+        sampled_node_dict[self.head_node_type] = self.strip_node_type_str(seed_nodes)
+        return sampled_node_dict
+
+    def get_adj_edgelist(self, graph, nodes_A, nodes_B=None):
+        if nodes_B == None:
+            adj = nx.adj_matrix(graph, nodelist=nodes_A.numpy() if isinstance(nodes_A, torch.Tensor) else nodes_A)
+        else:
+            adj = nx.algorithms.bipartite.biadjacency_matrix(graph, row_order=nodes_A, column_order=nodes_B)
+
+        adj = adj.tocoo()
+        edge_index = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long)
+        return edge_index
+
+    def get_collate_fn(self, collate_fn: str, batch_size=None):
+        if batch_size is not None:
+            self.batch_size = batch_size * len(self.node_types)
+        if "index" in collate_fn:
+            return self.collate_index_cls
+        elif "attr" in collate_fn:
+            return self.collate_node_attr_cls
+        elif "HAN_batch" in collate_fn:
+            return self.collate_HAN_batch
+        elif "HAN" in collate_fn:
+            return self.collate_HAN
+        elif "LATTENode_batch" in collate_fn:
+            return self.collate_LATTENode_batch
+        elif "LATTELink_batch" in collate_fn:
+            return self.collate_LATTELink_batch
+        else:
+            raise Exception(f"Correct collate function {collate_fn} not found.")
+
+    def collate_LATTENode_batch(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        sampled_nodes = self.bfs_traversal(batch_size=self.batch_size,
+                                           seed_nodes=self.convert_index2name(iloc, self.head_node_type))
+        node_index = self.y_index_dict[self.head_node_type][
+            self.strip_node_type_str(sampled_nodes[self.head_node_type])]
+        print("sampled_nodes", {k: len(v) for k, v in sampled_nodes.items()})
+        # assert len(iloc) == len(seed_nodes[self.head_node_type])
+        X = {"edge_index_dict": {}, "x_index_dict": {}}
+
+        for metapath in self.metapaths:
+            head_type, tail_type = metapath[0], metapath[-1]
+            if head_type not in sampled_nodes or len(sampled_nodes[head_type]) == 0: continue
+            if tail_type not in sampled_nodes or len(sampled_nodes[tail_type]) == 0: continue
+            try:
+                X["edge_index_dict"][metapath] = self.get_adj_edgelist(self.graphs[metapath],
+                                                                       nodes_A=sampled_nodes[head_type],
+                                                                       nodes_B=sampled_nodes[tail_type])
+            except Exception as e:
+                print(e)
+                continue
+
+        if self.use_reverse:
+            self.add_reverse_edge_index(X["edge_index_dict"])
+
+        for node_type in sampled_nodes:
+            X["x_index_dict"][node_type] = self.strip_node_type_str(sampled_nodes[node_type])
+
+        if hasattr(self, "x_dict"):
+            X["x_dict"] = {node_type: self.x_dict[node_type][X["x_index_dict"][node_type]] for node_type in self.x_dict}
+
+        if len(self.y_dict) > 1:
+            y = {node_type: y_true[X["x_index_dict"][node_type]] for node_type, y_true in self.y_dict.items()}
+        else:
+            y = self.y_dict[self.head_node_type][node_index].squeeze(-1)
+        return X, y, None
+
+    def collate_LATTELink_batch(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        X = {"edge_index_dict": {}, "x_index_dict": {}, "x_dict": {}}
+
+        triples = {k: v[iloc] for k, v in self.triples.items()}
+
+        for metapath_id in triples["relation"].unique():
+            metapath = self.metapaths[metapath_id]
+            head_type, tail_type = metapath[0], metapath[-1]
+            X["edge_index_dict"][metapath] = torch.stack([triples["head"], triples["tail"]], dim=1).t()
+            X["x_index_dict"].setdefault(head_type, []).append(triples["head"])
+            X["x_index_dict"].setdefault(tail_type, []).append(triples["tail"])
+
+        X["x_index_dict"] = {k: torch.cat(v, dim=0).unique() for k, v in X["x_index_dict"].items()}
+
+        if self.use_reverse:
+            self.add_reverse_edge_index(X["edge_index_dict"])
+
+        return X, None, None
+
     def collate_HAN(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
@@ -448,16 +499,6 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
-
-    def get_adj_edgelist(self, graph, nodes_A, nodes_B=None):
-        if nodes_B == None:
-            adj = nx.adj_matrix(graph, nodelist=nodes_A.numpy() if isinstance(nodes_A, torch.Tensor) else nodes_A)
-        else:
-            adj = nx.algorithms.bipartite.biadjacency_matrix(graph, row_order=nodes_A, column_order=nodes_B)
-
-        adj = adj.tocoo()
-        edge_index = torch.tensor(np.vstack([adj.row, adj.col]), dtype=torch.long)
-        return edge_index
 
     def collate_node_attr_cls(self, iloc):
         if not isinstance(iloc, torch.Tensor):
