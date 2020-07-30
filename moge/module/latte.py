@@ -300,18 +300,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 else:
                     edge_index = edge_index_dict[metapath]
 
-                if self.first:
-                    emb_relation_agg[head_type][:, i] = self.propagate(
-                        edge_index,
-                        size=(num_node_tail, num_node_head),
-                        x=(h_dict[tail_type], h_dict[head_type]),
-                        alpha=(score_r[metapath], score_l[metapath]))
-                else:
-                    emb_relation_agg[head_type][:, i] = self.propagate(
-                        edge_index,
-                        size=(num_node_tail, num_node_head),
-                        x=(h_dict[tail_type], h_dict[head_type]),
-                        alpha=(score_r[metapath], score_l[metapath]))
+                emb_relation_agg[head_type][:, i] = self.propagate(
+                    edge_index,
+                    size=(num_node_tail, num_node_head),
+                    x=(h_dict[tail_type], h_dict[head_type]),
+                    alpha=(score_r[metapath], score_l[metapath]))
+                print("score_l[metapath]", score_l[metapath][:5])
 
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
@@ -327,6 +321,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return emb_output, proximity_loss
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
+        print("alpha_i", alpha_i[:5])
+        print("alpha_j", alpha_j[:5])
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         # alpha = F.leaky_relu(alpha, 0.2)
         alpha = F.tanh(alpha)
