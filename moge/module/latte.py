@@ -246,7 +246,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = {}
         for node_type in x_index_dict:
             if node_type in x_dict:
-                h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
+                h_dict[node_type] = F.relu(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[x_index_dict[node_type]]
 
@@ -305,7 +305,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     size=(num_node_tail, num_node_head),
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(score_r[metapath], score_l[metapath]))
-                print("score_l[metapath]", score_l[metapath][:5])
+                # print(" score_r[metapath]", score_r[metapath][:5])
+                # print("score_l[metapath]", score_l[metapath][:5])
 
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
@@ -321,11 +322,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return emb_output, proximity_loss
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
-        print("alpha_i", alpha_i[:5])
-        print("alpha_j", alpha_j[:5])
+        # print("alpha_i", alpha_i[:5])
+        # print("alpha_j", alpha_j[:5])
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         # alpha = F.leaky_relu(alpha, 0.2)
-        alpha = F.tanh(alpha)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         # alpha = F.dropout(alpha, p=0.5, training=self.training)
         return x_j * alpha.unsqueeze(-1)

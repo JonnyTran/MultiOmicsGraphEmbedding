@@ -214,7 +214,11 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
         self.metapaths = list(self.edge_index_dict.keys())
-        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio,
+                                                                                             sample_indices=torch.arange(
+                                                                                                 self.y_dict[
+                                                                                                     self.head_node_type].size(
+                                                                                                     0)))
 
     def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
         data = dataset[0]
@@ -424,8 +428,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
 
         sampled_nodes = self.bfs_traversal(batch_size=self.batch_size,
                                            seed_nodes=self.convert_index2name(iloc, self.head_node_type))
-        node_index = self.y_index_dict[self.head_node_type][
-            self.strip_node_type_str(sampled_nodes[self.head_node_type])]
+        # node_index = self.y_index_dict[self.head_node_type][iloc]
         # print("sampled_nodes", {k: len(v) for k, v in sampled_nodes.items()})
         assert len(iloc) == len(sampled_nodes[self.head_node_type])
         X = {"edge_index_dict": {}, "x_index_dict": {}}
@@ -455,7 +458,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         if len(self.y_dict) > 1:
             y = {node_type: y_true[X["x_index_dict"][node_type]] for node_type, y_true in self.y_dict.items()}
         else:
-            y = self.y_dict[self.head_node_type][node_index].squeeze(-1)
+            y = self.y_dict[self.head_node_type][iloc].squeeze(-1)
         return X, y, None
 
     def collate_LATTELink_batch(self, iloc):
