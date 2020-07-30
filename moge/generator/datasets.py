@@ -24,7 +24,7 @@ from torch_geometric.data import InMemoryDataset
 
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=False, train_ratio=0.7,
+    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True):
         self.dataset = dataset
         self.directed = directed
@@ -79,7 +79,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
             pool = multiprocessing.Pool(processes=cpus)
             output = pool.map(self.create_graph, self.metapaths)
             for (metapath, graph) in output:
-                self.graphs[metapath] = graph
+                self.graphs[metapath.split(">")] = graph
             pool.close()
 
         self.join_graph = nx.compose_all([G.to_undirected() for metapath, G in self.graphs.items()])
@@ -101,7 +101,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
         edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
         graph = nx.from_edgelist(edgelist, create_using=nx.DiGraph if self.directed else nx.Graph)
-        return (metapath, graph)
+        return (">".join(metapath), graph)
 
     def get_metapaths(self):
         return self.metapaths + self.get_reverse_metapath(self.metapaths)
@@ -294,7 +294,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         """
         return torch.tensor([int(name[1:]) for name in node_names], dtype=torch.long)
 
-    def convert_to_node_index(self, node_names: list):
+    def convert_sampled_nodes_to_node_dict(self, node_names: list):
         """
         Strip letter from node names
         :param node_names:
@@ -358,27 +358,32 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         return sampled_nodes
 
     def bfs_traversal(self, batch_size: int, seed_nodes: list, traversal_depth=2):
-        sampled_nodes = []
+        sampled_nodes = copy.copy(seed_nodes)
+
         while len(sampled_nodes) < batch_size:
-            for start_node in seed_nodes:
+            for start_node in reversed(sampled_nodes):
                 if start_node is None or start_node not in self.join_graph:
                     continue
                 successor_nodes = [node for source, successors in
                                    islice(nx.traversal.bfs_successors(self.join_graph,
                                                                       source=start_node), traversal_depth) for node in
                                    successors]
-                if len(successor_nodes) > batch_size:
-                    successor_nodes = successor_nodes[:]
+                if len(successor_nodes) > (batch_size / (2 * len(self.node_types))):
+                    successor_nodes = successor_nodes[:int(batch_size / (2 * len(self.node_types)))]
                 sampled_nodes.extend(successor_nodes)
 
-        sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+            sampled_nodes = list(OrderedDict.fromkeys(sampled_nodes))
+
         if len(sampled_nodes) > batch_size:
             np.random.shuffle(sampled_nodes)
             sampled_nodes = sampled_nodes[:batch_size]
 
-        sampled_node_dict = self.convert_to_node_index(sampled_nodes)
-        sampled_node_dict[self.head_node_type] = self.strip_node_type_str(seed_nodes)
-        return sampled_node_dict
+        # Sort sampled nodes to node_name_dict
+        node_index_dict = {}
+        for node in sampled_nodes:
+            node_index_dict.setdefault(self.char_to_node_type[node[0]], []).append(node)
+        node_index_dict[self.head_node_type] = seed_nodes
+        return node_index_dict
 
     def get_adj_edgelist(self, graph, nodes_A, nodes_B=None):
         if nodes_B == None:
@@ -416,8 +421,8 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                                            seed_nodes=self.convert_index2name(iloc, self.head_node_type))
         node_index = self.y_index_dict[self.head_node_type][
             self.strip_node_type_str(sampled_nodes[self.head_node_type])]
-        print("sampled_nodes", {k: len(v) for k, v in sampled_nodes.items()})
-        # assert len(iloc) == len(seed_nodes[self.head_node_type])
+        # print("sampled_nodes", {k: len(v) for k, v in sampled_nodes.items()})
+        assert len(iloc) == len(sampled_nodes[self.head_node_type])
         X = {"edge_index_dict": {}, "x_index_dict": {}}
 
         for metapath in self.metapaths:
@@ -429,8 +434,9 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
                                                                        nodes_A=sampled_nodes[head_type],
                                                                        nodes_B=sampled_nodes[tail_type])
             except Exception as e:
-                print(e)
-                continue
+                print("sampled_nodes[head_type]", sampled_nodes[head_type])
+                print("sampled_nodes[tail_type]", sampled_nodes[tail_type])
+                raise e
 
         if self.use_reverse:
             self.add_reverse_edge_index(X["edge_index_dict"])
