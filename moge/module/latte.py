@@ -156,7 +156,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             {node_type: torch.nn.Conv1d(
                 in_channels=node_attr_shape[
                     node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
-                out_channels=self.get_relation_size(node_type),
+                out_channels=self.get_num_relations(node_type),
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
 
@@ -194,7 +194,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
         return relations
 
-    def get_relation_size(self, node_type) -> int:
+    def get_num_relations(self, node_type) -> int:
         """
         Return the number of metapaths with head node type equals to :param node_type: and plus one for none-selection.
         :param node_type (str):
@@ -285,9 +285,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
             emb_relation_agg[node_type] = torch.zeros(
                 size=(x_index_dict[node_type].size(0),
-                      self.get_relation_size(node_type),
-                      self.embedding_dim)).type_as(
-                self.conv[node_type].weight)
+                      self.get_num_relations(node_type),
+                      self.embedding_dim)).type_as(self.conv[node_type].weight)
 
             for i, metapath in enumerate(self.get_head_relations(node_type)):
                 if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
@@ -299,6 +298,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     edge_index, _ = edge_index_dict[metapath]
                 else:
                     edge_index = edge_index_dict[metapath]
+                if edge_index.size(1) <= 5: continue
 
                 emb_relation_agg[head_type][:, i] = self.propagate(
                     edge_index,
@@ -309,8 +309,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 # print("score_l[metapath]", score_l[metapath][:5])
 
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
-            emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
-                                                 beta[node_type]).squeeze(-1)
+            # emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
+            #                                      beta[node_type]).squeeze(-1)
+            emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1)
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(edge_index_dict,

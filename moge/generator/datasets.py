@@ -111,12 +111,15 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         return self.metapaths + self.get_reverse_metapath(self.metapaths)
 
     def split_train_val_test(self, train_ratio, sample_indices=None):
-        perm = torch.randperm(self.num_nodes_dict[self.head_node_type])
         if sample_indices is not None:
-            perm = sample_indices[perm]
-        training_idx = perm[:int(self.y_index_dict[self.head_node_type].size(0) * train_ratio)]
-        validation_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
-        testing_idx = perm[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+            indices = sample_indices[torch.randperm(sample_indices.size(0))]
+        else:
+            indices = torch.randperm(self.num_nodes_dict[self.head_node_type])
+
+        num_indices = self.y_index_dict[self.head_node_type].size(0)
+        training_idx = indices[:int(num_indices * train_ratio)]
+        validation_idx = indices[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        testing_idx = indices[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
         return training_idx, validation_idx, testing_idx
 
     @staticmethod
@@ -213,12 +216,17 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         self.node_types = list(data.num_nodes_dict.keys())
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
+
+        new_y_dict = {nodetype: torch.zeros(self.y_index_dict[nodetype].max() + 1).type_as(self.y_dict[nodetype]) for
+                      nodetype in self.y_dict}
+        for node_type in self.node_types:
+            new_y_dict[self.y_index_dict[node_type]] = self.y_dict[node_type]
+        self.y_dict = new_y_dict
+
         self.metapaths = list(self.edge_index_dict.keys())
-        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio,
-                                                                                             sample_indices=torch.arange(
-                                                                                                 self.y_dict[
-                                                                                                     self.head_node_type].size(
-                                                                                                     0)))
+        self.training_idx, self.validation_idx, self.testing_idx = \
+            self.split_train_val_test(train_ratio,
+                                      sample_indices=self.y_index_dict[self.head_node_type])
 
     def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
         data = dataset[0]
@@ -431,7 +439,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         # node_index = self.y_index_dict[self.head_node_type][iloc]
         # print("sampled_nodes", {k: len(v) for k, v in sampled_nodes.items()})
         assert len(iloc) == len(sampled_nodes[self.head_node_type])
-        X = {"edge_index_dict": {}, "x_index_dict": {}}
+        X = {"edge_index_dict": {}, "x_index_dict": {}, "x_dict": {}}
 
         for metapath in self.metapaths:
             head_type, tail_type = metapath[0], metapath[-1]

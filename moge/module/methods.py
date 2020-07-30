@@ -141,17 +141,17 @@ class LATTENodeClassifier(MetricsComparison):
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn="LATTENode_batch",
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=min(16, multiprocessing.cpu_count()))
+                                             num_workers=int(0.8 * multiprocessing.cpu_count()))
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn="LATTENode_batch",
                                            batch_size=self.hparams.batch_size,
-                                           num_workers=min(4, multiprocessing.cpu_count()))
+                                           num_workers=int(0.2 * multiprocessing.cpu_count()))
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn="LATTENode_batch",
                                             batch_size=self.hparams.batch_size,
-                                            num_workers=min(4, multiprocessing.cpu_count()))
+                                            num_workers=int(0.2 * multiprocessing.cpu_count()))
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
