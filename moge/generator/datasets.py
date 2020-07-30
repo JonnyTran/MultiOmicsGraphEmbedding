@@ -25,7 +25,7 @@ from torch_geometric.data import InMemoryDataset
 
 class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True):
+                 add_reverse_metapaths=True, multiworker=True):
         self.dataset = dataset
         self.directed = directed
         self.train_ratio = train_ratio
@@ -68,29 +68,27 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
-        try:
-            cpus = multiprocessing.cpu_count()
-        except NotImplementedError:
-            cpus = 2  # arbitrary default
-
         # Using multiprocessing to create_graph() for each metapath
         if not isinstance(dataset, PygLinkPropPredDataset):
-            self.graphs = {}
-            pool = multiprocessing.Pool(processes=cpus)
-            output = pool.map(self.create_graph, self.metapaths)
-            for (metapath, graph) in output:
-                self.graphs[metapath.split(">")] = graph
-            pool.close()
+            if multiworker:
+                try:
+                    cpus = multiprocessing.cpu_count()
+                except NotImplementedError:
+                    cpus = multiworker  # arbitrary default
+
+                self.graphs = {}
+                pool = multiprocessing.Pool(processes=cpus)
+                output = pool.map(self.create_graph, self.metapaths)
+                for (metapath, graph) in output:
+                    self.graphs[metapath] = graph
+                pool.close()
+            else:
+                self.graphs = {metapath: graph for metapath, graph in
+                               [self.create_graph(metapath) for metapath in self.metapaths]}
 
         self.join_graph = nx.compose_all([G.to_undirected() for metapath, G in self.graphs.items()])
 
         assert hasattr(self, "num_nodes_dict")
-
-    def name(self):
-        if not hasattr(self, "_name"):
-            return self.dataset.__class__.__name__
-        else:
-            return self._name
 
     def create_graph(self, metapath):
         """
@@ -101,7 +99,13 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
         edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
         graph = nx.from_edgelist(edgelist, create_using=nx.DiGraph if self.directed else nx.Graph)
-        return (">".join(metapath), graph)
+        return (metapath, graph)
+
+    def name(self):
+        if not hasattr(self, "_name"):
+            return self.dataset.__class__.__name__
+        else:
+            return self._name
 
     def get_metapaths(self):
         return self.metapaths + self.get_reverse_metapath(self.metapaths)
@@ -205,6 +209,7 @@ class HeterogeneousNetworkDataset(torch.utils.data.Dataset):
         data = dataset[0]
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
+        self.node_attr_shape = {}
         self.node_types = list(data.num_nodes_dict.keys())
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
