@@ -55,8 +55,6 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
-        self.char_to_node_type = {node_type[0]: node_type for node_type in self.node_types}
-
         if hasattr(self, "y_dict"):
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.multilabel = True
@@ -69,9 +67,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
-        # Using multiprocessing to create_graph() for each metapath
         if not isinstance(dataset, PygLinkPropPredDataset):
-            self.process_graphs()
+            self.process_graph_sampler()
 
         assert hasattr(self, "num_nodes_dict")
         if not hasattr(self, "node_attr_shape"):
@@ -79,7 +76,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         if not hasattr(self, "x_dict"):
             self.x_dict = {}
 
-    def process_graphs(self):
+    def process_graph_sampler(self):
         raise NotImplementedError
 
     def name(self):
@@ -87,9 +84,6 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             return self.dataset.__class__.__name__
         else:
             return self._name
-
-    def get_metapaths(self):
-        return self.metapaths + self.get_reverse_metapath(self.metapaths)
 
     def split_train_val_test(self, train_ratio, sample_indices=None):
         if sample_indices is not None:
@@ -102,6 +96,12 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         validation_idx = indices[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
         testing_idx = indices[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
         return training_idx, validation_idx, testing_idx
+
+    def get_metapaths(self):
+        if self.use_reverse:
+            return self.metapaths + self.get_reverse_metapath(self.metapaths)
+        else:
+            return self.metapaths
 
     @staticmethod
     def add_reverse_edge_index(edge_index_dict) -> None:

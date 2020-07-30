@@ -9,44 +9,31 @@ from moge.generator.datasets import HeteroNetDataset
 
 
 class HeteroNeighborSampler(HeteroNetDataset):
-
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True, num_neighbors=25):
+                 add_reverse_metapaths=True, neighbor_sizes=[25, 20]):
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths)
-        self.num_neighbors = num_neighbors
+        self.neighbor_sizes = neighbor_sizes
 
-    def process_graphs(self):
+    def process_graph_sampler(self):
+        if self.use_reverse:
+            self.add_reverse_edge_index(self.edge_index_dict)
+
         out = group_hetero_graph(self.edge_index_dict, self.num_nodes_dict)
-        edge_index, edge_type, node_type, local_node_idx, local2global, key2int = out
+        self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = out
 
         x_dict = {}
         for key, x in self.x_dict.items():
-            x_dict[key2int[key]] = x
+            x_dict[self.key2int[key]] = x
 
         num_nodes_dict = {}
         for key, N in self.num_nodes_dict.items():
-            num_nodes_dict[key2int[key]] = N
+            num_nodes_dict[self.key2int[key]] = N
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12):
-        loader = NeighborSampler(edge_index, node_idx=self.training_idx,
-                                 sizes=[self.num_neighbors, ] * len(self.edge_index_dict), batch_size=batch_size,
+        loader = NeighborSampler(self.edge_index, node_idx=self.training_idx,
+                                 sizes=self.neighbor_sizes, batch_size=batch_size,
                                  shuffle=True,
                                  num_workers=num_workers)
-        return loader
 
-    def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
-        loader = NeighborSampler(edge_index, node_idx=self.validation_idx,
-                                 sizes=[self.num_neighbors, ] * len(self.edge_index_dict), batch_size=batch_size,
-                                 shuffle=True,
-                                 num_workers=num_workers)
-        return loader
-
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
-        loader = NeighborSampler(edge_index, node_idx=self.testing_idx,
-                                 sizes=[self.num_neighbors, ] * len(self.edge_index_dict), batch_size=batch_size,
-                                 shuffle=True,
-                                 num_workers=num_workers)
-        return loader
 
 
 class NeighborSampler(HeteroNetDataset):
@@ -54,7 +41,7 @@ class NeighborSampler(HeteroNetDataset):
                  add_reverse_metapaths=True):
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths)
 
-    def process_graphs(self):
+    def process_graph_sampler(self):
         self.graphs = {}
 
         for metapath in self.metapaths:
@@ -73,3 +60,15 @@ class NeighborSampler(HeteroNetDataset):
         row, col, e_id = adj.coo()
         edge_index = torch.stack([n_id[row], n_id[col]], dim=0)
         return edge_index
+
+    def get_collate_fn(self, collate_fn: str, batch_size=None):
+        if batch_size is not None:
+            self.batch_size = batch_size * len(self.node_types)
+
+        if "adj_sample" in collate_fn:
+            return self.collate_adj_sample
+        else:
+            raise Exception(f"Correct collate function {collate_fn} not found.")
+
+    def collate_adj_sample(self, iloc):
+        pass
