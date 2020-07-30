@@ -13,9 +13,9 @@ from moge.generator.datasets import HeteroNetDataset
 class NetworkxSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True, multiworker=True):
+        self.multiworker = multiworker
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths)
         self.char_to_node_type = {node_type[0]: node_type for node_type in self.node_types}
-        self.multiworker = multiworker
 
     def process_graph_sampler(self):
         try:
@@ -31,8 +31,8 @@ class NetworkxSampler(HeteroNetDataset):
                 self.graphs[metapath] = graph
             pool.close()
         else:
-            self.graphs = {metapath_g: graph for metapath in self.metapaths for metapath_g, graph in
-                           self.create_nx_graph(metapath)}
+            self.graphs = {metapath: graph for metapath, graph in
+                           [self.create_graph(metapath) for metapath in self.metapaths]}
 
         self.join_graph = nx.compose_all([G.to_undirected() for metapath, G in self.graphs.items()])
 

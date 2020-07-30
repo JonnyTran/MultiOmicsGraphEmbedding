@@ -13,7 +13,6 @@ from ogb.nodeproppred import PygNodePropPredDataset
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
 
-
 class HeteroNetDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True):
