@@ -8,7 +8,7 @@ from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec
 
-from moge.generator.datasets import HeterogeneousNetworkDataset
+from moge.generator.datasets import HeteroNetDataset
 from .metrics import Metrics
 from .trainer import _fix_dp_return_type
 from .latte import LATTELayer, LATTE
@@ -57,7 +57,7 @@ class MetricsComparison(pl.LightningModule):
 
 
 class LATTENodeClassifier(MetricsComparison):
-    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["accuracy"]) -> None:
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="LATTENode_batch") -> None:
         super(LATTENodeClassifier, self).__init__()
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
@@ -66,6 +66,7 @@ class LATTENodeClassifier(MetricsComparison):
         self.hparams = hparams
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
         num_class = dataset.n_classes
+        self.collate_fn = collate_fn
 
         self.latte = LATTE(embedding_dim=hparams.embedding_dim, t_order=hparams.t_order,
                            num_nodes_dict=dataset.num_nodes_dict,
@@ -139,9 +140,12 @@ class LATTENodeClassifier(MetricsComparison):
         return {"test_loss": loss}
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn="LATTENode_batch",
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=int(0.8 * multiprocessing.cpu_count()))
+        if self.collate_fn == "LATTENode_batch":
+            return self.dataset.train_dataloader(collate_fn=self.collate_fn,
+                                                 batch_size=self.hparams.batch_size,
+                                                 num_workers=int(0.8 * multiprocessing.cpu_count()))
+        else:
+            return
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn="LATTENode_batch",
@@ -157,7 +161,7 @@ class LATTENodeClassifier(MetricsComparison):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 class GTN(GTN, MetricsComparison):
-    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]):
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
         num_class = dataset.n_classes
@@ -264,7 +268,7 @@ class GTN(GTN, MetricsComparison):
 
 
 class HAN(HAN, MetricsComparison):
-    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=["precision"]):
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
         num_class = dataset.n_classes
@@ -352,7 +356,7 @@ class HAN(HAN, MetricsComparison):
 
 
 class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
-    def __init__(self, hparams, dataset: HeterogeneousNetworkDataset, metrics=None):
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
         # Hparams
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size

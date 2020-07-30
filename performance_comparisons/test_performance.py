@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
 
 from moge.module.methods import MetaPath2Vec, HAN, GTN
-from moge.generator.datasets import HeterogeneousNetworkDataset
+from moge.generator.datasets import HeteroNetDataset
 from pytorch_lightning.loggers import WandbLogger
 
 
@@ -26,26 +26,26 @@ def train(hparams):
     METRICS = ["accuracy", "precision", "recall", "top_k"]
 
     if hparams.dataset == "ACM":
-        dataset = HeterogeneousNetworkDataset(ACM_HANDataset(),
-                                              node_types=["P"], metapaths=["PAP", "PLP"],
-                                              train_ratio=hparams.train_ratio)
+        dataset = HeteroNetDataset(ACM_HANDataset(),
+                                   node_types=["P"], metapaths=["PAP", "PLP"],
+                                   train_ratio=hparams.train_ratio)
     elif hparams.dataset == "DBLP":
-        dataset = HeterogeneousNetworkDataset(DBLP_HANDataset(),
-                                              node_types=["A"], metapaths=["APA", "ACA", "ATA"],
-                                              train_ratio=hparams.train_ratio)
+        dataset = HeteroNetDataset(DBLP_HANDataset(),
+                                   node_types=["A"], metapaths=["APA", "ACA", "ATA"],
+                                   train_ratio=hparams.train_ratio)
     elif hparams.dataset == "IMDB":
-        dataset = HeterogeneousNetworkDataset(IMDB_HANDataset(),
-                                              node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
-                                              train_ratio=hparams.train_ratio)
+        dataset = HeteroNetDataset(IMDB_HANDataset(),
+                                   node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
+                                   train_ratio=hparams.train_ratio)
     elif hparams.dataset == "AMiner":
-        dataset = HeterogeneousNetworkDataset(AMiner("datasets/aminer"), node_types=None, head_node_type="author",
-                                              metapaths=[('paper', 'written by', 'author'),
-                                                         ('venue', 'published', 'paper')],
-                                              train_ratio=hparams.train_ratio)
+        dataset = HeteroNetDataset(AMiner("datasets/aminer"), node_types=None, head_node_type="author",
+                                   metapaths=[('paper', 'written by', 'author'),
+                                              ('venue', 'published', 'paper')],
+                                   train_ratio=hparams.train_ratio)
     elif hparams.dataset == "BlogCatalog":
-        dataset = HeterogeneousNetworkDataset("/home/jonny/Downloads/blogcatalog6k.mat",
-                                              node_types=["user", "tag"],
-                                              train_ratio=hparams.train_ratio)
+        dataset = HeteroNetDataset("/home/jonny/Downloads/blogcatalog6k.mat",
+                                   node_types=["user", "tag"],
+                                   train_ratio=hparams.train_ratio)
         dataset.name = "BlogCatalog3"
 
     if hparams.method == "HAN":
