@@ -63,7 +63,6 @@ class LATTENodeClassifier(MetricsComparison):
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type)
         self.hparams = hparams
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
         num_class = dataset.n_classes
@@ -76,6 +75,7 @@ class LATTENodeClassifier(MetricsComparison):
                            use_proximity_loss=hparams.use_proximity_loss)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
         self.classifier = Dense(hparams)
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type)
 
         self.training_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
                                         multilabel=dataset.multilabel, metrics=metrics)

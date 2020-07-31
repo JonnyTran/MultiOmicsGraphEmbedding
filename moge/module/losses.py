@@ -30,7 +30,7 @@ class FocalLoss(nn.Module):
         if self.activation_type == "SOFTMAX":
             idx = target.view(-1, 1).long()
             one_hot_key = torch.zeros(idx.size(0), self.num_cls,
-                                      dtype=torch.float)
+                                      dtype=torch.float, device=logits.device)
             one_hot_key = one_hot_key.scatter_(1, idx, 1)
             logits = torch.softmax(logits, dim=-1)
             loss = -self.alpha * one_hot_key * \
