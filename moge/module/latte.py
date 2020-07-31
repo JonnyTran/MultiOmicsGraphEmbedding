@@ -173,8 +173,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
         if len(non_attr_node_types) > 0:
             self.embeddings = torch.nn.ModuleDict(
-                {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type], embedding_dim=embedding_dim).to(
-                    "cpu") \
+                {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type], embedding_dim=embedding_dim) \
                  for node_type in non_attr_node_types}
             )
         self.reset_parameters()
@@ -250,8 +249,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if node_type in x_dict:
                 h_dict[node_type] = F.relu(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
-                    self.linear[node_type].weight.device)
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]]
 
         # Compute relations attention coefficients
         beta = {}
@@ -338,7 +336,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
 
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
-        for metapath, edge_index in global_node_idx.items():
+        for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, values = edge_index
             else:
@@ -349,7 +347,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             loss += -torch.mean(values * torch.log(torch.sigmoid(e_ij)), dim=-1)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
-        for metapath, edge_index in global_node_idx.items():
+        for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, _ = edge_index
             if edge_index is None or edge_index.size(1) <= 5: continue
