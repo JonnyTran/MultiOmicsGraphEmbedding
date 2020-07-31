@@ -52,7 +52,7 @@ class LATTE(nn.Module):
                     metapaths.append(new_relation)
         return metapaths
 
-    def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, x_index_dict):
+    def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, global_node_idx):
         output_dict = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if edge_index_a is None or (isinstance(edge_index_a, tuple) and edge_index_a[0] is None): continue
@@ -88,13 +88,13 @@ class LATTE(nn.Module):
                                                      valueA=values_a,
                                                      indexB=edge_index_b,
                                                      valueB=values_b,
-                                                     m=x_index_dict[metapath_a[0]].size(0),
-                                                     k=x_index_dict[metapath_a[-1]].size(0),
-                                                     n=x_index_dict[metapath_b[-1]].size(0),
+                                                     m=global_node_idx[metapath_a[0]].size(0),
+                                                     k=global_node_idx[metapath_a[-1]].size(0),
+                                                     n=global_node_idx[metapath_b[-1]].size(0),
                                                      coalesced=True)
                     except Exception as e:
                         print(metapath_a, metapath_b)
-                        print("sizes", {node_type: idx.size(0) for node_type, idx in x_index_dict.items()})
+                        print("sizes", {node_type: idx.size(0) for node_type, idx in global_node_idx.items()})
                         print("edge_index_a", edge_index_a.size(1), edge_index_a.dtype)
                         print("values_a", values_a.size(), values_a.dtype)
                         print("edge_index_b", edge_index_b.size(1), edge_index_b.dtype)
@@ -106,30 +106,31 @@ class LATTE(nn.Module):
                     output_dict[metapath_join] = new_edge_index
         return output_dict
 
-    def forward(self, x_dict, x_index_dict, edge_index_dict):
-        proximity_loss = torch.tensor(0.0, device=x_index_dict[
+    def forward(self, x_dict, global_node_idx, edge_index_dict):
+        proximity_loss = torch.tensor(0.0, device=global_node_idx[
             self.node_types[0]].device) if self.use_proximity_loss else None
 
-        h_all_dict = {node_type: [] for node_type in x_index_dict}
+        h_all_dict = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict, x_index_dict=x_index_dict,
+                h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict, global_node_idx=global_node_idx,
                                                                   edge_index_dict=edge_index_dict)
                 if self.t_order >= 2:
                     with torch.no_grad():
-                        t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict, x_index_dict)
+                        t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict,
+                                                                         global_node_idx)
             else:
                 h_dict, t_proximity_loss = self.layers[t].forward(
-                    x_dict=x_dict, x_index_dict=x_index_dict,
+                    x_dict=x_dict, global_node_idx=global_node_idx,
                     edge_index_dict=t_order_edge_index_dict,
                     h1_dict={node_type: h_emb.detach() for node_type, h_emb in
                              h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
 
                 with torch.no_grad():
                     t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict,
-                                                                     x_index_dict)
+                                                                     global_node_idx)
 
-            for node_type in x_index_dict:
+            for node_type in global_node_idx:
                 h_all_dict[node_type].append(h_dict[node_type])
             if self.use_proximity_loss:
                 proximity_loss += t_proximity_loss
@@ -205,7 +206,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return len(relations) + 1
 
     def save_relation_weights(self, beta):
-        # Only save relation weights if beta has weights for all node_types in the x_index_dict batch
+        # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
         if len(beta) < len(self.node_types): return
         self._beta_avg = {}
         self._beta_std = {}
@@ -318,7 +319,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(edge_index_dict,
                                                  score_l=score_l,
-                                                 score_r=score_r, x_index_dict=global_node_idx)
+                                                 score_r=score_r, global_node_idx=global_node_idx)
         else:
             proximity_loss = None
 
@@ -333,11 +334,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # alpha = F.dropout(alpha, p=0.5, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
-    def proximity_loss(self, edge_index_dict, score_l, score_r, x_index_dict):
+    def proximity_loss(self, edge_index_dict, score_l, score_r, global_node_idx):
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
 
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
-        for metapath, edge_index in edge_index_dict.items():
+        for metapath, edge_index in global_node_idx.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, values = edge_index
             else:
@@ -348,14 +349,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             loss += -torch.mean(values * torch.log(torch.sigmoid(e_ij)), dim=-1)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
-        for metapath, edge_index in edge_index_dict.items():
+        for metapath, edge_index in global_node_idx.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, _ = edge_index
             if edge_index is None or edge_index.size(1) <= 5: continue
 
             neg_edge_index = negative_sample(edge_index,
-                                             M=x_index_dict[metapath[0]].size(0),
-                                             N=x_index_dict[metapath[-1]].size(0),
+                                             M=global_node_idx[metapath[0]].size(0),
+                                             N=global_node_idx[metapath[-1]].size(0),
                                              num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
             if neg_edge_index.size(1) <= 5: continue
 

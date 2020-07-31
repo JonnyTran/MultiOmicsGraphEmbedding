@@ -14,8 +14,9 @@ class NetworkXSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True, multiworker=True, process_graphs=True):
         self.multiworker = multiworker
-        super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths,
-                         process_graphs)
+        super(NetworkXSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio,
+                                              add_reverse_metapaths,
+                                              process_graphs)
         self.char_to_node_type = {node_type[0]: node_type for node_type in self.node_types}
 
     def process_graph_sampler(self):
@@ -166,6 +167,8 @@ class NetworkXSampler(HeteroNetDataset):
 
         if "LATTENode_batch" in collate_fn:
             return self.collate_LATTENode_batch
+        elif "HAN_batch" in collate_fn:
+            return self.collate_HAN_batch
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
@@ -207,4 +210,18 @@ class NetworkXSampler(HeteroNetDataset):
             y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
         else:
             y = self.y_dict[self.head_node_type][iloc].squeeze(-1)
+        return X, y, None
+
+    def collate_HAN_batch(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        node_index = self.y_index_dict[self.head_node_type][iloc]
+
+        X = {"adj": [(self.get_adj_edgelist(self.graphs[i], node_index),
+                      torch.ones(self.get_adj_edgelist(self.graphs[i], node_index).size(1))) for i in self.metapaths],
+             "x": self.data["x"][node_index] if hasattr(self.data, "x") else None,
+             "idx": node_index}
+
+        y = self.y_dict[self.head_node_type][iloc]
         return X, y, None

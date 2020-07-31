@@ -201,7 +201,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         new_y_dict = {nodetype: torch.zeros(self.y_index_dict[nodetype].max() + 1).type_as(self.y_dict[nodetype]) for
                       nodetype in self.y_dict}
         for node_type in self.y_dict:
-            new_y_dict[self.y_index_dict[node_type]] = self.y_dict[node_type]
+            new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
         self.y_dict = new_y_dict
 
         self.metapaths = list(self.edge_index_dict.keys())
@@ -285,9 +285,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         if batch_size is not None:
             self.batch_size = batch_size * len(self.node_types)
 
-        if "HAN_batch" in collate_fn:
-            return self.collate_HAN_batch
-        elif "HAN" in collate_fn:
+        if "HAN" in collate_fn:
             return self.collate_HAN
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
@@ -314,19 +312,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
         return X, None, None
 
-    def collate_HAN_batch(self, iloc):
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
 
-        node_index = self.y_index_dict[self.head_node_type][iloc]
-
-        X = {"adj": [(self.get_adj_edgelist(self.graphs[i], node_index),
-                      torch.ones(self.get_adj_edgelist(self.graphs[i], node_index).size(1))) for i in self.metapaths],
-             "x": self.data["x"][node_index] if hasattr(self.data, "x") else None,
-             "idx": node_index}
-
-        y = self.y_dict[self.head_node_type][iloc]
-        return X, y, None
 
     def collate_HAN(self, iloc):
         if not isinstance(iloc, torch.Tensor):
