@@ -227,13 +227,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
-    # def __repr__(self):
-    #     return '{}(linear={}, attn={}, embedding={})'.format(self.__class__.__name__,
-    #                                                          {nodetype: linear.weight.shape for
-    #                                                           nodetype, linear in self.linear.items()},
-    #                                                          {metapath: self.attn_l[i].weight.shape for i, metapath in enumerate(self.metapaths)},
-    #                                                          self.embedding_dim)
-
     def forward(self, x_dict, global_node_idx, edge_index_dict, h1_dict=None):
         """
 
@@ -268,17 +261,17 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         if not self.training: self.save_relation_weights(beta)
 
         # Compute node-level attention coefficients
-        score_l, score_r = {}, {}
+        alpha_l, alpha_r = {}, {}
         for i, metapath in enumerate(self.metapaths):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
-                score_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # score_l = attn_l * W * x_1
+                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
             else:
-                score_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # score_l = attn_l * h_1
+                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
 
-            score_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # score_r = attn_r * W * x_1
+            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         emb_relation_agg = {}
@@ -306,9 +299,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     edge_index,
                     size=(num_node_tail, num_node_head),
                     x=(h_dict[tail_type], h_dict[head_type]),
-                    alpha=(score_r[metapath], score_l[metapath]))
-                # print(" score_r[metapath]", score_r[metapath][:5])
-                # print("score_l[metapath]", score_l[metapath][:5])
+                    alpha=(alpha_r[metapath], alpha_l[metapath]))
+                # print(" alpha_r[metapath]", alpha_r[metapath][:5])
+                # print("alpha_l[metapath]", alpha_l[metapath][:5])
 
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
             # emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
@@ -317,8 +310,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(edge_index_dict,
-                                                 score_l=score_l,
-                                                 score_r=score_r, global_node_idx=global_node_idx)
+                                                 alpha_l=alpha_l,
+                                                 alpha_r=alpha_r, global_node_idx=global_node_idx)
         else:
             proximity_loss = None
 
@@ -333,7 +326,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # alpha = F.dropout(alpha, p=0.5, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
-    def proximity_loss(self, edge_index_dict, score_l, score_r, global_node_idx):
+    def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
 
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
@@ -344,7 +337,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 values = 1.0
             if edge_index is None: continue
 
-            e_ij = score_l[metapath][edge_index[0]] + score_r[metapath][edge_index[1]]
+            e_ij = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
             loss += -torch.mean(values * torch.log(torch.sigmoid(e_ij)), dim=-1)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
@@ -359,7 +352,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                              num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
             if neg_edge_index.size(1) <= 5: continue
 
-            e_ij = score_l[metapath][neg_edge_index[0]] + score_r[metapath][neg_edge_index[1]]
+            e_ij = alpha_l[metapath][neg_edge_index[0]] + alpha_r[metapath][neg_edge_index[1]]
             loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
         return loss
