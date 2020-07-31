@@ -10,11 +10,12 @@ import torch
 from moge.generator.datasets import HeteroNetDataset
 
 
-class NetworkxSampler(HeteroNetDataset):
+class NetworkXSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True, multiworker=True):
+                 add_reverse_metapaths=True, multiworker=True, process_graphs=True):
         self.multiworker = multiworker
-        super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths)
+        super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths,
+                         process_graphs)
         self.char_to_node_type = {node_type[0]: node_type for node_type in self.node_types}
 
     def process_graph_sampler(self):

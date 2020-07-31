@@ -15,9 +15,10 @@ from torch_geometric.data import InMemoryDataset
 
 class HeteroNetDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True):
+                 add_reverse_metapaths=True, process_graphs=True):
         """
         This class handles processing of the data & train/test spliting.
+        :param process_graphs:
         :param dataset:
         :param node_types:
         :param metapaths:
@@ -66,7 +67,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
-        if not isinstance(dataset, PygLinkPropPredDataset):
+        if process_graphs:
             self.process_graph_sampler()
 
         assert hasattr(self, "num_nodes_dict")
@@ -90,10 +91,10 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         else:
             indices = torch.randperm(self.num_nodes_dict[self.head_node_type])
 
-        num_indices = self.y_index_dict[self.head_node_type].size(0)
+        num_indices = indices.size(0)
         training_idx = indices[:int(num_indices * train_ratio)]
-        validation_idx = indices[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
-        testing_idx = indices[int(self.y_index_dict[self.head_node_type].size(0) * train_ratio):]
+        validation_idx = indices[int(num_indices * train_ratio):]
+        testing_idx = indices[int(num_indices * train_ratio):]
         return training_idx, validation_idx, testing_idx
 
     def get_metapaths(self):
@@ -280,7 +281,6 @@ class HeteroNetDataset(torch.utils.data.Dataset):
                                                                                                         batch_size))
         return loader
 
-
     def get_collate_fn(self, collate_fn: str, batch_size=None):
         if batch_size is not None:
             self.batch_size = batch_size * len(self.node_types)
@@ -289,13 +289,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             return self.collate_HAN_batch
         elif "HAN" in collate_fn:
             return self.collate_HAN
-        elif "LATTENode_batch" in collate_fn:
-            return self.collate_LATTENode_batch
-        elif "LATTELink_batch" in collate_fn:
-            return self.collate_LATTELink_batch
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
-
 
     def collate_LATTELink_batch(self, iloc):
         if not isinstance(iloc, torch.Tensor):

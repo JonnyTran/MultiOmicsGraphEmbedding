@@ -10,8 +10,9 @@ from moge.generator.datasets import HeteroNetDataset
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True, neighbor_sizes=[25, 20]):
-        super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths)
+                 add_reverse_metapaths=True, neighbor_sizes=[25, 20], process_graphs=True):
+        super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
+                                                    train_ratio, add_reverse_metapaths, process_graphs)
         self.neighbor_sizes = neighbor_sizes
 
     def process_graph_sampler(self):
@@ -32,10 +33,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         for key, N in self.num_nodes_dict.items():
             num_nodes_dict[self.key2int[key]] = N
 
-        loader = NeighborSampler(self.edge_index, node_idx=self.training_idx,
-                                 sizes=self.neighbor_sizes, batch_size=batch_size,
-                                 shuffle=True,
-                                 num_workers=num_workers)
+        loader = NeighborSampler(self.edge_index, )
 
     def sample_adj(self, metapath, source_node_id, num_neighbors=20):
         adj, n_id = self.graphs[metapath].sample_adj(source_node_id, num_neighbors=num_neighbors)
@@ -58,7 +56,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
 class NeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True):
+                 add_reverse_metapaths=True, process_graphs=True):
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths)
 
     def process_graph_sampler(self):

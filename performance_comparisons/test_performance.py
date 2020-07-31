@@ -26,25 +26,21 @@ def train(hparams):
     METRICS = ["accuracy", "precision", "recall", "top_k"]
 
     if hparams.dataset == "ACM":
-        dataset = HeteroNetDataset(ACM_HANDataset(),
-                                   node_types=["P"], metapaths=["PAP", "PLP"],
+        dataset = HeteroNetDataset(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
                                    train_ratio=hparams.train_ratio)
     elif hparams.dataset == "DBLP":
-        dataset = HeteroNetDataset(DBLP_HANDataset(),
-                                   node_types=["A"], metapaths=["APA", "ACA", "ATA"],
+        dataset = HeteroNetDataset(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
                                    train_ratio=hparams.train_ratio)
     elif hparams.dataset == "IMDB":
-        dataset = HeteroNetDataset(IMDB_HANDataset(),
-                                   node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
+        dataset = HeteroNetDataset(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
                                    train_ratio=hparams.train_ratio)
     elif hparams.dataset == "AMiner":
-        dataset = HeteroNetDataset(AMiner("datasets/aminer"), node_types=None, head_node_type="author",
+        dataset = HeteroNetDataset(AMiner("datasets/aminer"), node_types=None,
                                    metapaths=[('paper', 'written by', 'author'),
-                                              ('venue', 'published', 'paper')],
+                                              ('venue', 'published', 'paper')], head_node_type="author",
                                    train_ratio=hparams.train_ratio)
     elif hparams.dataset == "BlogCatalog":
-        dataset = HeteroNetDataset("/home/jonny/Downloads/blogcatalog6k.mat",
-                                   node_types=["user", "tag"],
+        dataset = HeteroNetDataset("/home/jonny/Downloads/blogcatalog6k.mat", node_types=["user", "tag"],
                                    train_ratio=hparams.train_ratio)
         dataset.name = "BlogCatalog3"
 
