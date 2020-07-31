@@ -137,6 +137,7 @@ class LATTE(nn.Module):
 
         embedding_output = {node_type: torch.cat(h_emb_list, dim=1) \
                             for node_type, h_emb_list in h_all_dict.items() if len(h_emb_list) > 0}
+        print("embedding_output", {k: v.shape for k, v in embedding_output.items()})
         return embedding_output, proximity_loss
 
 
