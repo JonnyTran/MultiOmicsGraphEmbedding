@@ -304,9 +304,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 # print("alpha_l[metapath]", alpha_l[metapath][:5])
 
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
-            # emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
-            #                                      beta[node_type]).squeeze(-1)
-            emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1)
+            emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
+                                                 beta[node_type]).squeeze(-1)
+            # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(edge_index_dict,
