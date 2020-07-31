@@ -15,11 +15,14 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.neighbor_sizes = neighbor_sizes
 
     def process_graph_sampler(self):
-        if self.use_reverse:
-            self.add_reverse_edge_index(self.edge_index_dict)
+        # if self.use_reverse:
+        #     self.add_reverse_edge_index(self.edge_index_dict)
 
         out = group_hetero_graph(self.edge_index_dict, self.num_nodes_dict)
         self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = out
+
+        self.int2node_type = {v: k for k, v in self.key2int.items() if isinstance(k, str)}
+        self.int2edge_type = {v: k for k, v in self.key2int.items() if isinstance(k, tuple)}
 
         x_dict = {}
         for key, x in self.x_dict.items():
@@ -34,6 +37,23 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                  shuffle=True,
                                  num_workers=num_workers)
 
+    def sample_adj(self, metapath, source_node_id, num_neighbors=20):
+        adj, n_id = self.graphs[metapath].sample_adj(source_node_id, num_neighbors=num_neighbors)
+        row, col, e_id = adj.coo()
+        edge_index = torch.stack([n_id[row], n_id[col]], dim=0)
+        return edge_index
+
+    def get_collate_fn(self, collate_fn: str, batch_size=None):
+        if batch_size is not None:
+            self.batch_size = batch_size * len(self.node_types)
+
+        if "adj_sample" in collate_fn:
+            return self.collate_adj_sample
+        else:
+            raise Exception(f"Correct collate function {collate_fn} not found.")
+
+    def collate_adj_sample(self, iloc):
+        pass
 
 
 class NeighborSampler(HeteroNetDataset):

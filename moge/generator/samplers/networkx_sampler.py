@@ -32,7 +32,7 @@ class NetworkxSampler(HeteroNetDataset):
             pool.close()
         else:
             self.graphs = {metapath: graph for metapath, graph in
-                           [self.create_graph(metapath) for metapath in self.metapaths]}
+                           [self.create_nx_graph(metapath) for metapath in self.metapaths]}
 
         self.join_graph = nx.compose_all([G.to_undirected() for metapath, G in self.graphs.items()])
 
@@ -177,7 +177,7 @@ class NetworkxSampler(HeteroNetDataset):
         # node_index = self.y_index_dict[self.head_node_type][iloc]
         # print("sampled_nodes", {k: len(v) for k, v in sampled_nodes.items()})
         assert len(iloc) == len(sampled_nodes[self.head_node_type])
-        X = {"edge_index_dict": {}, "x_index_dict": {}, "x_dict": {}}
+        X = {"edge_index_dict": {}, "global_node_index": {}, "x_dict": {}}
 
         for metapath in self.metapaths:
             head_type, tail_type = metapath[0], metapath[-1]
@@ -196,13 +196,14 @@ class NetworkxSampler(HeteroNetDataset):
             self.add_reverse_edge_index(X["edge_index_dict"])
 
         for node_type in sampled_nodes:
-            X["x_index_dict"][node_type] = self.strip_node_type_str(sampled_nodes[node_type])
+            X["global_node_index"][node_type] = self.strip_node_type_str(sampled_nodes[node_type])
 
         if hasattr(self, "x_dict"):
-            X["x_dict"] = {node_type: self.x_dict[node_type][X["x_index_dict"][node_type]] for node_type in self.x_dict}
+            X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] for node_type in
+                           self.x_dict}
 
         if len(self.y_dict) > 1:
-            y = {node_type: y_true[X["x_index_dict"][node_type]] for node_type, y_true in self.y_dict.items()}
+            y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
         else:
             y = self.y_dict[self.head_node_type][iloc].squeeze(-1)
         return X, y, None

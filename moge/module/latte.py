@@ -234,27 +234,27 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                               self.attn_l.items()},
                                                              self.embedding_dim)
 
-    def forward(self, x_dict, x_index_dict, edge_index_dict, h1_dict=None):
+    def forward(self, x_dict, global_node_idx, edge_index_dict, h1_dict=None):
         """
 
         :param x_dict: a dict of node attributes indexed node_type
-        :param x_index_dict: A dict of index values indexed by node_type in this mini-batch sampling
+        :param global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
         :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
         :param h1_dict: Embeddings of the previous order. Default: None (if first order). A dict of edge_index indexed by metapath
         :return: output_emb, loss
         """
         # H_t = W_t * x
         h_dict = {}
-        for node_type in x_index_dict:
+        for node_type in global_node_idx:
             if node_type in x_dict:
                 h_dict[node_type] = F.relu(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
-                h_dict[node_type] = self.embeddings[node_type].weight[x_index_dict[node_type]].to(
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
                     self.linear[node_type].weight.device)
 
         # Compute relations attention coefficients
         beta = {}
-        for node_type in x_index_dict:
+        for node_type in global_node_idx:
             if node_type in x_dict and self.first:
                 beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
             elif node_type not in x_dict and self.first:  # Use self.embeddings when first layer and node_type is not attributed
@@ -283,10 +283,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         emb_relation_agg = {}
         emb_output = {}
-        for node_type in x_index_dict:
+        for node_type in global_node_idx:
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
             emb_relation_agg[node_type] = torch.zeros(
-                size=(x_index_dict[node_type].size(0),
+                size=(global_node_idx[node_type].size(0),
                       self.get_num_relations(node_type),
                       self.embedding_dim)).type_as(self.conv[node_type].weight)
 
@@ -294,7 +294,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
                     continue
                 head_type, tail_type = metapath[0], metapath[-1]
-                num_node_head, num_node_tail = len(x_index_dict[head_type]), len(x_index_dict[tail_type])
+                num_node_head, num_node_tail = len(global_node_idx[head_type]), len(global_node_idx[tail_type])
 
                 if isinstance(edge_index_dict[metapath], tuple):
                     edge_index, _ = edge_index_dict[metapath]
@@ -318,7 +318,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(edge_index_dict,
                                                  score_l=score_l,
-                                                 score_r=score_r, x_index_dict=x_index_dict)
+                                                 score_r=score_r, x_index_dict=global_node_idx)
         else:
             proximity_loss = None
 
