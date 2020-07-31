@@ -172,11 +172,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
         if len(non_attr_node_types) > 0:
-            self.embeddings = torch.nn.ModuleDict(
-                {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type], embedding_dim=embedding_dim).to(
-                    "cpu") \
-                    for node_type in non_attr_node_types}
-            )
+            self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
+                                                       embedding_dim=embedding_dim).to("cpu") for node_type in
+                               non_attr_node_types}
+
         self.reset_parameters()
         self.relations_dim = 1
 
@@ -227,13 +226,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
-    def __repr__(self):
-        return '{}(linear={}, attn={}, embedding={})'.format(self.__class__.__name__,
-                                                             {nodetype: linear.weight.shape for
-                                                              nodetype, linear in self.linear.items()},
-                                                             {metapath: attn.shape for metapath, attn in
-                                                              self.attn_l.items()},
-                                                             self.embedding_dim)
+    # def __repr__(self):
+    #     return '{}(linear={}, attn={}, embedding={})'.format(self.__class__.__name__,
+    #                                                          {nodetype: linear.weight.shape for
+    #                                                           nodetype, linear in self.linear.items()},
+    #                                                          {metapath: self.attn_l[i].weight.shape for i, metapath in enumerate(self.metapaths)},
+    #                                                          self.embedding_dim)
 
     def forward(self, x_dict, global_node_idx, edge_index_dict, h1_dict=None):
         """
