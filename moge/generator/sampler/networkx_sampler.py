@@ -49,56 +49,6 @@ class NetworkXSampler(HeteroNetDataset):
         graph = nx.from_edgelist(edgelist, create_using=nx.DiGraph if self.directed else nx.Graph)
         return (metapath, graph)
 
-    def neighbors_traversal(self, batch_size: int, seed_nodes: {str: list}, max_iter=3):
-        num_node_all = 0
-        i = 0
-        while num_node_all < batch_size and i < max_iter:
-            for metapath, G in self.graphs.items():
-                head_type, tail_type = metapath[0], metapath[-1]
-
-                if head_type in seed_nodes and len(seed_nodes[head_type][-1]) > 0:
-                    neighbor_type = tail_type
-                    source_type = head_type
-                elif tail_type in seed_nodes and len(seed_nodes[tail_type][-1]) > 0:
-                    neighbor_type = head_type
-                    source_type = tail_type
-                else:
-                    continue
-                if neighbor_type == self.head_node_type: continue
-
-                source_nodes = [node for node in seed_nodes[source_type][-1] if node in G]
-                neighbors = [neighbor for source in source_nodes for neighbor in nx.neighbors(G, source)]
-
-                # Ensure that no node_type becomes the majority of the batch_size
-                if len(neighbors) > (batch_size / ((i + 1) * len(self.node_types))):
-                    np.random.shuffle(neighbors)
-                    neighbors = neighbors[: int(batch_size / ((i + 1) * len(self.node_types)))]
-
-                # Add neighbors nodes as a set to the sets in seed_nodes[neighbor_type]
-                seed_nodes.setdefault(neighbor_type, []).append(neighbors)
-
-            # Check whether to gather more nodes to fill batch_size
-            num_node_all = sum([len(nodes) for node_type, node_sets in seed_nodes.items() for nodes in node_sets])
-            i += 1
-
-        # Join all sampled node list in each node type
-        sampled_nodes = {}
-        for node_type, lists in seed_nodes.items():
-            sampled_nodes[node_type] = [node for nodelist in lists for node in nodelist]
-
-        # Remove duplicate
-        for node_type in sampled_nodes.keys():
-            sampled_nodes[node_type] = list(OrderedDict.fromkeys(sampled_nodes[node_type]))
-
-        # Remove excess node if exceeds batch_size
-        if num_node_all > batch_size:
-            largest_node_type = max({k: v for k, v in sampled_nodes.items()}, key=len)
-            np.random.shuffle(sampled_nodes[largest_node_type])
-            num_node_remove = num_node_all - batch_size
-            sampled_nodes[largest_node_type] = sampled_nodes[largest_node_type][:-num_node_remove]
-
-        return sampled_nodes
-
     def bfs_traversal(self, batch_size: int, seed_nodes: list, traversal_depth=2):
         sampled_nodes = copy.copy(seed_nodes)
 

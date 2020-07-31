@@ -173,8 +173,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
         if len(non_attr_node_types) > 0:
             self.embeddings = torch.nn.ModuleDict(
-                {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type], embedding_dim=embedding_dim) \
-                 for node_type in non_attr_node_types}
+                {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type], embedding_dim=embedding_dim).to(
+                    "cpu") \
+                    for node_type in non_attr_node_types}
             )
         self.reset_parameters()
         self.relations_dim = 1
@@ -249,7 +250,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if node_type in x_dict:
                 h_dict[node_type] = F.relu(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]]
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
+                    self.conv[node_type].weight.device)
 
         # Compute relations attention coefficients
         beta = {}
