@@ -62,7 +62,7 @@ class LATTENodeClassifier(MetricsComparison):
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
+        self.cross_entropy_loss = torch.nn.NLLLoss()
         self.hparams = hparams
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
         num_class = dataset.n_classes
