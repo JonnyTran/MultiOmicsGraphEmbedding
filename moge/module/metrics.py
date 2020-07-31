@@ -50,7 +50,7 @@ class Metrics():
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
 
         # Apply softmax/sigmoid activation if needed
-        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
+        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type or self.loss_type == "SOFTMAX_CROSS_ENTROPY":
             Y_hat = torch.softmax(Y_hat, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(Y_hat)
 
         for metric in self.metrics:

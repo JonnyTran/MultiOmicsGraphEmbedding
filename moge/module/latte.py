@@ -311,7 +311,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(edge_index_dict,
                                                  alpha_l=alpha_l,
-                                                 alpha_r=alpha_r, global_node_idx=global_node_idx)
+                                                 alpha_r=alpha_r,
+                                                 global_node_idx=global_node_idx)
         else:
             proximity_loss = None
 
