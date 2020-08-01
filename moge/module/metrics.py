@@ -51,23 +51,29 @@ class Metrics():
         y_pred, y_true = filter_samples(y_pred, y_true, weights)
 
         # Apply softmax/sigmoid activation if needed
-        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type or "SOFTMAX_CROSS_ENTROPY" == self.loss_type:
+        if "LOGITS" in self.loss_type or \
+                "FOCAL" in self.loss_type or \
+                "SOFTMAX_CROSS_ENTROPY" == self.loss_type:
+
             y_pred = torch.softmax(y_pred, dim=1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
         elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
 
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric:
-                if not self.is_multilabel or "SOFTMAX" in self.loss_type:
+                if not self.is_multilabel and "SOFTMAX" in self.loss_type:
                     self.metrics[metric].update(
-                        ((y_pred > self.threshold).type_as(y_true), self.hot_encode(y_true, y_pred)))
+                        ((y_pred > self.threshold).type_as(y_true),
+                         self.hot_encode(y_true, y_pred)))
                 else:
-                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
+                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true),
+                                                 y_true))
 
             elif "accuracy" in metric:
-                if not self.is_multilabel or "SOFTMAX" in self.loss_type:
+                if not self.is_multilabel and "SOFTMAX" in self.loss_type:
                     self.metrics[metric].update(
-                        ((y_pred > self.threshold).type_as(y_true), self.hot_encode(y_true, y_pred)))
+                        ((y_pred > self.threshold).type_as(y_true),
+                         self.hot_encode(y_true, y_pred)))
                 else:
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
 

@@ -55,7 +55,7 @@ class FocalLoss(nn.Module):
 
 
 class ClassificationLoss(nn.Module):
-    def __init__(self, n_classes, class_weight=None,
+    def __init__(self, n_classes: int, class_weight: torch.Tensor = None,
                  loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1e-6, hierar_relations=None):
         super(ClassificationLoss, self).__init__()
         self.label_size = n_classes
@@ -80,9 +80,7 @@ class ClassificationLoss(nn.Module):
         elif loss_type == "KL_DIVERGENCE":
             self.criterion = torch.nn.KLDivLoss()
         else:
-            raise TypeError(
-                "Unsupported loss type: %s." % (
-                    loss_type))
+            raise TypeError(f"Unsupported loss type:{loss_type}")
 
     def forward(self, logits, target, multiclass=False, use_hierar=False, classifier_weight: torch.Tensor = None):
         if use_hierar:

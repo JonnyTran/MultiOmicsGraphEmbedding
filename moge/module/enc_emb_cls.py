@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 from transformers import AlbertConfig
 
-from moge.module.classifier import Dense, HierarchicalAWX
+from moge.module.classifier import DenseClassification, HierarchicalAWX
 from moge.module.embedder import GAT
 from moge.module.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss, get_hierar_relations
@@ -91,7 +91,7 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
             raise Exception("hparams.embedder must be one of {'GAT'}")
 
         if hparams.classifier == "Dense":
-            self._classifier = Dense(hparams)
+            self._classifier = DenseClassification(hparams)
         elif hparams.classifier == "HierarchicalAWX":
             self._classifier = HierarchicalAWX(hparams)
         else:

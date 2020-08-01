@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from transformers import AlbertConfig
 
-from moge.module.classifier import Dense, HierarchicalAWX
+from moge.module.classifier import DenseClassification, HierarchicalAWX
 from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention, \
     ExpandedMultiplexGAT
 from moge.module.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
@@ -91,7 +91,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
 
         ################### Classifier ####################
         if hparams.classifier == "Dense":
-            self._classifier = Dense(hparams)
+            self._classifier = DenseClassification(hparams)
         elif hparams.classifier == "HierarchicalAWX":
             self._classifier = HierarchicalAWX(hparams)
         else:
@@ -230,7 +230,7 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
 
         ################### Classifier ####################
         if hparams.classifier == "Dense":
-            self._classifier = Dense(hparams)
+            self._classifier = DenseClassification(hparams)
         elif hparams.classifier == "HierarchicalAWX":
             self._classifier = HierarchicalAWX(hparams)
         else:
