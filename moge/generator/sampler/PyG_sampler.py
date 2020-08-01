@@ -90,7 +90,7 @@ class HeteroNeighborSampler(NetworkXSampler):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        sampled_nodes = self.neighbors_traversal(iloc)
+        sampled_nodes, n_id, adjs = self.neighbors_traversal(iloc)
         indices = np.isin(sampled_nodes[self.head_node_type], self.training_idx)
         sampled_nodes[self.head_node_type] = sampled_nodes[self.head_node_type][indices]
 
