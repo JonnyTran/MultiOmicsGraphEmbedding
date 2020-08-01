@@ -50,8 +50,10 @@ class Metrics():
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
 
         # Apply softmax/sigmoid activation if needed
-        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type or self.loss_type == "SOFTMAX_CROSS_ENTROPY":
-            Y_hat = torch.softmax(Y_hat, dim=-1) if "SOFTMAX" in self.loss_type else torch.sigmoid(Y_hat)
+        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
+            Y_hat = torch.softmax(Y_hat, dim=1) if "SOFTMAX" in self.loss_type else torch.sigmoid(Y_hat)
+        elif "NEGATIVE_LOG_LIKELIHOOD" in self.loss_type:
+            Y_hat = torch.softmax(Y_hat, dim=1)
 
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric:
@@ -96,7 +98,6 @@ class Metrics():
 
 
 class OGBEvaluator(Metric):
-
     def __init__(self, evaluator, output_transform=lambda x: x, device=None):
         super().__init__(output_transform, device)
         self.evaluator = evaluator
