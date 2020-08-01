@@ -38,19 +38,19 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
                                                 sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None):
+    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=str):
+        self.mode = mode
         if "neighbor_sampler" in collate_fn:
             return self.collate_neighbor_sampler
         else:
             raise Exception(f"Collate function {collate_fn} not found.")
 
-    def neighbors_traversal(self, iloc):
+    def get_all_sampled_nodes_dict(self, adjs, n_id):
         """
 
         :param iloc: A tensor of indices for nodes of `head_node_type`
         :return sampled_nodes, n_id, adjs:
         """
-        batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local2global[self.head_node_type][iloc])
         sampled_nodes = {}
         for adj in adjs:
             for row_col in [0, 1]:
@@ -64,9 +64,9 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
         # Concatenate & remove duplicate nodes
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
-        return sampled_nodes, n_id, adjs
+        return sampled_nodes
 
-    def collate_neighbor_sampler(self, iloc):
+    def collate_neighbor_sampler(self, iloc, mode):
         """
 
         :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
@@ -75,16 +75,26 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        # Sample neighbors and return `sampled_nodes` as the set of all nodes traversed
-        sampled_nodes, n_id, adjs = self.neighbors_traversal(iloc)
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local2global[self.head_node_type][iloc])
 
-        # Ensure none of sampled nodes
-        indices = np.isin(sampled_nodes[self.head_node_type], self.training_idx)
+        # Sample neighbors and return `sampled_nodes` as the set of all nodes traversed
+        sampled_nodes = self.get_all_sampled_nodes_dict(adjs, n_id)
+
+        # Ensure the sampled nodes only either belongs to training, validation, or testing set
+        if mode == "training":
+            allowed_nodes = self.training_idx
+        elif mode == "validation":
+            allowed_nodes = self.validation_idx
+        elif mode == "testing":
+            allowed_nodes = self.testing_idx
+        else:
+            raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
+
+        indices = np.isin(sampled_nodes[self.head_node_type], allowed_nodes)
         sampled_nodes[self.head_node_type] = sampled_nodes[self.head_node_type][indices]
 
         X = {"edge_index_dict": {}, "global_node_index": sampled_nodes, "x_dict": {}}
 
-        # dict
         node2batch_id_dict = {
             node_type: dict(zip(sampled_nodes[node_type].numpy(), range(len(sampled_nodes[node_type])))) \
             for node_type in sampled_nodes}
@@ -99,9 +109,22 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 edge_mask = self.edge_type[adj.e_id] == edge_type_id
                 edge_index = adj.edge_index[:, edge_mask]
 
-                edge_index[0] = self.local_node_idx[n_id[edge_index[0]]].apply_(
+                edge_index[0] = self.local_node_idx[n_id[edge_index[0]]]
+                edge_index[1] = self.local_node_idx[n_id[edge_index[1]]]
+
+                if head_type == "paper" and tail_type == "paper":
+                    edge_set_mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
+                    edge_index = edge_index[:, edge_set_mask]
+                elif head_type == "paper":
+                    edge_set_mask = np.isin(edge_index[0], allowed_nodes)
+                    edge_index = edge_index[:, edge_set_mask]
+                elif tail_type == "paper":
+                    edge_set_mask = np.isin(edge_index[1], allowed_nodes)
+                    edge_index = edge_index[:, edge_set_mask]
+
+                edge_index[0] = edge_index[0].apply_(
                     lambda x: node2batch_id_dict[head_type][x])
-                edge_index[1] = self.local_node_idx[n_id[edge_index[1]]].apply_(
+                edge_index[1] = edge_index[1].apply_(
                     lambda x: node2batch_id_dict[tail_type][x])
 
                 X["edge_index_dict"].setdefault(metapath, []).append(edge_index)
