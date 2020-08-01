@@ -1,5 +1,6 @@
 import multiprocessing
 from collections import OrderedDict
+import numpy as np
 import torch
 
 import torch_sparse
@@ -59,6 +60,11 @@ class HeteroNeighborSampler(NetworkXSampler):
             raise Exception(f"Collate function {collate_fn} not found.")
 
     def neighbors_traversal(self, iloc):
+        """
+
+        param iloc: A tensor of indices for nodes of `head_node_type`
+        :return:
+        """
         batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local_node_idx[iloc])
         sampled_nodes = {}
         for adj_idx in range(len(adjs)):
@@ -73,13 +79,20 @@ class HeteroNeighborSampler(NetworkXSampler):
 
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in
                          sampled_nodes.items()}  # concatenate & remove duplicates
-        return sampled_nodes
+        return sampled_nodes, n_id, adjs
 
     def collate_neighbor_sampler(self, iloc):
+        """
+
+        :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
+        :return:
+        """
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
         sampled_nodes = self.neighbors_traversal(iloc)
+        indices = np.isin(sampled_nodes[self.head_node_type], self.training_idx)
+        sampled_nodes[self.head_node_type] = sampled_nodes[self.head_node_type][indices]
 
         X = {"edge_index_dict": {}, "global_node_index": sampled_nodes, "x_dict": {}}
 
