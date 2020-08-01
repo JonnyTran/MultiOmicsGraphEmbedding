@@ -148,12 +148,12 @@ class LATTENodeClassifier(MetricsComparison):
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn=self.collate_fn,
-                                           batch_size=self.hparams.batch_size,
+                                           batch_size=self.hparams.batch_size * 2,
                                            num_workers=int(0.2 * multiprocessing.cpu_count()))
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size,
+                                            batch_size=self.hparams.batch_size * 2,
                                             num_workers=int(0.2 * multiprocessing.cpu_count()))
 
     def configure_optimizers(self):
