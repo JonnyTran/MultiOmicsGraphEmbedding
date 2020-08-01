@@ -102,10 +102,11 @@ class LATTENodeClassifier(MetricsComparison):
 
         loss = self.loss(y_hat, y)
 
-        logs = None
         if self.hparams.use_proximity_loss:
             loss = loss + proximity_loss
             logs = {"proximity_loss": proximity_loss}
+        else:
+            logs = None
 
         outputs = {'loss': loss}
         if logs is not None:
@@ -119,11 +120,11 @@ class LATTENodeClassifier(MetricsComparison):
 
         self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
 
-        loss = self.loss(y_hat, y)
+        val_loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
-            loss = loss + proximity_loss
+            val_loss = val_loss + proximity_loss
 
-        return {"val_loss": loss}
+        return {"val_loss": val_loss}
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
@@ -131,11 +132,11 @@ class LATTENodeClassifier(MetricsComparison):
 
         self.test_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
 
-        loss = self.loss(y_hat, y)
+        test_loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
-            loss = loss + proximity_loss
+            test_loss = test_loss + proximity_loss
 
-        return {"test_loss": loss}
+        return {"test_loss": test_loss}
 
     def train_dataloader(self):
         if self.collate_fn == "LATTENode_batch":
@@ -146,12 +147,12 @@ class LATTENodeClassifier(MetricsComparison):
             return
 
     def val_dataloader(self, batch_size=None):
-        return self.dataset.val_dataloader(collate_fn="LATTENode_batch",
+        return self.dataset.val_dataloader(collate_fn=self.collate_fn,
                                            batch_size=self.hparams.batch_size,
                                            num_workers=int(0.2 * multiprocessing.cpu_count()))
 
     def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn="LATTENode_batch",
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
                                             batch_size=self.hparams.batch_size,
                                             num_workers=int(0.2 * multiprocessing.cpu_count()))
 
