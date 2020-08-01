@@ -93,7 +93,7 @@ class LATTE(nn.Module):
                                                      n=global_node_idx[metapath_b[-1]].size(0),
                                                      coalesced=True)
                     except Exception as e:
-                        print(metapath_a, metapath_b)
+                        print(f"{metapath_a}, {edge_index_a.size(1)}", f"{metapath_b}, {edge_index_b.size(1)}")
                         print("sizes", {node_type: idx.size(0) for node_type, idx in global_node_idx.items()})
                         print("edge_index_a", edge_index_a.size(1), edge_index_a.dtype)
                         print("values_a", values_a.size(), values_a.dtype)
