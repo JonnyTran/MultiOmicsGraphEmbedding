@@ -31,7 +31,11 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.directed = directed
         self.train_ratio = train_ratio
         self.use_reverse = add_reverse_metapaths
+        self.node_types = node_types
         self.head_node_type = head_node_type
+
+        if self.node_types is not None:
+            assert self.node_types[0] == self.head_node_type
 
         # PyTorchGeometric Dataset
         if isinstance(dataset, PygNodePropPredDataset):
@@ -194,7 +198,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         self.node_attr_shape = {}
-        self.node_types = list(data.num_nodes_dict.keys())
+        if self.node_types is not None:
+            self.node_types = list(data.num_nodes_dict.keys())
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
 
@@ -214,7 +219,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
-        self.node_types = list(data.num_nodes_dict.keys())
+        if self.node_types is not None:
+            self.node_types = list(data.num_nodes_dict.keys())
         self.x_dict = data.x_dict
         self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
         self.y_dict = data.y_dict
