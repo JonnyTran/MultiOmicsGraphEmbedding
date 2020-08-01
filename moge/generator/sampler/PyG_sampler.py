@@ -80,8 +80,6 @@ class HeteroNeighborSampler(NetworkXSampler):
 
         X = {"edge_index_dict": {}, "global_node_index": sampled_nodes, "x_dict": {}}
 
-        # index = dict(zip(nodelist, range(nlen)))
-
         for metapath in self.metapaths:
             head_type, tail_type = metapath[0], metapath[-1]
             if head_type not in sampled_nodes or len(sampled_nodes[head_type]) == 0: continue
@@ -89,7 +87,6 @@ class HeteroNeighborSampler(NetworkXSampler):
             try:
                 X["edge_index_dict"][metapath] = self.get_adj_edge_index(
                     self.graphs[metapath],
-
                     nodes_A=self.convert_index2name(sampled_nodes[head_type], head_type),
                     nodes_B=self.convert_index2name(sampled_nodes[tail_type], tail_type))
 
@@ -108,7 +105,7 @@ class HeteroNeighborSampler(NetworkXSampler):
         if len(self.y_dict) > 1:
             y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
         else:
-            y = self.y_dict[self.head_node_type][iloc].squeeze(-1)
+            y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
         return X, y, None
 
 

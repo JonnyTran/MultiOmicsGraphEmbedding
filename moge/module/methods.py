@@ -30,8 +30,9 @@ class MetricsComparison(pl.LightningModule):
         logs = self.train_metrics.compute_metrics()
         logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
 
+        logs.update({"loss": avg_loss})
         self.train_metrics.reset_metrics()
-        return {"loss": avg_loss, "log": logs, "progress_bar": logs}
+        return {"log": logs}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
@@ -102,11 +103,10 @@ class LATTENodeClassifier(MetricsComparison):
 
         loss = self.loss(y_hat, y)
 
+        logs = None
         if self.hparams.use_proximity_loss:
             loss = loss + proximity_loss
             logs = {"proximity_loss": proximity_loss}
-        else:
-            logs = None
 
         outputs = {'loss': loss}
         if logs is not None:
