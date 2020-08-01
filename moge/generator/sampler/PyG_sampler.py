@@ -10,31 +10,14 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.datasets import HeteroNetDataset
-from moge.generator.sampler.networkx_sampler import NetworkXSampler
 
 
-class HeteroNeighborSampler(NetworkXSampler):
+class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True, neighbor_sizes=[25, 20], process_graphs=True, multiworker=True):
+                 add_reverse_metapaths=True, neighbor_sizes=[25, 20], process_graphs=True):
         self.neighbor_sizes = neighbor_sizes
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
                                                     train_ratio, add_reverse_metapaths, process_graphs)
-        try:
-            cpus = multiprocessing.cpu_count()
-        except NotImplementedError:
-            cpus = 1
-
-        if multiworker:
-            self.graphs = {}
-            pool = multiprocessing.Pool(processes=cpus)
-            output = pool.map(self.create_nx_graph, self.metapaths)
-            for (metapath, graph) in output:
-                self.graphs[metapath] = graph
-            pool.close()
-        else:
-            self.graphs = {metapath: graph for metapath, graph in
-                           [self.create_nx_graph(metapath) for metapath in self.metapaths]}
-        # We don't need the join_graph since will be using NeighborSampler with the group_hetero_graph()
 
     def process_graph_sampler(self):
         if self.use_reverse:
@@ -62,23 +45,23 @@ class HeteroNeighborSampler(NetworkXSampler):
     def neighbors_traversal(self, iloc):
         """
 
-        param iloc: A tensor of indices for nodes of `head_node_type`
-        :return:
+        :param iloc: A tensor of indices for nodes of `head_node_type`
+        :return sampled_nodes, n_id, adjs:
         """
         batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local_node_idx[iloc])
         sampled_nodes = {}
-        for adj_idx in range(len(adjs)):
+        for adj in adjs:
             for row_col in [0, 1]:
-                node_ids = n_id[adjs[adj_idx].edge_index[row_col]]
-                node_type_ids = self.node_type[node_ids]
+                node_ids = n_id[adj.edge_index[row_col]]
+                node_types = self.node_type[node_ids]
 
-                for node_type_id in node_type_ids.unique():
-                    mask = node_type_ids == node_type_id
+                for node_type_id in node_types.unique():
+                    mask = node_types == node_type_id
                     local_node_ids = self.local_node_idx[node_ids[mask]]
                     sampled_nodes.setdefault(self.int2node_type[node_type_id.item()], []).append(local_node_ids)
 
-        sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in
-                         sampled_nodes.items()}  # concatenate & remove duplicates
+        # Concatenate & remove duplicates
+        sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes, n_id, adjs
 
     def collate_neighbor_sampler(self, iloc):
@@ -96,23 +79,28 @@ class HeteroNeighborSampler(NetworkXSampler):
 
         X = {"edge_index_dict": {}, "global_node_index": sampled_nodes, "x_dict": {}}
 
-        for metapath in self.metapaths:
-            head_type, tail_type = metapath[0], metapath[-1]
-            if head_type not in sampled_nodes or len(sampled_nodes[head_type]) == 0: continue
-            if tail_type not in sampled_nodes or len(sampled_nodes[tail_type]) == 0: continue
-            try:
-                X["edge_index_dict"][metapath] = self.get_adj_edge_index(
-                    self.graphs[metapath],
-                    nodes_A=self.convert_index2name(sampled_nodes[head_type], head_type),
-                    nodes_B=self.convert_index2name(sampled_nodes[tail_type], tail_type))
+        batch_node_id_dict = {
+            node_type: dict(zip(sampled_nodes[node_type].numpy(), range(len(sampled_nodes[node_type])))) \
+            for node_type in sampled_nodes}
 
-            except Exception as e:
-                print("sampled_nodes[head_type]", sampled_nodes[head_type])
-                print("sampled_nodes[tail_type]", sampled_nodes[tail_type])
-                raise e
+        X["edge_index_dict"] = {}
+        for adj in adjs:
+            for edge_type_id in self.edge_type[adj.e_id].unique():
+                metapath = self.int2edge_type[edge_type_id.item()]
+                head_type, tail_type = metapath[0], metapath[-1]
 
-        if self.use_reverse:
-            self.add_reverse_edge_index(X["edge_index_dict"])
+                edge_mask = self.edge_type[adj.e_id] == edge_type_id
+                edge_index = adj.edge_index[:, edge_mask]
+
+                edge_index[0] = self.local_node_idx[n_id[edge_index[0]]].apply_(
+                    lambda x: batch_node_id_dict[head_type][x])
+                edge_index[1] = self.local_node_idx[n_id[edge_index[1]]].apply_(
+                    lambda x: batch_node_id_dict[tail_type][x])
+
+                X["edge_index_dict"].setdefault(metapath, []).append(edge_index)
+
+        X["edge_index_dict"] = {metapath: torch.cat(X["edge_index_dict"][metapath], dim=1) for metapath in
+                                X["edge_index_dict"]}
 
         if hasattr(self, "x_dict"):
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] for node_type in
@@ -123,4 +111,3 @@ class HeteroNeighborSampler(NetworkXSampler):
         else:
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
         return X, y, None
-
