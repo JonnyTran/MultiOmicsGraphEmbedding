@@ -99,7 +99,7 @@ class LATTE(nn.Module):
                         print("values_a", values_a.size(), values_a.dtype)
                         print("edge_index_b", edge_index_b.size(1), edge_index_b.dtype)
                         print("values_b", values_b.size(), values_b.dtype)
-                        raise e
+                        # raise e
 
                     if new_edge_index[0].size(1) <= 5: continue
                     # print(new_edge_index[0].size(1), new_edge_index[1].min().cpu().numpy(), new_edge_index[1].max().cpu().numpy())
@@ -278,7 +278,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         emb_output = {}
         for node_type in global_node_idx:
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
-            print("global_node_idx", {k: v.max() for k, v in global_node_idx.items()})
+            print("global_node_idx", {k: v.max().detach().item() for k, v in global_node_idx.items()})
             print(f"self.get_num_relations({node_type})", self.get_num_relations(node_type))
             emb_relation_agg[node_type] = torch.zeros(
                 size=(global_node_idx[node_type].size(0),
