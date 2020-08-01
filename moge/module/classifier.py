@@ -23,11 +23,11 @@ class DenseClassification(nn.Module):
         if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
             print("INFO: Output of `_classifier` is logits")
 
-        elif "NEGATIVE_LOG_LIKELIHOOD" in hparams.loss_type:
+        elif "NEGATIVE_LOG_LIKELIHOOD" == hparams.loss_type:
             self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
             print("INFO: Output of `_classifier` is logits")
             # print("INFO: Output of `_classifier` is Softmax")
-        elif "SOFTMAX_CROSS_ENTROPY" in hparams.loss_type:
+        elif "SOFTMAX_CROSS_ENTROPY" == hparams.loss_type:
             # self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
             print("INFO: Output of `_classifier` is linear")
 

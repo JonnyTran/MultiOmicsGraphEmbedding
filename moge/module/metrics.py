@@ -113,8 +113,8 @@ class OGBEvaluator(Metric):
 
     @reinit__is_reduced
     def reset(self):
-        self.y_pred = []
-        self.y_true = []
+        self.y_pred.data = []
+        self.y_true.data = []
 
     @reinit__is_reduced
     def update(self, outputs):
