@@ -50,7 +50,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         :param iloc: A tensor of indices for nodes of `head_node_type`
         :return sampled_nodes, n_id, adjs:
         """
-        batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local2global[iloc])
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local2global[self.head_node_type][iloc])
         sampled_nodes = {}
         for adj in adjs:
             for row_col in [0, 1]:
