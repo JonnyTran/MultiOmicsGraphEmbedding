@@ -27,32 +27,29 @@ class MetricsComparison(pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.training_metrics.compute_metrics()
+        logs = self.train_metrics.compute_metrics()
         logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
 
-        logs.update({"loss": avg_loss})
-        self.training_metrics.reset_metrics()
-        return {"log": logs}
+        self.train_metrics.reset_metrics()
+        return {"loss": avg_loss, "log": logs, "progress_bar": logs}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.validation_metrics.compute_metrics()
+        logs = self.valid_metrics.compute_metrics()
         logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
 
         logs.update({"val_loss": avg_loss})
-        self.validation_metrics.reset_metrics()
+        self.valid_metrics.reset_metrics()
         return {"progress_bar": logs,
                 "log": logs}
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
-        if hasattr(self, "test_metrics"):
-            logs = self.test_metrics.compute_metrics()
-            self.test_metrics.reset_metrics()
-        else:
-            logs = {}
-        logs.update({"test_loss": avg_loss})
+        logs = self.test_metrics.compute_metrics()
+        logs = _fix_dp_return_type(logs, device=outputs[0]["test_loss"].device)
 
+        logs.update({"test_loss": avg_loss})
+        self.test_metrics.reset_metrics()
         return {"progress_bar": logs,
                 "log": logs}
 
@@ -78,10 +75,10 @@ class LATTENodeClassifier(MetricsComparison):
         self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim, num_class=hparams.n_classes)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type)
 
-        self.training_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
-                                        multilabel=dataset.multilabel, metrics=metrics)
-        self.validation_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
-                                          multilabel=dataset.multilabel, metrics=metrics)
+        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
+                                     multilabel=dataset.multilabel, metrics=metrics)
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
                                     multilabel=dataset.multilabel, metrics=metrics)
 
@@ -101,7 +98,7 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        self.training_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        self.train_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
 
         loss = self.loss(y_hat, y)
 
@@ -120,7 +117,7 @@ class LATTENodeClassifier(MetricsComparison):
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
 
-        self.validation_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
 
         loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
