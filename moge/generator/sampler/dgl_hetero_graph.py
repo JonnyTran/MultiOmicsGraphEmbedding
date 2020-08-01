@@ -28,3 +28,4 @@ class DGLHeteroSampler(HeteroNetDataset):
 
         self.G = dgl.heterograph(dgl_edge_index)
         self.G.subgraph(self.training_idx).all_edges(etype=('paper', 'cites', 'paper'))
+        self.G.to
