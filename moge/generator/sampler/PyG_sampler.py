@@ -45,9 +45,9 @@ class HeteroNeighborSampler(NetworkXSampler):
         self.int2node_type = {v: k for k, v in self.key2int.items() if isinstance(k, str)}
         self.int2edge_type = {v: k for k, v in self.key2int.items() if isinstance(k, tuple)}
 
-        self.neighbor_sampler = AdjNeighborSampler(self.edge_index, node_idx=self.training_idx,
-                                                   sizes=self.neighbor_sizes, batch_size=128, shuffle=True,
-                                                   num_workers=1)
+        self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
+                                                sizes=self.neighbor_sizes, batch_size=128, shuffle=True,
+                                                num_workers=1)
 
     def get_collate_fn(self, collate_fn: str, batch_size=None):
         if "neighbor_sampler" in collate_fn:
@@ -79,6 +79,8 @@ class HeteroNeighborSampler(NetworkXSampler):
         sampled_nodes = self.neighbors_traversal(iloc)
 
         X = {"edge_index_dict": {}, "global_node_index": sampled_nodes, "x_dict": {}}
+
+        # index = dict(zip(nodelist, range(nlen)))
 
         for metapath in self.metapaths:
             head_type, tail_type = metapath[0], metapath[-1]
