@@ -33,7 +33,7 @@ class HeteroNeighborSampler(NetworkXSampler):
         else:
             self.graphs = {metapath: graph for metapath, graph in
                            [self.create_nx_graph(metapath) for metapath in self.metapaths]}
-        # We don't need the join_graph
+        # We don't need the join_graph since will be using NeighborSampler with the group_hetero_graph()
 
     def process_graph_sampler(self):
         if self.use_reverse:
@@ -46,8 +46,7 @@ class HeteroNeighborSampler(NetworkXSampler):
         self.int2edge_type = {v: k for k, v in self.key2int.items() if isinstance(k, tuple)}
 
         self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
-                                                sizes=self.neighbor_sizes, batch_size=128, shuffle=True,
-                                                num_workers=1)
+                                                sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
     def get_collate_fn(self, collate_fn: str, batch_size=None):
         if "neighbor_sampler" in collate_fn:
@@ -56,7 +55,7 @@ class HeteroNeighborSampler(NetworkXSampler):
             raise Exception(f"Collate function {collate_fn} not found.")
 
     def neighbors_traversal(self, iloc):
-        batch_size, n_id, adjs = self.neighbor_sampler.collate_fn(iloc)
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(iloc)
         sampled_nodes = {}
         for adj_idx in range(len(adjs)):
             for row_col in [0, 1]:
@@ -108,40 +107,3 @@ class HeteroNeighborSampler(NetworkXSampler):
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
         return X, y, None
 
-
-class AdjNeighborSampler(HeteroNetDataset):
-    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True, process_graphs=True):
-        super().__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio, add_reverse_metapaths)
-
-    def process_graph_sampler(self):
-        self.graphs = {}
-
-        for metapath in self.metapaths:
-            edge_index = self.edge_index_dict[metapath]
-            adj = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
-                                            value=torch.ones(edge_index.size(1), dtype=torch.float),
-                                            sparse_sizes=(self.num_nodes_dict[metapath[0]],
-                                                          self.num_nodes_dict[metapath[-1]]),
-                                            is_sorted=True)
-            self.graphs[metapath] = adj
-            if self.use_reverse:
-                self.graphs[tuple(reversed(metapath))] = adj.t()
-
-    def sample_adj(self, metapath, source_node_id, num_neighbors=20):
-        adj, n_id = self.graphs[metapath].sample_adj(source_node_id, num_neighbors=num_neighbors)
-        row, col, e_id = adj.coo()
-        edge_index = torch.stack([n_id[row], n_id[col]], dim=0)
-        return edge_index
-
-    def get_collate_fn(self, collate_fn: str, batch_size=None):
-        if batch_size is not None:
-            self.batch_size = batch_size * len(self.node_types)
-
-        if "adj_sample" in collate_fn:
-            return self.collate_adj_sample
-        else:
-            raise Exception(f"Correct collate function {collate_fn} not found.")
-
-    def collate_adj_sample(self, iloc):
-        pass
