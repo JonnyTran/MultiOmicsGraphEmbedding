@@ -116,14 +116,15 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 edge_index[0] = self.local_node_idx[n_id[edge_index[0]]]
                 edge_index[1] = self.local_node_idx[n_id[edge_index[1]]]
 
-                if head_type == "paper" and tail_type == "paper":
-                    edge_set_mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
+                if head_type == self.head_node_type and tail_type == self.head_node_type:
+                    edge_set_mask = np.isin(edge_index[0], sampled_nodes[self.head_node_type]) \
+                                    & np.isin(edge_index[1], sampled_nodes[self.head_node_type])
                     edge_index = edge_index[:, edge_set_mask]
-                elif head_type == "paper":
-                    edge_set_mask = np.isin(edge_index[0], allowed_nodes)
+                elif head_type == self.head_node_type:
+                    edge_set_mask = np.isin(edge_index[0], sampled_nodes[self.head_node_type])
                     edge_index = edge_index[:, edge_set_mask]
-                elif tail_type == "paper":
-                    edge_set_mask = np.isin(edge_index[1], allowed_nodes)
+                elif tail_type == self.head_node_type:
+                    edge_set_mask = np.isin(edge_index[1], sampled_nodes[self.head_node_type])
                     edge_index = edge_index[:, edge_set_mask]
 
                 edge_index[0] = edge_index[0].apply_(
