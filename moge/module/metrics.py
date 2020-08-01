@@ -55,7 +55,7 @@ class Metrics():
                 "FOCAL" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
         elif "SOFTMAX_CROSS_ENTROPY" == self.loss_type:
-            y_pred = y_pred.log_softmax(dim=1)
+            y_pred = self.hot_encode(y_pred.log_softmax(dim=1).argmax(), y_true)
         elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
 
