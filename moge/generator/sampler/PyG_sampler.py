@@ -89,6 +89,7 @@ class HeteroNeighborSampler(NetworkXSampler):
             try:
                 X["edge_index_dict"][metapath] = self.get_adj_edge_index(
                     self.graphs[metapath],
+
                     nodes_A=self.convert_index2name(sampled_nodes[head_type], head_type),
                     nodes_B=self.convert_index2name(sampled_nodes[tail_type], tail_type))
 
