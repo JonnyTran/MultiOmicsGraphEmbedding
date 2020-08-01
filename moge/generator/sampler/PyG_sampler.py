@@ -1,5 +1,5 @@
 import multiprocessing
-
+from collections import OrderedDict
 import torch
 
 import torch_sparse
@@ -39,7 +39,11 @@ class HeteroNeighborSampler(NetworkXSampler):
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)
 
-        out = group_hetero_graph(self.edge_index_dict, self.num_nodes_dict)
+        # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
+        assert self.node_types == self.head_node_type
+        num_nodes_dict = OrderedDict([(node_type, self.num_nodes_dict[node_type]) for node_type in self.node_types])
+
+        out = group_hetero_graph(self.edge_index_dict, num_nodes_dict)
         self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = out
 
         self.int2node_type = {v: k for k, v in self.key2int.items() if isinstance(k, str)}
@@ -55,7 +59,7 @@ class HeteroNeighborSampler(NetworkXSampler):
             raise Exception(f"Collate function {collate_fn} not found.")
 
     def neighbors_traversal(self, iloc):
-        batch_size, n_id, adjs = self.neighbor_sampler.sample(iloc)
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local_node_idx[iloc])
         sampled_nodes = {}
         for adj_idx in range(len(adjs)):
             for row_col in [0, 1]:
