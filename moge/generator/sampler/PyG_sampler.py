@@ -43,7 +43,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             return self.collate_neighbor_sampler(iloc, mode)
 
         if "neighbor_sampler" in collate_fn:
-            return self.collate_wrapper
+            return collate_wrapper
         else:
             raise Exception(f"Collate function {collate_fn} not found.")
 
