@@ -46,11 +46,13 @@ class MetricsComparison(pl.LightningModule):
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
-        logs = self.test_metrics.compute_metrics()
-        logs = _fix_dp_return_type(logs, device=outputs[0]["test_loss"].device)
-
+        if hasattr(self, "test_metrics"):
+            logs = self.test_metrics.compute_metrics()
+            self.test_metrics.reset_metrics()
+        else:
+            logs = {}
         logs.update({"test_loss": avg_loss})
-        self.test_metrics.reset_metrics()
+
         return {"progress_bar": logs,
                 "log": logs}
 
@@ -182,10 +184,10 @@ class GTN(GTN, MetricsComparison):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
                                                 sparse=True)
 
-        self.training_metrics = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
-                                        multilabel=dataset.multilabel, metrics=metrics)
-        self.validation_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
-                                          multilabel=dataset.multilabel, metrics=metrics)
+        self.train_metricss = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
+                                      multilabel=dataset.multilabel, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
+                                     multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
@@ -233,7 +235,7 @@ class GTN(GTN, MetricsComparison):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.training_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        self.train_metricss.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -241,7 +243,7 @@ class GTN(GTN, MetricsComparison):
         X, y, weights = batch
 
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.validation_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
         loss = self.loss(y_hat, y)
 
         return {"val_loss": loss}
@@ -288,10 +290,10 @@ class HAN(HAN, MetricsComparison):
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
-        self.training_metrics = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
-                                        multilabel=dataset.multilabel, metrics=metrics)
-        self.validation_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
-                                          multilabel=dataset.multilabel, metrics=metrics)
+        self.train_metricss = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
+                                      multilabel=dataset.multilabel, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
+                                     multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
@@ -321,7 +323,7 @@ class HAN(HAN, MetricsComparison):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.training_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        self.train_metricss.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -329,7 +331,7 @@ class HAN(HAN, MetricsComparison):
         X, y, weights = batch
 
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.validation_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
         loss = self.loss(y_hat, y)
 
         return {"val_loss": loss}
