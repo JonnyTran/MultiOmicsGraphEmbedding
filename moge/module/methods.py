@@ -141,12 +141,9 @@ class LATTENodeClassifier(MetricsComparison):
         return {"test_loss": test_loss}
 
     def train_dataloader(self):
-        if self.collate_fn == "LATTENode_batch":
-            return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                                 batch_size=self.hparams.batch_size,
-                                                 num_workers=int(0.8 * multiprocessing.cpu_count()))
-        else:
-            return
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=int(0.8 * multiprocessing.cpu_count()))
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn=self.collate_fn,
