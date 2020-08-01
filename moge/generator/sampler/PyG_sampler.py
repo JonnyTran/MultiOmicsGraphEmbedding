@@ -81,11 +81,11 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = self.get_all_sampled_nodes_dict(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
-        if mode == "training":
+        if "train" in mode:
             allowed_nodes = self.training_idx
-        elif mode == "validation":
+        elif "valid" in mode:
             allowed_nodes = self.validation_idx
-        elif mode == "testing":
+        elif "test" in mode:
             allowed_nodes = self.testing_idx
         else:
             raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
