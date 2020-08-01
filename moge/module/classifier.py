@@ -28,8 +28,8 @@ class Dense(nn.Module):
             print("INFO: Output of `_classifier` is logits")
             # print("INFO: Output of `_classifier` is Softmax")
         elif "SOFTMAX_CROSS_ENTROPY" in hparams.loss_type:
-            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
-            print("INFO: Output of `_classifier` is Sigmoid")
+            # self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
+            print("INFO: Output of `_classifier` is linear")
 
     @staticmethod
     def add_model_specific_args(parent_parser):

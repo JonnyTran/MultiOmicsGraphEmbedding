@@ -13,7 +13,8 @@ from .utils import filter_samples
 
 
 class Metrics():
-    def __init__(self, prefix, loss_type, threshold=0.5, k_s=[1, 5, 10], n_classes=None, multilabel=None,
+    def __init__(self, prefix, loss_type, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
+                 multilabel: bool = None,
                  metrics=["precision", "recall", "top_k", "accuracy"]):
         self.loss_type = loss_type
         self.threshold = threshold
@@ -24,7 +25,7 @@ class Metrics():
         self.is_multilabel = is_multilabel
 
         if n_classes:
-            k_s = [k for k in k_s if k < n_classes]
+            top_k = [k for k in top_k if k < n_classes]
 
         self.prefix = prefix
         self.metrics = {}
@@ -34,7 +35,7 @@ class Metrics():
             elif "recall" in metric:
                 self.metrics[metric] = Recall(average=True, is_multilabel=is_multilabel)
             elif "top_k" in metric:
-                self.metrics[metric] = TopKMulticlassAccuracy(k_s=k_s)
+                self.metrics[metric] = TopKMulticlassAccuracy(k_s=top_k)
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=is_multilabel)
             elif "ogbn" in metric:
@@ -46,38 +47,40 @@ class Metrics():
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
-    def update_metrics(self, Y_hat: torch.Tensor, Y: torch.Tensor, weights):
-        Y_hat, Y = filter_samples(Y_hat, Y, weights)
+    def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights):
+        y_pred, y_true = filter_samples(y_pred, y_true, weights)
 
         # Apply softmax/sigmoid activation if needed
-        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
-            Y_hat = torch.softmax(Y_hat, dim=1) if "SOFTMAX" in self.loss_type else torch.sigmoid(Y_hat)
-        elif "NEGATIVE_LOG_LIKELIHOOD" in self.loss_type:
-            Y_hat = torch.softmax(Y_hat, dim=1)
+        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type or "SOFTMAX_CROSS_ENTROPY" == self.loss_type:
+            y_pred = torch.softmax(y_pred, dim=1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
+        elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type:
+            y_pred = torch.softmax(y_pred, dim=1)
 
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric:
                 if not self.is_multilabel or "SOFTMAX" in self.loss_type:
                     self.metrics[metric].update(
-                        ((Y_hat > self.threshold).type_as(Y), self.convert_labels_to_matrix(Y, Y_hat)))
+                        ((y_pred > self.threshold).type_as(y_true), self.hot_encode(y_true, y_pred)))
                 else:
-                    self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
+                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
+
             elif "accuracy" in metric:
                 if not self.is_multilabel or "SOFTMAX" in self.loss_type:
                     self.metrics[metric].update(
-                        ((Y_hat > self.threshold).type_as(Y), self.convert_labels_to_matrix(Y, Y_hat)))
+                        ((y_pred > self.threshold).type_as(y_true), self.hot_encode(y_true, y_pred)))
                 else:
-                    self.metrics[metric].update(((Y_hat > self.threshold).type_as(Y), Y))
+                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
+
             elif metric == "top_k" or "ogb" in metric:
-                self.metrics[metric].update((Y_hat, Y))
+                self.metrics[metric].update((y_pred, y_true))
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
 
-    def convert_labels_to_matrix(self, Y, Y_hat):
-        if Y.dim() == 2:
-            Y = Y.squeeze(1)
-        Y = torch.eye(self.n_classes)[Y].type_as(Y_hat)
-        return Y
+    def hot_encode(self, y_true, y_pred):
+        if y_true.dim() == 2:
+            y_true = y_true.squeeze(1)
+        y_true = torch.eye(self.n_classes)[y_true].type_as(y_pred)
+        return y_true
 
     def compute_metrics(self):
         logs = {}
@@ -92,8 +95,6 @@ class Metrics():
 
     def reset_metrics(self):
         for metric in self.metrics:
-            if "ogb" in metric:
-                continue
             self.metrics[metric].reset()
 
 
@@ -106,8 +107,8 @@ class OGBEvaluator(Metric):
 
     @reinit__is_reduced
     def reset(self):
-        self.y_pred.data = []
-        self.y_true.data = []
+        self.y_pred = []
+        self.y_true = []
 
     @reinit__is_reduced
     def update(self, outputs):
@@ -121,8 +122,11 @@ class OGBEvaluator(Metric):
         self.y_pred.append(y_pred)
 
     def compute(self, prefix=None):
-        output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
-                                      "y_true": torch.cat(self.y_true, dim=0)})
+        if isinstance(self.evaluator, NodeEvaluator):
+            output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
+                                          "y_true": torch.cat(self.y_true, dim=0)})
+        else:
+            raise Exception(f"implement eval for {self.evaluator}")
 
         if prefix is None:
             return {f"{k}": v for k, v in output.items()}

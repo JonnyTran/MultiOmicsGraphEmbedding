@@ -100,7 +100,7 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        self.training_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
 
         loss = self.loss(y_hat, y)
 
@@ -119,7 +119,7 @@ class LATTENodeClassifier(MetricsComparison):
 
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
 
-        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        self.validation_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
 
         loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
@@ -131,7 +131,7 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
 
-        self.test_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        self.test_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
 
         loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
@@ -234,7 +234,7 @@ class GTN(GTN, MetricsComparison):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        self.training_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -242,7 +242,7 @@ class GTN(GTN, MetricsComparison):
         X, y, weights = batch
 
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        self.validation_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
         loss = self.loss(y_hat, y)
 
         return {"val_loss": loss}
@@ -258,10 +258,10 @@ class GTN(GTN, MetricsComparison):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -322,7 +322,7 @@ class HAN(HAN, MetricsComparison):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.training_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        self.training_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -330,7 +330,7 @@ class HAN(HAN, MetricsComparison):
         X, y, weights = batch
 
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.validation_metrics.update_metrics(Y_hat=y_hat, Y=y, weights=weights)
+        self.validation_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
         loss = self.loss(y_hat, y)
 
         return {"val_loss": loss}
