@@ -30,8 +30,10 @@ class HeteroNeighborSampler(HeteroNetDataset):
         out = group_hetero_graph(self.edge_index_dict, num_nodes_dict)
         self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = out
 
-        self.int2node_type = {v: k for k, v in self.key2int.items() if isinstance(k, str)}
-        self.int2edge_type = {v: k for k, v in self.key2int.items() if isinstance(k, tuple)}
+        self.int2node_type = {type_int: node_type for node_type, type_int in self.key2int.items() if
+                              isinstance(node_type, str)}
+        self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
+                              isinstance(edge_type, tuple)}
 
         self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
                                                 sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
