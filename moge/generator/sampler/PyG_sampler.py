@@ -39,9 +39,11 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                 sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=str):
-        self.mode = mode
+        def collate_wrapper(iloc):
+            return self.collate_neighbor_sampler(iloc, mode)
+
         if "neighbor_sampler" in collate_fn:
-            return self.collate_neighbor_sampler
+            return self.collate_wrapper
         else:
             raise Exception(f"Collate function {collate_fn} not found.")
 
