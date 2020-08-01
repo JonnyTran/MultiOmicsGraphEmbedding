@@ -77,7 +77,7 @@ class NetworkXSampler(HeteroNetDataset):
         node_index_dict[self.head_node_type] = seed_nodes
         return node_index_dict
 
-    def get_adj_edgelist(self, graph, nodes_A, nodes_B=None):
+    def get_adj_edge_index(self, graph, nodes_A, nodes_B=None):
         if nodes_B == None:
             adj = nx.adj_matrix(graph, nodelist=nodes_A.numpy() if isinstance(nodes_A, torch.Tensor) else nodes_A)
         else:
@@ -138,12 +138,14 @@ class NetworkXSampler(HeteroNetDataset):
             if head_type not in sampled_nodes or len(sampled_nodes[head_type]) == 0: continue
             if tail_type not in sampled_nodes or len(sampled_nodes[tail_type]) == 0: continue
             try:
-                X["edge_index_dict"][metapath] = self.get_adj_edgelist(self.graphs[metapath],
-                                                                       nodes_A=sampled_nodes[head_type],
-                                                                       nodes_B=sampled_nodes[tail_type])
+                X["edge_index_dict"][metapath] = self.get_adj_edge_index(self.graphs[metapath],
+                                                                         nodes_A=sampled_nodes[head_type],
+                                                                         nodes_B=sampled_nodes[tail_type])
             except Exception as e:
-                print("sampled_nodes[head_type]", sampled_nodes[head_type])
-                print("sampled_nodes[tail_type]", sampled_nodes[tail_type])
+                print(f"sampled_nodes[{head_type}]", sampled_nodes[head_type][:5],
+                      sampled_nodes[head_type] in self.graphs[metapath])
+                print(f"sampled_nodes[{tail_type}]", sampled_nodes[tail_type][:5],
+                      sampled_nodes[tail_type] in self.graphs[metapath])
                 raise e
 
         if self.use_reverse:
@@ -168,8 +170,8 @@ class NetworkXSampler(HeteroNetDataset):
 
         node_index = self.y_index_dict[self.head_node_type][iloc]
 
-        X = {"adj": [(self.get_adj_edgelist(self.graphs[i], node_index),
-                      torch.ones(self.get_adj_edgelist(self.graphs[i], node_index).size(1))) for i in self.metapaths],
+        X = {"adj": [(self.get_adj_edge_index(self.graphs[i], node_index),
+                      torch.ones(self.get_adj_edge_index(self.graphs[i], node_index).size(1))) for i in self.metapaths],
              "x": self.data["x"][node_index] if hasattr(self.data, "x") else None,
              "idx": node_index}
 
