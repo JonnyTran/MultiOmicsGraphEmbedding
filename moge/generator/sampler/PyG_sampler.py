@@ -62,7 +62,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
                     local_node_ids = self.local_node_idx[node_ids[mask]]
                     sampled_nodes.setdefault(self.int2node_type[node_type_id.item()], []).append(local_node_ids)
 
-        # Concatenate & remove duplicates
+        # Concatenate & remove duplicate nodes
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes, n_id, adjs
 
@@ -75,16 +75,21 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
+        # Sample neighbors and return `sampled_nodes` as the set of all nodes traversed
         sampled_nodes, n_id, adjs = self.neighbors_traversal(iloc)
+
+        # Ensure none of sampled nodes
         indices = np.isin(sampled_nodes[self.head_node_type], self.training_idx)
         sampled_nodes[self.head_node_type] = sampled_nodes[self.head_node_type][indices]
 
         X = {"edge_index_dict": {}, "global_node_index": sampled_nodes, "x_dict": {}}
 
-        batch_node_id_dict = {
+        # dict
+        node2batch_id_dict = {
             node_type: dict(zip(sampled_nodes[node_type].numpy(), range(len(sampled_nodes[node_type])))) \
             for node_type in sampled_nodes}
 
+        # Conbine all edge_index's and convert local node id to batch node ID
         X["edge_index_dict"] = {}
         for adj in adjs:
             for edge_type_id in self.edge_type[adj.e_id].unique():
@@ -95,14 +100,15 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 edge_index = adj.edge_index[:, edge_mask]
 
                 edge_index[0] = self.local_node_idx[n_id[edge_index[0]]].apply_(
-                    lambda x: batch_node_id_dict[head_type][x])
+                    lambda x: node2batch_id_dict[head_type][x])
                 edge_index[1] = self.local_node_idx[n_id[edge_index[1]]].apply_(
-                    lambda x: batch_node_id_dict[tail_type][x])
+                    lambda x: node2batch_id_dict[tail_type][x])
 
                 X["edge_index_dict"].setdefault(metapath, []).append(edge_index)
 
-        X["edge_index_dict"] = {metapath: torch.cat(X["edge_index_dict"][metapath], dim=1) for metapath in
-                                X["edge_index_dict"]}
+        # TODO ensure no duplicate edge from adjs[0] to adjs[1]...
+        X["edge_index_dict"] = {metapath: torch.cat(X["edge_index_dict"][metapath], dim=1) \
+                                for metapath in X["edge_index_dict"]}
 
         if hasattr(self, "x_dict"):
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] for node_type in
