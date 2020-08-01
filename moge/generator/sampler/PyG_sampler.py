@@ -40,7 +40,7 @@ class HeteroNeighborSampler(NetworkXSampler):
             self.add_reverse_edge_index(self.edge_index_dict)
 
         # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
-        assert self.node_types == self.head_node_type
+        assert self.node_types[0] == self.head_node_type
         num_nodes_dict = OrderedDict([(node_type, self.num_nodes_dict[node_type]) for node_type in self.node_types])
 
         out = group_hetero_graph(self.edge_index_dict, num_nodes_dict)
