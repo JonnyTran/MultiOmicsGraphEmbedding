@@ -270,24 +270,27 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size))
+                                                                                                        batch_size,
+                                                                                                        mode="training"))
         return loader
 
     def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size))
+                                                                                                        batch_size,
+                                                                                                        mode="validation"))
         return loader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size))
+                                                                                                        batch_size,
+                                                                                                        mode="testing"))
         return loader
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None):
+    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
         if batch_size is not None:
             self.batch_size = batch_size * len(self.node_types)
 

@@ -111,7 +111,7 @@ class NetworkXSampler(HeteroNetDataset):
         node_index_dict = {k: torch.tensor(v, dtype=torch.long) for k, v in node_index_dict.items()}
         return node_index_dict
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None):
+    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
         if batch_size is not None:
             self.batch_size = batch_size * len(self.node_types)
 

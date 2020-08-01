@@ -38,7 +38,9 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
                                                 sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=str):
+    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
+        assert mode is not None, "Must pass arg mode at get_collate_fn()"
+
         def collate_wrapper(iloc):
             return self.collate_neighbor_sampler(iloc, mode)
 
