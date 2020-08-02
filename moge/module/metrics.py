@@ -58,16 +58,18 @@ class Metrics():
 
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric:
-                if not self.multilabel and "SOFTMAX" in self.loss_type:
+                if not self.multilabel and y_true.dim() == 1:
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
                          self.hot_encode(y_true, y_pred)))
                 else:
+                    print("y_pred", (y_pred > self.threshold).type_as(y_true).shape)
+                    print("y_true", y_true)
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true),
                                                  y_true))
 
             elif "accuracy" in metric:
-                if not self.multilabel and "SOFTMAX" in self.loss_type:
+                if not self.multilabel and y_true.dim() == 1:
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
                          self.hot_encode(y_true, y_pred)))
