@@ -1,5 +1,6 @@
 import multiprocessing
 from collections import OrderedDict
+import pandas as pd
 import numpy as np
 import torch
 
@@ -144,8 +145,11 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
                 X["edge_index_dict"].setdefault(metapath, []).append(edge_index)
         # TODO ensure no duplicate edge from adjs[0] to adjs[1]...
+
         X["edge_index_dict"] = {metapath: torch.cat(X["edge_index_dict"][metapath], dim=1) \
                                 for metapath in X["edge_index_dict"]}
+        X["edge_index_dict"] = {metapath: self.nonduplicate_edge_idx(X["edge_index_dict"][metapath]) for metapath in
+                                X["edge_index_dict"]}
 
         if hasattr(self, "x_dict"):
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] for node_type in
@@ -156,3 +160,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
         return X, y, None
+
+    def nonduplicate_edge_idx(self, edge_index):
+        edge_df = pd.DataFrame(edge_index.t().numpy())  # shape: (n_edges, 2)
+        return ~edge_df.duplicated(subset=[0, 1])
