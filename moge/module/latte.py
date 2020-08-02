@@ -279,6 +279,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         emb_output = {}
         for node_type in global_node_idx:
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
+            print(f"global_node_idx[{node_type}].size(0)", global_node_idx[node_type].size(0))
+            print("self.get_num_relations(node_type)", self.get_num_relations(node_type))
             emb_relation_agg[node_type] = torch.zeros(
                 size=(global_node_idx[node_type].size(0),
                       self.get_num_relations(node_type),
