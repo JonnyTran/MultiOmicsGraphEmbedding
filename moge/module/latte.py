@@ -79,7 +79,10 @@ class LATTE(nn.Module):
                         edge_index_b = edge_index_b[0]
                         values_b = edge_index_b[1]
                     elif isinstance(edge_index_b, torch.Tensor) and edge_index_b.size(1) > 1:
-                        values_b = torch.ones(edge_index_b.size(1), dtype=torch.float, device=edge_index_b.device)
+                        try:
+                            values_b = torch.ones(edge_index_b.size(1), dtype=torch.float, device=edge_index_b.device)
+                        except:
+                            print("edge_index_b.size", edge_index_b.size(), edge_index_b.device, edge_index_b[:, :5])
                     else:
                         continue
                     if values_b.dtype != torch.float:
