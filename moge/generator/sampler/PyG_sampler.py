@@ -80,7 +80,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
             iloc = torch.tensor(iloc)
 
         batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local2global[self.head_node_type][iloc])
-
+        if not isinstance(adjs, list):
+            adjs = [adjs]
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
         sampled_local_nodes = self.get_local_nodes_dict(adjs, n_id)
 
