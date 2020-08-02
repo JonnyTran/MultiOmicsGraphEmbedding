@@ -62,7 +62,7 @@ class LATTE(nn.Module):
                 edge_index_a = edge_index_a[0]
                 values_a = edge_index_a[1]
             else:
-                values_a = torch.ones_like(edge_index_a[0].detach(), dtype=torch.float)
+                values_a = torch.ones_like(edge_index_a[0], dtype=torch.float)
             if edge_index_a.size(1) <= 5: continue
             if values_a.dtype != torch.int:
                 values_a = values_a.to(torch.float)
@@ -78,7 +78,7 @@ class LATTE(nn.Module):
                         edge_index_b = edge_index_b[0]
                         values_b = edge_index_b[1]
                     else:
-                        values_b = torch.ones_like(edge_index_b[0].detach(), dtype=torch.float)
+                        values_b = torch.ones_like(edge_index_b[0], dtype=torch.float)
                     if edge_index_b.size(1) <= 5: continue
                     if values_b.dtype != torch.int:
                         values_b = values_b.to(torch.float)
