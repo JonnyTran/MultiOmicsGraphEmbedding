@@ -75,7 +75,6 @@ class Metrics():
             elif metric == "top_k":
                 self.metrics[metric].update((y_pred, y_true))
             elif "ogb" in metric:
-                assert y_pred.dim() == 1, y_pred.shape
                 assert y_true.dim() == 1, y_true.shape
                 self.metrics[metric].update((y_pred, y_true))
             else:
