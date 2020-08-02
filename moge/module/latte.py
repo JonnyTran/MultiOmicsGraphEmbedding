@@ -282,11 +282,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         emb_output = {}
         for node_type in global_node_idx:
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
-            print(f"global_node_idx[{node_type}].size(0)", global_node_idx[node_type].size(0))
+            # print(f"global_node_idx[{node_type}].size(0)", global_node_idx[node_type].size(0))
             emb_relation_agg[node_type] = torch.zeros(
                 size=(global_node_idx[node_type].size(0),
                       self.get_num_relations(node_type),
-                      self.embedding_dim))
+                      self.embedding_dim)).type_as(self.conv[node_type].weight)
 
             for i, metapath in enumerate(self.get_head_relations(node_type)):
                 if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
