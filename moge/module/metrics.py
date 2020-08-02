@@ -13,10 +13,10 @@ from .utils import filter_samples
 
 
 class Metrics():
-    def __init__(self, prefix, loss_type, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
+    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
                  multilabel: bool = None,
                  metrics=["precision", "recall", "top_k", "accuracy"]):
-        self.loss_type = loss_type
+        self.loss_type = loss_type.upper()
         self.threshold = threshold
         self.n_classes = n_classes
         self.multilabel = multilabel
@@ -52,6 +52,8 @@ class Metrics():
                 "FOCAL" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
         elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type:
+            y_pred = torch.softmax(y_pred, dim=1)
+        elif "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
 
         for metric in self.metrics:

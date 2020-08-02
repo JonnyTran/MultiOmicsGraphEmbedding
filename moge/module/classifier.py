@@ -31,13 +31,13 @@ class DenseClassification(nn.Module):
             print("INFO: Output of `_classifier` is logits")
             # print("INFO: Output of `_classifier` is Softmax")
         elif "SOFTMAX_CROSS_ENTROPY" == hparams.loss_type:
-            print("INFO: Output of `_classifier` is linear")
+            # self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
+            print("INFO: Output of `_classifier` is logits")
         elif "BCE" == hparams.loss_type:
             self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
-            print("INFO: Output of `_classifier` is sigmoid")
+            print("INFO: Output of `_classifier` is sigmoid probailities")
         else:
-            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
-            print("INFO: Output of `_classifier` is sigmoid")
+            print("INFO: [Else Case] Output of `_classifier` is logits")
         self.reset_parameters()
 
     @staticmethod

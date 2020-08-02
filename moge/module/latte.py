@@ -27,7 +27,7 @@ class LATTE(nn.Module):
         self.neg_sampling_ratio = neg_sampling_ratio
 
         layers = []
-        t_order_metapaths = copy.copy(metapaths)
+        t_order_metapaths = copy.deepcopy(metapaths)
         for t in range(t_order):
             if t == 0:
                 layers.append(
@@ -54,43 +54,33 @@ class LATTE(nn.Module):
                     metapaths.append(new_relation)
         return metapaths
 
+    def get_edge_index_values(self, edge_index_tup):
+        if isinstance(edge_index_tup, tuple):
+            edge_index = edge_index_tup[0]
+            edge_values = edge_index[1]
+
+            if edge_values.dtype != torch.float:
+                edge_values = edge_values.to(torch.float)
+        elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 1:
+            edge_index = edge_index_tup
+            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float, device=edge_index_tup.device)
+        else:
+            return None, None  # Should raise an exception
+
+        return edge_index, edge_values
+
     def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, global_node_idx):
         output_dict = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if edge_index_a is None or (isinstance(edge_index_a, tuple) and edge_index_a[0] is None): continue
-
-            # Preprocess edge_index_a
-            if isinstance(edge_index_a, tuple):
-                edge_index_a = edge_index_a[0]
-                values_a = edge_index_a[1]
-            elif isinstance(edge_index_a, torch.Tensor) and edge_index_a.size(1) > 1:
-                values_a = torch.ones(edge_index_a.size(1), dtype=torch.float, device=edge_index_a.device)
-            else:
-                continue
-            if values_a.dtype != torch.float:
-                values_a = values_a.to(torch.float)
+            edge_index_a, values_a = self.get_edge_index_values(edge_index_a)
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if edge_index_b is None or (isinstance(edge_index_b, tuple) and edge_index_b[0] is None): continue
 
                 if metapath_a[-1] == metapath_b[0]:
                     metapath_join = metapath_a + metapath_b[1:]
-
-                    # Preprocess edge_index_a
-                    if isinstance(edge_index_b, tuple):
-                        edge_index_b = edge_index_b[0]
-                        values_b = edge_index_b[1]
-                    elif isinstance(edge_index_b, torch.Tensor) and edge_index_b.size(1) > 1:
-                        try:
-                            values_b = torch.ones(edge_index_b.size(1), dtype=torch.float, device=edge_index_b.device)
-                        except:
-                            print("edge_index_b.size", edge_index_b.size(), edge_index_b.device, edge_index_b[:, :5])
-                            continue
-                    else:
-                        continue
-                    if values_b.dtype != torch.float:
-                        values_b = values_b.to(torch.float)
-
+                    edge_index_b, values_b = self.get_edge_index_values(edge_index_b)
                     try:
                         new_edge_index = adamic_adar(indexA=edge_index_a,
                                                      valueA=values_a,
@@ -100,9 +90,12 @@ class LATTE(nn.Module):
                                                      k=global_node_idx[metapath_a[-1]].size(0),
                                                      n=global_node_idx[metapath_b[-1]].size(0),
                                                      coalesced=True)
+
+                        if new_edge_index[0].size(1) <= 5: continue
+                        output_dict[metapath_join] = new_edge_index
+
                     except Exception as e:
                         print(f"{metapath_a}, {edge_index_a.size(1)}", f"{metapath_b}, {edge_index_b.size(1)}")
-                        print("sizes", {node_type: idx.size(0) for node_type, idx in global_node_idx.items()})
                         print("edge_index_a", edge_index_a.size(1), edge_index_a.dtype)
                         print("values_a", values_a.size(), values_a.dtype)
                         print("edge_index_b", edge_index_b.size(1), edge_index_b.dtype)
@@ -110,9 +103,6 @@ class LATTE(nn.Module):
                         # raise e
                         continue
 
-                    if new_edge_index[0].size(1) <= 5: continue
-                    # print(new_edge_index[0].size(1), new_edge_index[1].min().cpu().numpy(), new_edge_index[1].max().cpu().numpy())
-                    output_dict[metapath_join] = new_edge_index
         return output_dict
 
     def forward(self, x_dict, global_node_idx, edge_index_dict):
@@ -132,9 +122,9 @@ class LATTE(nn.Module):
                 h_dict, t_proximity_loss = self.layers[t].forward(
                     x_dict=x_dict, global_node_idx=global_node_idx,
                     edge_index_dict=t_order_edge_index_dict,
-                    # h1_dict=h_dict)
-                    h1_dict={node_type: h_emb.detach() for node_type, h_emb in
-                             h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
+                    h1_dict=h_dict)
+                # h1_dict={node_type: h_emb.detach() for node_type, h_emb in
+                #          h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
 
                 with torch.no_grad():
                     t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict,
@@ -233,7 +223,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         Get the mean and std of relation attention weights for all nodes in testing/validation steps
         :return:
         """
-        return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
+        return {relation if isinstance(relation, tuple) else node_type: (avg, std) \
                 for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
@@ -370,6 +360,28 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
 
         return loss
+
+
+def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
+    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
+                     sparse_sizes=(m, k), is_sorted=not coalesced)
+    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
+                     sparse_sizes=(k, n), is_sorted=not coalesced)
+
+    deg_A = A.storage.colcount()
+    deg_B = B.storage.rowcount()
+    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
+    deg_normalized[deg_normalized == float('inf')] = 0.0
+
+    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
+                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
+                     value=deg_normalized.type_as(valueA),
+                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
+
+    C = matmul(matmul(A, D), B)
+    row, col, value = C.coo()
+
+    return torch.stack([row, col], dim=0), value
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):

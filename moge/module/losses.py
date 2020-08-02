@@ -55,7 +55,7 @@ class FocalLoss(nn.Module):
 
 
 class ClassificationLoss(nn.Module):
-    def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multilabel=True,
+    def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multilabel=True, use_hierar=False,
                  loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1e-6, hierar_relations=None):
         super(ClassificationLoss, self).__init__()
         self.n_classes = n_classes
@@ -63,6 +63,7 @@ class ClassificationLoss(nn.Module):
         self.hierar_penalty = hierar_penalty
         self.hierar_relations = hierar_relations
         self.multilabel = multilabel
+        self.use_hierar = use_hierar
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.criterion = torch.nn.CrossEntropyLoss(class_weight)
@@ -83,10 +84,11 @@ class ClassificationLoss(nn.Module):
         else:
             raise TypeError(f"Unsupported loss type:{loss_type}")
 
-    def forward(self, logits, target, use_hierar=False, linear_weight: torch.Tensor = None):
-        if use_hierar:
+    def forward(self, logits, target, linear_weight: torch.Tensor = None):
+        if self.use_hierar:
             assert self.loss_type in ["BCE_WITH_LOGITS",
                                       "SIGMOID_FOCAL_CROSS_ENTROPY"]
+            assert linear_weight is not None
             if not self.multilabel:
                 target = torch.eye(self.n_classes)[target]
 
