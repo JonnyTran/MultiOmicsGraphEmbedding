@@ -148,7 +148,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
         X["edge_index_dict"] = {metapath: torch.cat(X["edge_index_dict"][metapath], dim=1) \
                                 for metapath in X["edge_index_dict"]}
-        X["edge_index_dict"] = {metapath: edge_index[:, self.nonduplicate_edge_idx(edge_index)] \
+        X["edge_index_dict"] = {metapath: edge_index[:, self.nonduplicate_indices(edge_index)] \
                                 for metapath, edge_index in X["edge_index_dict"].items()}
 
         if hasattr(self, "x_dict"):
@@ -161,6 +161,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
         return X, y, None
 
-    def nonduplicate_edge_idx(self, edge_index):
+    def nonduplicate_indices(self, edge_index):
         edge_df = pd.DataFrame(edge_index.t().numpy())  # shape: (n_edges, 2)
         return ~edge_df.duplicated(subset=[0, 1])
