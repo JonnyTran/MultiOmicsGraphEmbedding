@@ -33,6 +33,7 @@ class DenseClassification(nn.Module):
             print("INFO: Output of `_classifier` is linear")
         elif "BCE" == hparams.loss_type:
             self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
+            print("INFO: Output of `_classifier` is sigmoid")
 
     @staticmethod
     def add_model_specific_args(parent_parser):
