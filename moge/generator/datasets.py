@@ -131,7 +131,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
     def process_BlogCatalog6k(self, dataset, train_ratio):
         data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
-        self._name = dataset.name
+        self._name = "BlogCatalog3"
         self.y_index_dict = {"user": torch.arange(data["friendship"].shape[0]),
                              "tag": torch.arange(data["tagnetwork"].shape[0])}
         self.node_types = ["user", "tag"]
