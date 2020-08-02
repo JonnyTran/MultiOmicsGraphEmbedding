@@ -49,7 +49,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             raise Exception(f"Collate function {collate_fn} not found.")
 
-    def get_all_sampled_nodes_dict(self, adjs, n_id):
+    def get_local_nodes_dict(self, adjs, n_id):
         """
 
         :param iloc: A tensor of indices for nodes of `head_node_type`
@@ -82,7 +82,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local2global[self.head_node_type][iloc])
 
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        sampled_local_nodes = self.get_all_sampled_nodes_dict(adjs, n_id)
+        sampled_local_nodes = self.get_local_nodes_dict(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         if "train" in mode:
@@ -96,15 +96,18 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
         assert np.isin(iloc, allowed_nodes).all()
 
-        indices = np.isin(sampled_local_nodes[self.head_node_type], allowed_nodes)
-        sampled_local_nodes[self.head_node_type] = sampled_local_nodes[self.head_node_type][indices]
+        node_mask = np.isin(sampled_local_nodes[self.head_node_type], allowed_nodes)
+        sampled_local_nodes[self.head_node_type] = sampled_local_nodes[self.head_node_type][node_mask]
 
-        X = {"edge_index_dict": {}, "global_node_index": sampled_local_nodes,
-             "x_dict": {}}  # global_node_index here actually refers to the 'local' type-specific index of the original graph
+        X = {"edge_index_dict": {},
+             "global_node_index": sampled_local_nodes,
+             # global_node_index here actually refers to the 'local' type-specific index of the original graph
+             "x_dict": {}}
 
         local2batch_idx_dict = {
-            node_type: dict(zip(sampled_local_nodes[node_type].numpy(), range(len(sampled_local_nodes[node_type])))) \
-            for node_type in sampled_local_nodes}
+            node_type: dict(zip(sampled_local_nodes[node_type].numpy(),
+                                range(len(sampled_local_nodes[node_type])))
+                            ) for node_type in sampled_local_nodes}
 
         # Conbine all edge_index's and convert local node id to "batch node index"
         X["edge_index_dict"] = {}
@@ -123,15 +126,14 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
                 allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
                 if head_type == self.head_node_type and tail_type == self.head_node_type:
-                    edge_mask = np.isin(edge_index, allowed_nodes_idx).all(0)
-                    print("edge_mask", edge_mask.shape)
-                    edge_index = edge_index[:, edge_mask]
+                    mask = np.isin(edge_index, allowed_nodes_idx).all(0)
+                    edge_index = edge_index[:, mask]
                 elif head_type == self.head_node_type:
-                    edge_mask = np.isin(edge_index[0], allowed_nodes_idx)
-                    edge_index = edge_index[:, edge_mask]
+                    mask = np.isin(edge_index[0], allowed_nodes_idx)
+                    edge_index = edge_index[:, mask]
                 elif tail_type == self.head_node_type:
-                    edge_mask = np.isin(edge_index[1], allowed_nodes_idx)
-                    edge_index = edge_index[:, edge_mask]
+                    mask = np.isin(edge_index[1], allowed_nodes_idx)
+                    edge_index = edge_index[:, mask]
 
                 # Convert node index global > local > batch
                 edge_index[0] = self.local_node_idx[edge_index[0]].apply_(
