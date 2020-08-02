@@ -58,7 +58,7 @@ class ClassificationLoss(nn.Module):
     def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multilabel=True,
                  loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1e-6, hierar_relations=None):
         super(ClassificationLoss, self).__init__()
-        self.label_size = n_classes
+        self.n_classes = n_classes
         self.loss_type = loss_type
         self.hierar_penalty = hierar_penalty
         self.hierar_relations = hierar_relations
@@ -88,7 +88,7 @@ class ClassificationLoss(nn.Module):
             assert self.loss_type in ["BCE_WITH_LOGITS",
                                       "SIGMOID_FOCAL_CROSS_ENTROPY"]
             if not self.multilabel:
-                target = torch.eye(self.label_size)[target]
+                target = torch.eye(self.n_classes)[target]
 
             return self.criterion(logits, target.type_as(logits)) + \
                    self.hierar_penalty * self.recursive_regularize(linear_weight, self.hierar_relations)
@@ -99,7 +99,7 @@ class ClassificationLoss(nn.Module):
             else:
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
-                    target = torch.eye(self.label_size)[target]
+                    target = torch.eye(self.n_classes)[target]
 
             return self.criterion(logits, target)
 

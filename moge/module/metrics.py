@@ -19,10 +19,7 @@ class Metrics():
         self.loss_type = loss_type
         self.threshold = threshold
         self.n_classes = n_classes
-        is_multilabel = False if "SOFTMAX" in loss_type else True
-        if multilabel is not None:
-            is_multilabel = multilabel
-        self.is_multilabel = is_multilabel
+        self.multilabel = multilabel
 
         if n_classes:
             top_k = [k for k in top_k if k < n_classes]
@@ -31,13 +28,13 @@ class Metrics():
         self.metrics = {}
         for metric in metrics:
             if "precision" in metric:
-                self.metrics[metric] = Precision(average=True, is_multilabel=is_multilabel)
+                self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)
             elif "recall" in metric:
-                self.metrics[metric] = Recall(average=True, is_multilabel=is_multilabel)
+                self.metrics[metric] = Recall(average=True, is_multilabel=multilabel)
             elif "top_k" in metric:
                 self.metrics[metric] = TopKMulticlassAccuracy(k_s=top_k)
             elif "accuracy" in metric:
-                self.metrics[metric] = Accuracy(is_multilabel=is_multilabel)
+                self.metrics[metric] = Accuracy(is_multilabel=multilabel)
             elif "ogbn" in metric:
                 self.metrics[metric] = OGBEvaluator(NodeEvaluator(metric))
             elif "ogbg" in metric:
@@ -61,7 +58,7 @@ class Metrics():
 
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric:
-                if not self.is_multilabel and "SOFTMAX" in self.loss_type:
+                if not self.multilabel and "SOFTMAX" in self.loss_type:
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
                          self.hot_encode(y_true, y_pred)))
@@ -70,7 +67,7 @@ class Metrics():
                                                  y_true))
 
             elif "accuracy" in metric:
-                if not self.is_multilabel and "SOFTMAX" in self.loss_type:
+                if not self.multilabel and "SOFTMAX" in self.loss_type:
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
                          self.hot_encode(y_true, y_pred)))
@@ -88,9 +85,10 @@ class Metrics():
 
     def hot_encode(self, y_true, y_pred):
         if y_true.dim() == 2:
-            y_true = y_true.squeeze(1)
-        y_true = torch.eye(self.n_classes)[y_true].type_as(y_pred)
-        return y_true
+            return y_true
+        elif y_true.dim() == 1:
+            y_true = torch.eye(self.n_classes)[y_true].type_as(y_pred)
+            return y_true
 
     def compute_metrics(self):
         logs = {}
