@@ -148,7 +148,7 @@ class LATTE(nn.Module):
 class LATTELayer(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int}, metapaths: list,
                  use_proximity_loss=True, neg_sampling_ratio=1.0, first=True) -> None:
-        super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
+        super(LATTELayer, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
