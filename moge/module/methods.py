@@ -74,8 +74,8 @@ class LATTENodeClassifier(MetricsComparison):
                            neg_sampling_ratio=hparams.neg_sampling_ratio,
                            use_proximity_loss=hparams.use_proximity_loss)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-        # self.classifier = DenseClassification(hparams)
-        self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim, num_class=hparams.n_classes)
+        self.classifier = DenseClassification(hparams)
+        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim, num_class=hparams.n_classes)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type)
 
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
