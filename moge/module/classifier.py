@@ -20,16 +20,19 @@ class DenseClassification(nn.Module):
             ("dropout", nn.Dropout(p=hparams.nb_cls_dropout)),
             ("linear", nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes))
         ]))
+
+        # Activation
         if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
             print("INFO: Output of `_classifier` is logits")
-
+            self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
         elif "NEGATIVE_LOG_LIKELIHOOD" == hparams.loss_type:
             self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
             print("INFO: Output of `_classifier` is logits")
             # print("INFO: Output of `_classifier` is Softmax")
         elif "SOFTMAX_CROSS_ENTROPY" == hparams.loss_type:
-            # self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
             print("INFO: Output of `_classifier` is linear")
+        elif "BCE" == hparams.loss_type:
+            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
 
     @staticmethod
     def add_model_specific_args(parent_parser):

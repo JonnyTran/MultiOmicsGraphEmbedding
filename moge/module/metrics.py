@@ -77,7 +77,11 @@ class Metrics():
                 else:
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
 
-            elif metric == "top_k" or "ogb" in metric:
+            elif metric == "top_k":
+                self.metrics[metric].update((y_pred, y_true))
+            elif "ogb" in metric:
+                assert y_pred.dim() == 1, y_pred.shape
+                assert y_true.dim() == 1, y_true.shape
                 self.metrics[metric].update((y_pred, y_true))
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
