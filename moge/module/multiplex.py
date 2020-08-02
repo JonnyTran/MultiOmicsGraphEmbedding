@@ -138,7 +138,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
             Y_hat, Y,
             use_hierar=self.hparams.use_hierar,
             multiclass=False if "SOFTMAX" in self.hparams.loss_type else True,
-            classifier_weight=self._classifier.fc_classifier.linear.att_weight if self.hparams.use_hierar else None,
+            linear_weight=self._classifier.fc_classifier.linear.att_weight if self.hparams.use_hierar else None,
         )
 
     def get_embeddings(self, X, batch_size=100, return_multi_emb=False):
