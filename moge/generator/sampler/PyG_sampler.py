@@ -148,8 +148,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
         X["edge_index_dict"] = {metapath: torch.cat(X["edge_index_dict"][metapath], dim=1) \
                                 for metapath in X["edge_index_dict"]}
-        X["edge_index_dict"] = {metapath: self.nonduplicate_edge_idx(X["edge_index_dict"][metapath]) for metapath in
-                                X["edge_index_dict"]}
+        X["edge_index_dict"] = {metapath: edge_index[self.nonduplicate_edge_idx(edge_index)] for metapath, edge_index in
+                                X["edge_index_dict"].items()}
 
         if hasattr(self, "x_dict"):
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] for node_type in
