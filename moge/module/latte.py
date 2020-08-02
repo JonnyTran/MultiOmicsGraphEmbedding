@@ -83,6 +83,7 @@ class LATTE(nn.Module):
                             values_b = torch.ones(edge_index_b.size(1), dtype=torch.float, device=edge_index_b.device)
                         except:
                             print("edge_index_b.size", edge_index_b.size(), edge_index_b.device, edge_index_b[:, :5])
+                            continue
                     else:
                         continue
                     if values_b.dtype != torch.float:
