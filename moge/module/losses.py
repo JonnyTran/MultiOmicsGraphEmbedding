@@ -55,14 +55,14 @@ class FocalLoss(nn.Module):
 
 
 class ClassificationLoss(nn.Module):
-    def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multiclass=True,
+    def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multilabel=True,
                  loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1e-6, hierar_relations=None):
         super(ClassificationLoss, self).__init__()
         self.label_size = n_classes
         self.loss_type = loss_type
         self.hierar_penalty = hierar_penalty
         self.hierar_relations = hierar_relations
-        self.multiclass = multiclass
+        self.multilabel = multilabel
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.criterion = torch.nn.CrossEntropyLoss(class_weight)
@@ -85,22 +85,20 @@ class ClassificationLoss(nn.Module):
 
     def forward(self, logits, target, use_hierar=False, linear_weight: torch.Tensor = None):
         if use_hierar:
-            # print(
-            #     f"WARNING: hparams.loss_type must be one of ['BCE_WITH_LOGITS', 'BCE', 'SIGMOID_FOCAL_CROSS_ENTROPY']")
-            if not self.multiclass:
+            assert self.loss_type in ["BCE_WITH_LOGITS",
+                                      "SIGMOID_FOCAL_CROSS_ENTROPY"]
+            if not self.multilabel:
                 target = torch.eye(self.label_size)[target]
 
             return self.criterion(logits, target.type_as(logits)) + \
                    self.hierar_penalty * self.recursive_regularize(linear_weight, self.hierar_relations)
         else:
-            if self.multiclass:
-                if target.dim() == 1:
-                    target = torch.eye(self.label_size)[target]
-                pass
-                # print(
-                #     f'WARNING hparams.loss_type must be one of ["BCE_WITH_LOGITS", "BCE", "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]')
+            if self.multilabel:
+                assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
+                                          "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
             else:
-                if target.dim() == 1:
+                if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
+                                          "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
                     target = torch.eye(self.label_size)[target]
 
             return self.criterion(logits, target)
