@@ -181,7 +181,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
         if len(non_attr_node_types) > 0:
             self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
-                                                       embedding_dim=embedding_dim).to("cpu") for node_type in
+                                                       embedding_dim=embedding_dim).to("cuda:1") for node_type in
                                non_attr_node_types}
 
         self.reset_parameters()
@@ -303,12 +303,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     edge_index = edge_index_dict[metapath]
                 if edge_index.size(1) <= 5: continue
 
-                print("\n", metapath, num_node_head, num_node_tail)
-                print({k: v.size(0) for k, v in global_node_idx.items()})
-                print("h_dict[head_type]", h_dict[head_type].size())
-                print("h_dict[tail_type]", h_dict[tail_type].size())
-                print("alpha_l[metapath]", alpha_l[metapath].size())
-                print("alpha_r[metapath]", alpha_r[metapath].size())
+                # print("\n", metapath, num_node_head, num_node_tail)
+                # print({k: v.size(0) for k, v in global_node_idx.items()})
+                # print("h_dict[head_type]", h_dict[head_type].size())
+                # print("h_dict[tail_type]", h_dict[tail_type].size())
+                # print("alpha_l[metapath]", alpha_l[metapath].size())
+                # print("alpha_r[metapath]", alpha_r[metapath].size())
                 emb_relation_agg[head_type][:, i] = self.propagate(
                     edge_index,
                     size=(num_node_tail, num_node_head),
