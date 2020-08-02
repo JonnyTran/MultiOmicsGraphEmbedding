@@ -61,10 +61,11 @@ class LATTE(nn.Module):
             if isinstance(edge_index_a, tuple):
                 edge_index_a = edge_index_a[0]
                 values_a = edge_index_a[1]
-            else:
+            elif isinstance(edge_index_a, torch.Tensor) and edge_index_a.size(1) > 1:
                 values_a = torch.ones(edge_index_a.size(1), dtype=torch.float, device=edge_index_a.device)
-            if edge_index_a.size(1) <= 5: continue
-            if values_a.dtype == torch.int:
+            else:
+                continue
+            if values_a.dtype != torch.float:
                 values_a = values_a.to(torch.float)
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
@@ -77,10 +78,11 @@ class LATTE(nn.Module):
                     if isinstance(edge_index_b, tuple):
                         edge_index_b = edge_index_b[0]
                         values_b = edge_index_b[1]
+                    elif isinstance(edge_index_b, torch.Tensor) and edge_index_b.size(1) > 1:
+                        values_b = torch.ones(edge_index_b.size(1), dtype=torch.float, device=edge_index_b.device)
                     else:
-                        values_b = torch.ones(edge_index_b.size(1), dtype=torch.float, device=edge_index_a.device)
-                    if edge_index_b.size(1) <= 5: continue
-                    if values_b.dtype == torch.int:
+                        continue
+                    if values_b.dtype != torch.float:
                         values_b = values_b.to(torch.float)
 
                     try:
