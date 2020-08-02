@@ -85,17 +85,19 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = self.get_all_sampled_nodes_dict(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
-        # if "train" in mode:
-        #     allowed_nodes = self.training_idx
-        # elif "valid" in mode:
-        #     allowed_nodes = self.validation_idx
-        # elif "test" in mode:
-        #     allowed_nodes = self.testing_idx
-        # else:
-        #     raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
-        #
-        # indices = np.isin(sampled_nodes[self.head_node_type], allowed_nodes)
-        # sampled_nodes[self.head_node_type] = sampled_nodes[self.head_node_type][indices]
+        if "train" in mode:
+            allowed_nodes = self.training_idx
+        elif "valid" in mode:
+            allowed_nodes = self.validation_idx
+        elif "test" in mode:
+            allowed_nodes = self.testing_idx
+        else:
+            raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
+
+        assert np.isin(iloc, allowed_nodes).all()
+
+        indices = np.isin(sampled_nodes[self.head_node_type], allowed_nodes)
+        sampled_nodes[self.head_node_type] = sampled_nodes[self.head_node_type][indices]
 
         X = {"edge_index_dict": {}, "global_node_index": sampled_nodes, "x_dict": {}}
 
