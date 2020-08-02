@@ -157,7 +157,7 @@ class LATTENodeClassifier(MetricsComparison):
                                             num_workers=int(0.2 * multiprocessing.cpu_count()))
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        return torch.optim.SGD(self.parameters(), lr=self.hparams.lr)
 
 class GTN(GTN, MetricsComparison):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
