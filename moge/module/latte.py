@@ -161,7 +161,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.use_proximity_loss = use_proximity_loss
         self.neg_sampling_ratio = neg_sampling_ratio
 
-        # Computes beta
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
                 in_channels=node_attr_shape[
@@ -171,7 +170,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
 
         self.linear = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=False) \
+            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
@@ -249,17 +248,18 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = {}
         for node_type in global_node_idx:
             if node_type in x_dict:
-                h_dict[node_type] = F.relu(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
+                h_dict[node_type] = F.tanh(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]]
 
         # Compute relations attention coefficients
         beta = {}
         for node_type in global_node_idx:
-            if node_type in x_dict and self.first:
-                beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-            elif node_type not in x_dict and self.first:  # Use self.embeddings when first layer and node_type is not attributed
-                beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            if self.first:
+                if node_type in x_dict:
+                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+                elif node_type not in x_dict:  # Use self.embeddings when first layer and node_type is not attributed
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             elif not self.first:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
             else:
