@@ -100,6 +100,7 @@ class LATTE(nn.Module):
                         print("edge_index_b", edge_index_b.size(1), edge_index_b.dtype)
                         print("values_b", values_b.size(), values_b.dtype)
                         # raise e
+                        continue
 
                     if new_edge_index[0].size(1) <= 5: continue
                     # print(new_edge_index[0].size(1), new_edge_index[1].min().cpu().numpy(), new_edge_index[1].max().cpu().numpy())
