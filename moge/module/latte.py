@@ -304,7 +304,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 if edge_index.size(1) <= 5: continue
 
                 print("\n", metapath, num_node_head, num_node_tail)
-                print(global_node_idx)
+                print({k: v.size(0) for k, v in global_node_idx.items()})
                 print("h_dict[head_type]", h_dict[head_type].size())
                 print("h_dict[tail_type]", h_dict[tail_type].size())
                 print("alpha_l[metapath]", alpha_l[metapath].size())
