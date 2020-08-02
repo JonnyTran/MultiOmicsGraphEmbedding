@@ -85,17 +85,17 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = self.get_all_sampled_nodes_dict(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
-        if "train" in mode:
-            allowed_nodes = self.training_idx
-        elif "valid" in mode:
-            allowed_nodes = self.validation_idx
-        elif "test" in mode:
-            allowed_nodes = self.testing_idx
-        else:
-            raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
-
-        indices = np.isin(sampled_nodes[self.head_node_type], allowed_nodes)
-        sampled_nodes[self.head_node_type] = sampled_nodes[self.head_node_type][indices]
+        # if "train" in mode:
+        #     allowed_nodes = self.training_idx
+        # elif "valid" in mode:
+        #     allowed_nodes = self.validation_idx
+        # elif "test" in mode:
+        #     allowed_nodes = self.testing_idx
+        # else:
+        #     raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
+        #
+        # indices = np.isin(sampled_nodes[self.head_node_type], allowed_nodes)
+        # sampled_nodes[self.head_node_type] = sampled_nodes[self.head_node_type][indices]
 
         X = {"edge_index_dict": {}, "global_node_index": sampled_nodes, "x_dict": {}}
 
@@ -116,18 +116,18 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 edge_index[0] = self.local_node_idx[n_id[edge_index[0]]]
                 edge_index[1] = self.local_node_idx[n_id[edge_index[1]]]
 
-                allowed_nodes_idx = self.local2global[self.head_node_type][sampled_nodes[self.head_node_type]]
-
-                if head_type == self.head_node_type and tail_type == self.head_node_type:
-                    edge_set_mask = np.isin(edge_index[0], allowed_nodes_idx) \
-                                    & np.isin(edge_index[1], allowed_nodes_idx)
-                    edge_index = edge_index[:, edge_set_mask]
-                elif head_type == self.head_node_type:
-                    edge_set_mask = np.isin(edge_index[0], allowed_nodes_idx)
-                    edge_index = edge_index[:, edge_set_mask]
-                elif tail_type == self.head_node_type:
-                    edge_set_mask = np.isin(edge_index[1], allowed_nodes_idx)
-                    edge_index = edge_index[:, edge_set_mask]
+                # allowed_nodes_idx = self.local2global[self.head_node_type][sampled_nodes[self.head_node_type]]
+                #
+                # if head_type == self.head_node_type and tail_type == self.head_node_type:
+                #     edge_set_mask = np.isin(edge_index[0], allowed_nodes_idx) \
+                #                     & np.isin(edge_index[1], allowed_nodes_idx)
+                #     edge_index = edge_index[:, edge_set_mask]
+                # elif head_type == self.head_node_type:
+                #     edge_set_mask = np.isin(edge_index[0], allowed_nodes_idx)
+                #     edge_index = edge_index[:, edge_set_mask]
+                # elif tail_type == self.head_node_type:
+                #     edge_set_mask = np.isin(edge_index[1], allowed_nodes_idx)
+                #     edge_index = edge_index[:, edge_set_mask]
 
                 edge_index[0] = edge_index[0].apply_(
                     lambda x: global2batch_idx_dict[head_type][x])
