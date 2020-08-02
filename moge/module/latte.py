@@ -333,9 +333,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        # alpha = F.leaky_relu(alpha, 0.2)
+        alpha = F.leaky_relu(alpha, 0.2)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        # alpha = F.dropout(alpha, p=0.5, training=self.training)
+        alpha = F.dropout(alpha, p=0.5, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
     def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
