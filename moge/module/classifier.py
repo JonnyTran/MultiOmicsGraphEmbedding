@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import torch
 from torch import nn
+from torch_geometric.nn.inits import glorot
 from torch_geometric.nn.inits import glorot, zeros
 
 
@@ -35,6 +36,8 @@ class DenseClassification(nn.Module):
             self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
             print("INFO: Output of `_classifier` is sigmoid")
 
+        self.reset_parameters()
+
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser])
@@ -45,6 +48,11 @@ class DenseClassification(nn.Module):
 
     def forward(self, embeddings):
         return self.fc_classifier(embeddings)
+
+    def reset_parameters(self):
+        for linear in self.fc_classifier:
+            if isinstance(linear, torch.nn.Linear):
+                glorot(linear.weight)
 
 
 class MulticlassClassification(nn.Module):
