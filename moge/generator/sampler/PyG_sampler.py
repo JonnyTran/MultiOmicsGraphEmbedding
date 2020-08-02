@@ -99,7 +99,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         indices = np.isin(sampled_local_nodes[self.head_node_type], allowed_nodes)
         sampled_local_nodes[self.head_node_type] = sampled_local_nodes[self.head_node_type][indices]
 
-        X = {"edge_index_dict": {}, "global_node_index": sampled_local_nodes, "x_dict": {}}
+        X = {"edge_index_dict": {}, "global_node_index": sampled_local_nodes,
+             "x_dict": {}}  # global_node_index here actually refers to the 'local' type-specific index of the original graph
 
         local2batch_idx_dict = {
             node_type: dict(zip(sampled_local_nodes[node_type].numpy(), range(len(sampled_local_nodes[node_type])))) \
@@ -119,25 +120,27 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 edge_index[0] = n_id[edge_index[0]]
                 edge_index[1] = n_id[edge_index[1]]
 
+                # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
                 allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
                 if head_type == self.head_node_type and tail_type == self.head_node_type:
-                    edge_set_mask = np.isin(edge_index[0], allowed_nodes_idx) \
-                                    & np.isin(edge_index[1], allowed_nodes_idx)
-                    edge_index = edge_index[:, edge_set_mask]
+                    edge_mask = np.isin(edge_index[0], allowed_nodes_idx) \
+                                & np.isin(edge_index[1], allowed_nodes_idx)
+                    print("edge_mask", edge_mask.shape)
+                    edge_index = edge_index[:, edge_mask]
                 elif head_type == self.head_node_type:
-                    edge_set_mask = np.isin(edge_index[0], allowed_nodes_idx)
-                    edge_index = edge_index[:, edge_set_mask]
+                    edge_mask = np.isin(edge_index[0], allowed_nodes_idx)
+                    edge_index = edge_index[:, edge_mask]
                 elif tail_type == self.head_node_type:
-                    edge_set_mask = np.isin(edge_index[1], allowed_nodes_idx)
-                    edge_index = edge_index[:, edge_set_mask]
+                    edge_mask = np.isin(edge_index[1], allowed_nodes_idx)
+                    edge_index = edge_index[:, edge_mask]
 
+                # Convert node index global > local > batch
                 edge_index[0] = self.local_node_idx[edge_index[0]].apply_(
                     lambda x: local2batch_idx_dict[head_type][x])
                 edge_index[1] = self.local_node_idx[edge_index[1]].apply_(
                     lambda x: local2batch_idx_dict[tail_type][x])
 
                 X["edge_index_dict"].setdefault(metapath, []).append(edge_index)
-
         # TODO ensure no duplicate edge from adjs[0] to adjs[1]...
         X["edge_index_dict"] = {metapath: torch.cat(X["edge_index_dict"][metapath], dim=1) \
                                 for metapath in X["edge_index_dict"]}
