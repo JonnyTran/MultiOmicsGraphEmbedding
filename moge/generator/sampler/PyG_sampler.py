@@ -126,7 +126,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
                 allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
                 if head_type == self.head_node_type and tail_type == self.head_node_type:
-                    mask = np.isin(edge_index, allowed_nodes_idx).all(0)
+                    mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
                     edge_index = edge_index[:, mask]
                 elif head_type == self.head_node_type:
                     mask = np.isin(edge_index[0], allowed_nodes_idx)
