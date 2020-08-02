@@ -311,9 +311,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 print("alpha_r[metapath]", alpha_r[metapath].size())
                 emb_relation_agg[head_type][:, i] = self.propagate(
                     edge_index,
-                    size=(num_node_head, num_node_tail),
-                    x=(h_dict[head_type], h_dict[tail_type]),
-                    alpha=(alpha_l[metapath], alpha_r[metapath]))
+                    size=(num_node_tail, num_node_head),
+                    x=(h_dict[tail_type], h_dict[head_type]),
+                    alpha=(alpha_r[metapath], alpha_l[metapath]))
 
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
