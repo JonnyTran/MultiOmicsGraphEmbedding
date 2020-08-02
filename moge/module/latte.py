@@ -32,13 +32,15 @@ class LATTE(nn.Module):
             if t == 0:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                               node_attr_shape=node_attr_shape, neg_sampling_ratio=neg_sampling_ratio,
-                               metapaths=t_order_metapaths, first=True))
+                               metapaths=t_order_metapaths, node_attr_shape=node_attr_shape,
+                               use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
+                               first=True))
             else:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                               node_attr_shape=node_attr_shape, neg_sampling_ratio=neg_sampling_ratio,
-                               metapaths=t_order_metapaths, first=False))
+                               metapaths=t_order_metapaths, node_attr_shape=node_attr_shape,
+                               use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
+                               first=False))
             t_order_metapaths = self.join_metapaths(t_order_metapaths, metapaths)
 
         self.layers = nn.ModuleList(layers)

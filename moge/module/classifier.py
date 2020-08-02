@@ -35,7 +35,9 @@ class DenseClassification(nn.Module):
         elif "BCE" == hparams.loss_type:
             self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
             print("INFO: Output of `_classifier` is sigmoid")
-
+        else:
+            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
+            print("INFO: Output of `_classifier` is sigmoid")
         self.reset_parameters()
 
     @staticmethod
