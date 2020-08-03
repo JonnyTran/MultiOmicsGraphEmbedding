@@ -8,6 +8,10 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
     if weights is None:
         return Y_hat, Y
 
+    print("Y_hat", Y_hat.shape)
+    print("Y", Y.shape)
+    print("weights", weights.shape)
+
     if isinstance(weights, torch.Tensor):
         idx = torch.nonzero(weights).view(-1)
     else:
