@@ -14,6 +14,7 @@ from .trainer import _fix_dp_return_type
 from .latte import LATTELayer, LATTE
 from .classifier import DenseClassification, MulticlassClassification
 from .losses import ClassificationLoss
+from .utils import filter_samples
 
 class MetricsComparison(pl.LightningModule):
     def __init__(self):
