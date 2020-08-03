@@ -64,7 +64,6 @@ class LATTENodeClassifier(MetricsComparison):
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self.hparams = hparams
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
         num_class = dataset.n_classes
         self.collate_fn = collate_fn
@@ -75,8 +74,9 @@ class LATTENodeClassifier(MetricsComparison):
                            neg_sampling_ratio=hparams.neg_sampling_ratio,
                            use_proximity_loss=hparams.use_proximity_loss)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-        self.classifier = DenseClassification(hparams)
+        # self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim, num_class=hparams.n_classes)
+        self.classifier = nn.Linear(hparams.embedding_dim, dataset.n_classes)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
 
@@ -86,6 +86,7 @@ class LATTENodeClassifier(MetricsComparison):
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.hparams = hparams
 
     def forward(self, x_dict, global_node_index, edge_index_dict):
         embeddings, proximity_loss = self.latte.forward(x_dict, global_node_index, edge_index_dict)
@@ -233,7 +234,8 @@ class GTN(GTN, MetricsComparison):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.train_metricss.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        self.train_metricss.update_metrics(y_pred=y_hat, y_true=y, weights=None)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -241,7 +243,8 @@ class GTN(GTN, MetricsComparison):
         X, y, weights = batch
 
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
         loss = self.loss(y_hat, y)
 
         return {"val_loss": loss}
@@ -249,6 +252,7 @@ class GTN(GTN, MetricsComparison):
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
 
         return {"test_loss": loss}
@@ -321,7 +325,8 @@ class HAN(HAN, MetricsComparison):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.train_metricss.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        self.train_metricss.update_metrics(y_pred=y_hat, y_true=y, weights=None)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -329,7 +334,8 @@ class HAN(HAN, MetricsComparison):
         X, y, weights = batch
 
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
         loss = self.loss(y_hat, y)
 
         return {"val_loss": loss}
@@ -337,6 +343,7 @@ class HAN(HAN, MetricsComparison):
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
 
         return {"test_loss": loss}
