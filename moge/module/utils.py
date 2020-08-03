@@ -13,9 +13,11 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
     print("weights", weights.shape)
 
     if isinstance(weights, torch.Tensor):
-        idx = torch.nonzero(weights).view(-1)
+        idx = torch.nonzero(weights)
     else:
         idx = torch.tensor(np.nonzero(weights)[0])
+
+    print("idx", idx.shape)
 
     return Y_hat[idx, :], Y[idx, :]
 
