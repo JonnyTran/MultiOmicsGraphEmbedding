@@ -121,6 +121,7 @@ class OGBEvaluator(Metric):
     @reinit__is_reduced
     def update(self, outputs):
         y_pred, y_true = outputs
+        assert y_pred.dim() == 2
         y_pred = y_pred.argmax(axis=1)
         if y_pred.dim() <= 1:
             y_pred = y_pred.unsqueeze(-1)
@@ -130,8 +131,8 @@ class OGBEvaluator(Metric):
         self.y_pred.append(y_pred)
 
     def compute(self, prefix=None):
-        print("y_pred", pd.Series(self.y_pred[-1].detach().cpu().numpy()).value_counts())
-        print("y_true", pd.Series(self.y_true[-1].detach().cpu().numpy()).value_counts())
+        print("y_pred", self.y_pred[-1].shape, pd.Series(self.y_pred[-1].detach().cpu().numpy()).value_counts())
+        print("y_true", self.y_true[-1].shape, pd.Series(self.y_true[-1].detach().cpu().numpy()).value_counts())
         if isinstance(self.evaluator, NodeEvaluator):
             output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
                                           "y_true": torch.cat(self.y_true, dim=0)})
