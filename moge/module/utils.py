@@ -9,7 +9,7 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
         return Y_hat, Y
 
     if isinstance(weights, torch.Tensor):
-        idx = torch.nonzero(weights)
+        idx = torch.nonzero(weights).view(-1)
     else:
         idx = torch.tensor(np.nonzero(weights)[0])
 
