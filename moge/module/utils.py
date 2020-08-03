@@ -8,19 +8,22 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
     if weights is None:
         return Y_hat, Y
 
-    print("Y_hat", Y_hat.shape)
-    print("Y", Y.shape)
-    print("weights", weights.shape)
-
     if isinstance(weights, torch.Tensor):
         idx = torch.nonzero(weights)
     else:
         idx = torch.tensor(np.nonzero(weights)[0])
 
-    print("idx", idx.shape)
+    if Y.dim() > 1:
+        Y = Y[idx, :]
+    else:
+        Y = Y[idx]
 
-    return Y_hat[idx, :], Y[idx, :]
+    if Y_hat.dim() > 1:
+        Y_hat = Y_hat[idx, :]
+    else:
+        Y_hat = Y_hat[idx]
 
+    return Y_hat, Y
 
 def pad_tensors(sequences):
     num = len(sequences)
