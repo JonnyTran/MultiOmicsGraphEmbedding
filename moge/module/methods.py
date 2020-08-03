@@ -122,9 +122,7 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=weights)
-        print("y_hat, y", y_hat.shape, y.shape)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        print("y_hat, y", y_hat.shape, y.shape)
 
         val_loss = self.loss(y_hat, y)
         if self.hparams.use_proximity_loss:
