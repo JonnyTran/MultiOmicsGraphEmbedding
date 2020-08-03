@@ -1,4 +1,5 @@
 from typing import Callable, Optional, Union
+import pandas as pd
 
 import torch
 from ignite.exceptions import NotComputableError
@@ -129,8 +130,8 @@ class OGBEvaluator(Metric):
         self.y_pred.append(y_pred)
 
     def compute(self, prefix=None):
-        print("y_pred", self.y_pred[-1].unique())
-        print("y_true", self.y_true[-1].unique())
+        print("y_pred", pd.Series(self.y_pred[-1].detach().cpu().numpy()).value_counts())
+        print("y_true", pd.Series(self.y_true[-1].detach().cpu().numpy()).value_counts())
         if isinstance(self.evaluator, NodeEvaluator):
             output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
                                           "y_true": torch.cat(self.y_true, dim=0)})
