@@ -176,6 +176,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                          embedding_dim=embedding_dim) for node_type in
                  non_attr_node_types})
+        else:
+            self.embeddings = None
 
         self.reset_parameters()
         self.relations_dim = 1
@@ -189,8 +191,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             glorot(self.linear[node_type].weight)
         for node_type in self.conv:
             glorot(self.conv[node_type].weight)
-        for node_type in self.embeddings:
-            self.embeddings[node_type].reset_parameters()
+
+        if hasattr(self, "embeddings") and len(self.embeddings.keys()) > 0:
+            for node_type in self.embeddings:
+                self.embeddings[node_type].reset_parameters()
 
     def get_head_relations(self, head_node_type) -> list:
         relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]

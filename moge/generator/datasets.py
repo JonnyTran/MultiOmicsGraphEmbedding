@@ -85,6 +85,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.node_attr_shape = {}
         if not hasattr(self, "x_dict"):
             self.x_dict = {}
+        else:
+            self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
 
     def process_graph_sampler(self):
         raise NotImplementedError
