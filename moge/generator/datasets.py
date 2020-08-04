@@ -115,7 +115,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         else:
             return self.metapaths
 
-    def compute_num_nodes_dict(self, edge_index_dict):
+    def get_num_nodes_dict(self, edge_index_dict):
         num_nodes_dict = {}
         for keys, edge_index in edge_index_dict.items():
             key = keys[0]
@@ -181,7 +181,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             ("user", "usertag", "tag"): self.adj_to_edgeindex(data["usertag"]),
             ("tag", "tagnetwork", "tag"): self.adj_to_edgeindex(data["tagnetwork"])}
 
-        self.num_nodes_dict = self.compute_num_nodes_dict(self.edge_index_dict)
+        self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def process_HANdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
@@ -199,7 +199,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
         node_indices = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
         self.y_index_dict = {self.head_node_type: node_indices}
-        self.num_nodes_dict = {self.head_node_type: node_indices.size(0)}
+        self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
         self.y_dict = {
             self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
 
