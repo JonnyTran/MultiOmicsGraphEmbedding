@@ -25,17 +25,14 @@ class DenseClassification(nn.Module):
         # Activation
         if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
             print("INFO: Output of `_classifier` is logits")
-            self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
         elif "NEGATIVE_LOG_LIKELIHOOD" == hparams.loss_type:
+            print("INFO: Output of `_classifier` is LogSoftmax")
             self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
-            print("INFO: Output of `_classifier` is logits")
-            # print("INFO: Output of `_classifier` is Softmax")
         elif "SOFTMAX_CROSS_ENTROPY" == hparams.loss_type:
-            # self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
             print("INFO: Output of `_classifier` is logits")
         elif "BCE" == hparams.loss_type:
+            print("INFO: Output of `_classifier` is sigmoid probabilities")
             self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
-            print("INFO: Output of `_classifier` is sigmoid probailities")
         else:
             print("INFO: [Else Case] Output of `_classifier` is logits")
         self.reset_parameters()
@@ -58,38 +55,36 @@ class DenseClassification(nn.Module):
 
 
 class MulticlassClassification(nn.Module):
-    def __init__(self, num_feature, num_class):
+    def __init__(self, num_feature, num_class, loss_type):
         super(MulticlassClassification, self).__init__()
 
-        self.layer_1 = nn.Linear(num_feature, 512)
-        self.layer_2 = nn.Linear(512, 128)
-        self.layer_3 = nn.Linear(128, 64)
-        self.layer_out = nn.Linear(64, num_class)
+        # Classifier
+        self.fc_classifier = nn.Sequential(OrderedDict([
+            ("layer_1", nn.Linear(num_feature, 512)),
+            ("batchnorm1", nn.BatchNorm1d(512)),
+            ("relu", nn.ReLU()),
+            ("layer_2", nn.Linear(512, 128)),
+            ("batchnorm2", nn.BatchNorm1d(128)),
+            ("relu", nn.ReLU()),
+            ("dropout", nn.Dropout(p=0.2)),
+            ("layer_3", nn.Linear(128, 64)),
+            ("batchnorm3", nn.BatchNorm1d(64)),
+            ("relu", nn.ReLU()),
+            ("dropout", nn.Dropout(p=0.2)),
+            ("layer_out", nn.Linear(64, num_class)),
+        ]))
 
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(p=0.2)
-        self.batchnorm1 = nn.BatchNorm1d(512)
-        self.batchnorm2 = nn.BatchNorm1d(128)
-        self.batchnorm3 = nn.BatchNorm1d(64)
+        if "NEGATIVE_LOG_LIKELIHOOD" == loss_type:
+            print("INFO: Output of `_classifier` is LogSoftmax")
+            self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
+        elif "BCE" == loss_type:
+            print("INFO: Output of `_classifier` is sigmoid probabilities")
+            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
+        else:
+            print("INFO: Output of `_classifier` is logits")
 
     def forward(self, x):
-        x = self.layer_1(x)
-        x = self.batchnorm1(x)
-        x = self.relu(x)
-
-        x = self.layer_2(x)
-        x = self.batchnorm2(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-
-        x = self.layer_3(x)
-        x = self.batchnorm3(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-
-        x = self.layer_out(x)
-
-        return x
+        return self.fc_classifier.forward(x)
 
 
 class HierarchicalAWX(nn.Module):
