@@ -168,6 +168,9 @@ class HeteroNeighborSampler(HeteroNetDataset):
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
 
         weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], allowed_nodes), dtype=torch.float)
+        assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
+        assert y.size(0) == X["x_dict"][self.head_node_type].size(0)
+        assert y.size(0) == weights.size(0)
         return X, y, weights
 
     def nonduplicate_indices(self, edge_index):

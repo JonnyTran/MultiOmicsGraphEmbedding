@@ -207,7 +207,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
 
-        new_y_dict = {nodetype: -torch.zeros(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) for
+        new_y_dict = {nodetype: -torch.ones(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) for
                       nodetype in self.y_dict}
         for node_type in self.y_dict:
             new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
