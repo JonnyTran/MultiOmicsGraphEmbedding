@@ -78,7 +78,7 @@ class LATTENodeClassifier(MetricsComparison):
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim, num_class=hparams.n_classes)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset,
-                                                                                         "class_weight") else None,
+                                                                                         "class_weight") and hparams.use_class_weights else None,
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
 
@@ -124,6 +124,8 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        print("y_hat", y_hat.shape)
+        print("y", y.shape)
         self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
         val_loss = self.loss(y_hat, y)

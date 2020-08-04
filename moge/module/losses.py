@@ -64,7 +64,7 @@ class ClassificationLoss(nn.Module):
         self.hierar_relations = hierar_relations
         self.multilabel = multilabel
         self.use_hierar = use_hierar
-        print("class_weight", class_weight)
+        print("class_weight", class_weight) if class_weight is not None else None
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.criterion = torch.nn.CrossEntropyLoss(class_weight)

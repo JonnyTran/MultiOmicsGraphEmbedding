@@ -159,7 +159,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         X["edge_index_dict"] = {metapath: edge_index[:, self.nonduplicate_indices(edge_index)] \
                                 for metapath, edge_index in X["edge_index_dict"].items()}
 
-        if hasattr(self, "x_dict"):
+        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
                            for node_type in self.x_dict}
 
@@ -170,8 +170,9 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
         weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], allowed_nodes), dtype=torch.float)
 
-        assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
-        assert y.size(0) == X["x_dict"][self.head_node_type].size(0)
+        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
+            assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
+        assert y.size(0) == X["global_node_index"][self.head_node_type].size(0)
         assert y.size(0) == weights.size(0)
         return X, y, weights
 

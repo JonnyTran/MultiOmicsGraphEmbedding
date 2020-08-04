@@ -14,7 +14,7 @@ from .utils import filter_samples
 
 
 class Metrics():
-    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
+    def __init__(self, prefix, loss_type: str, threshold=0.2, top_k=[1, 5, 10], n_classes: int = None,
                  multilabel: bool = None,
                  metrics=["precision", "recall", "top_k", "accuracy"]):
         self.loss_type = loss_type.upper()
@@ -63,9 +63,14 @@ class Metrics():
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
                          self.hot_encode(y_true, y_pred)))
+                    print("y_pred", (y_pred > self.threshold).type_as(y_true).shape,
+                          "y_true", self.hot_encode(y_true, y_pred).shape)
                 else:
+                    print("y_pred", y_pred.max(1).values, "y_true", y_true.shape)
+                    # self.metrics[metric].update((y_pred, y_true))
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true),
                                                  y_true))
+
 
             elif "accuracy" in metric:
                 if not self.multilabel and y_true.dim() == 1:
