@@ -64,8 +64,6 @@ class Metrics():
                         ((y_pred > self.threshold).type_as(y_true),
                          self.hot_encode(y_true, y_pred)))
                 else:
-                    print("y_pred", y_pred.max(1).values, "y_true", y_true.max(1).values)
-                    # self.metrics[metric].update((y_pred, y_true))
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true),
                                                  y_true))
 
