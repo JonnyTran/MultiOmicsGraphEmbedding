@@ -34,9 +34,9 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = out
 
         self.int2node_type = {type_int: node_type for node_type, type_int in self.key2int.items() if
-                              isinstance(node_type, str)}
+                              node_type in self.node_types}
         self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
-                              isinstance(edge_type, tuple)}
+                              edge_type in self.edge_index_dict}
 
         self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
                                                 sizes=self.neighbor_sizes, batch_size=128, shuffle=True)

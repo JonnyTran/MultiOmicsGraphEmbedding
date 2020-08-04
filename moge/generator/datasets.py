@@ -130,9 +130,24 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         reverse_edge_index_dict = {}
         for metapath in edge_index_dict:
             if edge_index_dict[metapath] == None: continue
-            reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
+            reverse_metapath = HeteroNetDataset.get_reverse_metapath_name(metapath, edge_index_dict)
+
             reverse_edge_index_dict[reverse_metapath] = edge_index_dict[metapath][[1, 0], :]
         edge_index_dict.update(reverse_edge_index_dict)
+
+    @staticmethod
+    def get_reverse_metapath_name(metapath, edge_index_dict):
+        if isinstance(metapath, tuple):
+            reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
+        elif isinstance(metapath, str):
+            reverse_metapath = "".join(reversed(metapath))
+            if reverse_metapath in edge_index_dict:
+                reverse_metapath = reverse_metapath[:2] + "_" + reverse_metapath[2:]
+        elif isinstance(metapath, int):
+            reverse_metapath = str(metapath) + "_"
+        else:
+            raise NotImplementedError(f"{metapath} not supported")
+        return reverse_metapath
 
     @staticmethod
     def get_reverse_metapath(metapaths) -> list:
@@ -171,7 +186,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         data = dataset.data
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.node_types = node_types
-        self.edge_types = list(range(dataset.num_edge))
+        self.metapaths = list(range(dataset.num_edge))
         self.x_dict = {self.head_node_type: data["x"]}
         self.in_features = data["x"].size(1)
 
@@ -198,7 +213,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
     def process_stellargraph(self, dataset, metapath, node_types, train_ratio):
         graph = dataset.load()
         self.node_types = graph.node_types if node_types is None else node_types
-        self.edge_types = graph.metapaths
+        self.metapaths = graph.metapaths
         self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
 
         edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
