@@ -71,7 +71,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.multilabel = True
                 self.classes = torch.arange(self.y_dict[self.head_node_type].size(1))
-                self.n_classes = self.y_dict[self.head_node_type].size(1)
+                self.n_classes = self.classes.size(0)
             else:
                 self.multilabel = False
                 self.classes = self.y_dict[self.head_node_type].unique()
