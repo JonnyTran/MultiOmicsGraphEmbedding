@@ -73,7 +73,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
                 self.n_classes = self.classes.size(0)
 
             class_counts = pd.Series(self.y_dict[self.head_node_type]).value_counts()
-            self.class_weight = torch.tensor(np.sqrt(class_counts.sum()) / class_counts)
+            self.class_weight = torch.tensor(np.sqrt(class_counts.sum()) / class_counts, dtype=torch.float)
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
@@ -173,17 +173,14 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.y_dict = {
             self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
 
-        # self.y_index_dict = {self.head_node_type: torch.arange(self.x[self.head_node_type].size(0))}
-        # self.num_nodes_dict = {self.head_node_type: self.x[self.head_node_type].size(0)}
-        #
-        # _, indices = torch.sort(node_indices)
-        # self.y_dict = {
-        #     self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])[
-        #         indices]}
+        new_y_dict = {nodetype: -torch.ones(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) for
+                      nodetype in self.y_dict}
+        for node_type in self.y_dict:
+            new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
+        self.y_dict = new_y_dict
 
-        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio=train_ratio)
-        assert self.y_index_dict[self.head_node_type].size(0) == self.y_dict[self.head_node_type].size(0)
-        assert torch.max(self.training_idx) < node_indices.shape[0]
+        self.training_idx, self.validation_idx, self.testing_idx = \
+            self.split_train_val_test(train_ratio=train_ratio, sample_indices=self.y_index_dict[self.head_node_type])
         self.data = data
 
     def process_stellargraph(self, dataset, metapath, node_types, train_ratio):
@@ -210,7 +207,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.y_dict = data.y_dict
         self.y_index_dict = data.y_index_dict
 
-        new_y_dict = {nodetype: torch.zeros(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) for
+        new_y_dict = {nodetype: -torch.zeros(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) for
                       nodetype in self.y_dict}
         for node_type in self.y_dict:
             new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
