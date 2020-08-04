@@ -59,7 +59,7 @@ class MetricsComparison(pl.LightningModule):
 
 
 class LATTENodeClassifier(MetricsComparison):
-    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="LATTENode_batch") -> None:
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClassifier, self).__init__()
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
@@ -95,20 +95,13 @@ class LATTENodeClassifier(MetricsComparison):
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 
-    def loss(self, y_hat, y):
-        if not self.multilabel:
-            loss = self.criterion(y_hat, y)
-        else:
-            loss = F.binary_cross_entropy_with_logits(y_hat, y.type_as(y_hat))
-        return loss
-
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
 
         self.train_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
-        loss = self.loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
 
         logs = None
         if self.hparams.use_proximity_loss:
@@ -124,11 +117,9 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        print("y_hat", y_hat.shape)
-        print("y", y.shape)
         self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
-        val_loss = self.loss(y_hat, y)
+        val_loss = self.criterion(y_hat, y)
         if self.hparams.use_proximity_loss:
             val_loss = val_loss + proximity_loss
 
@@ -140,7 +131,7 @@ class LATTENodeClassifier(MetricsComparison):
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.test_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
-        test_loss = self.loss(y_hat, y)
+        test_loss = self.criterion(y_hat, y)
         if self.hparams.use_proximity_loss:
             test_loss = test_loss + proximity_loss
 

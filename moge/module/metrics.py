@@ -63,14 +63,11 @@ class Metrics():
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
                          self.hot_encode(y_true, y_pred)))
-                    print("y_pred", (y_pred > self.threshold).type_as(y_true).shape,
-                          "y_true", self.hot_encode(y_true, y_pred).shape)
                 else:
-                    print("y_pred", y_pred.max(1).values, "y_true", y_true.shape)
+                    print("y_pred", y_pred.max(1).values, "y_true", y_true.max(1).values)
                     # self.metrics[metric].update((y_pred, y_true))
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true),
                                                  y_true))
-
 
             elif "accuracy" in metric:
                 if not self.multilabel and y_true.dim() == 1:
