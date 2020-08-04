@@ -71,13 +71,13 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.multilabel = True
                 self.classes = torch.arange(self.y_dict[self.head_node_type].size(1))
-                self.n_classes = self.classes.size(0)
+                class_counts = pd.Series(self.y_dict[self.head_node_type].sum(1)).value_counts()
             else:
                 self.multilabel = False
                 self.classes = self.y_dict[self.head_node_type].unique()
-                self.n_classes = self.classes.size(0)
+                class_counts = pd.Series(self.y_dict[self.head_node_type]).value_counts()
 
-            class_counts = pd.Series(self.y_dict[self.head_node_type]).value_counts()
+            self.n_classes = self.classes.size(0)
             self.class_weight = torch.tensor(np.sqrt(class_counts.sum()) / class_counts, dtype=torch.float)
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
