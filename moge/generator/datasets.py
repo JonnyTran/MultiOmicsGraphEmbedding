@@ -37,7 +37,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.node_types = node_types
         self.head_node_type = head_node_type
 
-        if self.node_types is not None:
+        if self.node_types is not None and self.head_node_type is not None:
             assert self.node_types[0] == self.head_node_type
 
         # PyTorchGeometric Dataset
@@ -334,12 +334,12 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         if isinstance(self.dataset, HANDataset):
             X = {"adj": self.data["adj"][:len(self.metapaths)],
                  "x": self.data["x"] if hasattr(self.data, "x") else None,
-                 "idx": self.y_index_dict[self.head_node_type][iloc]}
+                 "idx": iloc}
         else:
             X = {
                 "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapaths],
                 "x": None,
-                "idx": self.y_index_dict[self.head_node_type][iloc]}
+                "idx": iloc}
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None

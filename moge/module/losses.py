@@ -66,9 +66,9 @@ class ClassificationLoss(nn.Module):
         self.use_hierar = use_hierar
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
-            self.criterion = torch.nn.CrossEntropyLoss()
+            self.criterion = torch.nn.CrossEntropyLoss(class_weight)
         elif loss_type == "NEGATIVE_LOG_LIKELIHOOD":
-            self.criterion = torch.nn.NLLLoss()
+            self.criterion = torch.nn.NLLLoss(class_weight)
         elif loss_type == "SOFTMAX_FOCAL_CROSS_ENTROPY":
             self.criterion = FocalLoss(n_classes, "SOFTMAX")
         elif loss_type == "SIGMOID_FOCAL_CROSS_ENTROPY":
