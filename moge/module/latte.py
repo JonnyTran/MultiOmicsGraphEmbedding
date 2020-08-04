@@ -54,7 +54,7 @@ class LATTE(nn.Module):
                     metapaths.append(new_relation)
         return metapaths
 
-    def get_edge_index_values(self, edge_index_tup):
+    def get_edge_index_values(self, edge_index_tup: [tuple, torch.Tensor]):
         if isinstance(edge_index_tup, tuple):
             edge_index = edge_index_tup[0]
             edge_values = edge_index[1]
@@ -74,6 +74,7 @@ class LATTE(nn.Module):
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if edge_index_a is None or (isinstance(edge_index_a, tuple) and edge_index_a[0] is None): continue
             edge_index_a, values_a = self.get_edge_index_values(edge_index_a)
+            if edge_index_a is None: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if edge_index_b is None or (isinstance(edge_index_b, tuple) and edge_index_b[0] is None): continue
@@ -81,11 +82,10 @@ class LATTE(nn.Module):
                 if metapath_a[-1] == metapath_b[0]:
                     metapath_join = metapath_a + metapath_b[1:]
                     edge_index_b, values_b = self.get_edge_index_values(edge_index_b)
+                    if edge_index_b is None: continue
                     try:
-                        new_edge_index = adamic_adar(indexA=edge_index_a,
-                                                     valueA=values_a,
-                                                     indexB=edge_index_b,
-                                                     valueB=values_b,
+                        new_edge_index = adamic_adar(indexA=edge_index_a, valueA=values_a,
+                                                     indexB=edge_index_b, valueB=values_b,
                                                      m=global_node_idx[metapath_a[0]].size(0),
                                                      k=global_node_idx[metapath_a[-1]].size(0),
                                                      n=global_node_idx[metapath_b[-1]].size(0),
@@ -125,7 +125,6 @@ class LATTE(nn.Module):
                     h1_dict=h_dict)
                 # h1_dict={node_type: h_emb.detach() for node_type, h_emb in
                 #          h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
-
                 with torch.no_grad():
                     t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict,
                                                                      global_node_idx)
@@ -157,7 +156,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             {node_type: torch.nn.Conv1d(
                 in_channels=node_attr_shape[
                     node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
-                out_channels=self.get_num_relations(node_type),
+                out_channels=self.num_head_relations(node_type),
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
 
@@ -174,8 +173,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         if len(non_attr_node_types) > 0:
             self.embeddings = torch.nn.ModuleDict(
                 {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
-                                         embedding_dim=embedding_dim) for node_type in
-                 non_attr_node_types})
+                                         embedding_dim=embedding_dim,
+                                         sparse=True) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 
@@ -192,7 +191,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for node_type in self.conv:
             glorot(self.conv[node_type].weight)
 
-        if hasattr(self, "embeddings") and len(self.embeddings.keys()) > 0:
+        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
             for node_type in self.embeddings:
                 self.embeddings[node_type].reset_parameters()
 
@@ -200,7 +199,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
         return relations
 
-    def get_num_relations(self, node_type) -> int:
+    def num_head_relations(self, node_type) -> int:
         """
         Return the number of metapaths with head node type equals to :param node_type: and plus one for none-selection.
         :param node_type (str):
@@ -254,7 +253,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if self.first:
                 if node_type in x_dict:
                     beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-                elif node_type not in x_dict:  # Use self.embeddings when first layer and node_type is not attributed
+                elif node_type not in x_dict:
+                    # node_type is not attributed, use self.embeddings in first layer
                     beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             elif not self.first:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
@@ -285,7 +285,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # print(f"global_node_idx[{node_type}].size(0)", global_node_idx[node_type].size(0))
             emb_relation_agg[node_type] = torch.zeros(
                 size=(global_node_idx[node_type].size(0),
-                      self.get_num_relations(node_type),
+                      self.num_head_relations(node_type),
                       self.embedding_dim)).type_as(self.conv[node_type].weight)
 
             for i, metapath in enumerate(self.get_head_relations(node_type)):
@@ -358,7 +358,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                              M=global_node_idx[metapath[0]].size(0),
                                              N=global_node_idx[metapath[-1]].size(0),
                                              num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
-            if neg_edge_index.size(1) <= 5: continue
+            if neg_edge_index.size(1) <= 1: continue
 
             e_ij = alpha_l[metapath][neg_edge_index[0]] + alpha_r[metapath][neg_edge_index[1]]
             loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)

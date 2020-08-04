@@ -84,23 +84,26 @@ def get_multiplex_collate_fn(node_types, layers):
     return multiplex_collate_fn
 
 
-def preprocess_input(X, cuda=True, half=False):
-    if isinstance(X, dict):
-        X = {k: _preprocess_input(v, cuda=cuda, half=half) for k, v in X.items()}
+def preprocess_input(dict_tensor, cuda=True, device=None, half=False):
+    if isinstance(dict_tensor, dict):
+        dict_tensor = {k: _preprocess_input(v, cuda=cuda, device=device, half=half) for k, v in dict_tensor.items()}
     else:
-        X = _preprocess_input(X, cuda=cuda, half=half)
+        dict_tensor = _preprocess_input(dict_tensor, cuda=cuda, device=device, half=half)
 
-    return X
+    return dict_tensor
 
 
-def _preprocess_input(X, cuda=True, half=False):
+def _preprocess_input(X, cuda=True, device=None, half=False):
     if not isinstance(X, torch.Tensor):
         X = torch.tensor(X)
 
-    if cuda:
-        X = X.cuda()
+    if device:
+        X = X.to(device)
     else:
-        X = X.cpu()
+        if cuda:
+            X = X.cuda()
+        else:
+            X = X.cpu()
 
     if half:
         X = X.half()
