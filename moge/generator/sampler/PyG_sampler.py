@@ -27,6 +27,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             self.add_reverse_edge_index(self.edge_index_dict)
 
         # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
+        assert self.node_types[0] == self.head_node_type
         num_nodes_dict = OrderedDict([(node_type, self.num_nodes_dict[node_type]) for node_type in self.node_types])
 
         out = group_hetero_graph(self.edge_index_dict, num_nodes_dict)
@@ -168,6 +169,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
 
         weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], allowed_nodes), dtype=torch.float)
+
         assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
         assert y.size(0) == X["x_dict"][self.head_node_type].size(0)
         assert y.size(0) == weights.size(0)
