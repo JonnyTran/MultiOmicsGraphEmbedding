@@ -109,7 +109,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
     def get_metapaths(self):
         if self.use_reverse:
-            return self.metapaths + self.get_reverse_metapath(self.metapaths)
+            return self.metapaths + self.get_reverse_metapath(self.metapaths, self.edge_index_dict)
         else:
             return self.metapaths
 
@@ -150,10 +150,10 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         return reverse_metapath
 
     @staticmethod
-    def get_reverse_metapath(metapaths) -> list:
+    def get_reverse_metapath(metapaths, edge_index_dict) -> list:
         reverse_metapaths = []
         for metapath in metapaths:
-            reverse = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
+            reverse = HeteroNetDataset.get_reverse_metapath_name(metapath, edge_index_dict)
             reverse_metapaths.append(reverse)
         return reverse_metapaths
 
@@ -186,7 +186,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         data = dataset.data
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.node_types = node_types
-        self.metapaths = list(range(dataset.num_edge))
+        self.edge_types = list(range(dataset.num_edge))
+        self.metapaths = list(self.edge_index_dict.keys())
         self.x_dict = {self.head_node_type: data["x"]}
         self.in_features = data["x"].size(1)
 
