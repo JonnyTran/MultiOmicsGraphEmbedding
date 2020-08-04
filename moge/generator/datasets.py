@@ -2,7 +2,7 @@ from collections import OrderedDict
 from itertools import islice
 import multiprocessing
 from scipy.io import loadmat
-
+import pandas as pd
 import numpy as np
 
 import tensorflow as tf
@@ -71,6 +71,9 @@ class HeteroNetDataset(torch.utils.data.Dataset):
                 self.multilabel = False
                 self.classes = self.y_dict[self.head_node_type].unique()
                 self.n_classes = self.classes.size(0)
+
+            class_counts = pd.Series(self.y_dict[self.head_node_type]).value_counts()
+            self.class_weight = torch.tensor(np.sqrt(class_counts.sum()) / class_counts)
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 

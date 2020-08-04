@@ -74,11 +74,11 @@ class LATTENodeClassifier(MetricsComparison):
                            neg_sampling_ratio=hparams.neg_sampling_ratio,
                            use_proximity_loss=hparams.use_proximity_loss)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-        # self.classifier = DenseClassification(hparams)
+        self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim, num_class=hparams.n_classes)
-        self.classifier = torch.nn.Linear(hparams.embedding_dim, dataset.n_classes)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
-                                            # class_weight=dataset.class_weight,
+                                            class_weight=dataset.class_weight if hasattr(dataset,
+                                                                                         "class_weight") else None,
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
 
