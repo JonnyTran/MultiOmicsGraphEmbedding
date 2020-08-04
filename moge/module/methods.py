@@ -1,5 +1,6 @@
 import multiprocessing
 import pytorch_lightning as pl
+import pandas as pd
 import torch
 from cogdl.models.nn.gtn import GTN
 from cogdl.models.nn.han import HAN
