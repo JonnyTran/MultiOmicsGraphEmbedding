@@ -70,7 +70,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         if hasattr(self, "y_dict"):
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.multilabel = True
-                self.classes = self.y_dict[self.head_node_type].unique()
+                self.classes = torch.arange(self.y_dict[self.head_node_type].size(1))
                 self.n_classes = self.y_dict[self.head_node_type].size(1)
             else:
                 self.multilabel = False
@@ -94,7 +94,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
 
     def process_graph_sampler(self):
-        raise NotImplementedError
+        raise NotImplementedError()
 
     def name(self):
         if not hasattr(self, "_name"):
@@ -177,6 +177,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.node_types = ["user", "tag"]
         self.head_node_type = "user"
         self.y_dict = {self.head_node_type: torch.tensor(data["usercategory"].toarray().astype(int))}
+        print("self.y_dict", {k: v.shape for k, v in self.y_dict.items()})
 
         self.metapaths = [("user", "usertag", "tag"),
                           ("tag", "tagnetwork", "tag"),
@@ -185,11 +186,10 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             ("user", "friendship", "user"): self.sps_adj_to_edgeindex(data["friendship"]),
             ("user", "usertag", "tag"): self.sps_adj_to_edgeindex(data["usertag"]),
             ("tag", "tagnetwork", "tag"): self.sps_adj_to_edgeindex(data["tagnetwork"])}
-        print("got here")
+        print("got here", {k: v.shape for k, v in self.edge_index_dict.items()})
         self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
         print("got here", self.num_nodes_dict)
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
-        print("Done")
 
     def process_HANdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
         data = dataset.data
