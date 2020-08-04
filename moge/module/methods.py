@@ -131,10 +131,17 @@ class LATTENodeClassifier(MetricsComparison):
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
 
-        if self.multilabel:
-            print("y_pred classes", pd.Series(y_hat.sum(1).detach().cpu().numpy()).value_counts().to_dict())
-        else:
-            print("y_pred classes", pd.Series(y_hat.argmax(1).detach().cpu().numpy()).value_counts().to_dict())
+        if batch_nb == 0:
+            if self.multilabel:
+                print("y_pred classes",
+                      pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict())
+                print("y_true classes",
+                      pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict())
+            else:
+                print("y_pred classes",
+                      pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict())
+                print("y_true classes",
+                      pd.Series(y.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict())
 
         self.test_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
