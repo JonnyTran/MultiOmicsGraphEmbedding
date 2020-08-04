@@ -116,8 +116,40 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                 range(len(sampled_local_nodes[node_type])))
                             ) for node_type in sampled_local_nodes}
 
+        X["edge_index_dict"] = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
+                                                              sampled_local_nodes=sampled_local_nodes,
+                                                              local2batch_idx_dict=local2batch_idx_dict,
+                                                              filter_nodes=filter_nodes)
+
+        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
+            X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
+                           for node_type in self.x_dict}
+
+        if len(self.y_dict) > 1:
+            y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
+        else:
+            y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
+
+        weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], allowed_nodes), dtype=torch.float)
+
+        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
+            assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
+        assert y.size(0) == X["global_node_index"][self.head_node_type].size(0)
+        assert y.size(0) == weights.size(0)
+        return X, y, weights
+
+    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch_idx_dict: dict,
+                                  filter_nodes: bool):
+        """
         # Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and `global_node_index`
-        X["edge_index_dict"] = {}
+        :param adjs:
+        :param n_id:
+        :param sampled_local_nodes:
+        :param local2batch_idx_dict:
+        :param filter_nodes:
+        :return:
+        """
+        edge_index_dict = {}
         for adj in adjs:
             for edge_type_id in self.edge_type[adj.e_id].unique():
                 metapath = self.int2edge_type[edge_type_id.item()]
@@ -150,31 +182,14 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 edge_index[1] = self.local_node_idx[edge_index[1]].apply_(
                     lambda x: local2batch_idx_dict[tail_type][x])
 
-                X["edge_index_dict"].setdefault(metapath, []).append(edge_index)
-
+                edge_index_dict.setdefault(metapath, []).append(edge_index)
         # Join edges from the adjs
-        X["edge_index_dict"] = {metapath: torch.cat(edge_index, dim=1) \
-                                for metapath, edge_index in X["edge_index_dict"].items()}
+        edge_index_dict = {metapath: torch.cat(edge_index, dim=1) \
+                           for metapath, edge_index in edge_index_dict.items()}
         # Ensure no duplicate edge from adjs[0] to adjs[1]...
-        X["edge_index_dict"] = {metapath: edge_index[:, self.nonduplicate_indices(edge_index)] \
-                                for metapath, edge_index in X["edge_index_dict"].items()}
-
-        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
-            X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
-                           for node_type in self.x_dict}
-
-        if len(self.y_dict) > 1:
-            y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
-        else:
-            y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
-
-        weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], allowed_nodes), dtype=torch.float)
-
-        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
-            assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
-        assert y.size(0) == X["global_node_index"][self.head_node_type].size(0)
-        assert y.size(0) == weights.size(0)
-        return X, y, weights
+        edge_index_dict = {metapath: edge_index[:, self.nonduplicate_indices(edge_index)] \
+                           for metapath, edge_index in edge_index_dict.items()}
+        return edge_index_dict
 
     def nonduplicate_indices(self, edge_index):
         edge_df = pd.DataFrame(edge_index.t().numpy())  # shape: (n_edges, 2)
