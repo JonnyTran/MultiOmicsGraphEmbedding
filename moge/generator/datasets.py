@@ -132,7 +132,6 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         return embeddings_all, types_all, labels
 
     def get_TSNE_pos(self, embeddings_all, UMAP: classmethod):
-        embeddings_all = pd.concat(embeddings_all, axis=0)
         pos = UMAP(n_components=2).fit_transform(embeddings_all)
         pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
         return pos

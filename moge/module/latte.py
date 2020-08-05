@@ -248,7 +248,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = {}
         for node_type in global_node_idx:
             if node_type in x_dict:
-                h_dict[node_type] = F.tanh(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
+                h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
                     self.conv[node_type].weight.device)
@@ -313,7 +313,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 # print("alpha_r[metapath]", alpha_r[metapath].size())
                 # Propapate flows from target nodes to source nodes
                 emb_relation_agg[head_type][:, i] = self.propagate(
-                    edge_index.to(h_dict[head_type].device),
+                    edge_index=edge_index.to(h_dict[head_type].device),
                     size=(num_node_tail, num_node_head),
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(alpha_r[metapath], alpha_l[metapath]))
