@@ -46,7 +46,13 @@ class Metrics():
                 print(f"WARNING: metric {metric} doesn't exist")
 
     def update_metrics(self, y_pred: torch.Tensor, y_true: torch.Tensor, weights):
-        y_pred, y_true = filter_samples(y_pred, y_true, weights)
+        """
+        Remember to call this AFTER calculating the loss function, as it may modify y_pred
+        :param y_pred:
+        :param y_true:
+        :param weights:
+        """
+        y_pred, y_true = filter_samples(y_pred.detach(), y_true.detach(), weights)
 
         # Apply softmax/sigmoid activation if needed
         if "LOGITS" in self.loss_type or \
