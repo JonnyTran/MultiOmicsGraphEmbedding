@@ -14,7 +14,7 @@ from moge.generator.datasets import HeteroNetDataset
 from .metrics import Metrics
 from .trainer import _fix_dp_return_type
 from .latte import LATTE
-from .classifier import MulticlassClassification
+from .classifier import MulticlassClassification, DenseClassification
 from .losses import ClassificationLoss
 from .utils import filter_samples, preprocess_input
 
