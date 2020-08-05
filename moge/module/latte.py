@@ -294,24 +294,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
 
             # # Apply \sigma activation to all embeddings
-            # if self.activation == "sigmoid":
-            #     emb_relation_agg[node_type] = F.sigmoid(emb_relation_agg[node_type])
-            # elif self.activation == "tanh":
-            #     emb_relation_agg[node_type] = F.tanh(emb_relation_agg[node_type])
-            # elif self.activation == "relu":
-            #     emb_relation_agg[node_type] = F.relu(emb_relation_agg[node_type])
+            # emb_relation_agg[node_type] = self.apply_activation(emb_relation_agg[node_type])
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
                                                  beta[node_type]).squeeze(-1)
             # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
             # Apply \sigma activation to all embeddings
-            if self.activation == "sigmoid":
-                emb_output[node_type] = F.sigmoid(emb_output[node_type])
-            elif self.activation == "tanh":
-                emb_output[node_type] = F.tanh(emb_output[node_type])
-            elif self.activation == "relu":
-                emb_output[node_type] = F.relu(emb_output[node_type])
+            emb_output[node_type] = self.apply_activation(emb_output[node_type])
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(preprocess_input(edge_index_dict, device=h_dict[head_type].device),
@@ -322,6 +312,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             proximity_loss = None
 
         return emb_output, proximity_loss
+
+    def apply_activation(self, embeddings):
+        if self.activation == "sigmoid":
+            return F.sigmoid(embeddings)
+        elif self.activation == "tanh":
+            return F.tanh(embeddings)
+        elif self.activation == "relu":
+            return F.relu(embeddings)
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
