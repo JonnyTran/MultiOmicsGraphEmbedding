@@ -117,18 +117,13 @@ class LATTENodeClassifier(MetricsComparison):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.criterion(y_hat, y)
 
-        if y is not None:
-            y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-            loss = self.criterion(y_hat, y)
+        self.train_metrics.update_metrics(y_hat, y, weights=None)
 
-            self.train_metrics.update_metrics(y_hat, y, weights=None)
-
-            logs = None
-        else:
-            loss = 0
-
-        if y is None and self.hparams.use_proximity_loss:
+        logs = None
+        if self.hparams.use_proximity_loss:
             loss = loss + proximity_loss
             logs = {"proximity_loss": proximity_loss}
 
@@ -140,14 +135,10 @@ class LATTENodeClassifier(MetricsComparison):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        val_loss = self.criterion(y_hat, y)
 
-        if y is not None:
-            y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-            val_loss = self.criterion(y_hat, y)
-
-            self.valid_metrics.update_metrics(y_hat, y, weights=None)
-        else:
-            val_loss = 0
+        self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
         if self.hparams.use_proximity_loss:
             val_loss = val_loss + proximity_loss
