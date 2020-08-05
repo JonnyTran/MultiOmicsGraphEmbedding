@@ -11,17 +11,24 @@ from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec
 
 from moge.generator.datasets import HeteroNetDataset
-from .metrics import Metrics
-from .trainer import _fix_dp_return_type
-from .latte import LATTE
-from .classifier import MulticlassClassification, DenseClassification
-from .losses import ClassificationLoss
-from .utils import filter_samples, preprocess_input
+from moge.module.metrics import Metrics
+from moge.module.trainer import _fix_dp_return_type
+from moge.module.latte import LATTE
+from moge.module.classifier import MulticlassClassification, DenseClassification
+from moge.module.losses import ClassificationLoss
+from moge.module.utils import filter_samples, preprocess_input
 
 
-class MetricsComparison(pl.LightningModule):
-    def __init__(self):
-        super(MetricsComparison, self).__init__()
+class NodeClfMetrics(pl.LightningModule):
+    def __init__(self, hparams, metrics):
+        super(NodeClfMetrics, self).__init__()
+        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
+                                    multilabel=dataset.multilabel, metrics=metrics)
+        self.hparams = hparams
 
     def name(self):
         if hasattr(self, "_name"):
@@ -75,9 +82,9 @@ class MetricsComparison(pl.LightningModule):
             print("y_true classes", {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
 
 
-class LATTENodeClassifier(MetricsComparison):
+class LATTENodeClassifier(NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
-        super(LATTENodeClassifier, self).__init__()
+        super(LATTENodeClassifier, self).__init__(hparams=hparams, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
@@ -100,14 +107,6 @@ class LATTENodeClassifier(MetricsComparison):
                                                                                          "class_weight") and hparams.use_class_weights else None,
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
-
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
-                                    multilabel=dataset.multilabel, metrics=metrics)
-        self.hparams = hparams
 
     def forward(self, x_dict, global_node_index, edge_index_dict):
         embeddings, proximity_loss = self.latte.forward(x_dict, global_node_index, edge_index_dict)
@@ -179,7 +178,8 @@ class LATTENodeClassifier(MetricsComparison):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
-class GTN(GTN, MetricsComparison):
+
+class GTN(GTN, NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
@@ -196,17 +196,13 @@ class GTN(GTN, MetricsComparison):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
+        super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers, hparams=hparams,
+                         metrics=metrics)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
                                                 sparse=True)
 
-        self.train_metricss = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
-                                      multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
 
@@ -289,7 +285,7 @@ class GTN(GTN, MetricsComparison):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class HAN(HAN, MetricsComparison):
+class HAN(HAN, NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
@@ -306,16 +302,11 @@ class HAN(HAN, MetricsComparison):
 
         w_out = hparams.embedding_dim
 
-        super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
+        super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers, hparams=hparams, metrics=metrics)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
-        self.train_metrics = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
 
@@ -380,7 +371,7 @@ class HAN(HAN, MetricsComparison):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class MetaPath2Vec(MetaPath2Vec, MetricsComparison):
+class MetaPath2Vec(MetaPath2Vec, NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
         # Hparams
         self.train_ratio = hparams.train_ratio
