@@ -63,7 +63,7 @@ class Metrics():
         elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
         elif "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
-            y_pred = torch.softmax(y_pred, dim=1, in_place=False)
+            y_pred = torch.softmax(y_pred, dim=1)
 
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric:
@@ -139,10 +139,6 @@ class OGBEvaluator(Metric):
         self.y_pred.append(y_pred)
 
     def compute(self, prefix=None):
-        print("y_pred", self.y_pred[-1].shape,
-              pd.Series(self.y_pred[-1].squeeze(-1).detach().cpu().numpy()).value_counts().to_dict())
-        print("y_true", self.y_true[-1].shape,
-              pd.Series(self.y_true[-1].squeeze(-1).detach().cpu().numpy()).value_counts().to_dict())
         if isinstance(self.evaluator, NodeEvaluator):
             output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
                                           "y_true": torch.cat(self.y_true, dim=0)})

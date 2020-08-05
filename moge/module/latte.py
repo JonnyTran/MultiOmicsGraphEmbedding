@@ -178,7 +178,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             self.embeddings = torch.nn.ModuleDict(
                 {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                          embedding_dim=embedding_dim,
-                                         sparse=True) for node_type in non_attr_node_types})
+                                         sparse=True).cuda(2) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 

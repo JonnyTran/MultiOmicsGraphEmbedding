@@ -120,7 +120,7 @@ class LATTENodeClassifier(MetricsComparison):
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.criterion(y_hat, y)
 
-        self.train_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
+        self.train_metrics.update_metrics(y_hat, y, weights=None)
 
         logs = None
         if self.hparams.use_proximity_loss:
@@ -138,7 +138,7 @@ class LATTENodeClassifier(MetricsComparison):
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion(y_hat, y)
 
-        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
+        self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
         if self.hparams.use_proximity_loss:
             val_loss = val_loss + proximity_loss
@@ -154,7 +154,7 @@ class LATTENodeClassifier(MetricsComparison):
         if batch_nb == 0:
             self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
+        self.test_metrics.update_metrics(y_hat, y, weights=None)
 
         if self.hparams.use_proximity_loss:
             test_loss = test_loss + proximity_loss
@@ -254,7 +254,7 @@ class GTN(GTN, MetricsComparison):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        self.train_metricss.update_metrics(y_pred=y_hat, y_true=y, weights=None)
+        self.train_metricss.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -264,7 +264,7 @@ class GTN(GTN, MetricsComparison):
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
-        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
+        self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"val_loss": loss}
 
@@ -311,8 +311,8 @@ class HAN(HAN, MetricsComparison):
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
-        self.train_metricss = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
-                                      multilabel=dataset.multilabel, metrics=metrics)
+        self.train_metrics = Metrics(prefix=None, loss_type=hparams.loss_type, n_classes=num_class,
+                                     multilabel=dataset.multilabel, metrics=metrics)
         self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
@@ -345,7 +345,7 @@ class HAN(HAN, MetricsComparison):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        self.train_metricss.update_metrics(y_pred=y_hat, y_true=y, weights=None)
+        self.train_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -354,7 +354,7 @@ class HAN(HAN, MetricsComparison):
 
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
+        self.valid_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
 
         return {"val_loss": loss}
