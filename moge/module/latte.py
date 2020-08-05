@@ -13,7 +13,7 @@ from torch_sparse.matmul import matmul
 import pytorch_lightning as pl
 
 from moge.module.sampling import negative_sample
-
+from .utils import preprocess_input
 
 class LATTE(nn.Module):
     def __init__(self, embedding_dim: int, t_order: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list,
@@ -116,8 +116,10 @@ class LATTE(nn.Module):
                                                                   edge_index_dict=edge_index_dict)
                 if self.t_order >= 2:
                     with torch.no_grad():
-                        t_order_edge_index_dict = self.join_edge_indexes(edge_index_dict, edge_index_dict,
-                                                                         global_node_idx)
+                        t_order_edge_index_dict = self.join_edge_indexes(
+                            preprocess_input(edge_index_dict, device="cuda:3"),
+                            preprocess_input(edge_index_dict, device="cuda:3"),
+                            preprocess_input(global_node_idx, device="cuda:3"))
             else:
                 h_dict, t_proximity_loss = self.layers[t].forward(
                     x_dict=x_dict, global_node_idx=global_node_idx,
@@ -126,8 +128,10 @@ class LATTE(nn.Module):
                 # h1_dict={node_type: h_emb.detach() for node_type, h_emb in
                 #          h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
                 with torch.no_grad():
-                    t_order_edge_index_dict = self.join_edge_indexes(t_order_edge_index_dict, edge_index_dict,
-                                                                     global_node_idx)
+                    t_order_edge_index_dict = self.join_edge_indexes(
+                        preprocess_input(t_order_edge_index_dict, device="cuda:3"),
+                        preprocess_input(edge_index_dict, device="cuda:3"),
+                        preprocess_input(global_node_idx, device="cuda:3"))
 
             for node_type in global_node_idx:
                 h_all_dict[node_type].append(h_dict[node_type])

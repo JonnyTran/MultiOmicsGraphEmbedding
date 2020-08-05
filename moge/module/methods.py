@@ -13,10 +13,11 @@ from torch_geometric.nn import MetaPath2Vec
 from moge.generator.datasets import HeteroNetDataset
 from .metrics import Metrics
 from .trainer import _fix_dp_return_type
-from .latte import LATTELayer, LATTE
-from .classifier import DenseClassification, MulticlassClassification
+from .latte import LATTE
+from .classifier import MulticlassClassification
 from .losses import ClassificationLoss
-from .utils import filter_samples
+from .utils import filter_samples, preprocess_input
+
 
 class MetricsComparison(pl.LightningModule):
     def __init__(self):
@@ -58,6 +59,20 @@ class MetricsComparison(pl.LightningModule):
 
         return {"progress_bar": logs,
                 "log": logs}
+
+    def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
+        if multilabel:
+            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            print(f"y_pred {len(y_pred_dict)} classes",
+                  {k: v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
+            print("y_true classes", {k: v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+        else:
+            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            print(f"y_pred {y_pred_dict} classes",
+                  {k: v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
+            print("y_true classes", {k: v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
 
 
 class LATTENodeClassifier(MetricsComparison):
@@ -137,7 +152,7 @@ class LATTENodeClassifier(MetricsComparison):
         test_loss = self.criterion(y_hat, y)
 
         if batch_nb == 0:
-            self.print_pred_class_counts(y_hat, y)
+            self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
         self.test_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
@@ -145,18 +160,6 @@ class LATTENodeClassifier(MetricsComparison):
             test_loss = test_loss + proximity_loss
 
         return {"test_loss": test_loss}
-
-    def print_pred_class_counts(self, y_hat, y):
-        if self.multilabel:
-            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print("y_pred classes", {k: v for k, v in itertools.islice(y_pred_dict.items(), 10)})
-            print("y_true classes", {k: v for k, v in itertools.islice(y_true_dict.items(), 10)})
-        else:
-            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print("y_pred classes", {k: v for k, v in itertools.islice(y_pred_dict.items(), 10)})
-            print("y_true classes", {k: v for k, v in itertools.islice(y_true_dict.items(), 10)})
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
@@ -260,16 +263,16 @@ class GTN(GTN, MetricsComparison):
 
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
         loss = self.loss(y_hat, y)
+        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
 
         return {"test_loss": loss}
 
