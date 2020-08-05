@@ -18,7 +18,7 @@ from .utils import preprocess_input
 class LATTE(nn.Module):
     def __init__(self, embedding_dim: int, t_order: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list,
                  activation: str = None,
-                 use_proximity_loss=True, neg_sampling_ratio=1.0):
+                 use_proximity_loss=True, neg_sampling_ratio=2.0):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -43,11 +43,11 @@ class LATTE(nn.Module):
                                metapaths=t_order_metapaths, node_attr_shape=node_attr_shape, activation=activation,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=False))
-            t_order_metapaths = self.join_metapaths(t_order_metapaths, metapaths)
-
+            t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
         self.layers = nn.ModuleList(layers)
 
-    def join_metapaths(self, metapath_A, metapath_B):
+    @staticmethod
+    def join_metapaths(metapath_A, metapath_B):
         metapaths = []
         for relation_a in metapath_A:
             for relation_b in metapath_B:
@@ -56,7 +56,8 @@ class LATTE(nn.Module):
                     metapaths.append(new_relation)
         return metapaths
 
-    def get_edge_index_values(self, edge_index_tup: [tuple, torch.Tensor]):
+    @staticmethod
+    def get_edge_index_values(edge_index_tup: [tuple, torch.Tensor]):
         if isinstance(edge_index_tup, tuple):
             edge_index = edge_index_tup[0]
             edge_values = edge_index[1]
@@ -71,11 +72,12 @@ class LATTE(nn.Module):
 
         return edge_index, edge_values
 
-    def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, global_node_idx):
+    @staticmethod
+    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx):
         output_dict = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if edge_index_a is None or (isinstance(edge_index_a, tuple) and edge_index_a[0] is None): continue
-            edge_index_a, values_a = self.get_edge_index_values(edge_index_a)
+            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a)
             if edge_index_a is None: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
@@ -83,7 +85,7 @@ class LATTE(nn.Module):
 
                 if metapath_a[-1] == metapath_b[0]:
                     metapath_join = metapath_a + metapath_b[1:]
-                    edge_index_b, values_b = self.get_edge_index_values(edge_index_b)
+                    edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                     if edge_index_b is None: continue
                     try:
                         new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
@@ -118,7 +120,7 @@ class LATTE(nn.Module):
                                                                   edge_index_dict=edge_index_dict)
                 if self.t_order >= 2:
                     with torch.no_grad():
-                        t_order_edge_index_dict = self.join_edge_indexes(
+                        t_order_edge_index_dict = LATTE.join_edge_indexes(
                             preprocess_input(edge_index_dict, device=self.compute_device),
                             preprocess_input(edge_index_dict, device=self.compute_device),
                             preprocess_input(global_node_idx, device=self.compute_device))
@@ -130,7 +132,7 @@ class LATTE(nn.Module):
                 # h1_dict={node_type: h_emb.detach() for node_type, h_emb in
                 #          h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
                 with torch.no_grad():
-                    t_order_edge_index_dict = self.join_edge_indexes(
+                    t_order_edge_index_dict = LATTE.join_edge_indexes(
                         preprocess_input(t_order_edge_index_dict, device=self.compute_device),
                         preprocess_input(edge_index_dict, device=self.compute_device),
                         preprocess_input(global_node_idx, device=self.compute_device))
@@ -298,7 +300,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                  beta[node_type]).squeeze(-1)
             # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
             # Apply \sigma activation to all embeddings
-            emb_output[node_type] = self.apply_activation(emb_output[node_type])
+            emb_output[node_type] = self.embedding_activation(emb_output[node_type])
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(preprocess_input(edge_index_dict, device=h_dict[head_type].device),
@@ -310,7 +312,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         return emb_output, proximity_loss
 
-    def apply_activation(self, embeddings):
+    def embedding_activation(self, embeddings):
         if self.activation == "sigmoid":
             return F.sigmoid(embeddings)
         elif self.activation == "tanh":
@@ -354,7 +356,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
     def get_alphas(self, edge_index_dict, h_dict, h1_dict):
         alpha_l, alpha_r = {}, {}
         for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
+            if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
