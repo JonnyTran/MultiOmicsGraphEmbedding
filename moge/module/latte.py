@@ -293,9 +293,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Assign the "self" embedding representation
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
 
-            # # Apply \sigma activation to all embeddings
-            # emb_relation_agg[node_type] = self.apply_activation(emb_relation_agg[node_type])
-
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
                                                  beta[node_type]).squeeze(-1)
