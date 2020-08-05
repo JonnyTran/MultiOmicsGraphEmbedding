@@ -231,7 +231,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         Get the mean and std of relation attention weights for all nodes in testing/validation steps
         :return:
         """
-        return {relation if isinstance(relation, tuple) else node_type: (avg, std) \
+        return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
                 for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
@@ -324,7 +324,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
 
         if self.use_proximity_loss:
-            proximity_loss = self.proximity_loss(edge_index_dict,
+            proximity_loss = self.proximity_loss(preprocess_input(edge_index_dict, device=h_dict[head_type].device),
                                                  alpha_l=alpha_l,
                                                  alpha_r=alpha_r,
                                                  global_node_idx=global_node_idx)
