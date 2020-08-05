@@ -251,50 +251,21 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        h_dict = {}
-        for node_type in global_node_idx:
-            if node_type in x_dict:
-                h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
-            else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
-                    self.conv[node_type].weight.device)
+        h_dict = self.get_h_dict(x_dict, global_node_idx)
 
         # Compute relations attention coefficients
-        beta = {}
-        for node_type in global_node_idx:
-            if self.first:
-                if node_type in x_dict:
-                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-                elif node_type not in x_dict:
-                    # node_type is not attributed, use self.embeddings in first layer
-                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            elif not self.first:
-                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
-            else:
-                raise Exception()
-            beta[node_type] = torch.softmax(beta[node_type], dim=1)
-        # Compute beta from testing samples
+        beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
+        # Save beta weights from testing samples
         if not self.training: self.save_relation_weights(beta)
 
         # Compute node-level attention coefficients
-        alpha_l, alpha_r = {}, {}
-        for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
-                continue
-            head_type, tail_type = metapath[0], metapath[-1]
-            if self.first:
-                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
-            else:
-                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
-
-            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
+        alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h1_dict)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         emb_relation_agg = {}
         emb_output = {}
         for node_type in global_node_idx:
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
-            # print(f"global_node_idx[{node_type}].size(0)", global_node_idx[node_type].size(0))
             emb_relation_agg[node_type] = torch.zeros(
                 size=(global_node_idx[node_type].size(0),
                       self.num_head_relations(node_type),
@@ -312,11 +283,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     edge_index = edge_index_dict[metapath]
                 if edge_index.size(1) <= 5: continue
 
-                # print("\n", metapath, num_node_head, num_node_tail)
-                # print("h_dict[head_type]", h_dict[head_type].size())
-                # print("h_dict[tail_type]", h_dict[tail_type].size())
-                # print("alpha_l[metapath]", alpha_l[metapath].size())
-                # print("alpha_r[metapath]", alpha_r[metapath].size())
                 # Propapate flows from target nodes to source nodes
                 emb_relation_agg[head_type][:, i] = self.propagate(
                     edge_index=edge_index.to(h_dict[head_type].device),
@@ -327,18 +293,25 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Assign the "self" embedding representation
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
 
-            # Apply \sigma activation to all embeddings
-            if self.activation == "sigmoid":
-                emb_relation_agg[node_type] = F.sigmoid(emb_relation_agg[node_type])
-            elif self.activation == "tanh":
-                emb_relation_agg[node_type] = F.tanh(emb_relation_agg[node_type])
-            elif self.activation == "relu":
-                emb_relation_agg[node_type] = F.relu(emb_relation_agg[node_type])
+            # # Apply \sigma activation to all embeddings
+            # if self.activation == "sigmoid":
+            #     emb_relation_agg[node_type] = F.sigmoid(emb_relation_agg[node_type])
+            # elif self.activation == "tanh":
+            #     emb_relation_agg[node_type] = F.tanh(emb_relation_agg[node_type])
+            # elif self.activation == "relu":
+            #     emb_relation_agg[node_type] = F.relu(emb_relation_agg[node_type])
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
                                                  beta[node_type]).squeeze(-1)
             # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
+            # Apply \sigma activation to all embeddings
+            if self.activation == "sigmoid":
+                emb_output[node_type] = F.sigmoid(emb_output[node_type])
+            elif self.activation == "tanh":
+                emb_output[node_type] = F.tanh(emb_output[node_type])
+            elif self.activation == "relu":
+                emb_output[node_type] = F.relu(emb_output[node_type])
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(preprocess_input(edge_index_dict, device=h_dict[head_type].device),
@@ -356,6 +329,46 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=0.25, training=self.training)
         return x_j * alpha.unsqueeze(-1)
+
+    def get_h_dict(self, x_dict, global_node_idx):
+        h_dict = {}
+        for node_type in global_node_idx:
+            if node_type in x_dict:
+                h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
+            else:
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
+                    self.conv[node_type].weight.device)
+        return h_dict
+
+    def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
+        beta = {}
+        for node_type in global_node_idx:
+            if self.first:
+                if node_type in x_dict:
+                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+                else:
+                    # node_type is not attributed, use self.embeddings in first layer
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            elif not self.first:
+                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
+            else:
+                raise Exception()
+            beta[node_type] = torch.softmax(beta[node_type], dim=1)
+        return beta
+
+    def get_alphas(self, edge_index_dict, h_dict, h1_dict):
+        alpha_l, alpha_r = {}, {}
+        for i, metapath in enumerate(self.metapaths):
+            if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
+                continue
+            head_type, tail_type = metapath[0], metapath[-1]
+            if self.first:
+                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
+            else:
+                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
+
+            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
+        return alpha_l, alpha_r
 
     def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
