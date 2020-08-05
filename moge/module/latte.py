@@ -311,7 +311,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 # print("alpha_r[metapath]", alpha_r[metapath].size())
                 # Propapate flows from target nodes to source nodes
                 emb_relation_agg[head_type][:, i] = self.propagate(
-                    edge_index,
+                    edge_index.to(h_dict[head_type].device),
                     size=(num_node_tail, num_node_head),
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(alpha_r[metapath], alpha_l[metapath]))
