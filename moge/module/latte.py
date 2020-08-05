@@ -17,6 +17,7 @@ from .utils import preprocess_input
 
 class LATTE(nn.Module):
     def __init__(self, embedding_dim: int, t_order: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list,
+                 activation: str = None,
                  use_proximity_loss=True, neg_sampling_ratio=1.0):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
@@ -33,13 +34,13 @@ class LATTE(nn.Module):
             if t == 0:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                               metapaths=t_order_metapaths, node_attr_shape=node_attr_shape,
+                               metapaths=t_order_metapaths, node_attr_shape=node_attr_shape, activation=activation,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=True))
             else:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                               metapaths=t_order_metapaths, node_attr_shape=node_attr_shape,
+                               metapaths=t_order_metapaths, node_attr_shape=node_attr_shape, activation=activation,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=False))
             t_order_metapaths = self.join_metapaths(t_order_metapaths, metapaths)
@@ -85,12 +86,12 @@ class LATTE(nn.Module):
                     edge_index_b, values_b = self.get_edge_index_values(edge_index_b)
                     if edge_index_b is None: continue
                     try:
-                        new_edge_index = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                     indexB=edge_index_b, valueB=values_b,
-                                                     m=global_node_idx[metapath_a[0]].size(0),
-                                                     k=global_node_idx[metapath_a[-1]].size(0),
-                                                     n=global_node_idx[metapath_b[-1]].size(0),
-                                                     coalesced=True)
+                        new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                             indexB=edge_index_b, valueB=values_b,
+                                                             m=global_node_idx[metapath_a[0]].size(0),
+                                                             k=global_node_idx[metapath_a[-1]].size(0),
+                                                             n=global_node_idx[metapath_b[-1]].size(0),
+                                                             coalesced=True)
 
                         if new_edge_index[0].size(1) <= 5: continue
                         output_dict[metapath_join] = new_edge_index
@@ -146,7 +147,10 @@ class LATTE(nn.Module):
 
 
 class LATTELayer(MessagePassing, pl.LightningModule):
-    def __init__(self, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int}, metapaths: list,
+    RELATIONS_DIM = 1
+
+    def __init__(self, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int},
+                 metapaths: list, activation: str,
                  use_proximity_loss=True, neg_sampling_ratio=1.0, first=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
@@ -156,6 +160,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.embedding_dim = embedding_dim
         self.use_proximity_loss = use_proximity_loss
         self.neg_sampling_ratio = neg_sampling_ratio
+
+        self.activation = activation
+        assert self.activation in ["sigmoid", "tanh", "relu", None]
 
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
@@ -184,7 +191,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             self.embeddings = None
 
         self.reset_parameters()
-        self.relations_dim = 1
 
     def reset_parameters(self):
         for i, metapath in enumerate(self.metapaths):
@@ -325,6 +331,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
                                                  beta[node_type]).squeeze(-1)
             # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
+
+            if self.activation == "sigmoid":
+                emb_output[node_type] = F.sigmoid(emb_output[node_type])
+            elif self.activation == "tanh":
+                emb_output[node_type] = F.tanh(emb_output[node_type])
+            elif self.activation == "relu":
+                emb_output[node_type] = F.relu(emb_output[node_type])
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(preprocess_input(edge_index_dict, device=h_dict[head_type].device),
