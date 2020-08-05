@@ -1,4 +1,5 @@
 import multiprocessing
+import itertools
 import pytorch_lightning as pl
 import pandas as pd
 import torch
@@ -136,16 +137,7 @@ class LATTENodeClassifier(MetricsComparison):
         test_loss = self.criterion(y_hat, y)
 
         if batch_nb == 0:
-            if self.multilabel:
-                print("y_pred classes",
-                      pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict())
-                print("y_true classes",
-                      pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict())
-            else:
-                print("y_pred classes",
-                      pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict())
-                print("y_true classes",
-                      pd.Series(y.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict())
+            self.print_pred_class_counts(y_hat, y)
 
         self.test_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
@@ -153,6 +145,18 @@ class LATTENodeClassifier(MetricsComparison):
             test_loss = test_loss + proximity_loss
 
         return {"test_loss": test_loss}
+
+    def print_pred_class_counts(self, y_hat, y):
+        if self.multilabel:
+            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            print("y_pred classes", {k: v for k, v in itertools.islice(y_pred_dict.items(), 10)})
+            print("y_true classes", {k: v for k, v in itertools.islice(y_true_dict.items(), 10)})
+        else:
+            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            y_true_dict = pd.Series(y.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            print("y_pred classes", {k: v for k, v in itertools.islice(y_pred_dict.items(), 10)})
+            print("y_true classes", {k: v for k, v in itertools.islice(y_true_dict.items(), 10)})
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
