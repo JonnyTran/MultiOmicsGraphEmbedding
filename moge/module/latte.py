@@ -283,14 +283,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
-                alpha_l[metapath] = self.attn_l[i].forward(
-                    F.tanh(h_dict[head_type])).sum(dim=-1)  # alpha_l = attn_l * W * x_1
+                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
             else:
-                alpha_l[metapath] = self.attn_l[i].forward(
-                    F.tanh(h1_dict[head_type])).sum(dim=-1)  # alpha_l = attn_l * h_1
+                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
 
-            alpha_r[metapath] = self.attn_r[i].forward(
-                F.tanh(h_dict[tail_type])).sum(dim=-1)  # alpha_r = attn_r * W * x_1
+            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         emb_relation_agg = {}
