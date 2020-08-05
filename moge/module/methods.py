@@ -102,9 +102,9 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.criterion(y_hat, y)
 
         self.train_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
-        loss = self.criterion(y_hat, y)
 
         logs = None
         if self.hparams.use_proximity_loss:
@@ -120,10 +120,10 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        print(y_hat.shape, y.shape)
-        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
         val_loss = self.criterion(y_hat, y)
+        self.valid_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
+
         if self.hparams.use_proximity_loss:
             val_loss = val_loss + proximity_loss
 
@@ -133,6 +133,7 @@ class LATTENodeClassifier(MetricsComparison):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        test_loss = self.criterion(y_hat, y)
 
         if batch_nb == 0:
             if self.multilabel:
@@ -148,7 +149,6 @@ class LATTENodeClassifier(MetricsComparison):
 
         self.test_metrics.update_metrics(y_pred=y_hat, y_true=y, weights=None)
 
-        test_loss = self.criterion(y_hat, y)
         if self.hparams.use_proximity_loss:
             test_loss = test_loss + proximity_loss
 

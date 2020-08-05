@@ -104,8 +104,7 @@ class ClassificationLoss(nn.Module):
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
                     target = torch.eye(self.n_classes)[target]
-
-            return self.criterion(logits, target)
+            return self.criterion.forward(logits, target)
 
     def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):
         """ Only support hierarchical text classification with BCELoss
