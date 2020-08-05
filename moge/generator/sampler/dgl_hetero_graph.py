@@ -1,4 +1,6 @@
+import numpy as np
 import torch
+from ogb.linkproppred import PygLinkPropPredDataset
 
 from torch_geometric.data import DataLoader, Data
 from torch_geometric.utils import to_undirected
@@ -29,3 +31,4 @@ class DGLHeteroSampler(HeteroNetDataset):
         self.G = dgl.heterograph(dgl_edge_index)
         self.G.subgraph(self.training_idx).all_edges(etype=('paper', 'cites', 'paper'))
         self.G.to
+

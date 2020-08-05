@@ -70,7 +70,7 @@ class MetricsComparison(pl.LightningModule):
         else:
             y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
             y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {y_pred_dict} classes",
+            print(f"y_pred {len(y_pred_dict)} classes",
                   {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
             print("y_true classes", {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
 
@@ -117,13 +117,18 @@ class LATTENodeClassifier(MetricsComparison):
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.criterion(y_hat, y)
 
-        self.train_metrics.update_metrics(y_hat, y, weights=None)
+        if y is not None:
+            y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+            loss = self.criterion(y_hat, y)
 
-        logs = None
-        if self.hparams.use_proximity_loss:
+            self.train_metrics.update_metrics(y_hat, y, weights=None)
+
+            logs = None
+        else:
+            loss = 0
+
+        if y is None and self.hparams.use_proximity_loss:
             loss = loss + proximity_loss
             logs = {"proximity_loss": proximity_loss}
 
@@ -135,10 +140,14 @@ class LATTENodeClassifier(MetricsComparison):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        val_loss = self.criterion(y_hat, y)
 
-        self.valid_metrics.update_metrics(y_hat, y, weights=None)
+        if y is not None:
+            y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+            val_loss = self.criterion(y_hat, y)
+
+            self.valid_metrics.update_metrics(y_hat, y, weights=None)
+        else:
+            val_loss = 0
 
         if self.hparams.use_proximity_loss:
             val_loss = val_loss + proximity_loss
@@ -177,7 +186,7 @@ class LATTENodeClassifier(MetricsComparison):
                                             num_workers=int(0.2 * multiprocessing.cpu_count()))
 
     def configure_optimizers(self):
-        return torch.optim.SGD(self.parameters(), lr=self.hparams.lr)
+        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 class GTN(GTN, MetricsComparison):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):

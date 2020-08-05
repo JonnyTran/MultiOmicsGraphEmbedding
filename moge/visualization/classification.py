@@ -15,6 +15,8 @@ def plot_roc_curve_multiclass(y_test: pd.DataFrame, y_score, classes: (list, pd.
     else:
         class_indices = range(y_test.shape[1])
 
+    print("class_indices")
+
     if isinstance(y_test, pd.DataFrame):
         y_test = y_test.values
 

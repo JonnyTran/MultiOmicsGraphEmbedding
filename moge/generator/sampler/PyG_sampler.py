@@ -7,6 +7,7 @@ import torch
 from cogdl.datasets.han_data import HANDataset
 
 import torch_sparse
+from ogb.linkproppred import PygLinkPropPredDataset
 from torch_geometric.data import DataLoader, Data
 from torch_geometric.utils import to_undirected
 from torch_geometric.data import NeighborSampler
@@ -194,4 +195,5 @@ class HeteroNeighborSampler(HeteroNetDataset):
     def nonduplicate_indices(self, edge_index):
         edge_df = pd.DataFrame(edge_index.t().numpy())  # shape: (n_edges, 2)
         return ~edge_df.duplicated(subset=[0, 1])
+
 

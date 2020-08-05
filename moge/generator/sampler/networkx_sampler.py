@@ -6,6 +6,7 @@ from itertools import islice
 import networkx as nx
 import numpy as np
 import torch
+from ogb.linkproppred import PygLinkPropPredDataset
 
 from moge.generator.datasets import HeteroNetDataset
 
@@ -177,3 +178,4 @@ class NetworkXSampler(HeteroNetDataset):
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
+
