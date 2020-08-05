@@ -65,14 +65,14 @@ class MetricsComparison(pl.LightningModule):
             y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
             y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
             print(f"y_pred {len(y_pred_dict)} classes",
-                  {k: v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print("y_true classes", {k: v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
+            print("y_true classes", {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
         else:
             y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
             y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
             print(f"y_pred {y_pred_dict} classes",
-                  {k: v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print("y_true classes", {k: v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
+            print("y_true classes", {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
 
 
 class LATTENodeClassifier(MetricsComparison):

@@ -25,6 +25,7 @@ class LATTE(nn.Module):
         self.use_proximity_loss = use_proximity_loss
         self.t_order = t_order
         self.neg_sampling_ratio = neg_sampling_ratio
+        self.compute_device = "cuda:3"
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -117,9 +118,9 @@ class LATTE(nn.Module):
                 if self.t_order >= 2:
                     with torch.no_grad():
                         t_order_edge_index_dict = self.join_edge_indexes(
-                            preprocess_input(edge_index_dict, device="cuda:3"),
-                            preprocess_input(edge_index_dict, device="cuda:3"),
-                            preprocess_input(global_node_idx, device="cuda:3"))
+                            preprocess_input(edge_index_dict, device=self.compute_device),
+                            preprocess_input(edge_index_dict, device=self.compute_device),
+                            preprocess_input(global_node_idx, device=self.compute_device))
             else:
                 h_dict, t_proximity_loss = self.layers[t].forward(
                     x_dict=x_dict, global_node_idx=global_node_idx,
@@ -129,9 +130,9 @@ class LATTE(nn.Module):
                 #          h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
                 with torch.no_grad():
                     t_order_edge_index_dict = self.join_edge_indexes(
-                        preprocess_input(t_order_edge_index_dict, device="cuda:3"),
-                        preprocess_input(edge_index_dict, device="cuda:3"),
-                        preprocess_input(global_node_idx, device="cuda:3"))
+                        preprocess_input(t_order_edge_index_dict, device=self.compute_device),
+                        preprocess_input(edge_index_dict, device=self.compute_device),
+                        preprocess_input(global_node_idx, device=self.compute_device))
 
             for node_type in global_node_idx:
                 h_all_dict[node_type].append(h_dict[node_type])
@@ -178,7 +179,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             self.embeddings = torch.nn.ModuleDict(
                 {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                          embedding_dim=embedding_dim,
-                                         sparse=True).cuda(2) for node_type in non_attr_node_types})
+                                         sparse=False).cuda(2) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 
@@ -249,7 +250,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if node_type in x_dict:
                 h_dict[node_type] = F.tanh(self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]]
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
+                    self.conv[node_type].weight.device)
 
         # Compute relations attention coefficients
         beta = {}
