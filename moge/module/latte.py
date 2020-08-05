@@ -327,17 +327,22 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(alpha_r[metapath], alpha_l[metapath]))
 
+            # Assign the "self" embedding representation
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
+
+            # Apply \sigma activation to all embeddings
+            if self.activation == "sigmoid":
+                emb_relation_agg[node_type] = F.sigmoid(emb_relation_agg[node_type])
+            elif self.activation == "tanh":
+                emb_relation_agg[node_type] = F.tanh(emb_relation_agg[node_type])
+            elif self.activation == "relu":
+                emb_relation_agg[node_type] = F.relu(emb_relation_agg[node_type])
+
+            # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
                                                  beta[node_type]).squeeze(-1)
             # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
 
-            if self.activation == "sigmoid":
-                emb_output[node_type] = F.sigmoid(emb_output[node_type])
-            elif self.activation == "tanh":
-                emb_output[node_type] = F.tanh(emb_output[node_type])
-            elif self.activation == "relu":
-                emb_output[node_type] = F.relu(emb_output[node_type])
 
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(preprocess_input(edge_index_dict, device=h_dict[head_type].device),
@@ -353,7 +358,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         # alpha = F.leaky_relu(alpha, 0.2)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=0.5, training=self.training)
+        alpha = F.dropout(alpha, p=0.25, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
     def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
