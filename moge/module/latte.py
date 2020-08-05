@@ -343,7 +343,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                  beta[node_type]).squeeze(-1)
             # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
 
-
         if self.use_proximity_loss:
             proximity_loss = self.proximity_loss(preprocess_input(edge_index_dict, device=h_dict[head_type].device),
                                                  alpha_l=alpha_l,
