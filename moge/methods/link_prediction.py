@@ -9,14 +9,14 @@ from ..module.latte import LATTE
 
 
 class LinkPredMetrics(NodeClfMetrics):
-    def __init__(self, hparams, metrics):
-        super(LinkPredMetrics, self).__init__(hparams, metrics)
+    def __init__(self, hparams, dataset, metrics):
+        super(LinkPredMetrics, self).__init__(hparams, dataset, metrics)
 
 
 class LATTELinkPredictor(LinkPredMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["obgl-biokg"],
                  collate_fn="neighbor_sampler") -> None:
-        super(LATTELinkPredictor).__init__(hparams, metrics)
+        super(LATTELinkPredictor).__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
@@ -38,7 +38,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         X, y, weights = batch
         _, loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
 
-        self.train_metrics.update_metrics(y_hat, y, weights=None)
+        # self.train_metrics.update_metrics(y_hat, y, weights=None)
 
         outputs = {'loss': loss}
         return outputs
@@ -46,7 +46,7 @@ class LATTELinkPredictor(LinkPredMetrics):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
         _, loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        self.valid_metrics.update_metrics(y_hat, y, weights=None)
+        # self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"val_loss": loss}
 
@@ -56,8 +56,7 @@ class LATTELinkPredictor(LinkPredMetrics):
 
         if batch_nb == 0:
             self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
-
-        self.test_metrics.update_metrics(y_hat, y, weights=None)
+        # self.test_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"test_loss": loss}
 

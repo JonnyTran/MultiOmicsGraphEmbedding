@@ -20,13 +20,13 @@ from moge.module.utils import filter_samples, preprocess_input
 
 
 class NodeClfMetrics(pl.LightningModule):
-    def __init__(self, hparams, metrics):
+    def __init__(self, hparams, dataset, metrics):
         super(NodeClfMetrics, self).__init__()
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=num_class,
+        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=hparams.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=num_class,
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=hparams.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=num_class,
+        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=hparams.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
 
@@ -84,7 +84,7 @@ class NodeClfMetrics(pl.LightningModule):
 
 class LATTENodeClassifier(NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
-        super(LATTENodeClassifier, self).__init__(hparams=hparams, metrics=metrics)
+        super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
@@ -197,8 +197,7 @@ class GTN(GTN, NodeClfMetrics):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super().__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers, hparams=hparams,
-                         metrics=metrics)
+        super().__init__(num_edge, None, num_channels)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
@@ -303,7 +302,7 @@ class HAN(HAN, NodeClfMetrics):
 
         w_out = hparams.embedding_dim
 
-        super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers, hparams=hparams, metrics=metrics)
+        super().__init__(num_edge, None, w_in)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
@@ -392,8 +391,7 @@ class MetaPath2Vec(MetaPath2Vec, NodeClfMetrics):
         self.head_node_type = self.dataset.head_node_type
         edge_index_dict = dataset.edge_index_dict
 
-        super().__init__(edge_index_dict, embedding_dim, metapath, walk_length, context_size, walks_per_node,
-                         num_negative_samples, num_nodes_dict, self.sparse)
+        super().__init__(edge_index_dict, None, embedding_dim)
         self.hparams = hparams
 
     def training_step(self, batch, batch_nb):
