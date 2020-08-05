@@ -277,11 +277,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
-                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
+                alpha_l[metapath] = self.attn_l[i].forward(
+                    F.tanh(h_dict[head_type])).sum(dim=-1)  # alpha_l = attn_l * W * x_1
             else:
-                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
+                alpha_l[metapath] = self.attn_l[i].forward(
+                    F.tanh(h1_dict[head_type])).sum(dim=-1)  # alpha_l = attn_l * h_1
 
-            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
+            alpha_r[metapath] = self.attn_r[i].forward(
+                F.tanh(h_dict[tail_type])).sum(dim=-1)  # alpha_r = attn_r * W * x_1
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         emb_relation_agg = {}
@@ -335,7 +338,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = F.leaky_relu(alpha, 0.2)
+        # alpha = F.leaky_relu(alpha, 0.2)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=0.5, training=self.training)
         return x_j * alpha.unsqueeze(-1)
@@ -394,23 +397,3 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
     return torch.stack([row, col], dim=0), value
 
 
-def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
-    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=not coalesced)
-    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=not coalesced)
-
-    deg_A = A.storage.colcount()
-    deg_B = B.storage.rowcount()
-    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
-    deg_normalized[deg_normalized == float('inf')] = 0.0
-
-    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     value=deg_normalized.type_as(valueA),
-                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
-
-    C = matmul(matmul(A, D), B)
-    row, col, value = C.coo()
-
-    return torch.stack([row, col], dim=0), value

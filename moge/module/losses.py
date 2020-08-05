@@ -4,56 +4,6 @@ import torch
 import torch.nn as nn
 
 
-class FocalLoss(nn.Module):
-    """Softmax focal loss
-    references: Focal Loss for Dense Object Detection
-                https://github.com/Hsuxu/FocalLoss-PyTorch
-    """
-
-    def __init__(self, label_size, activation_type="SOFTMAX",
-                 gamma=2.0, alpha=0.25, epsilon=1.e-9):
-        super(FocalLoss, self).__init__()
-        self.num_cls = label_size
-        self.activation_type = activation_type
-        self.gamma = gamma
-        self.alpha = alpha
-        self.epsilon = epsilon
-
-    def forward(self, logits, target):
-        """
-        Args:
-            logits: model's output, shape of [batch_size, num_cls]
-            target: ground truth labels, shape of [batch_size]
-        Returns:
-            shape of [batch_size]
-        """
-        if self.activation_type == "SOFTMAX":
-            idx = target.view(-1, 1).long()
-            one_hot_key = torch.zeros(idx.size(0), self.num_cls,
-                                      dtype=torch.float, device=logits.device)
-            one_hot_key = one_hot_key.scatter_(1, idx, 1)
-            logits = torch.softmax(logits, dim=-1)
-            loss = -self.alpha * one_hot_key * \
-                   torch.pow((1 - logits), self.gamma) * \
-                   (logits + self.epsilon).log()
-            loss = loss.sum(1)
-
-        elif self.activation_type == "SIGMOID":
-            multi_hot_key = target
-            logits = torch.sigmoid(logits)
-            zero_hot_key = 1 - multi_hot_key
-            loss = -self.alpha * multi_hot_key * \
-                   torch.pow((1 - logits), self.gamma) * \
-                   (logits + self.epsilon).log()
-            loss += -(1 - self.alpha) * zero_hot_key * \
-                    torch.pow(logits, self.gamma) * \
-                    (1 - logits + self.epsilon).log()
-        else:
-            raise TypeError("Unknown activation type: " + self.activation_type
-                            + "Supported activation types: ")
-        return loss.mean()
-
-
 class ClassificationLoss(nn.Module):
     def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multilabel=True, use_hierar=False,
                  loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1e-6, hierar_relations=None):
@@ -64,7 +14,7 @@ class ClassificationLoss(nn.Module):
         self.hierar_relations = hierar_relations
         self.multilabel = multilabel
         self.use_hierar = use_hierar
-        print("class_weight", class_weight) if class_weight is not None else None
+        print(f"class_weight for {class_weight.shape} classes") if class_weight is not None else None
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
             self.criterion = torch.nn.CrossEntropyLoss(class_weight)
@@ -126,6 +76,56 @@ class ClassificationLoss(nn.Module):
             diff_paras = diff_paras.view(diff_paras.size(0), -1)
             recursive_loss += 1.0 / 2 * torch.norm(diff_paras, p=2) ** 2
         return recursive_loss
+
+
+class FocalLoss(nn.Module):
+    """Softmax focal loss
+    references: Focal Loss for Dense Object Detection
+                https://github.com/Hsuxu/FocalLoss-PyTorch
+    """
+
+    def __init__(self, label_size, activation_type="SOFTMAX",
+                 gamma=2.0, alpha=0.25, epsilon=1.e-9):
+        super(FocalLoss, self).__init__()
+        self.num_cls = label_size
+        self.activation_type = activation_type
+        self.gamma = gamma
+        self.alpha = alpha
+        self.epsilon = epsilon
+
+    def forward(self, logits, target):
+        """
+        Args:
+            logits: model's output, shape of [batch_size, num_cls]
+            target: ground truth labels, shape of [batch_size]
+        Returns:
+            shape of [batch_size]
+        """
+        if self.activation_type == "SOFTMAX":
+            idx = target.view(-1, 1).long()
+            one_hot_key = torch.zeros(idx.size(0), self.num_cls,
+                                      dtype=torch.float, device=logits.device)
+            one_hot_key = one_hot_key.scatter_(1, idx, 1)
+            logits = torch.softmax(logits, dim=-1)
+            loss = -self.alpha * one_hot_key * \
+                   torch.pow((1 - logits), self.gamma) * \
+                   (logits + self.epsilon).log()
+            loss = loss.sum(1)
+
+        elif self.activation_type == "SIGMOID":
+            multi_hot_key = target
+            logits = torch.sigmoid(logits)
+            zero_hot_key = 1 - multi_hot_key
+            loss = -self.alpha * multi_hot_key * \
+                   torch.pow((1 - logits), self.gamma) * \
+                   (logits + self.epsilon).log()
+            loss += -(1 - self.alpha) * zero_hot_key * \
+                    torch.pow(logits, self.gamma) * \
+                    (1 - logits + self.epsilon).log()
+        else:
+            raise TypeError("Unknown activation type: " + self.activation_type
+                            + "Supported activation types: ")
+        return loss.mean()
 
 
 def get_hierar_relations(hierar_taxonomy_file, label_map):
