@@ -112,14 +112,14 @@ class HeteroNeighborSampler(HeteroNetDataset):
              "global_node_index": sampled_local_nodes,
              "x_dict": {}}
 
-        local2batch_idx_dict = {
+        local2batch = {
             node_type: dict(zip(sampled_local_nodes[node_type].numpy(),
                                 range(len(sampled_local_nodes[node_type])))
                             ) for node_type in sampled_local_nodes}
 
         X["edge_index_dict"] = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
                                                               sampled_local_nodes=sampled_local_nodes,
-                                                              local2batch_idx_dict=local2batch_idx_dict,
+                                                              local2batch=local2batch,
                                                               filter_nodes=filter_nodes)
 
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
@@ -139,14 +139,14 @@ class HeteroNeighborSampler(HeteroNetDataset):
         assert y.size(0) == weights.size(0)
         return X, y, weights
 
-    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch_idx_dict: dict,
+    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch: dict,
                                   filter_nodes: bool):
         """
         # Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and `global_node_index`
         :param adjs:
         :param n_id:
         :param sampled_local_nodes:
-        :param local2batch_idx_dict:
+        :param local2batch:
         :param filter_nodes:
         :return:
         """
@@ -179,9 +179,9 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
                 # Convert node global index -> local index -> batch index
                 edge_index[0] = self.local_node_idx[edge_index[0]].apply_(
-                    lambda x: local2batch_idx_dict[head_type][x])
+                    lambda x: local2batch[head_type][x])
                 edge_index[1] = self.local_node_idx[edge_index[1]].apply_(
-                    lambda x: local2batch_idx_dict[tail_type][x])
+                    lambda x: local2batch[tail_type][x])
 
                 edge_index_dict.setdefault(metapath, []).append(edge_index)
         # Join edges from the adjs
