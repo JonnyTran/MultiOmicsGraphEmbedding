@@ -110,7 +110,7 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             multilabel=dataset.multilabel)
 
     def forward(self, x_dict, global_node_index, edge_index_dict):
-        embeddings, proximity_loss = self.latte.forward(x_dict, global_node_index, edge_index_dict)
+        embeddings, proximity_loss, _ = self.latte.forward(x_dict, global_node_index, edge_index_dict)
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 
@@ -134,6 +134,8 @@ class LATTENodeClassifier(NodeClfMetrics):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
+        print({k: {j: l.shape for j, l in v.items()} for k, v in X.items()})
+        print("y", y.shape)
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion(y_hat, y)

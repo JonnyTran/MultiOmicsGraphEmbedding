@@ -61,26 +61,31 @@ class LinkSampler(HeteroNetDataset):
         X = {"edge_index_dict": {}, "global_node_index": {}, "x_dict": {}}
 
         triples = {k: v[iloc] for k, v in self.triples.items()}
+        relation_ids = triples["relation"].unique()
 
-        for metapath_id in triples["relation"].unique():
+        for metapath_id in relation_ids:
             metapath = self.metapaths[metapath_id]
             head_type, tail_type = metapath[0], metapath[-1]
-            X["global_node_index"].setdefault(head_type, []).append(triples["head"])
-            X["global_node_index"].setdefault(tail_type, []).append(triples["tail"])
 
-        X["global_node_index"] = {node_type: torch.cat(node_idx, dim=0).unique() \
-                                  for node_type, node_idx in X["global_node_index"].items()}
+            mask = triples["relation"] == metapath_id
+            X["global_node_index"].setdefault(head_type, []).append(triples["head"][mask])
+            X["global_node_index"].setdefault(tail_type, []).append(triples["tail"][mask])
+
+        X["global_node_index"] = {node_type: torch.cat(node_sets, dim=0).unique() \
+                                  for node_type, node_sets in X["global_node_index"].items()}
 
         local2batch = {
             node_type: dict(zip(X["global_node_index"][node_type].numpy(),
                                 range(len(X["global_node_index"][node_type])))
                             ) for node_type in X["global_node_index"]}
 
-        for metapath_id in triples["relation"].unique():
+        for metapath_id in relation_ids:
             metapath = self.metapaths[metapath_id]
             head_type, tail_type = metapath[0], metapath[-1]
-            sources = triples["head"].apply_(lambda x: local2batch[head_type][x])
-            targets = triples["tail"].apply_(lambda x: local2batch[tail_type][x])
+
+            mask = triples["relation"] == metapath_id
+            sources = triples["head"][mask].apply_(lambda x: local2batch[head_type][x])
+            targets = triples["tail"][mask].apply_(lambda x: local2batch[tail_type][x])
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
 
         if self.use_reverse:
