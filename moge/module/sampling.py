@@ -22,7 +22,7 @@ def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
         perm[rest] = tmp
         rest = rest[mask.nonzero().view(-1)]
 
-    row = perm / N
+    row = perm // N
     col = perm % N
     neg_edge_index = torch.stack([row, col], dim=0).long()
 
