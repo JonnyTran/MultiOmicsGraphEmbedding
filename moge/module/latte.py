@@ -2,6 +2,7 @@ import copy
 import numpy as np
 import torch
 from torch import nn as nn
+
 import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.inits import glorot
@@ -9,7 +10,6 @@ from torch_geometric.utils import softmax
 import torch_sparse
 from torch_sparse.tensor import SparseTensor
 from torch_sparse.matmul import matmul
-
 import pytorch_lightning as pl
 
 from moge.module.sampling import negative_sample
@@ -181,8 +181,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
-        self.alpha_activations = torch.nn.ModuleList([
-            torch.nn.PReLU(init=0.2) for metapath in self.metapaths])
+        self.alpha_weights = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
@@ -241,7 +240,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         Get the mean and std of relation attention weights for all nodes in testing/validation steps
         :return:
         """
-        return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
+        return {".".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
                 for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
@@ -328,7 +327,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.alpha_activations[metapath_idx].forward(alpha)
+        alpha = self.alpha_weights[metapath_idx] * alpha
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=0.25, training=self.training)
         return x_j * alpha.unsqueeze(-1)
