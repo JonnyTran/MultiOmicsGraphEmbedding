@@ -21,20 +21,21 @@ class Metrics():
         self.threshold = threshold
         self.n_classes = n_classes
         self.multilabel = multilabel
+        self.top_ks = top_k
 
         if n_classes:
             top_k = [k for k in top_k if k < n_classes]
 
         self.prefix = prefix
         self.metrics = {}
-        for metric in metrics:
+        for metric in set(metrics):
             if "precision" in metric:
                 self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)
             elif "recall" in metric:
                 self.metrics[metric] = Recall(average=True, is_multilabel=multilabel)
             elif "top_k" in metric:
                 if self.multilabel:
-                    self.metrics[metric] = TopKMulticlassAccuracy(k_s=top_k)
+                    self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
                     self.metrics[metric] = TopKCategoricalAccuracy(k=top_k[-1])
             elif "accuracy" in metric:
@@ -104,8 +105,11 @@ class Metrics():
     def compute_metrics(self):
         logs = {}
         for metric in self.metrics:
-            if metric == "top_k" or "ogb" in metric:
+            if "ogb" in metric or (metric == "top_k" and isinstance(self.metrics[metric], TopKMultilabelAccuracy)):
                 logs.update(self.metrics[metric].compute(prefix=self.prefix))
+            elif metric == "top_k" and isinstance(self.metrics[metric], TopKCategoricalAccuracy):
+                metric_name = (metric if self.prefix is None else self.prefix + metric) + f"@{self.top_ks[-1]}"
+                logs[metric_name] = self.metrics[metric].compute()
             else:
                 metric_name = metric if self.prefix is None else self.prefix + metric
                 logs[metric_name] = self.metrics[metric].compute()
@@ -154,7 +158,7 @@ class OGBEvaluator(Metric):
             return {f"{prefix}{k}": v for k, v in output.items()}
 
 
-class TopKMulticlassAccuracy(Metric):
+class TopKMultilabelAccuracy(Metric):
     """
     Calculates the top-k categorical accuracy.
 
@@ -163,7 +167,7 @@ class TopKMulticlassAccuracy(Metric):
 
     def __init__(self, k_s=[5, 10, 50, 100, 200], output_transform=lambda x: x, device=None):
         self.k_s = k_s
-        super(TopKMulticlassAccuracy, self).__init__(output_transform, device=device)
+        super(TopKMultilabelAccuracy, self).__init__(output_transform, device=device)
 
     @reinit__is_reduced
     def reset(self):
