@@ -181,7 +181,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
-        self.alpha_activation = torch.nn.PReLU()
+        self.alpha_activations = torch.nn.ModuleList([
+            torch.nn.PReLU() for metapath in self.metapaths])
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
@@ -301,7 +302,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     edge_index=edge_index.to(h_dict[head_type].device),
                     size=(num_node_tail, num_node_head),
                     x=(h_dict[tail_type], h_dict[head_type]),
-                    alpha=(alpha_r[metapath], alpha_l[metapath]))
+                    alpha=(alpha_r[metapath], alpha_l[metapath]),
+                    metapath_idx=self.metapaths.index(metapath),
+                )
 
             # Assign the "self" embedding representation
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
@@ -323,9 +326,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         return emb_output, proximity_loss
 
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
+    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.alpha_activation(alpha)
+        alpha = self.alpha_activations[metapath_idx].forward(alpha)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=0.25, training=self.training)
         return x_j * alpha.unsqueeze(-1)
@@ -369,6 +372,17 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
             alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
         return alpha_l, alpha_r
+
+    def predict_score(self, edge_index_dict, alpha_l, alpha_r):
+        predicted_edge_score = {}
+        for metapath, edge_index in edge_index_dict.items():
+            if isinstance(edge_index, tuple):  # Weighted edges
+                edge_index, values = edge_index
+            if edge_index is None: continue
+
+            e_ij = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
+            predicted_edge_score[metapath] = F.sigmoid(e_ij)
+        return predicted_edge_score
 
     def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
