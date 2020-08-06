@@ -25,7 +25,6 @@ class LATTE(nn.Module):
         self.use_proximity_loss = use_proximity_loss
         self.t_order = t_order
         self.neg_sampling_ratio = neg_sampling_ratio
-        self.compute_device = "cuda:3"
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -122,10 +121,8 @@ class LATTE(nn.Module):
                                                                                   edge_index_dict=edge_index_dict)
                 if self.t_order >= 2:
                     with torch.no_grad():
-                        t_order_edge_index_dict = LATTE.join_edge_indexes(
-                            preprocess_input(edge_index_dict, device=self.compute_device),
-                            preprocess_input(edge_index_dict, device=self.compute_device),
-                            preprocess_input(global_node_idx, device=self.compute_device))
+                        t_order_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict, edge_index_dict,
+                                                                          global_node_idx)
             else:
                 h_dict, t_proximity_loss, edge_pred_dict_t = self.layers[t].forward(
                     x_dict=x_dict, global_node_idx=global_node_idx,
@@ -139,9 +136,7 @@ class LATTE(nn.Module):
 
                 with torch.no_grad():
                     t_order_edge_index_dict = LATTE.join_edge_indexes(
-                        preprocess_input(t_order_edge_index_dict, device=self.compute_device),
-                        preprocess_input(edge_index_dict, device=self.compute_device),
-                        preprocess_input(global_node_idx, device=self.compute_device))
+                        t_order_edge_index_dict, edge_index_dict, global_node_idx)
 
             for node_type in global_node_idx:
                 h_all_dict[node_type].append(h_dict[node_type])
@@ -304,7 +299,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
                 # Propapate flows from target nodes to source nodes
                 emb_relation_agg[head_type][:, i] = self.propagate(
-                    edge_index=edge_index.to(h_dict[head_type].device),
+                    edge_index=edge_index,
                     size=(num_node_tail, num_node_head),
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(alpha_r[metapath], alpha_l[metapath]),

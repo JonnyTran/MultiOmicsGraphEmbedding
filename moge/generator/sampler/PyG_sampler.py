@@ -42,11 +42,11 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
                                                 sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
+    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None, t_order=1):
         assert mode is not None, "Must pass arg mode at get_collate_fn()"
 
         def collate_wrapper(iloc):
-            return self.collate_neighbor_sampler(iloc, mode)
+            return self.collate_neighbor_sampler(iloc, mode, t_order)
 
         if "neighbor_sampler" in collate_fn:
             return collate_wrapper
@@ -76,7 +76,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def collate_neighbor_sampler(self, iloc, mode, filter_nodes=False):
+    def collate_neighbor_sampler(self, iloc, mode, t_order=1, filter_nodes=False):
         """
 
         :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
@@ -135,6 +135,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
+
         assert y.size(0) == X["global_node_index"][self.head_node_type].size(0)
         assert y.size(0) == weights.size(0)
         return X, y, weights
