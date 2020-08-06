@@ -111,7 +111,8 @@ class LATTE(nn.Module):
         return output_dict
 
     def forward(self, x_dict, global_node_idx, edge_index_dict):
-        proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity_loss else None
+        device = global_node_idx[list(global_node_idx.keys())[0]].device
+        proximity_loss = torch.tensor(0.0, device=device) if self.use_proximity_loss else None
 
         h_all_dict = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
@@ -144,6 +145,7 @@ class LATTE(nn.Module):
 
             for node_type in global_node_idx:
                 h_all_dict[node_type].append(h_dict[node_type])
+
             if self.use_proximity_loss:
                 proximity_loss += t_proximity_loss
 
@@ -336,7 +338,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         alpha = self.alpha_weights[metapath_idx] * alpha
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=0.25, training=self.training)
+        alpha = F.dropout(alpha, p=0.5, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
     def get_h_dict(self, x_dict, global_node_idx):

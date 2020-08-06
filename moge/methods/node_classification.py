@@ -41,6 +41,7 @@ class NodeClfMetrics(pl.LightningModule):
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
         logs = self.train_metrics.compute_metrics()
+        print("logs", logs)
         logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
 
         logs.update({"loss": avg_loss})
@@ -50,6 +51,7 @@ class NodeClfMetrics(pl.LightningModule):
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
         logs = self.valid_metrics.compute_metrics()
+        print("logs", logs)
         logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
 
         logs.update({"val_loss": avg_loss})

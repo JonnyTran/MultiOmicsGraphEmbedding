@@ -161,6 +161,7 @@ class OGBEvaluator(Metric):
 
             output = self.evaluator.eval({"y_pred_pos": y_pred_pos,
                                           "y_pred_neg": y_pred_neg})
+            output = {k.strip("_list"): v.mean().item() for k, v in output.items()}
         else:
             raise Exception(f"implement eval for {self.evaluator}")
 
