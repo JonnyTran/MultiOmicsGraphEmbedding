@@ -129,7 +129,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             else:
                 t_order_edge_index = LATTE.join_edge_indexes(t_order_edge_index, X["edge_index_dict"],
                                                              X["global_node_index"])
-                X["edge_index_dict"].update(t_order_edge_index)
+            X["edge_index_dict"].update(t_order_edge_index)
 
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
