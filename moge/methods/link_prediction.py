@@ -16,11 +16,11 @@ class LinkPredMetrics(NodeClfMetrics):
 class LATTELinkPredictor(LinkPredMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["obgl-biokg"],
                  collate_fn="neighbor_sampler") -> None:
-        super(LATTELinkPredictor).__init__(hparams, dataset, metrics)
+        super(LATTELinkPredictor, self).__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
+        self._name = f"LATTE-{hparams.t_order}{' link_pred' if hparams.use_proximity_loss else ''}"
         self.collate_fn = collate_fn
 
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
@@ -30,32 +30,34 @@ class LATTELinkPredictor(LinkPredMetrics):
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
     def forward(self, x_dict, global_node_index, edge_index_dict):
-        embeddings, proximity_loss = self.latte.forward(x_dict, global_node_index, edge_index_dict)
-        return proximity_loss
+        embeddings, proximity_loss, edge_pred_dict = self.latte.forward(x_dict, global_node_index, edge_index_dict)
+        return embeddings, proximity_loss, edge_pred_dict
 
     def training_step(self, batch, batch_nb):
-        X, y, weights = batch
-        _, loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-
-        # self.train_metrics.update_metrics(y_hat, y, weights=None)
+        X, _, _ = batch
+        _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" not in metapath], dim=0)
+        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         outputs = {'loss': loss}
         return outputs
 
     def validation_step(self, batch, batch_nb):
-        X, y, weights = batch
-        _, loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        # self.valid_metrics.update_metrics(y_hat, y, weights=None)
+        X, _, _ = batch
+        _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" not in metapath], dim=0)
+        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat, loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-
-        if batch_nb == 0:
-            self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
-        # self.test_metrics.update_metrics(y_hat, y, weights=None)
+        y_hat, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" not in metapath], dim=0)
+        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"test_loss": loss}
 

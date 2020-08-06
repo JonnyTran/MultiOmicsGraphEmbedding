@@ -149,6 +149,9 @@ class OGBEvaluator(Metric):
         if isinstance(self.evaluator, NodeEvaluator):
             output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
                                           "y_true": torch.cat(self.y_true, dim=0)})
+        elif isinstance(self.evaluator, LinkEvaluator):
+            output = self.evaluator.eval({"y_pred_pos": torch.cat(self.y_pred, dim=0),
+                                          "y_pred_neg": torch.cat(self.y_true, dim=0)})
         else:
             raise Exception(f"implement eval for {self.evaluator}")
 

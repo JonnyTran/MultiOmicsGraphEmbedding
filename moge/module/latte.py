@@ -117,8 +117,9 @@ class LATTE(nn.Module):
         h_all_dict = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_proximity_loss = self.layers[t].forward(x_dict=x_dict, global_node_idx=global_node_idx,
-                                                                  edge_index_dict=edge_index_dict)
+                h_dict, t_proximity_loss, edge_pred_dict = self.layers[t].forward(x_dict=x_dict,
+                                                                                  global_node_idx=global_node_idx,
+                                                                                  edge_index_dict=edge_index_dict)
                 if self.t_order >= 2:
                     with torch.no_grad():
                         t_order_edge_index_dict = LATTE.join_edge_indexes(
@@ -126,12 +127,16 @@ class LATTE(nn.Module):
                             preprocess_input(edge_index_dict, device=self.compute_device),
                             preprocess_input(global_node_idx, device=self.compute_device))
             else:
-                h_dict, t_proximity_loss = self.layers[t].forward(
+                h_dict, t_proximity_loss, edge_pred_dict_t = self.layers[t].forward(
                     x_dict=x_dict, global_node_idx=global_node_idx,
                     edge_index_dict=t_order_edge_index_dict,
                     h1_dict=h_dict)
                 # h1_dict={node_type: h_emb.detach() for node_type, h_emb in
                 #          h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
+
+                if edge_pred_dict is not None and edge_pred_dict_t:
+                    edge_pred_dict.update(edge_pred_dict_t)
+
                 with torch.no_grad():
                     t_order_edge_index_dict = LATTE.join_edge_indexes(
                         preprocess_input(t_order_edge_index_dict, device=self.compute_device),
@@ -146,7 +151,7 @@ class LATTE(nn.Module):
         embedding_output = {node_type: torch.cat(h_emb_list, dim=1) \
                             for node_type, h_emb_list in h_all_dict.items() if len(h_emb_list) > 0}
 
-        return embedding_output, proximity_loss
+        return embedding_output, proximity_loss, edge_pred_dict
 
 
 class LATTELayer(MessagePassing, pl.LightningModule):
@@ -316,14 +321,17 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             emb_output[node_type] = self.embedding_activation(emb_output[node_type])
 
         if self.use_proximity_loss:
-            proximity_loss = self.proximity_loss(preprocess_input(edge_index_dict, device=h_dict[head_type].device),
-                                                 alpha_l=alpha_l,
-                                                 alpha_r=alpha_r,
-                                                 global_node_idx=global_node_idx)
+            proximity_loss, edge_pred_dict = self.proximity_loss(
+                preprocess_input(edge_index_dict, device=h_dict[head_type].device),
+                alpha_l=alpha_l,
+                alpha_r=alpha_r,
+                global_node_idx=global_node_idx)
+
         else:
             proximity_loss = None
+            edge_pred_dict = None
 
-        return emb_output, proximity_loss
+        return emb_output, proximity_loss, edge_pred_dict
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
@@ -372,20 +380,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
         return alpha_l, alpha_r
 
-    def predict_score(self, edge_index_dict, alpha_l, alpha_r):
-        predicted_edge_score = {}
-        for metapath, edge_index in edge_index_dict.items():
-            if isinstance(edge_index, tuple):  # Weighted edges
-                edge_index, values = edge_index
-            if edge_index is None: continue
-
-            e_ij = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
-            predicted_edge_score[metapath] = F.sigmoid(e_ij)
-        return predicted_edge_score
+    def predict_scores(self, edge_index, alpha_l, alpha_r, metapath):
+        e_ij = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
+        e_pred_scores = F.sigmoid(e_ij)
+        return e_pred_scores
 
     def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
-
+        edge_pred_dict = {}
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
@@ -394,8 +396,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 values = 1.0
             if edge_index is None: continue
 
-            e_ij = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
-            loss += -torch.mean(values * torch.log(torch.sigmoid(e_ij)), dim=-1)
+            e_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath)
+            edge_pred_dict[metapath] = e_pred
+        loss += -torch.mean(values * torch.log(torch.sigmoid(e_pred)), dim=-1)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
         for metapath, edge_index in edge_index_dict.items():
@@ -409,11 +412,20 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                              num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
             if neg_edge_index.size(1) <= 1: continue
 
-            e_ij = alpha_l[metapath][neg_edge_index[0]] + alpha_r[metapath][neg_edge_index[1]]
-            loss += -torch.mean(torch.log(torch.sigmoid(-e_ij)), dim=-1)
+            e_pred = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath)
+            edge_pred_dict[tag_negative(metapath)] = e_pred
+            loss += -torch.mean(torch.log(torch.sigmoid(-e_pred)), dim=-1)
 
-        return loss
+        return loss, edge_pred_dict
 
+
+def tag_negative(metapath):
+    if isinstance(metapath, tuple):
+        return metapath + ("neg",)
+    elif isinstance(metapath, str):
+        return metapath + "neg"
+    else:
+        return "neg"
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
