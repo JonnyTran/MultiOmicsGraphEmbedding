@@ -182,7 +182,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
         self.alpha_activations = torch.nn.ModuleList([
-            torch.nn.PReLU() for metapath in self.metapaths])
+            torch.nn.PReLU(init=0.2) for metapath in self.metapaths])
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
