@@ -181,7 +181,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
-        self.PReLU = torch.nn.PReLU()
+        self.alpha_activation = torch.nn.PReLU()
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
@@ -243,6 +243,16 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return {"-".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
                 for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
+
+    def embedding_activation(self, embeddings):
+        if self.activation == "sigmoid":
+            return F.sigmoid(embeddings)
+        elif self.activation == "tanh":
+            return F.tanh(embeddings)
+        elif self.activation == "relu":
+            return F.relu(embeddings)
+        else:
+            return embeddings
 
     def forward(self, x_dict, global_node_idx, edge_index_dict, h1_dict=None):
         """
@@ -313,17 +323,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         return emb_output, proximity_loss
 
-    def embedding_activation(self, embeddings):
-        if self.activation == "sigmoid":
-            return F.sigmoid(embeddings)
-        elif self.activation == "tanh":
-            return F.tanh(embeddings)
-        elif self.activation == "relu":
-            return F.relu(embeddings)
-
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.PReLU(alpha)
+        alpha = self.alpha_activation(alpha)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=0.25, training=self.training)
         return x_j * alpha.unsqueeze(-1)

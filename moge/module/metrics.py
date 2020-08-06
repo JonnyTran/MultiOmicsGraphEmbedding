@@ -22,11 +22,11 @@ class Metrics():
         self.n_classes = n_classes
         self.multilabel = multilabel
         self.top_ks = top_k
+        self.prefix = prefix
 
         if n_classes:
             top_k = [k for k in top_k if k < n_classes]
 
-        self.prefix = prefix
         self.metrics = {}
         for metric in set(metrics):
             if "precision" in metric:
