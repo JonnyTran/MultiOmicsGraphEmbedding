@@ -323,28 +323,31 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.train_ratio = self.training_idx.numel() / \
                            sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         batch_size,
-                                                                                                        mode="training"))
+                                                                                                        mode="training",
+                                                                                                        **kwargs))
         return loader
 
-    def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
+    def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         batch_size,
-                                                                                                        mode="validation"))
+                                                                                                        mode="validation",
+                                                                                                        **kwargs))
         return loader
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         batch_size,
-                                                                                                        mode="testing"))
+                                                                                                        mode="testing",
+                                                                                                        **kwargs))
         return loader
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):

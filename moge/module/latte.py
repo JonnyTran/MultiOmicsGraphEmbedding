@@ -116,17 +116,18 @@ class LATTE(nn.Module):
         h_all_dict = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_proximity_loss, edge_pred_dict = self.layers[t].forward(x_dict=x_dict,
-                                                                                  global_node_idx=global_node_idx,
-                                                                                  edge_index_dict=edge_index_dict)
-                if self.t_order >= 2:
-                    with torch.no_grad():
-                        t_order_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict, edge_index_dict,
-                                                                          global_node_idx)
+                t_order_edge_index_dict = {k: v for k, v in edge_index_dict.items() if k in self.layers[t].metapaths}
+                h_dict, t_proximity_loss, edge_pred_dict = self.layers[t].forward(
+                    x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict)
+                # if self.t_order >= 2:
+                #     with torch.no_grad():
+                #         t_order_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict, edge_index_dict,
+                #                                                           global_node_idx)
             else:
+                t_order_edge_index_dict = {k: v for k, v in edge_index_dict.items() if k in self.layers[t].metapaths}
+
                 h_dict, t_proximity_loss, edge_pred_dict_t = self.layers[t].forward(
-                    x_dict=x_dict, global_node_idx=global_node_idx,
-                    edge_index_dict=t_order_edge_index_dict,
+                    x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
                     h1_dict=h_dict)
                 # h1_dict={node_type: h_emb.detach() for node_type, h_emb in
                 #          h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
@@ -134,9 +135,9 @@ class LATTE(nn.Module):
                 if edge_pred_dict is not None and edge_pred_dict_t:
                     edge_pred_dict.update(edge_pred_dict_t)
 
-                with torch.no_grad():
-                    t_order_edge_index_dict = LATTE.join_edge_indexes(
-                        t_order_edge_index_dict, edge_index_dict, global_node_idx)
+                # with torch.no_grad():
+                #     t_order_edge_index_dict = LATTE.join_edge_indexes(
+                #         t_order_edge_index_dict, edge_index_dict, global_node_idx)
 
             for node_type in global_node_idx:
                 h_all_dict[node_type].append(h_dict[node_type])

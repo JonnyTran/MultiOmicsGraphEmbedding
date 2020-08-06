@@ -14,7 +14,7 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.datasets import HeteroNetDataset
-
+from ...module.latte import LATTE
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
@@ -46,7 +46,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         assert mode is not None, "Must pass arg mode at get_collate_fn()"
 
         def collate_wrapper(iloc):
-            return self.collate_neighbor_sampler(iloc, mode, t_order)
+            return self.collate_neighbor_sampler(iloc, mode=mode, t_order=t_order)
 
         if "neighbor_sampler" in collate_fn:
             return collate_wrapper
@@ -121,6 +121,15 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                               sampled_local_nodes=sampled_local_nodes,
                                                               local2batch=local2batch,
                                                               filter_nodes=filter_nodes)
+
+        for t in range(2, t_order + 1):
+            if t == 2:
+                t_order_edge_index = LATTE.join_edge_indexes(X["edge_index_dict"], X["edge_index_dict"],
+                                                             X["global_node_index"])
+            else:
+                t_order_edge_index = LATTE.join_edge_indexes(t_order_edge_index, X["edge_index_dict"],
+                                                             X["global_node_index"])
+                X["edge_index_dict"].update(t_order_edge_index)
 
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
