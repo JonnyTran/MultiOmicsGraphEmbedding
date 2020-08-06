@@ -94,17 +94,15 @@ class LATTENodeClassifier(NodeClfMetrics):
         num_class = dataset.n_classes
         self.collate_fn = collate_fn
 
-        self.latte = LATTE(embedding_dim=hparams.embedding_dim, t_order=hparams.t_order,
-                           num_nodes_dict=dataset.num_nodes_dict,
-                           node_attr_shape=dataset.node_attr_shape, metapaths=dataset.get_metapaths(),
-                           activation=hparams.activation,
-                           neg_sampling_ratio=hparams.neg_sampling_ratio,
-                           use_proximity_loss=hparams.use_proximity_loss)
+        self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
+                           t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
+                           metapaths=dataset.get_metapaths(), activation=hparams.activation,
+                           use_proximity_loss=hparams.use_proximity_loss, neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-        # self.classifier = DenseClassification(hparams)
-        self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
-                                                   num_class=hparams.n_classes,
-                                                   loss_type=hparams.loss_type)
+        self.classifier = DenseClassification(hparams)
+        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
+        #                                            num_class=hparams.n_classes,
+        #                                            loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset,
                                                                                          "class_weight") and hparams.use_class_weights else None,

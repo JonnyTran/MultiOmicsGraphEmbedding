@@ -17,7 +17,7 @@ class ClassificationLoss(nn.Module):
         print(f"class_weight for {class_weight.shape} classes") if class_weight is not None else None
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
-            self.criterion = torch.nn.CrossEntropyLoss(class_weight)
+            self.criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
         elif loss_type == "NEGATIVE_LOG_LIKELIHOOD":
             self.criterion = torch.nn.NLLLoss(class_weight)
         elif loss_type == "SOFTMAX_FOCAL_CROSS_ENTROPY":

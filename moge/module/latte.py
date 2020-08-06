@@ -16,9 +16,8 @@ from moge.module.sampling import negative_sample
 from .utils import preprocess_input
 
 class LATTE(nn.Module):
-    def __init__(self, embedding_dim: int, t_order: int, num_nodes_dict: dict, node_attr_shape: dict, metapaths: list,
-                 activation: str = None,
-                 use_proximity_loss=True, neg_sampling_ratio=2.0):
+    def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
+                 activation: str = "relu", use_proximity_loss=True, neg_sampling_ratio=2.0):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -33,14 +32,16 @@ class LATTE(nn.Module):
         for t in range(t_order):
             if t == 0:
                 layers.append(
-                    LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                               metapaths=t_order_metapaths, node_attr_shape=node_attr_shape, activation=activation,
+                    LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
+                               num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths,
+                               activation=activation,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=True))
             else:
                 layers.append(
-                    LATTELayer(embedding_dim=embedding_dim, num_nodes_dict=num_nodes_dict,
-                               metapaths=t_order_metapaths, node_attr_shape=node_attr_shape, activation=activation,
+                    LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
+                               num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths,
+                               activation=activation,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=False))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
@@ -151,9 +152,8 @@ class LATTE(nn.Module):
 class LATTELayer(MessagePassing, pl.LightningModule):
     RELATIONS_DIM = 1
 
-    def __init__(self, embedding_dim: int, num_nodes_dict: {str: int}, node_attr_shape: {str: int},
-                 metapaths: list, activation: str,
-                 use_proximity_loss=True, neg_sampling_ratio=1.0, first=True) -> None:
+    def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
+                 activation: str = "relu", use_proximity_loss=True, neg_sampling_ratio=1.0, first=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
