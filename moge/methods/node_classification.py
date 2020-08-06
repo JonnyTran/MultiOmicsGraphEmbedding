@@ -134,8 +134,8 @@ class LATTENodeClassifier(NodeClfMetrics):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-        print({k: {j: l.shape for j, l in v.items()} for k, v in X.items()})
-        print("y", y.shape)
+        # print({k: {j: l.shape for j, l in v.items()} for k, v in X.items()})
+        # print("y", y.shape)
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion(y_hat, y)

@@ -140,10 +140,11 @@ class OGBEvaluator(Metric):
             assert y_pred.dim() == 2
             y_pred = y_pred.argmax(axis=1)
 
-            if y_pred.dim() <= 1:
-                y_pred = y_pred.unsqueeze(-1)
-            if y_true.dim() <= 1:
-                y_true = y_true.unsqueeze(-1)
+        if y_pred.dim() <= 1:
+            y_pred = y_pred.unsqueeze(-1)
+        if y_true.dim() <= 1:
+            y_true = y_true.unsqueeze(-1)
+
         self.y_true.append(y_true)
         self.y_pred.append(y_pred)
 
@@ -152,8 +153,14 @@ class OGBEvaluator(Metric):
             output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
                                           "y_true": torch.cat(self.y_true, dim=0)})
         elif isinstance(self.evaluator, LinkEvaluator):
-            output = self.evaluator.eval({"y_pred_pos": torch.cat(self.y_pred, dim=0),
-                                          "y_pred_neg": torch.cat(self.y_true, dim=0)})
+            y_pred_pos = torch.cat(self.y_pred, dim=0).squeeze(-1)
+            y_pred_neg = torch.cat(self.y_true, dim=0)
+            min_idx = min(y_pred_pos.size(0), y_pred_neg.size(0))
+            y_pred_pos = y_pred_pos[:min_idx]
+            y_pred_neg = y_pred_neg[:min_idx]
+
+            output = self.evaluator.eval({"y_pred_pos": y_pred_pos,
+                                          "y_pred_neg": y_pred_neg})
         else:
             raise Exception(f"implement eval for {self.evaluator}")
 
