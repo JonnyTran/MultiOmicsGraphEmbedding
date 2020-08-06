@@ -58,7 +58,7 @@ class NodeClfMetrics(pl.LightningModule):
                 "log": logs}
 
     def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
+        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
         if hasattr(self, "test_metrics"):
             logs = self.test_metrics.compute_metrics()
             self.test_metrics.reset_metrics()
