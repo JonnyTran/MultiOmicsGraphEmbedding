@@ -136,12 +136,14 @@ class OGBEvaluator(Metric):
     @reinit__is_reduced
     def update(self, outputs):
         y_pred, y_true = outputs
-        assert y_pred.dim() == 2
-        y_pred = y_pred.argmax(axis=1)
-        if y_pred.dim() <= 1:
-            y_pred = y_pred.unsqueeze(-1)
-        if y_true.dim() <= 1:
-            y_true = y_true.unsqueeze(-1)
+        if isinstance(self.evaluator, NodeEvaluator):
+            assert y_pred.dim() == 2
+            y_pred = y_pred.argmax(axis=1)
+
+            if y_pred.dim() <= 1:
+                y_pred = y_pred.unsqueeze(-1)
+            if y_true.dim() <= 1:
+                y_true = y_true.unsqueeze(-1)
         self.y_true.append(y_true)
         self.y_pred.append(y_pred)
 

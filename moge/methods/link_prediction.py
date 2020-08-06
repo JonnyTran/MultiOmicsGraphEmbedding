@@ -25,7 +25,8 @@ class LATTELinkPredictor(LinkPredMetrics):
 
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
                            t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
-                           metapaths=dataset.get_metapaths(), use_proximity_loss=hparams.use_proximity_loss,
+                           metapaths=dataset.get_metapaths(),
+                           use_proximity_loss=True,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
