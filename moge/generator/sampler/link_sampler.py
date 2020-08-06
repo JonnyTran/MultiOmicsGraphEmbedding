@@ -80,7 +80,7 @@ class LinkSampler(HeteroNetDataset):
             metapath = self.metapaths[metapath_id]
             head_type, tail_type = metapath[0], metapath[-1]
             sources = triples["head"].apply_(lambda x: local2batch[head_type][x])
-            targets = triples["tail"].apply_(lambda x: local2batch[head_type][x])
+            targets = triples["tail"].apply_(lambda x: local2batch[tail_type][x])
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
 
         if self.use_reverse:
