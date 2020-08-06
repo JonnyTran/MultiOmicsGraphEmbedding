@@ -413,10 +413,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                              num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
             if neg_edge_index.size(1) <= 1: continue
 
-            e_pred = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
-            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred)
+            e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
+            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits)
 
-            loss += -torch.mean(torch.log(torch.sigmoid(-e_pred)), dim=-1)
+            loss += -torch.mean(torch.log(torch.sigmoid(-e_pred_logits)), dim=-1)
 
         return loss, edge_pred_dict
 
