@@ -11,6 +11,8 @@ class LinkSampler(HeteroNetDataset):
         super(LinkSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio,
                                           add_reverse_metapaths,
                                           process_graphs)
+        self.n_classes = None
+        self.classes = None
 
     def process_PygLinkDataset(self, dataset: PygLinkPropPredDataset, train_ratio):
         data = dataset[0]
