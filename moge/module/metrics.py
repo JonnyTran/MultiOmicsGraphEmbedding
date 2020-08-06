@@ -3,7 +3,7 @@ import pandas as pd
 
 import torch
 from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, Accuracy
+from ignite.metrics import Precision, Recall, Accuracy, TopKCategoricalAccuracy
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from ogb.graphproppred import Evaluator as GraphEvaluator
@@ -33,7 +33,10 @@ class Metrics():
             elif "recall" in metric:
                 self.metrics[metric] = Recall(average=True, is_multilabel=multilabel)
             elif "top_k" in metric:
-                self.metrics[metric] = TopKMulticlassAccuracy(k_s=top_k)
+                if self.multilabel:
+                    self.metrics[metric] = TopKMulticlassAccuracy(k_s=top_k)
+                else:
+                    self.metrics[metric] = TopKCategoricalAccuracy(k=top_k[-1])
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=multilabel)
             elif "ogbn" in metric:

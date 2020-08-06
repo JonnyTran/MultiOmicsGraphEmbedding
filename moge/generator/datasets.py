@@ -135,8 +135,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
         return embeddings_all, types_all, labels
 
-    def get_TSNE_pos(self, embeddings_all, UMAP: classmethod):
-        pos = UMAP(n_components=2).fit_transform(embeddings_all)
+    def get_projection_pos(self, embeddings_all, UMAP: classmethod, n_components=2):
+        pos = UMAP(n_components=n_components).fit_transform(embeddings_all)
         pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
         return pos
 
