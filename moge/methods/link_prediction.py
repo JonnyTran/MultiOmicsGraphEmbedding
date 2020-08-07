@@ -37,18 +37,25 @@ class LATTELinkPredictor(LinkPredMetrics):
     def training_step(self, batch, batch_nb):
         X, _, _ = batch
         _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" not in metapath], dim=0)
-        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         outputs = {'loss': loss}
         return outputs
 
+    def get_e_pos_neg(self, edge_pred_dict):
+        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
+                           if "neg" not in metapath and metapath in self.dataset.metapaths], dim=0)
+        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        print(e_neg.shape)
+        e_neg = e_neg.view(e_pos.size(0), -1)
+        print(e_neg.shape)
+        return e_pos, e_neg
+
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
         _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" not in metapath], dim=0)
-        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"val_loss": loss}
@@ -56,8 +63,7 @@ class LATTELinkPredictor(LinkPredMetrics):
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" not in metapath], dim=0)
-        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"test_loss": loss}

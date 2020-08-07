@@ -131,10 +131,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                              X["global_node_index"])
             X["edge_index_dict"].update(t_order_edge_index)
 
+        # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
                            for node_type in self.x_dict}
 
+        # y_dict
         if len(self.y_dict) > 1:
             y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
         else:
@@ -145,8 +147,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
 
-        assert y.size(0) == X["global_node_index"][self.head_node_type].size(0)
-        assert y.size(0) == weights.size(0)
+        # assert y.size(0) == X["global_node_index"][self.head_node_type].size(0)
+        # assert y.size(0) == weights.size(0)
         return X, y, weights
 
     def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch: dict,

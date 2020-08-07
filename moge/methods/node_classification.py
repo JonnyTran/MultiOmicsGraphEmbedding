@@ -3,8 +3,8 @@ import itertools
 import pytorch_lightning as pl
 import pandas as pd
 import torch
-from cogdl.models.nn.pyg_gtn import GTN
-from cogdl.models.nn.pyg_han import HAN
+# from cogdl.models.nn.pyg_gtn import GTN
+# from cogdl.models.nn.pyg_han import HAN
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
@@ -216,7 +216,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         return [optimizer], [scheduler]
 
 
-class GTN(GTN, NodeClfMetrics):
+class GTN(NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
@@ -321,7 +321,7 @@ class GTN(GTN, NodeClfMetrics):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class HAN(HAN, NodeClfMetrics):
+class HAN(NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)

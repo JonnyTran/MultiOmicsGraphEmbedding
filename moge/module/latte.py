@@ -396,7 +396,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             e_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=False)
-            loss += -torch.mean(values * torch.log(e_pred), dim=-1)
+            loss += -torch.sum(torch.true_divide(values, e_pred.size(0)) * torch.log(e_pred), dim=-1)
             edge_pred_dict[metapath] = e_pred.detach()
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
