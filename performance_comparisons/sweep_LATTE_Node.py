@@ -23,8 +23,8 @@ def train(hparams):
     MAX_EPOCHS = 30
 
     if hparams.t_order > 1:
-        hparams.n_neighbors_2 = int(153600 / (hparams.n_neighbors_1 * hparams.batch_size))
-        neighbor_sizes = [hparams.n_neighbors_1, max(1, hparams.n_neighbors_2)]
+        hparams.n_neighbors_2 = max(1, int(153600 / (hparams.n_neighbors_1 * hparams.batch_size)))
+        neighbor_sizes = [hparams.n_neighbors_1, hparams.n_neighbors_2]
     else:
         neighbor_sizes = [hparams.n_neighbors_1]
         hparams.batch_size = int(2 * hparams.batch_size)
@@ -48,9 +48,7 @@ def train(hparams):
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2, min_delta=0.01),
-        # callbacks=[EarlyStopping(monitor='loss', patience=1, min_delta=0.0001),
-        #            EarlyStopping(monitor='val_loss', patience=2, min_delta=0.0001), ],
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2, min_delta=0.01, strict=False),
         logger=logger,
         # regularizers=regularizers,
         weights_summary='top',
@@ -67,9 +65,9 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--t_order', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=3036)
-    parser.add_argument('--n_neighbors_1', type=int, default=2024)
-    parser.add_argument('--activation', type=str, default="sigmoid")
+    parser.add_argument('--batch_size', type=int, default=2500)
+    parser.add_argument('--n_neighbors_1', type=int, default=25)
+    parser.add_argument('--activation', type=str, default="tanh")
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)

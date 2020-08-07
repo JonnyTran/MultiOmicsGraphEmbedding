@@ -30,16 +30,16 @@ class Metrics():
         self.metrics = {}
         for metric in set(metrics):
             if "precision" in metric:
-                self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)
+                self.metrics[metric] = Precision(average=True, is_multilabel=multilabel, output_transform=None)
             elif "recall" in metric:
-                self.metrics[metric] = Recall(average=True, is_multilabel=multilabel)
+                self.metrics[metric] = Recall(average=True, is_multilabel=multilabel, output_transform=None)
             elif "top_k" in metric:
                 if self.multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
-                    self.metrics[metric] = TopKCategoricalAccuracy(k=top_k[-1])
+                    self.metrics[metric] = TopKCategoricalAccuracy(k=top_k[-1], output_transform=None)
             elif "accuracy" in metric:
-                self.metrics[metric] = Accuracy(is_multilabel=multilabel)
+                self.metrics[metric] = Accuracy(is_multilabel=multilabel, output_transform=None)
             elif "ogbn" in metric:
                 self.metrics[metric] = OGBEvaluator(NodeEvaluator(metric))
             elif "ogbg" in metric:
@@ -121,18 +121,16 @@ class Metrics():
 
 
 class OGBEvaluator(Metric):
-    def __init__(self, evaluator, output_transform=lambda x: x, device=None):
+    def __init__(self, evaluator, output_transform=None, device=None):
         super().__init__(output_transform, device)
         self.evaluator = evaluator
         self.y_pred = []
         self.y_true = []
 
-    @reinit__is_reduced
     def reset(self):
         self.y_pred = []
         self.y_true = []
 
-    @reinit__is_reduced
     def update(self, outputs):
         y_pred, y_true = outputs
         if isinstance(self.evaluator, NodeEvaluator):
@@ -174,7 +172,7 @@ class TopKMultilabelAccuracy(Metric):
     - `update` must receive output of the form `(y_pred, y)` or `{'y_pred': y_pred, 'y': y}` Tensors of size (batch_size, n_classes).
     """
 
-    def __init__(self, k_s=[5, 10, 50, 100, 200], output_transform=lambda x: x, device=None):
+    def __init__(self, k_s=[5, 10, 50, 100, 200], output_transform=None, device=None):
         self.k_s = k_s
         super(TopKMultilabelAccuracy, self).__init__(output_transform, device=device)
 

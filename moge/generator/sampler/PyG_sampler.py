@@ -46,7 +46,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         assert mode is not None, "Must pass arg mode at get_collate_fn()"
 
         def collate_wrapper(iloc):
-            return self.collate_neighbor_sampler(iloc, mode=mode, t_order=t_order)
+            return self.sample(iloc, mode=mode, t_order=t_order)
 
         if "neighbor_sampler" in collate_fn:
             return collate_wrapper
@@ -76,7 +76,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def collate_neighbor_sampler(self, iloc, mode, t_order=1, filter_nodes=False):
+    def sample(self, iloc, mode, t_order=1, filter_nodes=False):
         """
 
         :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
@@ -190,10 +190,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
                         edge_index = edge_index[:, mask]
 
                 # Convert node global index -> local index -> batch index
-                edge_index[0] = self.local_node_idx[edge_index[0]].apply_(
-                    lambda x: local2batch[head_type][x])
-                edge_index[1] = self.local_node_idx[edge_index[1]].apply_(
-                    lambda x: local2batch[tail_type][x])
+                edge_index[0] = self.local_node_idx[edge_index[0]].apply_(local2batch[head_type].get)
+                edge_index[1] = self.local_node_idx[edge_index[1]].apply_(local2batch[tail_type].get)
 
                 edge_index_dict.setdefault(metapath, []).append(edge_index)
         # Join edges from the adjs
