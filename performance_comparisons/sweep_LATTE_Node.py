@@ -31,12 +31,14 @@ def train(hparams):
         neighbor_sizes = [hparams.n_neighbors_1, hparams.n_neighbors_2]
     else:
         neighbor_sizes = [hparams.n_neighbors_1]
+        hparams.batch_size = int(2 * hparams.batch_size)
+
     dataset = HeteroNeighborSampler(mag, directed=True, neighbor_sizes=neighbor_sizes,
                                     node_types=['paper', 'author', 'field_of_study', 'institution'],
                                     head_node_type="paper",
                                     add_reverse_metapaths=True)
 
-    METRICS = ["precision", "recall", "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
+    METRICS = ["accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
     hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
     hparams.n_classes = dataset.n_classes
     model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler",
@@ -49,7 +51,7 @@ def train(hparams):
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=4, min_delta=0.001),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2, min_delta=0.001),
         # callbacks=[EarlyStopping(monitor='loss', patience=1, min_delta=0.0001),
         #            EarlyStopping(monitor='val_loss', patience=2, min_delta=0.0001), ],
         logger=logger,
