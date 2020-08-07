@@ -24,11 +24,11 @@ from moge.module.utils import filter_samples, preprocess_input, pad_tensors
 class NodeClfMetrics(pl.LightningModule):
     def __init__(self, hparams, dataset, metrics):
         super(NodeClfMetrics, self).__init__()
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=hparams.n_classes,
+        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=hparams.n_classes,
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=hparams.n_classes,
+        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
         self.hparams = hparams
 

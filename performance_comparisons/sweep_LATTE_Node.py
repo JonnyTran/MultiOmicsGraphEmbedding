@@ -38,7 +38,8 @@ def train(hparams):
 
     METRICS = ["precision", "recall", "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
     hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
-    model = LATTENodeClassifier(Namespace(**hparams), dataset, collate_fn="neighbor_sampler",
+    hparams.n_classes = dataset.n_classes
+    model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler",
                                 metrics=METRICS)
 
     wandb_logger = WandbLogger(name=model.name(),
