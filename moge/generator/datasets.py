@@ -128,10 +128,13 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         embeddings_all = pd.concat(embeddings, axis=0)
 
         types_all = embeddings_all.index.to_series().str.slice(0, 1)
-        labels = pd.Series(
-            self.y_dict[self.head_node_type][global_node_index[self.head_node_type]].squeeze(-1).numpy(),
-            index=embeddings[0].index,
-            dtype=str)
+        if hasattr(self, "y_dict") and len(self.y_dict) > 0:
+            labels = pd.Series(
+                self.y_dict[self.head_node_type][global_node_index[self.head_node_type]].squeeze(-1).numpy(),
+                index=embeddings[0].index,
+                dtype=str)
+        else:
+            labels = None
 
         return embeddings_all, types_all, labels
 
@@ -334,7 +337,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
     def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
-                                 shuffle=False, num_workers=num_workers,
+                                 shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         batch_size,
                                                                                                         mode="validation",
@@ -343,7 +346,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
-                                 shuffle=False, num_workers=num_workers,
+                                 shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         batch_size,
                                                                                                         mode="testing",

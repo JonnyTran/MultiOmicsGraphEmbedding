@@ -22,7 +22,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         self.multilabel = dataset.multilabel
         self._name = f"LATTE-{hparams.t_order}{' link_pred' if hparams.use_proximity_loss else ''}"
         self.collate_fn = collate_fn
-        self.num_nodes_neg = hparams.neg_sampling_ratio * (2 if self.dataset.use_reverse else 1)
+        self.num_nodes_neg = int(hparams.neg_sampling_ratio * (2 if self.dataset.use_reverse else 1))
 
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
                            t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
@@ -53,6 +53,8 @@ class LATTELinkPredictor(LinkPredMetrics):
         e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
                            if "neg" not in metapath and metapath in self.dataset.metapaths], dim=0)
         e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        if e_neg.size(0) % self.num_nodes_neg:
+            e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % self.num_nodes_neg]
         e_neg = e_neg.view(-1, self.num_nodes_neg)
 
         # ensure same num_edge in dim 0
