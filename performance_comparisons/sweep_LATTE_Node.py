@@ -42,10 +42,7 @@ def train(hparams):
     model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler",
                                 metrics=METRICS)
 
-    wandb_logger = WandbLogger(name=model.name(),
-                               tags=[dataset.name()],
-                               project="multiplex-comparison")
-    wandb_logger.log_hyperparams(hparams)
+    logger = WandbLogger()
 
     trainer = Trainer(
         gpus=NUM_GPUS,
@@ -55,7 +52,7 @@ def train(hparams):
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=4, min_delta=0.001),
         # callbacks=[EarlyStopping(monitor='loss', patience=1, min_delta=0.0001),
         #            EarlyStopping(monitor='val_loss', patience=2, min_delta=0.0001), ],
-        logger=wandb_logger,
+        logger=logger,
         # regularizers=regularizers,
         weights_summary='top',
         # use_amp=USE_AMP,
