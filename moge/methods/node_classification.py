@@ -91,7 +91,6 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
-        num_class = dataset.n_classes
         self.collate_fn = collate_fn
 
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,

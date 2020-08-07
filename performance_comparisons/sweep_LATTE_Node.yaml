@@ -1,0 +1,22 @@
+program: performance_comparisons/sweep_LATTE_Node.py
+method: bayes
+metric:
+  name: val_acc
+  goal: maximize
+parameters:
+  embedding_dim:
+    values: [64, 128, 256]
+  t_order:
+    values: [1, 2]
+  n_neighbors_1:
+    values: [5, 15, 25, 30]
+  activation:
+    values: ["sigmoid", "tanh", "relu"]
+  use_proximity_loss:
+    values: [True, False]
+  neg_sampling_ratio:
+    values: [1.0, 2.0, 5.0]
+  use_class_weights:
+    values: [True, False]
+  lr:
+    values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
