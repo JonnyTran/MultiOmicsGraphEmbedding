@@ -162,8 +162,9 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         return {"test_loss": test_loss}
 
-    def get_multiplex_collate_fn(self, node_types, layers):
-        def multiplex_collate_fn(batch):
+    @staticmethod
+    def multiplex_collate_fn(node_types, layers):
+        def collate_fn(batch):
             y_all, idx_all = [], []
             node_type_concat = dict()
             layer_concat = dict()
@@ -188,7 +189,7 @@ class LATTENodeClassifier(NodeClfMetrics):
 
             return X_all, torch.cat(y_all), torch.cat(idx_all)
 
-        return multiplex_collate_fn
+        return collate_fn
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
