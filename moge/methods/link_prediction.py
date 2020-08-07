@@ -22,6 +22,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         self.multilabel = dataset.multilabel
         self._name = f"LATTE-{hparams.t_order}{' link_pred' if hparams.use_proximity_loss else ''}"
         self.collate_fn = collate_fn
+        self.num_nodes_neg = hparams.neg_sampling_ratio * (2 if self.dataset.use_reverse else 1)
 
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
                            t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
@@ -44,12 +45,21 @@ class LATTELinkPredictor(LinkPredMetrics):
         return outputs
 
     def get_e_pos_neg(self, edge_pred_dict):
+        """
+        Align e_pos and e_neg to shape shape (num_edge, ) and (num_edge, num_nodes_neg)
+        :param edge_pred_dict:
+        :return:
+        """
         e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
                            if "neg" not in metapath and metapath in self.dataset.metapaths], dim=0)
         e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
-        print(e_neg.shape)
-        e_neg = e_neg.view(e_pos.size(0), -1)
-        print(e_neg.shape)
+        e_neg = e_neg.view(-1, self.num_nodes_neg)
+
+        # ensure same num_edge in dim 0
+        min_idx = min(e_pos.size(0), e_neg.size(0))
+        e_pos = e_pos[:min_idx]
+        e_neg = e_neg[:min_idx]
+
         return e_pos, e_neg
 
     def validation_step(self, batch, batch_nb):
