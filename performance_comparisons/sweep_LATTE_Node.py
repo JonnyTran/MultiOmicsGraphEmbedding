@@ -4,7 +4,6 @@ from argparse import ArgumentParser, Namespace
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
-
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 import pytorch_lightning as pl
@@ -13,7 +12,6 @@ from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 
 from ogb.nodeproppred import PygNodePropPredDataset
-
 from moge.generator import HeteroNeighborSampler, LinkSampler
 from pytorch_lightning.loggers import WandbLogger
 
@@ -46,11 +44,11 @@ def train(hparams):
     logger = WandbLogger()
 
     trainer = Trainer(
-        gpus=NUM_GPUS,
+        gpus=NUM_GPUS, auto_select_gpus=True,
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2, min_delta=0.001),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2, min_delta=0.1),
         # callbacks=[EarlyStopping(monitor='loss', patience=1, min_delta=0.0001),
         #            EarlyStopping(monitor='val_loss', patience=2, min_delta=0.0001), ],
         logger=logger,

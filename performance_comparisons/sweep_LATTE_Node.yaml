@@ -11,7 +11,7 @@ parameters:
   n_neighbors_1:
     values: [5, 15, 25, 30]
   activation:
-    values: ["sigmoid", "tanh", "relu"]
+    values: ["sigmoid", "tanh", "relu", "none"]
   nb_cls_dense_size:
     values: [0, 512, 1024]
   nb_cls_dropout:

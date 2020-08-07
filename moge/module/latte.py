@@ -164,8 +164,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.use_proximity_loss = use_proximity_loss
         self.neg_sampling_ratio = neg_sampling_ratio
 
-        self.activation = activation
-        assert self.activation in ["sigmoid", "tanh", "relu", None]
+        self.activation = activation.lower()
+        assert self.activation in ["sigmoid", "tanh", "relu", "none"]
 
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
