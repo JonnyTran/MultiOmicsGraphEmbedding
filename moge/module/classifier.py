@@ -25,7 +25,6 @@ class DenseClassification(nn.Module):
         else:
             if hparams.nb_cls_dropout > 0.0:
                 self.fc_classifier = nn.Sequential(OrderedDict([
-                    ("relu", nn.ReLU()),
                     ("dropout", nn.Dropout(p=hparams.nb_cls_dropout)),
                     ("linear", nn.Linear(hparams.embedding_dim, hparams.n_classes))
                 ]))

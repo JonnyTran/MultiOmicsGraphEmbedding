@@ -22,9 +22,7 @@ from moge.methods.node_classification import LATTENodeClassifier
 
 def train(hparams):
     NUM_GPUS = 1
-    MAX_EPOCHS = 100
-
-    mag = PygNodePropPredDataset(name="ogbn-mag", root="datasets")
+    MAX_EPOCHS = 30
 
     if hparams.t_order > 1:
         hparams.n_neighbors_2 = int(153600 / (hparams.n_neighbors_1 * hparams.batch_size))
@@ -33,17 +31,18 @@ def train(hparams):
         neighbor_sizes = [hparams.n_neighbors_1]
         hparams.batch_size = int(2 * hparams.batch_size)
 
+    mag = PygNodePropPredDataset(name="ogbn-mag", root="datasets")
     dataset = HeteroNeighborSampler(mag, directed=True, neighbor_sizes=neighbor_sizes,
                                     node_types=['paper', 'author', 'field_of_study', 'institution'],
                                     head_node_type="paper",
                                     add_reverse_metapaths=True)
 
-    METRICS = ["accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
     hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
     hparams.n_classes = dataset.n_classes
+    METRICS = ["accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
+
     model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler",
                                 metrics=METRICS)
-
     logger = WandbLogger()
 
     trainer = Trainer(
@@ -63,7 +62,7 @@ def train(hparams):
     )
 
     trainer.fit(model)
-
+    trainer.test(model)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -81,6 +80,7 @@ if __name__ == "__main__":
     parser.add_argument('--neg_sampling_ratio', type=float, default=2.0)
     parser.add_argument('--use_class_weights', type=bool, default=False)
 
+    parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
     parser.add_argument('--lr', type=float, default=0.01)
 
     # add all the available options to the trainer

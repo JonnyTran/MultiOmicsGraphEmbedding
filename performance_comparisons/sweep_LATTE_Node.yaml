@@ -5,13 +5,19 @@ metric:
   goal: maximize
 parameters:
   embedding_dim:
-    values: [64, 128, 256]
+    values: [64, 128, 192]
   t_order:
     values: [1, 2]
   n_neighbors_1:
     values: [5, 15, 25, 30]
   activation:
     values: ["sigmoid", "tanh", "relu"]
+  nb_cls_dense_size:
+    values: [0, 512, 1024]
+  nb_cls_dropout:
+    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+  loss_type:
+    values: ["SOFTMAX_CROSS_ENTROPY", "SOFTMAX_FOCAL_CROSS_ENTROPY"]
   use_proximity_loss:
     values: [True, False]
   neg_sampling_ratio:
