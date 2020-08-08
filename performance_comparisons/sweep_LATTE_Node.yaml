@@ -26,11 +26,7 @@ parameters:
     values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
   loss_type:
     values: ["SOFTMAX_CROSS_ENTROPY", "SOFTMAX_FOCAL_CROSS_ENTROPY"]
-  use_proximity_loss:
-    values: [True, False]
-  neg_sampling_ratio:
-    values: [1.0, 2.0, 5.0]
   use_class_weights:
     values: [True, False]
   lr:
-    values: [0.0005, 0.001, 0.01]
+    values: [0.005, 0.001, 0.01]
