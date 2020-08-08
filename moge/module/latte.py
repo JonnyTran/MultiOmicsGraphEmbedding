@@ -34,14 +34,14 @@ class LATTE(nn.Module):
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
-                               attn_activation=attn_activation.lower(), attn_dropout=attn_dropout,
+                               attn_activation=attn_activation, attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=True))
             else:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
-                               attn_activation=attn_activation.lower(), attn_dropout=attn_dropout,
+                               attn_activation=attn_activation, attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=False))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
