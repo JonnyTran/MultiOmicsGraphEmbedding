@@ -181,14 +181,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
-            self.alpha_activation = torch.nn.ModuleList(
-                [torch.nn.Linear(1, 1, bias=False) for metapath in self.metapaths])
-            # nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
-        elif attn_activation == "sharpening_bias":
-            self.alpha_activation = torch.nn.ModuleList(
-                [torch.nn.Linear(1, 1, bias=True) for metapath in self.metapaths])
+            self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
         elif attn_activation == "PReLU":
-            self.alpha_activation = torch.nn.ModuleList([nn.PReLU(init=0.02) for metapath in self.metapaths])
+            self.alpha_activation = nn.PReLU(init=0.02)
         elif attn_activation == "LeakyReLU":
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
         else:
@@ -267,8 +262,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             return embeddings
 
     def attn_activation(self, alpha, metapath_id):
-        if isinstance(self.alpha_activation, nn.ModuleList):
-            return self.alpha_activation[metapath_id].forward(alpha)
+        if isinstance(self.alpha_activation, torch.Tensor):
+            return self.alpha_activation[metapath_id] * alpha
         elif isinstance(self.alpha_activation, nn.Module):
             return self.alpha_activation.forward(alpha)
         else:
