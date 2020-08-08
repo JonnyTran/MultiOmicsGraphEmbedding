@@ -9,13 +9,15 @@ early_terminate:
   s: 2
 parameters:
   embedding_dim:
-    values: [64, 128, 192]
+    values: [64, 128, 256]
   t_order:
     values: [1, 2]
   n_neighbors_1:
     values: [5, 15, 25, 30]
   activation:
     values: ["sigmoid", "tanh", "relu", "none"]
+  alpha_activation:
+    values: ["sharpening", "sharpening_bias", "PReLU", "LeakyReLU", "none"]
   nb_cls_dense_size:
     values: [0, 512, 1024]
   nb_cls_dropout:
@@ -29,4 +31,4 @@ parameters:
   use_class_weights:
     values: [True, False]
   lr:
-    values: [0.0001, 0.001, 0.01]
+    values: [0.0005, 0.001, 0.01]

@@ -19,8 +19,9 @@ from moge.methods.node_classification import LATTENodeClassifier
 
 
 def train(hparams):
-    NUM_GPUS = 1
-    MAX_EPOCHS = 30
+    NUM_GPUS = 4
+    USE_AMP = True if NUM_GPUS > 1 else False
+    MAX_EPOCHS = 50
 
     if hparams.t_order > 1:
         hparams.n_neighbors_2 = max(1, int(153600 / (hparams.n_neighbors_1 * hparams.batch_size)))
@@ -44,17 +45,17 @@ def train(hparams):
     logger = WandbLogger()
 
     trainer = Trainer(
-        gpus=NUM_GPUS, auto_select_gpus=True,
-        distributed_backend='dp' if NUM_GPUS > 1 else None,
+        gpus=NUM_GPUS,
+        distributed_backend='ddp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=2, min_delta=0.01, strict=False),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3, min_delta=0.01, strict=False),
         logger=logger,
         # regularizers=regularizers,
         weights_summary='top',
-        # use_amp=USE_AMP,
-        # amp_level='O1' if USE_AMP else None,
-        # precision=16 if USE_AMP else 32
+        use_amp=USE_AMP,
+        amp_level='O1' if USE_AMP else None,
+        precision=16 if USE_AMP else 32
     )
 
     trainer.fit(model)
@@ -65,9 +66,10 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--t_order', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=2500)
+    parser.add_argument('--batch_size', type=int, default=2048)
     parser.add_argument('--n_neighbors_1', type=int, default=25)
     parser.add_argument('--activation', type=str, default="tanh")
+    parser.add_argument('--alpha_activation', type=str, default="tanh")
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
