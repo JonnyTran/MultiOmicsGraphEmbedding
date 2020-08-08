@@ -5,7 +5,6 @@ import pandas as pd
 import torch
 # from cogdl.models.nn.pyg_gtn import GTN
 # from cogdl.models.nn.pyg_han import HAN
-import horovod.torch as hvd
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
@@ -212,7 +211,7 @@ class LATTENodeClassifier(NodeClfMetrics):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
-        optimizer = hvd.DistributedOptimizer(optimizer)
+        # optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=self.named_parameters())
         scheduler = ReduceLROnPlateau(optimizer)
 
         return [optimizer], [scheduler]
