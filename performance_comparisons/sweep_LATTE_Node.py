@@ -68,8 +68,8 @@ if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
     parser.add_argument('--embedding_dim', type=int, default=128)
-    parser.add_argument('--t_order', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=4096)
+    parser.add_argument('--t_order', type=int, default=2)
+    parser.add_argument('--batch_size', type=int, default=2048)
     parser.add_argument('--n_neighbors_1', type=int, default=30)
     parser.add_argument('--activation', type=str, default="tanh")
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
