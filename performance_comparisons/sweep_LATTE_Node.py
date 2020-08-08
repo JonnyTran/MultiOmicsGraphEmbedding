@@ -17,7 +17,7 @@ from moge.generator import HeteroNeighborSampler, LinkSampler
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.methods.node_classification import LATTENodeClassifier
-
+from moge.methods.link_prediction import LATTELinkPredictor
 
 def train(hparams):
     NUM_GPUS = 4
@@ -38,21 +38,30 @@ def train(hparams):
         ogbn = PygNodePropPredDataset(name=hparams.dataset, root="datasets")
         dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=neighbor_sizes,
                                         node_types=list(ogbn[0].num_nodes_dict.keys()),
-                                        head_node_type="paper",
+                                        head_node_type=None,
                                         add_reverse_metapaths=True)
-    if "ogbl" in hparams.dataset:
+
+        hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
+        hparams.n_classes = dataset.n_classes
+        METRICS = ["accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
+
+        model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
+
+    elif "ogbl" in hparams.dataset:
         ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="datasets")
         dataset = LinkSampler(ogbl, directed=True,
                               node_types=list(ogbl[0].num_nodes_dict.keys()),
-                              head_node_type="paper",
+                              head_node_type=None,
                               add_reverse_metapaths=True)
 
-    hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
-    hparams.n_classes = dataset.n_classes
-    METRICS = ["accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
+        hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
+        hparams.n_classes = dataset.n_classes
+        METRICS = ["accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
 
-    model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler",
-                                metrics=METRICS)
+        model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=METRICS)
+    else:
+        raise Exception(f"Dataset `{hparams.dataset}` not found")
+
     logger = WandbLogger()
 
     trainer = Trainer(
