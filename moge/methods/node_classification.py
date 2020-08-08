@@ -95,8 +95,8 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
                            t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
                            metapaths=dataset.get_metapaths(), activation=hparams.activation,
-                           alpha_activation=hparams.alpha_activation,
-                           use_proximity_loss=hparams.use_proximity_loss, neg_sampling_ratio=hparams.neg_sampling_ratio)
+                           attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
+                           neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,

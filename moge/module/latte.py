@@ -17,7 +17,7 @@ from .utils import preprocess_input
 
 class LATTE(nn.Module):
     def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
-                 activation: str = "relu", alpha_activation="sharpening", use_proximity_loss=True,
+                 activation: str = "relu", attn_activation="sharpening", attn_dropout=0.5, use_proximity_loss=True,
                  neg_sampling_ratio=2.0):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
@@ -33,15 +33,15 @@ class LATTE(nn.Module):
             if t == 0:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
-                               num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths,
-                               activation=activation, alpha_activation=alpha_activation.lower(),
+                               num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
+                               attn_activation=attn_activation.lower(), attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=True))
             else:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
-                               num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths,
-                               activation=activation, alpha_activation=alpha_activation.lower(),
+                               num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
+                               attn_activation=attn_activation.lower(), attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=False))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
@@ -148,9 +148,8 @@ class LATTE(nn.Module):
 
 class LATTELayer(MessagePassing, pl.LightningModule):
     RELATIONS_DIM = 1
-
     def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", alpha_activation="sharpening", use_proximity_loss=True,
+                 activation: str = "relu", attn_activation="sharpening", attn_dropout=0.5, use_proximity_loss=True,
                  neg_sampling_ratio=1.0, first=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
@@ -160,6 +159,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.embedding_dim = embedding_dim
         self.use_proximity_loss = use_proximity_loss
         self.neg_sampling_ratio = neg_sampling_ratio
+        self.attn_dropout = attn_dropout
 
         self.activation = activation.lower()
         assert self.activation in ["sigmoid", "tanh", "relu", "none"]
@@ -180,19 +180,19 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
 
-        if alpha_activation == "sharpening":
+        if attn_activation == "sharpening":
             self.alpha_activation = torch.nn.ModuleList(
                 [torch.nn.Linear(1, 1, bias=False) for metapath in self.metapaths])
             # nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
-        elif alpha_activation == "sharpening_bias":
+        elif attn_activation == "sharpening_bias":
             self.alpha_activation = torch.nn.ModuleList(
                 [torch.nn.Linear(1, 1, bias=True) for metapath in self.metapaths])
-        elif alpha_activation == "PReLU":
+        elif attn_activation == "PReLU":
             self.alpha_activation = torch.nn.ModuleList([nn.PReLU(init=0.02) for metapath in self.metapaths])
-        elif alpha_activation == "LeakyReLU":
+        elif attn_activation == "LeakyReLU":
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
         else:
-            print(f"WARNING: alpha_activation `{alpha_activation}` did not match, so used linear activation")
+            print(f"WARNING: alpha_activation `{attn_activation}` did not match, so used linear activation")
             self.alpha_activation = None
 
         # If some node type are not attributed, assign embeddings for them
@@ -266,7 +266,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         else:
             return embeddings
 
-    def alpha_activation(self, alpha, metapath_id):
+    def attn_activation(self, alpha, metapath_id):
         if isinstance(self.alpha_activation, nn.ModuleList):
             return self.alpha_activation[metapath_id].forward(alpha)
         elif isinstance(self.alpha_activation, nn.Module):
@@ -346,10 +346,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        # alpha = self.alpha_weights[metapath_idx] * alpha
-        alpha = self.alpha_activation(alpha, metapath_idx)
+        alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=0.5, training=self.training)
+        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
     def get_h_dict(self, x_dict, global_node_idx):
