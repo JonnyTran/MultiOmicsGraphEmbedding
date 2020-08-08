@@ -261,7 +261,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         :param x_dict: a dict of node attributes indexed node_type
         :param global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
         :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
-        :param h1_dict: Embeddings of the previous order. Default: None (if first order). A dict of edge_index indexed by metapath
+        :param h1_dict: Context embedding of the previous order. Default: None (if first order). A dict of (node_type: tensor)
         :return: output_emb, loss
         """
         # H_t = W_t * x
@@ -291,11 +291,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 head_type, tail_type = metapath[0], metapath[-1]
                 num_node_head, num_node_tail = len(global_node_idx[head_type]), len(global_node_idx[tail_type])
 
-                if isinstance(edge_index_dict[metapath], tuple):
-                    edge_index, _ = edge_index_dict[metapath]
-                else:
-                    edge_index = edge_index_dict[metapath]
-                if edge_index.size(1) <= 5: continue
+                edge_index, _ = LATTE.get_edge_index_values(edge_index_dict[metapath])
+                if edge_index is None: continue
 
                 # Propapate flows from target nodes to source nodes
                 emb_relation_agg[head_type][:, i] = self.propagate(
@@ -303,8 +300,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     size=(num_node_tail, num_node_head),
                     x=(h_dict[tail_type], h_dict[head_type]),
                     alpha=(alpha_r[metapath], alpha_l[metapath]),
-                    metapath_idx=self.metapaths.index(metapath),
-                )
+                    metapath_idx=self.metapaths.index(metapath))
 
             # Assign the "self" embedding representation
             emb_relation_agg[node_type][:, -1] = h_dict[node_type]
@@ -331,7 +327,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.alpha_weights[metapath_idx] * alpha
+        # alpha = self.alpha_weights[metapath_idx] * alpha
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=0.5, training=self.training)
         return x_j * alpha.unsqueeze(-1)
@@ -395,10 +391,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 values = 1.0
             if edge_index is None: continue
 
-            e_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=False)
-            edge_pred_dict[metapath] = e_pred.detach()
-            loss_pos += -torch.sum(values * torch.log(e_pred), dim=-1)
-            num_samples += e_pred.size(0)
+            e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
+            loss_pos += -torch.sum(values * F.logsigmoid(e_pred_logits), dim=-1)
+            edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
+            num_samples += e_pred_logits.size(0)
         loss_pos = torch.true_divide(loss_pos, num_samples)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
@@ -416,8 +412,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if neg_edge_index.size(1) <= 1: continue
 
             e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
-            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits).detach()
-            loss_neg += -torch.sum(torch.log(torch.sigmoid(-e_pred_logits)), dim=-1)
+            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits.detach())
+            loss_neg += -torch.sum(F.logsigmoid(-e_pred_logits), dim=-1)
             num_samples += e_pred_logits.size(0)
         loss_neg = torch.true_divide(loss_neg, num_samples)
 

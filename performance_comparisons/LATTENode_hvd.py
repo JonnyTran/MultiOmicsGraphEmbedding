@@ -52,7 +52,7 @@ def train(hparams):
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=2, min_delta=0.01, strict=False),
-        callbacks=[ModelCheckpoint(f"./models/{model.name()}-{dataset.name()}.ckpt", )],
+        # callbacks=[ModelCheckpoint(f"./models/{model.name()}-{dataset.name()}.ckpt", )],
         # regularizers=regularizers,
         weights_summary='top',
         # use_amp=USE_AMP,

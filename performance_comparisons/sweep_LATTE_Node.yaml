@@ -1,8 +1,8 @@
 program: performance_comparisons/sweep_LATTE_Node.py
 method: bayes
 metric:
-  name: val_acc
-  goal: maximize
+  name: val_loss
+  goal: minimize
 early_terminate:
   type: hyperband
   max_iter: 27
@@ -29,4 +29,4 @@ parameters:
   use_class_weights:
     values: [True, False]
   lr:
-    values: [0.000001, 0.00001, 0.0001, 0.001, 0.01, 0.1]
+    values: [0.0001, 0.001, 0.01]
