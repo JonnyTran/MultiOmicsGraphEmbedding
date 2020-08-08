@@ -34,14 +34,14 @@ class LATTE(nn.Module):
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths,
-                               activation=activation, alpha_activation=alpha_activation,
+                               activation=activation, alpha_activation=alpha_activation.lower(),
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=True))
             else:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths,
-                               activation=activation, alpha_activation=alpha_activation,
+                               activation=activation, alpha_activation=alpha_activation.lower(),
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
                                first=False))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
@@ -101,11 +101,6 @@ class LATTE(nn.Module):
 
                     except Exception as e:
                         print(f"{metapath_a}, {edge_index_a.size(1)}", f"{metapath_b}, {edge_index_b.size(1)}")
-                        print("edge_index_a", edge_index_a.size(1), edge_index_a.dtype)
-                        print("values_a", values_a.size(), values_a.dtype)
-                        print("edge_index_b", edge_index_b.size(1), edge_index_b.dtype)
-                        print("values_b", values_b.size(), values_b.dtype)
-                        # raise e
                         continue
 
         return output_dict
@@ -197,6 +192,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         elif alpha_activation == "LeakyReLU":
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
         else:
+            print(f"WARNING: alpha_activation `{alpha_activation}` did not match, so used linear activation")
             self.alpha_activation = None
 
         # If some node type are not attributed, assign embeddings for them

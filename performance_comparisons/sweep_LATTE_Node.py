@@ -69,7 +69,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=2048)
     parser.add_argument('--n_neighbors_1', type=int, default=25)
     parser.add_argument('--activation', type=str, default="tanh")
-    parser.add_argument('--alpha_activation', type=str, default="tanh")
+    parser.add_argument('--alpha_activation', type=str, default="relu")
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
