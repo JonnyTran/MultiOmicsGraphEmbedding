@@ -24,11 +24,14 @@ def train(hparams):
     MAX_EPOCHS = 50
 
     if hparams.t_order > 1:
-        hparams.n_neighbors_2 = max(1, int(153600 / (hparams.n_neighbors_1 * hparams.batch_size)))
+        hparams.n_neighbors_2 = max(1, 153600 // (hparams.n_neighbors_1 * hparams.batch_size))
         neighbor_sizes = [hparams.n_neighbors_1, hparams.n_neighbors_2]
     else:
         neighbor_sizes = [hparams.n_neighbors_1]
         hparams.batch_size = int(2 * hparams.batch_size)
+
+    if hparams.embedding_dim > 128:
+        hparams.batch_size = hparams.batch_size // 2
 
     mag = PygNodePropPredDataset(name="ogbn-mag", root="datasets")
     dataset = HeteroNeighborSampler(mag, directed=True, neighbor_sizes=neighbor_sizes,
