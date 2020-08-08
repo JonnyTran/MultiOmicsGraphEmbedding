@@ -1,10 +1,8 @@
 import multiprocessing
 import torch
-import pytorch_lightning as pl
 
-from .node_classification import NodeClfMetrics, LATTENodeClassifier
-from ..generator.datasets import HeteroNetDataset
-from ..generator.sampler.link_sampler import LinkSampler
+from .node_classification import NodeClfMetrics
+from moge.generator.sampler.datasets import HeteroNetDataset
 from ..module.latte import LATTE
 
 

@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
 
 from moge.methods.node_classification import MetaPath2Vec, HAN, GTN
-from moge.generator.datasets import HeteroNetDataset
+from moge.generator.sampler.datasets import HeteroNetDataset
 from pytorch_lightning.loggers import WandbLogger
 
 

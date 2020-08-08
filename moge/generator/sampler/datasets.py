@@ -35,14 +35,6 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.node_types = node_types
         self.head_node_type = head_node_type
 
-        if self.node_types is not None and self.head_node_type is not None:
-            assert self.node_types[0] == self.head_node_type
-        elif self.head_node_type is None:
-            self.head_node_type = self.node_types[0]
-            print(f"Selected head_node_type to be {self.head_node_type}")
-        else:
-            raise Exception("Must pass in node_types")
-
         # PyTorchGeometric Dataset
         if isinstance(dataset, PygNodePropPredDataset):
             print("PygNodePropPredDataset")
@@ -53,10 +45,6 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         elif isinstance(dataset, InMemoryDataset):
             print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio)
-        # StellarGraph Dataset
-        # elif isinstance(dataset, DatasetLoader):
-        #     print("StellarGraph Dataset")
-        #     self.process_stellargraph(dataset, metapaths, node_types, train_ratio)
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             print("HANDataset/GTNDataset")
             self.process_HANdataset(dataset, metapaths, node_types, train_ratio)
@@ -303,28 +291,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.split_train_val_test(train_ratio,
                                       sample_indices=self.y_index_dict[self.head_node_type])
 
-    def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
-        data = dataset[0]
-        self._name = dataset.name
-        self.edge_index_dict = data.edge_index_dict
-        self.num_nodes_dict = data.num_nodes_dict
-        if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
-        self.x_dict = data.x_dict
-        self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
-        self.y_dict = data.y_dict
-        self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
-                             data.y_dict.keys()}
-        self.multilabel = False
 
-        self.metapaths = list(self.edge_index_dict.keys())
-
-        split_idx = dataset.get_idx_split()
-        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
-                                                                   split_idx["valid"][self.head_node_type], \
-                                                                   split_idx["test"][self.head_node_type]
-        self.train_ratio = self.training_idx.numel() / \
-                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,

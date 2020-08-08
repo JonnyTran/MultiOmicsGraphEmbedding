@@ -12,6 +12,7 @@ from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 
 from ogb.nodeproppred import PygNodePropPredDataset
+from ogb.linkproppred import PygLinkPropPredDataset
 from moge.generator import HeteroNeighborSampler, LinkSampler
 from pytorch_lightning.loggers import WandbLogger
 
@@ -33,11 +34,18 @@ def train(hparams):
     if hparams.embedding_dim > 128:
         hparams.batch_size = hparams.batch_size // 2
 
-    mag = PygNodePropPredDataset(name="ogbn-mag", root="datasets")
-    dataset = HeteroNeighborSampler(mag, directed=True, neighbor_sizes=neighbor_sizes,
-                                    node_types=['paper', 'author', 'field_of_study', 'institution'],
-                                    head_node_type="paper",
-                                    add_reverse_metapaths=True)
+    if "ogbn" in hparams.dataset:
+        ogbn = PygNodePropPredDataset(name=hparams.dataset, root="datasets")
+        dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=neighbor_sizes,
+                                        node_types=list(ogbn[0].num_nodes_dict.keys()),
+                                        head_node_type="paper",
+                                        add_reverse_metapaths=True)
+    if "ogbl" in hparams.dataset:
+        ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="datasets")
+        dataset = LinkSampler(ogbl, directed=True,
+                              node_types=list(ogbl[0].num_nodes_dict.keys()),
+                              head_node_type="paper",
+                              add_reverse_metapaths=True)
 
     hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
     hparams.n_classes = dataset.n_classes
@@ -67,6 +75,7 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
+    parser.add_argument('--dataset', type=str, default="ogbn-mag")
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--t_order', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=2048)

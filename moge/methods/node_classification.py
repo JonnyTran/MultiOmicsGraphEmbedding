@@ -12,13 +12,13 @@ from torch_geometric.nn import MetaPath2Vec
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from moge.generator.datasets import HeteroNetDataset
+from moge.generator.sampler.datasets import HeteroNetDataset
 from moge.module.metrics import Metrics
 from moge.module.trainer import _fix_dp_return_type
 from moge.module.latte import LATTE
-from moge.module.classifier import MulticlassClassification, DenseClassification
+from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
-from moge.module.utils import filter_samples, preprocess_input, pad_tensors
+from moge.module.utils import filter_samples, pad_tensors
 
 class NodeClfMetrics(pl.LightningModule):
     def __init__(self, hparams, dataset, metrics):

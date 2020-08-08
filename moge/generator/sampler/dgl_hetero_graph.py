@@ -1,16 +1,6 @@
-import numpy as np
-import torch
-from ogb.linkproppred import PygLinkPropPredDataset
-
-from torch_geometric.data import DataLoader, Data
-from torch_geometric.utils import to_undirected
-from torch_geometric.data import NeighborSampler
-from torch_geometric.utils.hetero import group_hetero_graph
-import torch_sparse
-
 import dgl
 
-from ..datasets import HeteroNetDataset
+from moge.generator.sampler.datasets import HeteroNetDataset
 
 
 class DGLHeteroSampler(HeteroNetDataset):

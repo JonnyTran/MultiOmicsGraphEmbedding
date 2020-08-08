@@ -1,20 +1,13 @@
-import multiprocessing
 from collections import OrderedDict
 import pandas as pd
 import numpy as np
 import torch
 
-from cogdl.datasets.han_data import HANDataset
-
-import torch_sparse
-from ogb.linkproppred import PygLinkPropPredDataset
-from torch_geometric.data import DataLoader, Data
-from torch_geometric.utils import to_undirected
 from torch_geometric.data import NeighborSampler
 from torch_geometric.utils.hetero import group_hetero_graph
+from ogb.nodeproppred import PygNodePropPredDataset
+from moge.generator.sampler.datasets import HeteroNetDataset
 
-from moge.generator.datasets import HeteroNetDataset
-from ...module.latte import LATTE
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
@@ -23,12 +16,40 @@ class HeteroNeighborSampler(HeteroNetDataset):
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
                                                     train_ratio, add_reverse_metapaths, process_graphs)
 
+    def process_PygNodeDataset(self, dataset: PygNodePropPredDataset, train_ratio):
+        data = dataset[0]
+        self._name = dataset.name
+        self.edge_index_dict = data.edge_index_dict
+        self.num_nodes_dict = data.num_nodes_dict
+        if self.node_types is None:
+            self.node_types = list(data.num_nodes_dict.keys())
+        self.x_dict = data.x_dict
+        self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
+        self.y_dict = data.y_dict
+        self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
+                             data.y_dict.keys()}
+
+        if self.head_node_type is None:
+            if hasattr(self, "y_dict"):
+                self.head_node_type = list(self.y_dict.keys())[0]
+            else:
+                self.head_node_type = self.node_types[0]
+
+        self.metapaths = list(self.edge_index_dict.keys())
+
+        split_idx = dataset.get_idx_split()
+        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
+                                                                   split_idx["valid"][self.head_node_type], \
+                                                                   split_idx["test"][self.head_node_type]
+        self.train_ratio = self.training_idx.numel() / \
+                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+        print("train_ratio", self.train_ratio)
+
     def process_graph_sampler(self):
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)
 
         # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
-        assert self.node_types[0] == self.head_node_type
         num_nodes_dict = OrderedDict([(node_type, self.num_nodes_dict[node_type]) for node_type in self.node_types])
 
         out = group_hetero_graph(self.edge_index_dict, num_nodes_dict)

@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
-from ..datasets import HeteroNetDataset
+from moge.generator.sampler.datasets import HeteroNetDataset
 
 
 class LinkSampler(HeteroNetDataset):
