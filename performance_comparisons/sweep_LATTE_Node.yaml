@@ -18,7 +18,7 @@ parameters:
     values: ["sigmoid", "tanh", "relu", "none"]
   attn_dropout:
     values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-  alpha_activation:
+  attn_activation:
     values: ["sharpening", "PReLU", "LeakyReLU", "none"]
   nb_cls_dense_size:
     values: [0, 512, 1024]

@@ -49,7 +49,7 @@ def train(hparams):
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3, min_delta=0.01, strict=False),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3, min_delta=0.001, strict=False),
         logger=logger,
         # regularizers=regularizers,
         weights_summary='top',
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', type=int, default=2048)
     parser.add_argument('--n_neighbors_1', type=int, default=25)
     parser.add_argument('--activation', type=str, default="tanh")
-    parser.add_argument('--alpha_activation', type=str, default="relu")
+    parser.add_argument('--attn_activation', type=str, default="relu")
     parser.add_argument('--attn_dropout', type=float, default=0.2)
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
