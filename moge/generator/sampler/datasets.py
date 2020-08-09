@@ -40,6 +40,9 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         if isinstance(dataset, PygNodePropPredDataset):
             print("PygNodePropPredDataset")
             self.process_PygNodeDataset(dataset, train_ratio)
+        elif isinstance(dataset, PygLinkPropPredDataset) and dataset.name == "ogbl-wikikg":
+            print("PygLinkPropPredDataset")
+            self.process_edge_reltype_dataset(dataset, train_ratio)
         elif isinstance(dataset, PygLinkPropPredDataset):
             print("PygLinkPropPredDataset")
             self.process_PygLinkDataset(dataset, train_ratio)

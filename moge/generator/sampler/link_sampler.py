@@ -14,11 +14,53 @@ class LinkSampler(HeteroNetDataset):
         self.n_classes = None
         self.classes = None
 
+    def process_edge_reltype_dataset(self, dataset: PygLinkPropPredDataset):
+        data = dataset[0]
+        self._name = dataset.name
+
+        if hasattr(data, "num_nodes_dict"):
+            self.num_nodes_dict = data.num_nodes_dict
+        elif not hasattr(data, "edge_index_dict"):
+            self.head_node_type = "entity"
+            self.num_nodes_dict = {self.head_node_type: data.edge_index.max() + 1}
+
+        if self.node_types is None:
+            self.node_types = list(data.num_nodes_dict.keys())
+
+        self.node_attr_shape = {}
+        self.multilabel = False
+
+        self.metapaths = list(self.edge_reltype.unique().numpy())
+
+        split_idx = dataset.get_edge_split()
+        train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
+        self.triples = {}
+        for key in train_triples.keys():
+            if isinstance(train_triples[key], torch.Tensor):
+                self.triples[key] = torch.cat([train_triples[key], valid_triples[key], test_triples[key]], dim=0)
+            else:
+                self.triples[key] = np.array(train_triples[key] + valid_triples[key] + test_triples[key])
+
+        self.training_idx = torch.arange(0, len(train_triples["relation"]))
+        self.validation_idx = torch.arange(self.training_idx.size(0),
+                                           self.training_idx.size(0) + len(valid_triples["relation"]))
+        self.testing_idx = torch.arange(self.training_idx.size(0) + self.validation_idx.size(0),
+                                        self.training_idx.size(0) + self.validation_idx.size(0) + len(
+                                            test_triples["relation"]))
+
+        self.train_ratio = self.training_idx.numel() / \
+                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+
     def process_PygLinkDataset(self, dataset: PygLinkPropPredDataset, train_ratio):
         data = dataset[0]
         self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
-        self.num_nodes_dict = data.num_nodes_dict
+
+        if hasattr(data, "num_nodes_dict"):
+            self.num_nodes_dict = data.num_nodes_dict
+        else:
+            self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
+
         if self.node_types is None:
             self.node_types = list(data.num_nodes_dict.keys())
         self.node_attr_shape = {}
