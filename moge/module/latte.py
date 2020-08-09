@@ -193,15 +193,19 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
         if len(non_attr_node_types) > 0:
-            self.embeddings = torch.nn.ModuleDict(
-                {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
-                                         embedding_dim=embedding_dim,
-                                         sparse=False) for node_type in non_attr_node_types})
+            if sum([v for k, v in self.num_nodes_dict.items()]) > 500000:
+                self.embeddings = {
+                    {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
+                                             embedding_dim=embedding_dim,
+                                             sparse=False).cpu() for node_type in non_attr_node_types}}
+            else:
+                self.embeddings = torch.nn.ModuleDict(
+                    {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
+                                             embedding_dim=embedding_dim,
+                                             sparse=False) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 
-        if sum([v for k, v in self.num_nodes_dict.items()]) > 500000:
-            self.embeddings = self.embeddings.to("cpu")
 
         self.reset_parameters()
 
