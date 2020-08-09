@@ -13,6 +13,7 @@ from ogb.nodeproppred import PygNodePropPredDataset
 
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
+import torch_sparse
 
 class HeteroNetDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
@@ -98,6 +99,26 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.G = G
 
         return self.G
+
+    def get_node_degrees(self):
+        if hasattr(self, "node_degrees"):
+            return self.node_degrees
+
+        index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
+                          axis=0).reset_index()
+        multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
+        self.node_degrees = pd.DataFrame(data=0, index=multi_index, columns=[k[1] for k in self.metapaths])
+
+        for metapath in self.metapaths:
+            edge_index = self.edge_index_dict[metapath]
+            D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
+                                          sparse_sizes=(
+                                              self.num_nodes_dict[metapath[0]], self.num_nodes_dict[metapath[-1]]))
+            self.node_degrees.loc[(metapath[0], metapath[1])] = (
+                    self.node_degrees.loc[(metapath[0], metapath[1])] + D.storage.rowcount().numpy()).values
+            self.node_degrees.loc[(metapath[-1], metapath[1])] = (
+                    self.node_degrees.loc[(metapath[-1], metapath[1])] + D.storage.colcount().numpy()).values
+        return self.node_degrees
 
     def get_embedding_dfs(self, embeddings_dict, global_node_index):
         embeddings = []
