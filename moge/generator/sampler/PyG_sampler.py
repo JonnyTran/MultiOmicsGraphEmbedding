@@ -115,6 +115,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         if "train" in mode:
             allowed_nodes = self.training_idx
+        elif "train_valid" in mode:
+            allowed_nodes = torch.cat([self.training_idx, self.validation_idx], dim=0)
         elif "valid" in mode:
             allowed_nodes = self.validation_idx
         elif "test" in mode:
