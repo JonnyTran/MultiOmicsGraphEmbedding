@@ -19,6 +19,7 @@ from pytorch_lightning.loggers import WandbLogger
 from moge.methods.node_classification import LATTENodeClassifier
 from moge.methods.link_prediction import LATTELinkPredictor
 
+
 def train(hparams):
     NUM_GPUS = 4
     USE_AMP = True if NUM_GPUS > 1 else False
@@ -34,20 +35,7 @@ def train(hparams):
     if hparams.embedding_dim > 128:
         hparams.batch_size = hparams.batch_size // 2
 
-    if "ogbn" in hparams.dataset:
-        ogbn = PygNodePropPredDataset(name=hparams.dataset, root="datasets")
-        dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=neighbor_sizes,
-                                        node_types=list(ogbn[0].num_nodes_dict.keys()),
-                                        head_node_type=None,
-                                        add_reverse_metapaths=True)
-
-        hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
-        hparams.n_classes = dataset.n_classes
-        METRICS = ["accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
-
-        model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
-
-    elif "ogbl" in hparams.dataset:
+    if "ogbl" in hparams.dataset:
         ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="datasets")
         dataset = LinkSampler(ogbl, directed=True,
                               node_types=list(ogbl[0].num_nodes_dict.keys()),
@@ -87,8 +75,8 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--t_order', type=int, default=2)
-    parser.add_argument('--batch_size', type=int, default=1536)
-    parser.add_argument('--n_neighbors_1', type=int, default=20)
+    parser.add_argument('--batch_size', type=int, default=2048)
+    parser.add_argument('--n_neighbors_1', type=int, default=30)
     parser.add_argument('--activation', type=str, default="tanh")
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
     parser.add_argument('--attn_dropout', type=float, default=0.2)
