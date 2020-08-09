@@ -34,8 +34,6 @@ def train(hparams):
                               node_types=list(ogbl[0].num_nodes_dict.keys()),
                               head_node_type=None,
                               add_reverse_metapaths=True)
-
-        hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
         hparams.n_classes = dataset.n_classes
         METRICS = [hparams.dataset]
 
