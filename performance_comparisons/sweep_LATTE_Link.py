@@ -37,7 +37,7 @@ def train(hparams):
 
         hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
         hparams.n_classes = dataset.n_classes
-        METRICS = ["accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
+        METRICS = [hparams.dataset]
 
         model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=METRICS)
     else:
