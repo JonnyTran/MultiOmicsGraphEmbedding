@@ -25,13 +25,6 @@ def train(hparams):
     USE_AMP = True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 50
 
-    if hparams.t_order > 1:
-        hparams.n_neighbors_2 = max(1, 153600 // (hparams.n_neighbors_1 * hparams.batch_size))
-        neighbor_sizes = [hparams.n_neighbors_1, hparams.n_neighbors_2]
-    else:
-        neighbor_sizes = [hparams.n_neighbors_1]
-        hparams.batch_size = int(2 * hparams.batch_size)
-
     if hparams.embedding_dim > 128:
         hparams.batch_size = hparams.batch_size // 2
 
@@ -72,19 +65,19 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
-    parser.add_argument('--dataset', type=str, default="ogbn-mag")
+    parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--t_order', type=int, default=2)
-    parser.add_argument('--batch_size', type=int, default=2048)
+    parser.add_argument('--batch_size', type=int, default=2097152)
     parser.add_argument('--n_neighbors_1', type=int, default=30)
     parser.add_argument('--activation', type=str, default="tanh")
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
     parser.add_argument('--attn_dropout', type=float, default=0.2)
 
-    parser.add_argument('--nb_cls_dense_size', type=int, default=1024)
+    parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
 
-    parser.add_argument('--use_proximity_loss', type=bool, default=False)
+    parser.add_argument('--use_proximity_loss', type=bool, default=True)
     parser.add_argument('--neg_sampling_ratio', type=float, default=2.0)
     parser.add_argument('--use_class_weights', type=bool, default=False)
 

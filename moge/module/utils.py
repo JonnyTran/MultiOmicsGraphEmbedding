@@ -83,6 +83,16 @@ def get_multiplex_collate_fn(node_types, layers):
 
     return multiplex_collate_fn
 
+def _preprocess_tuple(X, cuda=True, device=None, half=False):
+    new_tuple = []
+    for tensor in X:
+        if device:
+            tensor = tensor.to(device)
+        else:
+            if cuda:
+                tensor = tensor.cuda()
+            else:
+                tensor = tensor.cpu()
 
 def preprocess_input(dict_tensor, cuda=True, device=None, half=False):
     if isinstance(dict_tensor, dict):
