@@ -200,6 +200,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         else:
             self.embeddings = None
 
+        if sum([v for k, v in self.num_nodes_dict.items()]) > 500000:
+            self.embeddings = self.embeddings.to("cpu")
+
         self.reset_parameters()
 
     def reset_parameters(self):

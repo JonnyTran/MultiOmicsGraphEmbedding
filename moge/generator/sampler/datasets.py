@@ -210,7 +210,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             reverse_metapath = "".join(reversed(metapath))
             if reverse_metapath in edge_index_dict:
                 reverse_metapath = reverse_metapath[:2] + "_" + reverse_metapath[2:]
-        elif isinstance(metapath, int):
+        elif isinstance(metapath, (int, np.int)):
             reverse_metapath = str(metapath) + "_"
         else:
             raise NotImplementedError(f"{metapath} not supported")

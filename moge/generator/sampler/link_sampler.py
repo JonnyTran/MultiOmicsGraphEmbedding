@@ -17,20 +17,22 @@ class LinkSampler(HeteroNetDataset):
     def process_edge_reltype_dataset(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
         self._name = dataset.name
+        self.edge_reltype = data.edge_reltype
 
         if hasattr(data, "num_nodes_dict"):
             self.num_nodes_dict = data.num_nodes_dict
         elif not hasattr(data, "edge_index_dict"):
             self.head_node_type = "entity"
-            self.num_nodes_dict = {self.head_node_type: data.edge_index.max() + 1}
+            self.num_nodes_dict = {self.head_node_type: data.edge_index.max().item() + 1}
 
         if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
+            self.node_types = list(self.num_nodes_dict.keys())
 
         self.node_attr_shape = {}
         self.multilabel = False
 
-        self.metapaths = list(self.edge_reltype.unique().numpy())
+        self.metapaths = [(self.head_node_type, str(k.item()), self.head_node_type) for k in self.edge_reltype.unique()]
+        self.edge_index_dict = {k: None for k in self.metapaths}
 
         split_idx = dataset.get_edge_split()
         train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
