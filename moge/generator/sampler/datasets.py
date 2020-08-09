@@ -116,8 +116,9 @@ class HeteroNetDataset(torch.utils.data.Dataset):
                                               self.num_nodes_dict[metapath[0]], self.num_nodes_dict[metapath[-1]]))
             self.node_degrees.loc[(metapath[0], metapath[1])] = (
                     self.node_degrees.loc[(metapath[0], metapath[1])] + D.storage.rowcount().numpy()).values
-            self.node_degrees.loc[(metapath[-1], metapath[1])] = (
-                    self.node_degrees.loc[(metapath[-1], metapath[1])] + D.storage.colcount().numpy()).values
+            if metapath[0] != metapath[-1]:
+                self.node_degrees.loc[(metapath[-1], metapath[1])] = (
+                        self.node_degrees.loc[(metapath[-1], metapath[1])] + D.storage.colcount().numpy()).values
         return self.node_degrees
 
     def get_embedding_dfs(self, embeddings_dict, global_node_index):

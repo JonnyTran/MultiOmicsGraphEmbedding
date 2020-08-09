@@ -23,6 +23,27 @@ forceatlas2 = ForceAtlas2(
     # Log
     verbose=False)
 
+def node_degree_viz(node_degrees):
+    fig = go.Figure(data=go.Heatmap(z=node_degrees.applymap(lambda x: np.log10(x + 1)),
+                                    x=node_degrees.columns, y=node_degrees.index, colorscale="Greys"),
+                    layout=go.Layout(
+                        #                        xaxis=dict(title=x_label),
+                        #                        yaxis=dict(title="node types"),
+                        width=500,
+                        height=90,
+                        margin=dict(
+                            l=5,
+                            r=5,
+                            b=5,
+                            t=5,
+                            pad=5
+                        ),
+                        font=dict(size=12, ),
+                        # xaxis_nticks=36
+                        #                        legend=dict(x=0.4, y=0.0)
+
+                    ))
+    return fig
 
 def graph_viz(g: nx.Graph,
               nodelist: list, node_symbol: pd.Series = None, node_color: pd.Series = None,
