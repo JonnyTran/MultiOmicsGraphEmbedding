@@ -5,4 +5,4 @@ metric:
   goal: maximize
 parameters:
   dataset:
-    values: ["ogbl-biokg", "DBLP", "IMDB", "BlogCatalog"]
+    values: ["ogbl-biokg", "ogbl-wikikg"]
