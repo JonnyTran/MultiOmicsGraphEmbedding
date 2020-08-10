@@ -80,17 +80,17 @@ class LATTELinkPredictor(LinkPredMetrics):
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=int(0.8 * multiprocessing.cpu_count()))
+                                             num_workers=0)  # int(0.8 * multiprocessing.cpu_count())
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn=self.collate_fn,
                                            batch_size=self.hparams.batch_size * 2,
-                                           num_workers=int(0.2 * multiprocessing.cpu_count()))
+                                           num_workers=0)
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
                                             batch_size=self.hparams.batch_size * 2,
-                                            num_workers=int(0.2 * multiprocessing.cpu_count()))
+                                            num_workers=0)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
