@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--use_proximity_loss', type=bool, default=True)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
-    parser.add_argument('--neg_sampling_test_size', type=int, default=128)
+    parser.add_argument('--neg_sampling_test_size', type=int, default=10)
 
     parser.add_argument('--use_class_weights', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
