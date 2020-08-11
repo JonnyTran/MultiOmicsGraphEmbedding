@@ -46,7 +46,6 @@ def train(hparams):
     wandb_logger = WandbLogger(name=model.name(),
                                tags=[dataset.name()],
                                project="multiplex-comparison")
-    wandb_logger.log_hyperparams(hparams)
 
     trainer = Trainer(
         gpus=NUM_GPUS,
