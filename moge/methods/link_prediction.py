@@ -54,7 +54,7 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def training_step(self, batch, batch_nb):
         X, _, _ = batch
-        print("X", {k: v.shape for k, v in X.items()})
+        # print("X", {k: v.shape for k, v in X.items()})
         _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
@@ -64,7 +64,7 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
-        print("X", {k: v.shape for k, v in X.items()})
+        # print("X", {k: v.shape for k, v in X.items()})
         _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
