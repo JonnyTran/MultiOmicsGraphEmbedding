@@ -112,6 +112,7 @@ class LinkSampler(HeteroNetDataset):
             head_type, tail_type = metapath[0], metapath[-1]
 
             mask = triples["relation"] == metapath_id
+            if mask.sum() <= 1: continue
             X["global_node_index"].setdefault(head_type, []).append(triples["head"][mask])
             X["global_node_index"].setdefault(tail_type, []).append(triples["tail"][mask])
 
@@ -128,6 +129,7 @@ class LinkSampler(HeteroNetDataset):
             head_type, tail_type = metapath[0], metapath[-1]
 
             mask = triples["relation"] == metapath_id
+            if mask.sum() <= 1: continue
             sources = triples["head"][mask].apply_(lambda x: local2batch[head_type][x])
             targets = triples["tail"][mask].apply_(lambda x: local2batch[tail_type][x])
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
