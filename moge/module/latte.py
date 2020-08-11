@@ -196,12 +196,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if sum([v for k, v in self.num_nodes_dict.items()]) > 500000:
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
-                                                           sparse=False).cpu() for node_type in non_attr_node_types}
+                                                           sparse=True).cpu() for node_type in non_attr_node_types}
             else:
                 self.embeddings = torch.nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
-                                             sparse=False) for node_type in non_attr_node_types})
+                                             sparse=True) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 
