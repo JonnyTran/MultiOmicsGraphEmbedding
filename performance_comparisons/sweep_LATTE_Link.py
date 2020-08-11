@@ -88,7 +88,6 @@ if __name__ == "__main__":
     parser.add_argument('--use_reverse', type=bool, default=True)
 
     parser.add_argument('--loss_type', type=str, default="KL_DIVERGENCE")
-    parser.add_argument('--auto_lr_find', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=0.01)
 
     # add all the available options to the trainer
