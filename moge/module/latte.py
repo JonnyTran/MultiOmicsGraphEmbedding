@@ -64,7 +64,7 @@ class LATTE(nn.Module):
             edge_values = edge_index[1]
 
             if edge_values.dtype != torch.float:
-                edge_values = edge_values.to(torch.float)
+                edge_values = edge_values.type(torch.float)
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 1:
             edge_index = edge_index_tup
             edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float, device=edge_index_tup.device)
@@ -455,7 +455,7 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
 
     deg_A = A.storage.colcount()
     deg_B = B.storage.rowcount()
-    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
+    deg_normalized = 1.0 / (deg_A + deg_B).type(torch.float)
     deg_normalized[deg_normalized == float('inf')] = 0.0
 
     D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
