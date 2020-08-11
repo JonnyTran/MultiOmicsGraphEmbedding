@@ -32,15 +32,6 @@ class LATTELinkPredictor(LinkPredMetrics):
         embeddings, proximity_loss, edge_pred_dict = self.latte.forward(x_dict, global_node_index, edge_index_dict)
         return embeddings, proximity_loss, edge_pred_dict
 
-    def training_step(self, batch, batch_nb):
-        X, _, _ = batch
-        _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
-        self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
-
-        outputs = {'loss': loss}
-        return outputs
-
     def get_e_pos_neg(self, edge_pred_dict):
         """
         Align e_pos and e_neg to shape shape (num_edge, ) and (num_edge, num_nodes_neg)
@@ -61,17 +52,27 @@ class LATTELinkPredictor(LinkPredMetrics):
 
         return e_pos, e_neg
 
+    def training_step(self, batch, batch_nb):
+        X, _, _ = batch
+        print("X", {k: v.shape for k, v in X.items()})
+        _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
+        self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
+
+        outputs = {'loss': loss}
+        return outputs
+
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
+        print("X", {k: v.shape for k, v in X.items()})
         _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
-        print("val_loss", loss)
 
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
-        X, y, weights = batch
+        X, _, _ = batch
         y_hat, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
