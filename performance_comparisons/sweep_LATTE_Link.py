@@ -49,7 +49,7 @@ def train(hparams):
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=3, min_delta=0.001, strict=False),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=15, min_delta=0.001, strict=False),
         logger=logger,
         # regularizers=regularizers,
         weights_summary='top',
