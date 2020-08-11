@@ -172,7 +172,7 @@ class OGBLEvaluator(Metric):
         self.outputs = {}
 
     def reset(self):
-        self.outputs.clear()
+        self.outputs = {}
 
     def update(self, outputs):
         e_pred_pos, e_pred_neg = outputs
