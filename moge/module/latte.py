@@ -64,7 +64,7 @@ class LATTE(nn.Module):
             edge_values = edge_index[1]
 
             if edge_values.dtype != torch.float:
-                edge_values = edge_values.type(torch.float)
+                edge_values = edge_values.to(torch.float)
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 1:
             edge_index = edge_index_tup
             edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float, device=edge_index_tup.device)
@@ -96,7 +96,7 @@ class LATTE(nn.Module):
                                                              n=global_node_idx[metapath_b[-1]].size(0),
                                                              coalesced=True)
 
-                        if new_edge_index[0].size(1) < 1: continue
+                        if new_edge_index[0].size(1) <= 5: continue
                         output_dict[metapath_join] = new_edge_index
 
                     except Exception as e:
@@ -196,12 +196,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if sum([v for k, v in self.num_nodes_dict.items()]) > 500000:
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
-                                                           sparse=True).cpu() for node_type in non_attr_node_types}
+                                                           sparse=False).cpu() for node_type in non_attr_node_types}
             else:
                 self.embeddings = torch.nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
-                                             sparse=True) for node_type in non_attr_node_types})
+                                             sparse=False) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 
@@ -358,8 +358,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if node_type in x_dict:
                 h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].type_as(
-                    self.conv[node_type].weight)
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
+                    self.conv[node_type].weight.device)
         return h_dict
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
@@ -405,34 +405,37 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         edge_pred_dict = {}
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
-        for metapath, edge_index_tup in edge_index_dict.items():
-            edge_index, values = LATTE.get_edge_index_values(edge_index_tup)
+        for metapath, edge_index in edge_index_dict.items():
+            if isinstance(edge_index, tuple):  # Weighted edges
+                edge_index, values = edge_index
+            else:
+                values = 1.0
             if edge_index is None: continue
 
             e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
             loss_pos += -torch.sum(values * F.logsigmoid(e_pred_logits), dim=-1)
-            num_samples += e_pred_logits.size(0)
             edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
+            num_samples += e_pred_logits.size(0)
         loss_pos = torch.true_divide(loss_pos, num_samples)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
         loss_neg = torch.tensor(0.0, dtype=torch.float, device=self.attn_l[0].weight.device)
         num_samples = 1.0
-        for metapath, edge_index_tup in edge_index_dict.items():
+        for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, _ = edge_index
-            if edge_index is None or edge_index.size(1) < 1: continue
+            if edge_index is None or edge_index.size(1) <= 5: continue
 
             neg_edge_index = negative_sample(edge_index,
                                              M=global_node_idx[metapath[0]].size(0),
                                              N=global_node_idx[metapath[-1]].size(0),
                                              num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
-            if neg_edge_index.size(1) < 1: continue
+            if neg_edge_index.size(1) <= 1: continue
 
             e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
+            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits.detach())
             loss_neg += -torch.sum(F.logsigmoid(-e_pred_logits), dim=-1)
             num_samples += e_pred_logits.size(0)
-            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits.detach())
         loss_neg = torch.true_divide(loss_neg, num_samples)
 
         loss = loss_pos + loss_neg
@@ -455,7 +458,7 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
 
     deg_A = A.storage.colcount()
     deg_B = B.storage.rowcount()
-    deg_normalized = 1.0 / (deg_A + deg_B).type(torch.float)
+    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
     deg_normalized[deg_normalized == float('inf')] = 0.0
 
     D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
