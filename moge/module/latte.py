@@ -359,7 +359,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].type_as(
-                    self.conv[node_type].weight.device)
+                    self.conv[node_type].weight)
         return h_dict
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
