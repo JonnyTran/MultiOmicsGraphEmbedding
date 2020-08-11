@@ -177,8 +177,8 @@ class OGBLEvaluator(Metric):
     def update(self, outputs):
         e_pred_pos, e_pred_neg = outputs
 
-        if e_pred_pos.dim() <= 1:
-            e_pred_pos = e_pred_pos.unsqueeze(-1)
+        if e_pred_pos.dim() > 1:
+            e_pred_pos = e_pred_pos.squeeze(-1)
         if e_pred_neg.dim() <= 1:
             e_pred_neg = e_pred_neg.unsqueeze(-1)
 
