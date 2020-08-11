@@ -38,7 +38,8 @@ class LATTE(nn.Module):
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
                                attn_activation=attn_activation, attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss,
-                               neg_sampling_ratio=neg_sampling_ratio if isinstance(neg_sampling_ratio, int) else
+                               neg_sampling_ratio=neg_sampling_ratio if isinstance(neg_sampling_ratio,
+                                                                                   (int, float)) else
                                neg_sampling_ratio[t],
                                neg_sampling_test_size=neg_sampling_test_size,
                                first=True))
@@ -48,7 +49,8 @@ class LATTE(nn.Module):
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
                                attn_activation=attn_activation, attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss,
-                               neg_sampling_ratio=neg_sampling_ratio if isinstance(neg_sampling_ratio, int) else
+                               neg_sampling_ratio=neg_sampling_ratio if isinstance(neg_sampling_ratio,
+                                                                                   (int, float)) else
                                neg_sampling_ratio[t],
                                neg_sampling_test_size=0,  # don't need to sample higher_order edges for testing
                                first=False))
