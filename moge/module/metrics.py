@@ -41,11 +41,11 @@ class Metrics():
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=multilabel, output_transform=None)
             elif "ogbn" in metric:
-                self.metrics[metric] = OGBEvaluator(NodeEvaluator(metric))
+                self.metrics[metric] = OGBNEvaluator(NodeEvaluator(metric))
             elif "ogbg" in metric:
-                self.metrics[metric] = OGBEvaluator(GraphEvaluator(metric))
+                self.metrics[metric] = OGBNEvaluator(GraphEvaluator(metric))
             elif "ogbl" in metric:
-                self.metrics[metric] = OGBEvaluator(LinkEvaluator(metric))
+                self.metrics[metric] = OGBLEvaluator(LinkEvaluator(metric))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
@@ -120,8 +120,8 @@ class Metrics():
             self.metrics[metric].reset()
 
 
-class OGBEvaluator(Metric):
-    def __init__(self, evaluator, output_transform=None, device=None):
+class OGBNEvaluator(Metric):
+    def __init__(self, evaluator: NodeEvaluator, output_transform=None, device=None):
         super().__init__(output_transform, device)
         self.evaluator = evaluator
         self.y_pred = []
@@ -158,6 +158,37 @@ class OGBEvaluator(Metric):
             output = {k.strip("_list"): v.mean().item() for k, v in output.items()}
         else:
             raise Exception(f"implement eval for {self.evaluator}")
+
+        if prefix is None:
+            return {f"{k}": v for k, v in output.items()}
+        else:
+            return {f"{prefix}{k}": v for k, v in output.items()}
+
+
+class OGBLEvaluator(Metric):
+    def __init__(self, evaluator: LinkEvaluator, output_transform=None, device=None):
+        super().__init__(output_transform, device)
+        self.evaluator = evaluator
+        self.outputs = {}
+
+    def reset(self):
+        self.outputs.clear()
+
+    def update(self, outputs):
+        e_pred_pos, e_pred_neg = outputs
+
+        if e_pred_pos.dim() <= 1:
+            e_pred_pos = e_pred_pos.unsqueeze(-1)
+        if e_pred_neg.dim() <= 1:
+            e_pred_neg = e_pred_neg.unsqueeze(-1)
+
+        output = self.evaluator.eval({"y_pred_pos": e_pred_pos,
+                                      "y_pred_neg": e_pred_neg})
+        for k, v in output.items():
+            self.outputs.setdefault(k.strip("_list"), []).append(v.mean())
+
+    def compute(self, prefix=None):
+        output = {k: torch.cat(v, dim=0).mean().item() for k, v in self.outputs.items()}
 
         if prefix is None:
             return {f"{k}": v for k, v in output.items()}
