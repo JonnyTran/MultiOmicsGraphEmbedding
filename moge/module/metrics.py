@@ -188,6 +188,7 @@ class OGBLEvaluator(Metric):
             self.outputs.setdefault(k.strip("_list"), []).append(v.mean())
 
     def compute(self, prefix=None):
+        print(self.outputs)
         output = {k: torch.cat(v, dim=0).mean().item() for k, v in self.outputs.items()}
 
         if prefix is None:
