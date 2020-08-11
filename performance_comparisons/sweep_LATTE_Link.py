@@ -60,6 +60,7 @@ def train(hparams):
 
     trainer.fit(model)
     trainer.test(model)
+    return None
 
 if __name__ == "__main__":
     parser = ArgumentParser()
