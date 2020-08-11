@@ -460,6 +460,15 @@ def tag_negative(metapath):
         return "neg"
 
 
+def untag_negative(metapath):
+    if isinstance(metapath, tuple) and metapath[-1] == "neg":
+        return metapath[:-1]
+    elif isinstance(metapath, str):
+        return metapath.strip("neg")
+    else:
+        return metapath
+
+
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
                      sparse_sizes=(m, k), is_sorted=not coalesced)
