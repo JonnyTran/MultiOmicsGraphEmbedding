@@ -18,7 +18,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self._name = f"LATTE-{hparams.t_order}{' link_pred' if hparams.use_proximity_loss else ''}"
+        self._name = f"LATTE-{hparams.t_order}{' Link' if hparams.use_proximity_loss else ''}"
         self.collate_fn = collate_fn
         self.num_nodes_neg = int(hparams.neg_sampling_ratio * (2 if self.dataset.use_reverse else 1))
 
