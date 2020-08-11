@@ -42,7 +42,11 @@ def train(hparams):
     else:
         raise Exception(f"Dataset `{hparams.dataset}` not found")
 
-    logger = WandbLogger()
+    # logger = WandbLogger()
+    wandb_logger = WandbLogger(name=model.name(),
+                               tags=[dataset.name()],
+                               project="multiplex-comparison")
+    wandb_logger.log_hyperparams(hparams)
 
     trainer = Trainer(
         gpus=NUM_GPUS,
@@ -50,7 +54,7 @@ def train(hparams):
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=15, min_delta=0.001, strict=False),
-        logger=logger,
+        logger=wandb_logger,
         # regularizers=regularizers,
         weights_summary='top',
         use_amp=USE_AMP,
