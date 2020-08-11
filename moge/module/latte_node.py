@@ -19,7 +19,7 @@ from .utils import preprocess_input
 class LATTE(nn.Module):
     def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_activation="sharpening", attn_dropout=0.5, use_proximity_loss=True,
-                 neg_sampling_ratio=2.0):
+                 neg_sampling_ratio=2.0, negative_sample_size=128):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -27,6 +27,7 @@ class LATTE(nn.Module):
         self.use_proximity_loss = use_proximity_loss
         self.t_order = t_order
         self.neg_sampling_ratio = neg_sampling_ratio
+        self.negative_sample_size = negative_sample_size
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -37,6 +38,7 @@ class LATTE(nn.Module):
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
                                attn_activation=attn_activation, attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
+                               negative_sample_size=negative_sample_size,
                                first=True))
             else:
                 layers.append(
@@ -44,6 +46,7 @@ class LATTE(nn.Module):
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
                                attn_activation=attn_activation, attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
+                               negative_sample_size=negative_sample_size,
                                first=False))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
         self.layers = nn.ModuleList(layers)
@@ -152,7 +155,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_activation="sharpening", attn_dropout=0.5, use_proximity_loss=True,
-                 neg_sampling_ratio=1.0, first=True) -> None:
+                 neg_sampling_ratio=1.0, negative_sample_size=128, first=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
@@ -161,6 +164,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.embedding_dim = embedding_dim
         self.use_proximity_loss = use_proximity_loss
         self.neg_sampling_ratio = neg_sampling_ratio
+        self.negative_sample_size = negative_sample_size
         self.attn_dropout = attn_dropout
 
         self.activation = activation.lower()
@@ -430,7 +434,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if self.training:
                 num_neg_samples = edge_index.size(1) * self.neg_sampling_ratio
             else:
-                num_neg_samples = edge_index.size(1) * 1000
+                num_neg_samples = edge_index.size(1) * self.negative_sample_size
             neg_edge_index = negative_sample(edge_index,
                                              M=global_node_idx[metapath[0]].size(0),
                                              N=global_node_idx[metapath[-1]].size(0),
