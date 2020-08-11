@@ -3,7 +3,7 @@ import torch
 
 from .node_classification import NodeClfMetrics
 from moge.generator.sampler.datasets import HeteroNetDataset
-from ..module.latte_node import LATTE
+from ..module.latte import LATTE
 
 
 class LinkPredMetrics(NodeClfMetrics):
