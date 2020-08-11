@@ -19,7 +19,7 @@ from .utils import preprocess_input
 class LATTE(nn.Module):
     def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_activation="sharpening", attn_dropout=0.5, use_proximity_loss=True,
-                 neg_sampling_ratio=2.0, negative_sample_size=128):
+                 neg_sampling_ratio=2.0, neg_sampling_test_size=128):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -27,7 +27,7 @@ class LATTE(nn.Module):
         self.use_proximity_loss = use_proximity_loss
         self.t_order = t_order
         self.neg_sampling_ratio = neg_sampling_ratio
-        self.negative_sample_size = negative_sample_size
+        self.neg_sampling_test_size = neg_sampling_test_size
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -37,16 +37,20 @@ class LATTE(nn.Module):
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
                                attn_activation=attn_activation, attn_dropout=attn_dropout,
-                               use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
-                               negative_sample_size=negative_sample_size,
+                               use_proximity_loss=use_proximity_loss,
+                               neg_sampling_ratio=neg_sampling_ratio if isinstance(neg_sampling_ratio, int) else
+                               neg_sampling_ratio[t],
+                               neg_sampling_test_size=neg_sampling_test_size,
                                first=True))
             else:
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
                                attn_activation=attn_activation, attn_dropout=attn_dropout,
-                               use_proximity_loss=use_proximity_loss, neg_sampling_ratio=neg_sampling_ratio,
-                               negative_sample_size=negative_sample_size,
+                               use_proximity_loss=use_proximity_loss,
+                               neg_sampling_ratio=neg_sampling_ratio if isinstance(neg_sampling_ratio, int) else
+                               neg_sampling_ratio[t],
+                               neg_sampling_test_size=0,  # don't need to sample higher_order edges for testing
                                first=False))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
         self.layers = nn.ModuleList(layers)
@@ -125,14 +129,11 @@ class LATTE(nn.Module):
                                                                           global_node_idx)
             else:
                 # t_order_edge_index_dict = {k: v for k, v in edge_index_dict.items() if k in self.layers[t].metapaths}
-                h_dict, t_proximity_loss, edge_pred_dict_t = self.layers[t].forward(
+                h_dict, t_proximity_loss, _ = self.layers[t].forward(
                     x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
                     h1_dict=h_dict)
                 # h1_dict={node_type: h_emb.detach() for node_type, h_emb in
                 #          h_dict.items()})  # Detach the prior-order embeddings from backprop gradients
-
-                if edge_pred_dict is not None and edge_pred_dict_t:
-                    edge_pred_dict.update(edge_pred_dict_t)
 
                 with torch.no_grad():
                     t_order_edge_index_dict = LATTE.join_edge_indexes(
@@ -155,7 +156,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_activation="sharpening", attn_dropout=0.5, use_proximity_loss=True,
-                 neg_sampling_ratio=1.0, negative_sample_size=128, first=True) -> None:
+                 neg_sampling_ratio=1.0, neg_sampling_test_size=128, first=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
@@ -164,7 +165,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.embedding_dim = embedding_dim
         self.use_proximity_loss = use_proximity_loss
         self.neg_sampling_ratio = neg_sampling_ratio
-        self.negative_sample_size = negative_sample_size
+        self.neg_sampling_test_size = neg_sampling_test_size
         self.attn_dropout = attn_dropout
 
         self.activation = activation.lower()
@@ -434,7 +435,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if self.training:
                 num_neg_samples = edge_index.size(1) * self.neg_sampling_ratio
             else:
-                num_neg_samples = edge_index.size(1) * self.negative_sample_size
+                if self.neg_sampling_test_size == 0: continue
+                num_neg_samples = edge_index.size(1) * self.neg_sampling_test_size
             neg_edge_index = negative_sample(edge_index,
                                              M=global_node_idx[metapath[0]].size(0),
                                              N=global_node_idx[metapath[-1]].size(0),
