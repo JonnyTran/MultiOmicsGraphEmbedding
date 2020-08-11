@@ -50,7 +50,7 @@ def train(hparams):
     trainer = Trainer(
         gpus=NUM_GPUS,
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
-        # auto_lr_find=True,
+        auto_lr_find=hparams.auto_lr_find,
         max_epochs=MAX_EPOCHS,
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=10, min_delta=0.001, strict=False),
         logger=wandb_logger,
@@ -82,12 +82,13 @@ if __name__ == "__main__":
 
     parser.add_argument('--use_proximity_loss', type=bool, default=True)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
-    parser.add_argument('--negative_sample_size', type=int, default=128)
+    parser.add_argument('--neg_sampling_test_size', type=int, default=128)
 
     parser.add_argument('--use_class_weights', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
 
     parser.add_argument('--loss_type', type=str, default="KL_DIVERGENCE")
+    parser.add_argument('--auto_lr_find', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=0.01)
 
     # add all the available options to the trainer

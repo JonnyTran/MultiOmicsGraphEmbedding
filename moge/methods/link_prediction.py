@@ -21,7 +21,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         self._name = f"LATTE-{hparams.t_order}{' Link' if hparams.use_proximity_loss else ''}"
         self.collate_fn = collate_fn
         self.num_nodes_neg = int(hparams.neg_sampling_ratio * (2 if self.dataset.use_reverse else 1))
-        self.negative_sample_size = hparams.neg_sampling_test_size
+        self.neg_sampling_test_size = hparams.neg_sampling_test_size
 
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
                            t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
@@ -47,7 +47,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         if training:
             num_nodes_neg = self.num_nodes_neg
         else:
-            num_nodes_neg = self.negative_sample_size * (2 if self.dataset.use_reverse else 1)
+            num_nodes_neg = self.neg_sampling_test_size * (2 if self.dataset.use_reverse else 1)
 
         if e_neg.size(0) % num_nodes_neg:
             e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % num_nodes_neg]
