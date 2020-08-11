@@ -15,7 +15,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from moge.generator.sampler.datasets import HeteroNetDataset
 from moge.module.metrics import Metrics
 from moge.module.trainer import _fix_dp_return_type
-from moge.module.latte import LATTE
+from moge.module.latte_node import LATTE
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.utils import filter_samples, pad_tensors

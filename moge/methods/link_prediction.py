@@ -3,7 +3,7 @@ import torch
 
 from .node_classification import NodeClfMetrics
 from moge.generator.sampler.datasets import HeteroNetDataset
-from ..module.latte import LATTE
+from ..module.latte_node import LATTE
 
 
 class LinkPredMetrics(NodeClfMetrics):
@@ -32,7 +32,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         embeddings, proximity_loss, edge_pred_dict = self.latte.forward(x_dict, global_node_index, edge_index_dict)
         return embeddings, proximity_loss, edge_pred_dict
 
-    def get_e_pos_neg(self, edge_pred_dict):
+    def get_e_pos_neg(self, edge_pred_dict, training=True):
         """
         Align e_pos and e_neg to shape shape (num_edge, ) and (num_edge, num_nodes_neg)
         :param edge_pred_dict:
@@ -41,9 +41,15 @@ class LATTELinkPredictor(LinkPredMetrics):
         e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
                            if "neg" not in metapath and metapath in self.dataset.metapaths], dim=0)
         e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
-        if e_neg.size(0) % self.num_nodes_neg:
-            e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % self.num_nodes_neg]
-        e_neg = e_neg.view(-1, self.num_nodes_neg)
+
+        if training:
+            num_nodes_neg = self.num_nodes_neg
+        else:
+            num_nodes_neg = 1000 * (2 if self.dataset.use_reverse else 1)
+
+        if e_neg.size(0) % num_nodes_neg:
+            e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % num_nodes_neg]
+        e_neg = e_neg.view(-1, num_nodes_neg)
 
         # ensure same num_edge in dim 0
         min_idx = min(e_pos.size(0), e_neg.size(0))
@@ -56,7 +62,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         X, _, _ = batch
         # print("X", {k: v.shape for k, v in X.items()})
         _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
+        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=True)
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         outputs = {'loss': loss}
@@ -66,7 +72,7 @@ class LATTELinkPredictor(LinkPredMetrics):
         X, _, _ = batch
         # print("X", {k: v.shape for k, v in X.items()})
         _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
+        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=False)
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"val_loss": loss}
@@ -74,7 +80,7 @@ class LATTELinkPredictor(LinkPredMetrics):
     def test_step(self, batch, batch_nb):
         X, _, _ = batch
         y_hat, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
-        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
+        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=False)
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"test_loss": loss}
