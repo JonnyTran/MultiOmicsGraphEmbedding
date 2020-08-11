@@ -94,11 +94,11 @@ class LinkSampler(HeteroNetDataset):
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
         if "triples_batch" in collate_fn:
-            return self.collate_triples_batch
+            return self.sample_triples
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def collate_triples_batch(self, iloc):
+    def sample_triples(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 

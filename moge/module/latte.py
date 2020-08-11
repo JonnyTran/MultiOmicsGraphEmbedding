@@ -96,7 +96,7 @@ class LATTE(nn.Module):
                                                              n=global_node_idx[metapath_b[-1]].size(0),
                                                              coalesced=True)
 
-                        if new_edge_index[0].size(1) <= 5: continue
+                        if new_edge_index[0].size(1) < 1: continue
                         output_dict[metapath_join] = new_edge_index
 
                     except Exception as e:
@@ -405,17 +405,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         edge_pred_dict = {}
         # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
-        for metapath, edge_index in edge_index_dict.items():
-            if isinstance(edge_index, tuple):  # Weighted edges
-                edge_index, values = edge_index
-            else:
-                values = 1.0
+        for metapath, edge_index_tup in edge_index_dict.items():
+            edge_index, values = LATTE.get_edge_index_values(edge_index_tup)
             if edge_index is None: continue
 
             e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
             loss_pos += -torch.sum(values * F.logsigmoid(e_pred_logits), dim=-1)
-            edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
             num_samples += e_pred_logits.size(0)
+            edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
         loss_pos = torch.true_divide(loss_pos, num_samples)
 
         # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
@@ -424,18 +421,18 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, _ = edge_index
-            if edge_index is None or edge_index.size(1) <= 5: continue
+            if edge_index is None or edge_index.size(1) < 1: continue
 
             neg_edge_index = negative_sample(edge_index,
                                              M=global_node_idx[metapath[0]].size(0),
                                              N=global_node_idx[metapath[-1]].size(0),
                                              num_neg_samples=edge_index.size(1) * self.neg_sampling_ratio)
-            if neg_edge_index.size(1) <= 1: continue
+            if neg_edge_index.size(1) < 1: continue
 
             e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
-            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits.detach())
             loss_neg += -torch.sum(F.logsigmoid(-e_pred_logits), dim=-1)
             num_samples += e_pred_logits.size(0)
+            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits.detach())
         loss_neg = torch.true_divide(loss_neg, num_samples)
 
         loss = loss_pos + loss_neg
