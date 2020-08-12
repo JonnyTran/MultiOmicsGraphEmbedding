@@ -29,7 +29,7 @@ def train(hparams):
         hparams.batch_size = hparams.batch_size // 2
 
     if "ogbl" in hparams.dataset:
-        ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB/")
+        ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB")
         dataset = LinkSampler(ogbl, directed=True,
                               node_types=list(ogbl[0].num_nodes_dict.keys()) if hasattr(ogbl[0],
                                                                                         "num_nodes_dict") else None,
