@@ -41,11 +41,11 @@ class Metrics():
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=multilabel, output_transform=None)
             elif "ogbn" in metric:
-                self.metrics[metric] = OGBNEvaluator(NodeEvaluator(metric))
+                self.metrics[metric] = NodeClfEvaluator(NodeEvaluator(metric))
             elif "ogbg" in metric:
-                self.metrics[metric] = OGBNEvaluator(GraphEvaluator(metric))
+                self.metrics[metric] = NodeClfEvaluator(GraphEvaluator(metric))
             elif "ogbl" in metric:
-                self.metrics[metric] = OGBLEvaluator(LinkEvaluator(metric))
+                self.metrics[metric] = LinkPredEvaluator(LinkEvaluator(metric))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
@@ -120,7 +120,7 @@ class Metrics():
             self.metrics[metric].reset()
 
 
-class OGBNEvaluator(Metric):
+class NodeClfEvaluator(Metric):
     def __init__(self, evaluator: NodeEvaluator, output_transform=None, device=None):
         super().__init__(output_transform, device)
         self.evaluator = evaluator
@@ -165,7 +165,7 @@ class OGBNEvaluator(Metric):
             return {f"{prefix}{k}": v for k, v in output.items()}
 
 
-class OGBLEvaluator(Metric):
+class LinkPredEvaluator(Metric):
     def __init__(self, evaluator: LinkEvaluator, output_transform=None, device=None):
         super().__init__(output_transform, device)
         self.evaluator = evaluator
