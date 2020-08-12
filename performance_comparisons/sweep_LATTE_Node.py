@@ -35,7 +35,7 @@ def train(hparams):
         hparams.batch_size = hparams.batch_size // 2
 
     if "ogbn" in hparams.dataset:
-        ogbn = PygNodePropPredDataset(name=hparams.dataset, root="datasets")
+        ogbn = PygNodePropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB/")
         dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=neighbor_sizes,
                                         node_types=list(ogbn[0].num_nodes_dict.keys()),
                                         head_node_type=None,
