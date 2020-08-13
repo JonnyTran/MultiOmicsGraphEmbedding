@@ -36,11 +36,9 @@ def train(hparams):
                               head_node_type=None,
                               add_reverse_metapaths=hparams.use_reverse)
         hparams.n_classes = dataset.n_classes
-        METRICS = [hparams.dataset]
-
-        model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=METRICS)
+        model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=[hparams.dataset])
     else:
-        raise Exception(f"Dataset `{hparams.dataset}` not found")
+        raise Exception(f"Dataset `{hparams.dataset}` not compatible")
 
     # logger = WandbLogger()
     wandb_logger = WandbLogger(name=model.name(),
@@ -62,8 +60,8 @@ def train(hparams):
     )
 
     trainer.fit(model)
+    model.neg_sampling_test_size = 500
     trainer.test(model)
-    return None
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -71,7 +69,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--t_order', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=524288)
+    parser.add_argument('--batch_size', type=int, default=262144)
     parser.add_argument('--n_neighbors_1', type=int, default=30)
     parser.add_argument('--activation', type=str, default="tanh")
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
@@ -82,7 +80,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--use_proximity_loss', type=bool, default=True)
     parser.add_argument('--neg_sampling_ratio', type=float, default=128.0)
-    parser.add_argument('--neg_sampling_test_size', type=int, default=500)
+    parser.add_argument('--neg_sampling_test_size', type=int, default=100)
 
     parser.add_argument('--use_class_weights', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
