@@ -409,13 +409,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         num_samples = torch.tensor(1.0, dtype=torch.float, device=loss_pos.device)
 
         edge_pred_dict = {}
-        # KL Divergence over observed edges, -\sum_(a_ij) a_ij log(e_ij)
+        # KL Divergence over observed positive edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, values = edge_index
             else:
                 values = 1.0
-            if edge_index is None: continue
+            if edge_index is None or edge_index.size(1) == 0: continue
 
             e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
             loss_pos += -torch.sum(values * F.logsigmoid(e_pred_logits), dim=-1)
@@ -423,7 +423,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             num_samples += e_pred_logits.size(0)
         loss_pos = torch.true_divide(loss_pos, num_samples)
 
-        # KL Divergence over negative sampling edges, -\sum_(a'_uv) a_uv log(-e'_uv)
+        # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
         loss_neg = torch.tensor(0.0, dtype=torch.float, device=self.attn_l[0].weight.device)
         num_samples = 1.0
         for metapath, edge_index in edge_index_dict.items():
@@ -459,7 +459,6 @@ def tag_negative(metapath):
         return metapath + "neg"
     else:
         return "neg"
-
 
 def untag_negative(metapath):
     if isinstance(metapath, tuple) and metapath[-1] == "neg":
