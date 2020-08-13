@@ -107,6 +107,7 @@ class LinkSampler(HeteroNetDataset):
         triples = {k: v[iloc] for k, v in self.triples.items()}
         relation_ids = triples["relation"].unique()
 
+        # Gather all nodes sampled
         for relation_id in relation_ids:
             metapath = self.metapaths[relation_id]
             head_type, tail_type = metapath[0], metapath[-1]
@@ -123,13 +124,14 @@ class LinkSampler(HeteroNetDataset):
                                 range(len(X["global_node_index"][node_type])))
                             ) for node_type in X["global_node_index"]}
 
+        # Get edge_index with batch id
         for relation_id in relation_ids:
             metapath = self.metapaths[relation_id]
             head_type, tail_type = metapath[0], metapath[-1]
 
             mask = triples["relation"] == relation_id
-            sources = triples["head"][mask].apply_(lambda x: local2batch[head_type][x])
-            targets = triples["tail"][mask].apply_(lambda x: local2batch[tail_type][x])
+            sources = triples["head"][mask].apply_(local2batch[head_type].get)
+            targets = triples["tail"][mask].apply_(local2batch[tail_type].get)
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
 
         if self.use_reverse:
