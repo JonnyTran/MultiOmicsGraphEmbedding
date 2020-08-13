@@ -51,6 +51,7 @@ class NodeClfMetrics(pl.LightningModule):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
         logs = self.valid_metrics.compute_metrics()
         logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
+        print(logs)
 
         logs.update({"val_loss": avg_loss})
         self.valid_metrics.reset_metrics()
