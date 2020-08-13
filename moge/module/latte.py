@@ -364,7 +364,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
                     self.conv[node_type].weight.device)
-            h_dict[node_type] = F.relu(h_dict[node_type])
         return h_dict
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
