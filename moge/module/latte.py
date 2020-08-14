@@ -188,7 +188,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
         elif attn_activation == "PReLU":
-            self.alpha_activation = nn.PReLU(init=0.02)
+            self.alpha_activation = nn.PReLU(init=0.2)
         elif attn_activation == "LeakyReLU":
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
         else:
@@ -201,7 +201,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if embedding_dim > 200 or sum([v for k, v in self.num_nodes_dict.items()]) > 500000:
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
-                                                           sparse=True).cpu() for node_type in non_attr_node_types}
+                                                           sparse=False).cpu() for node_type in non_attr_node_types}
             else:
                 self.embeddings = torch.nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
@@ -404,9 +404,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             return F.sigmoid(e_ij)
 
     def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
-        loss_pos = torch.tensor(0.0, dtype=torch.float, device=self.attn_l[0].weight.device)
-        num_samples = torch.tensor(1.0, dtype=torch.float, device=loss_pos.device)
-
+        loss = torch.tensor(0.0, dtype=torch.float, device=self.attn_l[0].weight.device)
         edge_pred_dict = {}
         # KL Divergence over observed positive edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
@@ -414,17 +412,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 edge_index, values = edge_index
             else:
                 values = 1.0
-            if edge_index is None or edge_index.size(1) == 0: continue
+            if edge_index is None: continue
 
-            e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
-            loss_pos += -torch.sum(values * F.logsigmoid(e_pred_logits), dim=-1)
-            edge_pred_dict[metapath] = e_pred_logits.detach()
-            num_samples += e_pred_logits.size(0)
-        loss_pos = torch.true_divide(loss_pos, num_samples)
+            e_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=False)
+            loss += -torch.sum(torch.true_divide(values, e_pred.size(0)) * torch.log(e_pred), dim=-1)
+            edge_pred_dict[metapath] = e_pred.detach()
 
         # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
         loss_neg = torch.tensor(0.0, dtype=torch.float, device=self.attn_l[0].weight.device)
-        num_samples = 1.0
         for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, _ = edge_index
@@ -442,12 +437,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if neg_edge_index.size(1) <= 1: continue
 
             e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
-            edge_pred_dict[tag_negative(metapath)] = e_pred_logits.detach()
-            loss_neg += -torch.sum(F.logsigmoid(-e_pred_logits), dim=-1)
-            num_samples += e_pred_logits.size(0)
-        loss_neg = torch.true_divide(loss_neg, num_samples)
+            loss += -torch.mean(torch.log(torch.sigmoid(-e_pred_logits)), dim=-1)
+            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits).detach()
 
-        loss = loss_pos + loss_neg
         return loss, edge_pred_dict
 
 
