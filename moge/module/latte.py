@@ -153,9 +153,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
     RELATIONS_DIM = 1
 
     def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", attn_activation="sharpening", attn_dropout=0.5, use_proximity_loss=True,
+                 activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
+                 use_proximity_loss=True,
                  neg_sampling_ratio=1.0, neg_sampling_test_size=128, first=True) -> None:
-        super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
+        super(LATTELayer, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
@@ -164,6 +165,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.use_proximity_loss = use_proximity_loss
         self.neg_sampling_ratio = neg_sampling_ratio
         self.neg_sampling_test_size = neg_sampling_test_size
+        self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
 
         self.activation = activation.lower()
@@ -201,12 +203,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if embedding_dim > 200 or sum([v for k, v in self.num_nodes_dict.items()]) > 500000:
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
-                                                           sparse=False).cpu() for node_type in non_attr_node_types}
+                                                           sparse=True).cpu() for node_type in non_attr_node_types}
             else:
                 self.embeddings = torch.nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
-                                             sparse=False) for node_type in non_attr_node_types})
+                                             sparse=True) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 
@@ -300,41 +302,17 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h1_dict)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
-        emb_relation_agg = {}
-        emb_output = {}
+        out = {}
         for node_type in global_node_idx:
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
-            emb_relation_agg[node_type] = torch.zeros(
-                size=(global_node_idx[node_type].size(0),
-                      self.num_head_relations(node_type),
-                      self.embedding_dim)).type_as(self.conv[node_type].weight)
-
-            for i, metapath in enumerate(self.get_head_relations(node_type)):
-                if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
-                    continue
-                head_type, tail_type = metapath[0], metapath[-1]
-                num_node_head, num_node_tail = len(global_node_idx[head_type]), len(global_node_idx[tail_type])
-
-                edge_index, _ = LATTE.get_edge_index_values(edge_index_dict[metapath])
-                if edge_index is None: continue
-
-                # Propapate flows from target nodes to source nodes
-                emb_relation_agg[head_type][:, i] = self.propagate(
-                    edge_index=edge_index,
-                    size=(num_node_tail, num_node_head),
-                    x=(h_dict[tail_type], h_dict[head_type]),
-                    alpha=(alpha_r[metapath], alpha_l[metapath]),
-                    metapath_idx=self.metapaths.index(metapath))
-
-            # Assign the "self" embedding representation
-            emb_relation_agg[node_type][:, -1] = h_dict[node_type]
+            out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
+                                                         global_node_idx)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            emb_output[node_type] = torch.matmul(emb_relation_agg[node_type].permute(0, 2, 1),
-                                                 beta[node_type]).squeeze(-1)
+            out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
             # emb_output[node_type] = emb_relation_agg[node_type].mean(dim=1) # average over all relations
             # Apply \sigma activation to all embeddings
-            emb_output[node_type] = self.embedding_activation(emb_output[node_type])
+            out[node_type] = self.embedding_activation(out[node_type])
 
         if self.use_proximity_loss:
             proximity_loss, edge_pred_dict = self.proximity_loss(
@@ -344,10 +322,39 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 global_node_idx=global_node_idx)
 
         else:
-            proximity_loss = None
-            edge_pred_dict = None
+            proximity_loss, edge_pred_dict = None, None
 
-        return emb_output, proximity_loss, edge_pred_dict
+        return out, proximity_loss, edge_pred_dict
+
+    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, h_dict, edge_index_dict, global_node_idx):
+        emb_relations = torch.zeros(
+            size=(global_node_idx[node_type].size(0),
+                  self.num_head_relations(node_type),
+                  self.embedding_dim)).type_as(self.conv[node_type].weight)
+
+        for i, metapath in enumerate(self.get_head_relations(node_type)):
+            if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
+                continue
+            head_type, tail_type = metapath[0], metapath[-1]
+            num_node_head, num_node_tail = len(global_node_idx[head_type]), len(global_node_idx[tail_type])
+
+            edge_index, _ = LATTE.get_edge_index_values(edge_index_dict[metapath])
+            if edge_index is None: continue
+
+            # Propapate flows from target nodes to source nodes
+            print(metapath, {k: global_node_idx[k].size() for k in [metapath[0], metapath[-1]]},
+                  (edge_index[0].max(), edge_index[1].max()))
+            emb_relations[:, i] = self.propagate(
+                edge_index=edge_index,
+                x=(h_dict[head_type], h_dict[tail_type]),
+                alpha=(alpha_l[metapath], alpha_r[metapath]),
+                size=(num_node_head, num_node_tail),
+                metapath_idx=self.metapaths.index(metapath))
+
+        # Assign the "self" embedding representation
+        emb_relations[:, -1] = h_dict[node_type]
+
+        return emb_relations
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
