@@ -2,7 +2,7 @@ import multiprocessing
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from .node_classification import NodeClfMetrics
+from .node_clf import NodeClfMetrics
 from moge.generator.sampler.datasets import HeteroNetDataset
 from ..module.latte import LATTE
 

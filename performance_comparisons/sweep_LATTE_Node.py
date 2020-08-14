@@ -16,8 +16,9 @@ from ogb.linkproppred import PygLinkPropPredDataset
 from moge.generator import HeteroNeighborSampler, LinkSampler
 from pytorch_lightning.loggers import WandbLogger
 
-from moge.methods.node_classification import LATTENodeClassifier
-from moge.methods.link_prediction import LATTELinkPredictor
+from moge.methods.node_clf import LATTENodeClassifier
+from moge.methods.link_pred import LATTELinkPredictor
+
 
 def train(hparams):
     NUM_GPUS = 4
