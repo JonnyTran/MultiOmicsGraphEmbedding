@@ -21,7 +21,7 @@ from moge.methods.link_prediction import LATTELinkPredictor
 
 
 def train(hparams):
-    NUM_GPUS = 4
+    NUM_GPUS = hparams.num_gpus
     USE_AMP = True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 50
 
@@ -50,7 +50,7 @@ def train(hparams):
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
         auto_lr_find=False,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=10, min_delta=0.001, strict=False),
+        early_stop_callback=EarlyStopping(monitor='val_loss', patience=10, min_delta=0.01, strict=False),
         logger=wandb_logger,
         # regularizers=regularizers,
         weights_summary='top',
@@ -65,6 +65,8 @@ def train(hparams):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
+    parser.add_argument('--num_gpus', type=int, default=4)
+
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
