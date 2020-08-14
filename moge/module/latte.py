@@ -183,9 +183,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
         self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, 1, bias=False) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, 1, bias=False) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -382,6 +382,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
+                print("self.attn_l[i].forward(h_dict[head_type])", self.attn_l[i].forward(h_dict[head_type]).shape)
                 alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
             else:
                 alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
@@ -407,7 +408,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
         e_ij = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
-        print("e_ij", e_ij.shape, "alpha", alpha_l[metapath][edge_index[0]].shape)
         if logits:
             return e_ij
         else:
