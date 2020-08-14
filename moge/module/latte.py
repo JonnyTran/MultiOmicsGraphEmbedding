@@ -153,6 +153,11 @@ class LATTE(nn.Module):
 class LATTELayer(MessagePassing, pl.LightningModule):
     RELATIONS_DIM = 1
 
+    def register_modules(self, tensors, name):
+        for i, tensor in enumerate(tensors):
+            self.__setattr__(f"{name}_{i}", tensor)
+        return tensors
+
     def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity_loss=True,
@@ -187,8 +192,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         #     [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         # self.attn_r = torch.nn.ModuleList(
         #     [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_l = [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths]
-        self.attn_r = [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths]
+        self.attn_l = self.register_modules(
+            [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths], name="attn_l")
+        self.attn_r = self.register_modules(
+            [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths], name="attn_r")
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -299,7 +306,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # Compute relations attention coefficients
         # beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
         # Save beta weights from testing samples
-        if not self.training: self.save_relation_weights(beta)
+        # if not self.training: self.save_relation_weights(beta)
 
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h1_dict)
@@ -390,13 +397,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
                 # alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
-                alpha_l[metapath] = (h_dict[head_type] * self.attn_l[i]).view(-1, self.attn_heads, self.embedding_dim)
+                alpha_l[metapath] = (h_dict[head_type] * self.attn_l[i]).sum(dim=-1)
             else:
                 # alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
-                alpha_l[metapath] = (h1_dict[head_type] * self.attn_l[i]).view(-1, self.attn_heads, self.embedding_dim)
+                alpha_l[metapath] = (h1_dict[head_type] * self.attn_l[i]).sum(dim=-1)
 
             # alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
-            alpha_r[metapath] = (h_dict[tail_type] * self.attn_r[i]).view(-1, self.attn_heads, self.embedding_dim)
+            alpha_r[metapath] = (h_dict[tail_type] * self.attn_r[i]).sum(dim=-1)
         return alpha_l, alpha_r
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
