@@ -342,10 +342,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
-            print(metapath, {k: global_node_idx[k].size() for k in [metapath[0], metapath[-1]]},
-                  (edge_index[0].max(), edge_index[1].max()))
-            print("h_dict head tail", h_dict[head_type].shape, h_dict[tail_type].shape)
-            print("alpha_lr", alpha_l[metapath].shape, alpha_r[metapath].shape)
+            # print(metapath, {k: global_node_idx[k].size() for k in [metapath[0], metapath[-1]]},
+            #       (edge_index[0].max(), edge_index[1].max()))
+            # print("h_dict head tail", h_dict[head_type].shape, h_dict[tail_type].shape)
+            # print("alpha_lr", alpha_l[metapath].shape, alpha_r[metapath].shape)
             emb_relations[:, i] = self.propagate(
                 edge_index=edge_index,
                 x=(h_dict[head_type], h_dict[tail_type]),
@@ -407,6 +407,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
         e_ij = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
+        print("e_ij", e_ij.shape, "alpha", alpha_l[metapath][edge_index[0]].shape)
         if logits:
             return e_ij
         else:
