@@ -365,7 +365,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 metapath_idx=self.metapaths.index(metapath)).mean(dim=1)
 
         # Assign the "self" embedding representation
-        emb_relations[:, -1] = h_dict[node_type]
+        emb_relations[:, -1] = h_dict[node_type].mean(dim=1)
 
         return emb_relations
 
