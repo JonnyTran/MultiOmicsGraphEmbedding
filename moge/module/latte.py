@@ -181,9 +181,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
         self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, 1, bias=False) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, 1, bias=False) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
