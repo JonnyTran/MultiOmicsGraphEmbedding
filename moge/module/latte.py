@@ -375,8 +375,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 h_dict[node_type] = self.linear[node_type](x_dict[node_type]).view(-1, self.attn_heads,
                                                                                    self.embedding_dim)
             else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
-                    self.conv[node_type].weight.device)
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
+                    .repeat(self.attn_heads) \
+                    .view(-1, self.attn_heads, self.embedding_dim) \
+                    .to(self.conv[node_type].weight.device)
         return h_dict
 
     def get_alphas(self, edge_index_dict, h_dict, h1_dict):
