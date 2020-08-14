@@ -18,7 +18,8 @@ from .utils import preprocess_input
 
 class LATTE(nn.Module):
     def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
-                 activation: str = "relu", attn_activation="sharpening", attn_dropout=0.5, use_proximity_loss=True,
+                 activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
+                 use_proximity_loss=True,
                  neg_sampling_ratio=2.0, neg_sampling_test_size=128):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
@@ -36,7 +37,7 @@ class LATTE(nn.Module):
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
-                               attn_activation=attn_activation, attn_dropout=attn_dropout,
+                               attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss,
                                neg_sampling_ratio=neg_sampling_ratio \
                                    if isinstance(neg_sampling_ratio, (int, float)) else neg_sampling_ratio[t],
@@ -46,7 +47,7 @@ class LATTE(nn.Module):
                 layers.append(
                     LATTELayer(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
                                num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
-                               attn_activation=attn_activation, attn_dropout=attn_dropout,
+                               attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
                                use_proximity_loss=use_proximity_loss,
                                neg_sampling_ratio=neg_sampling_ratio \
                                    if isinstance(neg_sampling_ratio, (int, float)) else neg_sampling_ratio[t],
@@ -180,14 +181,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
 
         self.linear = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+            {node_type: torch.nn.Linear(in_channels, embedding_dim * attn_heads, bias=True) \
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
-        self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        # self.attn_l = [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths]
-        # self.attn_r = [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths]
+        # self.attn_l = torch.nn.ModuleList(
+        #     [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
+        # self.attn_r = torch.nn.ModuleList(
+        #     [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
+        self.attn_l = [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths]
+        self.attn_r = [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths]
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -353,7 +354,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 x=(h_dict[head_type], h_dict[tail_type]),
                 alpha=(alpha_l[metapath], alpha_r[metapath]),
                 size=(num_node_head, num_node_tail),
-                metapath_idx=self.metapaths.index(metapath))
+                metapath_idx=self.metapaths.index(metapath)).mean(dim=1)
 
         # Assign the "self" embedding representation
         emb_relations[:, -1] = h_dict[node_type]
@@ -371,7 +372,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = {}
         for node_type in global_node_idx:
             if node_type in x_dict:
-                h_dict[node_type] = (self.linear[node_type](x_dict[node_type])).view(-1, self.embedding_dim)
+                h_dict[node_type] = self.linear[node_type](x_dict[node_type]).view(-1, self.attn_heads,
+                                                                                   self.embedding_dim)
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
                     self.conv[node_type].weight.device)
@@ -384,11 +386,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
-                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
+                # alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
+                alpha_l[metapath] = (h_dict[head_type] * self.attn_l[i]).view(-1, self.attn_heads, self.embedding_dim)
             else:
-                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
+                # alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
+                alpha_l[metapath] = (h1_dict[head_type] * self.attn_l[i]).view(-1, self.attn_heads, self.embedding_dim)
 
-            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
+            # alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
+            alpha_r[metapath] = (h_dict[tail_type] * self.attn_r[i]).view(-1, self.attn_heads, self.embedding_dim)
         return alpha_l, alpha_r
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
