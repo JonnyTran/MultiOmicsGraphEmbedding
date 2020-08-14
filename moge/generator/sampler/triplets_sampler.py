@@ -137,4 +137,9 @@ class LinkSampler(HeteroNetDataset):
         if self.use_reverse:
             self.add_reverse_edge_index(X["edge_index_dict"])
 
+        # Make x_dict
+        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
+            X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
+                           for node_type in self.x_dict}
+
         return X, None, None
