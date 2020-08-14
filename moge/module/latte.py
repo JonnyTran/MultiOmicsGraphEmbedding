@@ -156,7 +156,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity_loss=True,
                  neg_sampling_ratio=1.0, neg_sampling_test_size=128, first=True) -> None:
-        super(LATTELayer, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
+        super(LATTELayer, self).__init__(aggr="add", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
