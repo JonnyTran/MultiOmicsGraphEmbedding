@@ -297,7 +297,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = self.get_h_dict(x_dict, global_node_idx)
 
         # Compute relations attention coefficients
-        beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
+        # beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
         # Save beta weights from testing samples
         if not self.training: self.save_relation_weights(beta)
 
@@ -312,7 +312,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                          global_node_idx)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
+            # out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
+            out[node_type] = out[node_type].mean(dim=1)
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
@@ -376,7 +377,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                                                    self.embedding_dim)
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
-                    .repeat(self.attn_heads) \
+                    .repeat(1, self.attn_heads) \
                     .view(-1, self.attn_heads, self.embedding_dim) \
                     .to(self.conv[node_type].weight.device)
         return h_dict
