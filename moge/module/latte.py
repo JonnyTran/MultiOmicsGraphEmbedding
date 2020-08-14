@@ -229,7 +229,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 self.embeddings[node_type].reset_parameters()
 
     def get_head_relations(self, head_node_type) -> list:
-        relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
+        relations = [metapath for metapath in self.metapaths if metapath[-1] == head_node_type]
         return relations
 
     def num_head_relations(self, node_type) -> int:
@@ -348,7 +348,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             print("alpha_lr", alpha_l[metapath].shape, alpha_r[metapath].shape)
             emb_relations[:, i] = self.propagate(
                 edge_index=edge_index,
-                x=(h_dict[tail_type], h_dict[head_type]),
+                x=(h_dict[head_type], h_dict[tail_type]),
                 alpha=(alpha_l[metapath], alpha_r[metapath]),
                 size=(num_node_head, num_node_tail),
                 metapath_idx=self.metapaths.index(metapath))
