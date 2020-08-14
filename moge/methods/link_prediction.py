@@ -1,5 +1,6 @@
 import multiprocessing
 import torch
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .node_classification import NodeClfMetrics
 from moge.generator.sampler.datasets import HeteroNetDataset
@@ -103,4 +104,7 @@ class LATTELinkPredictor(LinkPredMetrics):
                                             num_workers=0)
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        scheduler = ReduceLROnPlateau(optimizer)
+
+        return [optimizer], [scheduler]

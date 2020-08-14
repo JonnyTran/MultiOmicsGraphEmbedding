@@ -213,8 +213,6 @@ class LATTENodeClassifier(NodeClfMetrics):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
-
-        # optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=self.named_parameters())
         scheduler = ReduceLROnPlateau(optimizer)
 
         return [optimizer], [scheduler]
