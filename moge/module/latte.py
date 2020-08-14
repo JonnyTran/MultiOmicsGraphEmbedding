@@ -445,7 +445,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             edge_pred_dict[metapath] = e_pred.detach()
 
         # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
-        loss_neg = torch.tensor(0.0, dtype=torch.float, device=self.attn_l[0].weight.device)
         for metapath, edge_index in edge_index_dict.items():
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, _ = edge_index
