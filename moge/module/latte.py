@@ -441,6 +441,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             e_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=False)
+            print("values", values.shape if isinstance(values, torch.Tensor) else values)
+            print("e_pred", e_pred.shape)
             loss += -torch.true_divide(torch.sum(values * torch.log(e_pred), dim=-1), e_pred.size(0))
             edge_pred_dict[metapath] = e_pred.detach()
 
