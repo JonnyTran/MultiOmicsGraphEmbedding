@@ -428,9 +428,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 values = 1.0
             if edge_index is None: continue
-            e_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=False)
-            loss += -torch.mean(values * torch.log(e_pred), dim=-1)
-            edge_pred_dict[metapath] = e_pred.detach()
+            e_pos_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=False)
+            loss += -torch.mean(values * torch.log(e_pos_pred), dim=-1)
+            edge_pred_dict[metapath] = e_pos_pred.detach()
 
             # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
             neg_edge_index = negative_sample(edge_index,
@@ -439,9 +439,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                              n_sample_per_edge=self.neg_sampling_ratio if self.training else self.neg_sampling_test_size)
             if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
 
-            e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
-            loss += -torch.mean(torch.log(torch.sigmoid(-e_pred_logits)), dim=-1)
-            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_pred_logits).detach()
+            e_neg_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
+            loss += -torch.mean(torch.log(torch.sigmoid(-e_neg_pred_logits)), dim=-1)
+            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_pred_logits).detach()
 
         loss = torch.true_divide(loss, len(edge_index_dict) * 2)
         return loss, edge_pred_dict

@@ -6,8 +6,7 @@ import torch
 
 def negative_sample(edge_index, M: int, N: int, n_sample_per_edge: int):
     num_neg_samples = edge_index.size(1) * n_sample_per_edge
-    num_neg_samples = int(min(num_neg_samples,
-                              M * N - edge_index.size(1)))
+    num_neg_samples = int(min(num_neg_samples, M * N - edge_index.size(1)))
     rng = range(M * N)
     idx = (edge_index[0] * N + edge_index[1]).to('cpu')  # idx = N * i + j
 

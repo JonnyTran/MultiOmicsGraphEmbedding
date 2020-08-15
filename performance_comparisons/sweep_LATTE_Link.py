@@ -60,7 +60,7 @@ def train(hparams):
     )
 
     trainer.fit(model)
-    model.neg_sampling_test_size = 500
+    model.neg_sampling_test_size = 1000
     trainer.test(model)
 
 if __name__ == "__main__":
