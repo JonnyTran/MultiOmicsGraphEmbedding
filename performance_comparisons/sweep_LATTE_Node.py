@@ -50,7 +50,9 @@ def train(hparams):
     else:
         raise Exception(f"Dataset `{hparams.dataset}` not found")
 
-    logger = WandbLogger()
+    logger = WandbLogger(name=model.name(),
+                         tags=[dataset.name()],
+                         project="multiplex-comparison")
 
     trainer = Trainer(
         gpus=NUM_GPUS,

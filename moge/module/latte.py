@@ -188,13 +188,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
 
         self.linear = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(in_channels, embedding_dim * attn_heads, bias=True) \
+            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        # self.q = nn.Linear(attn_heads, 1, bias=False)
+        self.attn_q = nn.Sequential(nn.ReLU(), nn.Linear(attn_heads * 2, 1, bias=False))
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -217,7 +217,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 self.embeddings = torch.nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
-                                             sparse=True) for node_type in non_attr_node_types})
+                                             sparse=False) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 
@@ -310,14 +310,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h1_dict)
 
-        proximity_loss, edge_pred_dict = None, None
-        if self.use_proximity_loss:
-            proximity_loss, edge_pred_dict = self.proximity_loss(
-                edge_index_dict,
-                alpha_l=alpha_l,
-                alpha_r=alpha_r,
-                global_node_idx=global_node_idx)
-
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
         for node_type in global_node_idx:
@@ -331,6 +323,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
+
+        proximity_loss, edge_pred_dict = None, None
+        if self.use_proximity_loss:
+            proximity_loss, edge_pred_dict = self.proximity_loss(
+                edge_index_dict,
+                alpha_l=alpha_l,
+                alpha_r=alpha_r,
+                global_node_idx=global_node_idx)
 
         return out, proximity_loss, edge_pred_dict
 
@@ -350,22 +350,26 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
-            out = self.propagate(
+            print(metapath, {k: global_node_idx[k].size() for k in [metapath[0], metapath[-1]]},
+                  (edge_index[0].max(), edge_index[1].max()))
+            print("h_dict[head_type]", h_dict[head_type].shape)
+            print("h_dict[tail_type]", h_dict[tail_type].shape)
+            emb_relations[:, i] = self.propagate(
                 edge_index=edge_index,
                 x=(h_dict[tail_type], h_dict[head_type]),
                 alpha=(alpha_r[metapath], alpha_l[metapath]),
                 size=(num_node_tail, num_node_head),
                 metapath_idx=self.metapaths.index(metapath))
 
-            emb_relations[:, i] = out.mean(dim=1)
-
         # Assign the "self" embedding representation
-        emb_relations[:, -1] = h_dict[node_type].mean(dim=1)
+        emb_relations[:, -1] = h_dict[node_type]
 
         return emb_relations
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
+        # alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
+        alpha = self.attn_q.forward(torch.cat(alpha_i, alpha_j, dim=1))
+        print("alpha", alpha.shape)
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
@@ -375,12 +379,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = {}
         for node_type in global_node_idx:
             if node_type in x_dict:
-                h_dict[node_type] = self.linear[node_type](x_dict[node_type]).view(-1, self.attn_heads,
-                                                                                   self.embedding_dim)
+                h_dict[node_type] = self.linear[node_type](x_dict[node_type])
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
-                    .repeat(1, self.attn_heads) \
-                    .view(-1, self.attn_heads, self.embedding_dim) \
                     .to(self.conv[node_type].weight.device)
         return h_dict
 
@@ -391,14 +392,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
-                alpha_l[metapath] = (h_dict[head_type] *
-                                     self.attn_l[i].weight.view(1, self.attn_heads, self.embedding_dim)).sum(-1)
+                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type])
             else:
-                alpha_l[metapath] = (h1_dict[head_type] * self.attn_l[i].weight.view(1, self.attn_heads,
-                                                                                     self.embedding_dim)).sum(-1)
+                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type])
 
-            alpha_r[metapath] = (h_dict[tail_type] *
-                                 self.attn_r[i].weight.view(1, self.attn_heads, self.embedding_dim)).sum(-1)
+            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type])
         return alpha_l, alpha_r
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
@@ -409,7 +407,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
                 else:
                     # node_type is not attributed, use self.embeddings in first layer
-                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].mean(1).unsqueeze(-1))
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             elif not self.first:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
             else:
@@ -419,6 +417,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
         e_ij = (alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]).mean(-1)
+        print("e_ij", e_ij.shape)
         if logits:
             return e_ij
         else:
