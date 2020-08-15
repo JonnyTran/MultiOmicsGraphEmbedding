@@ -71,7 +71,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
     parser.add_argument('-t', '--t_order', type=int, default=1)
-    parser.add_argument('-b', '--batch_size', type=int, default=262144)
+    parser.add_argument('-b', '--batch_size', type=int, default=131072)
     parser.add_argument('--n_neighbors_1', type=int, default=30)
     parser.add_argument('--activation', type=str, default="tanh")
     parser.add_argument('--attn_heads', type=int, default=64)
