@@ -24,3 +24,7 @@ def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
     neg_edge_index = torch.stack([row, col], dim=0).long()
 
     return neg_edge_index.to(edge_index.device)
+
+def negative_sample_head_tail(edge_index, M: int, N: int, num_neg_samples: int):
+    num_neg_samples = int(min(num_neg_samples,
+                              M * N - edge_index.size(1)))

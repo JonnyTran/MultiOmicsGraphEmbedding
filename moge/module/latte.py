@@ -164,7 +164,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity_loss=True,
                  neg_sampling_ratio=1.0, neg_sampling_test_size=128, first=True) -> None:
-        super(LATTELayer, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
+        super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
@@ -208,7 +208,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
         if len(non_attr_node_types) > 0:
-            if embedding_dim > 200 or sum([v for k, v in self.num_nodes_dict.items()]) > 500000:
+            if embedding_dim > 500 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
                                                            sparse=True).cpu() for node_type in non_attr_node_types}
@@ -237,7 +237,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 self.embeddings[node_type].reset_parameters()
 
     def get_head_relations(self, head_node_type) -> list:
-        relations = [metapath for metapath in self.metapaths if metapath[-1] == head_node_type]
+        relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
         return relations
 
     def num_head_relations(self, node_type) -> int:
@@ -302,9 +302,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = self.get_h_dict(x_dict, global_node_idx)
 
         # Compute relations attention coefficients
-        # beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
+        beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
         # Save beta weights from testing samples
-        # if not self.training: self.save_relation_weights(beta)
+        if not self.training: self.save_relation_weights(beta)
 
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h1_dict)
@@ -325,8 +325,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                          global_node_idx)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            # out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
-            out[node_type] = out[node_type].mean(dim=1)
+            out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
+            # out[node_type] = out[node_type].mean(dim=1)
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
@@ -349,16 +349,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
-            # print(metapath, {k: global_node_idx[k].size() for k in [metapath[0], metapath[-1]]},
-            #       (edge_index[0].max(), edge_index[1].max()))
-            # print("h_dict head tail", h_dict[head_type].shape, h_dict[tail_type].shape)
-            # print("alpha_lr", alpha_l[metapath].shape, alpha_r[metapath].shape)
-            emb_relations[:, i] = self.propagate(
+            out = self.propagate(
                 edge_index=edge_index,
-                x=(h_dict[head_type], h_dict[tail_type]),
-                alpha=(alpha_l[metapath], alpha_r[metapath]),
-                size=(num_node_head, num_node_tail),
-                metapath_idx=self.metapaths.index(metapath)).mean(dim=1)
+                x=(h_dict[tail_type], h_dict[head_type]),
+                alpha=(alpha_r[metapath], alpha_l[metapath]),
+                size=(num_node_tail, num_node_head),
+                metapath_idx=self.metapaths.index(metapath))
+
+            emb_relations[:, i] = out.mean(dim=1)
 
         # Assign the "self" embedding representation
         emb_relations[:, -1] = h_dict[node_type].mean(dim=1)
@@ -392,19 +390,15 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
-                # alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * W * x_1
-                alpha_l[metapath] = (
-                            h_dict[head_type] * self.attn_l[i].weight.view(1, self.attn_heads, self.embedding_dim)).sum(
-                    dim=-1)
+                alpha_l[metapath] = (h_dict[head_type] *
+                                     self.attn_l[i].weight.view(1, self.attn_heads, self.embedding_dim))
+                print("alpha_l[metapath]", alpha_l[metapath].shape)
             else:
-                # alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type]).sum(dim=-1)  # alpha_l = attn_l * h_1
                 alpha_l[metapath] = (h1_dict[head_type] * self.attn_l[i].weight.view(1, self.attn_heads,
-                                                                                     self.embedding_dim)).sum(dim=-1)
+                                                                                     self.embedding_dim))
 
-            # alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type]).sum(dim=-1)  # alpha_r = attn_r * W * x_1
-            alpha_r[metapath] = (
-                        h_dict[tail_type] * self.attn_r[i].weight.view(1, self.attn_heads, self.embedding_dim)).sum(
-                dim=-1)
+            alpha_r[metapath] = (h_dict[tail_type] *
+                                 self.attn_r[i].weight.view(1, self.attn_heads, self.embedding_dim))
         return alpha_l, alpha_r
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
@@ -415,7 +409,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
                 else:
                     # node_type is not attributed, use self.embeddings in first layer
-                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].mean(1).unsqueeze(-1))
             elif not self.first:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
             else:
@@ -440,17 +434,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 values = 1.0
             if edge_index is None: continue
-
             e_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=False)
             loss += -torch.mean(values * torch.log(e_pred), dim=-1)
             edge_pred_dict[metapath] = e_pred.detach()
 
-        # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
-        for metapath, edge_index in edge_index_dict.items():
-            if isinstance(edge_index, tuple):  # Weighted edges
-                edge_index, _ = edge_index
-            if edge_index is None or edge_index.size(1) <= 5: continue
-
+            # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
             if self.training:
                 num_neg_samples = edge_index.size(1) * self.neg_sampling_ratio
             else:
