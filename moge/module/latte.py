@@ -154,8 +154,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
     RELATIONS_DIM = 1
 
     def register_modules(self, modules, name):
+        new_modules_list = []
         for i, module in enumerate(modules):
             self.__setattr__(f"{name}_{i}", module)
+            new_modules_list.append(self.__getattr__(f"{name}_{i}"))
+        return new_modules_list
 
     def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.5,
@@ -191,10 +194,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         #     [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         # self.attn_r = torch.nn.ModuleList(
         #     [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_l = [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths]
-        self.register_modules(self.attn_l, name="attn_l")
-        self.attn_r = [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths]
-        self.register_modules(self.attn_r, name="attn_r")
+        self.attn_l = self.register_modules(
+            [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths], name="attn_l")
+        self.attn_r = self.register_modules(
+            [nn.Parameter(torch.Tensor(1, attn_heads, embedding_dim)) for metapath in self.metapaths], name="attn_r")
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
