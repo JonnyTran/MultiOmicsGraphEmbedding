@@ -22,7 +22,7 @@ from moge.methods.link_pred import LATTELinkPredictor
 
 def train(hparams):
     NUM_GPUS = 4
-    USE_AMP = True if NUM_GPUS > 1 else False
+    USE_AMP = False  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 50
 
     if hparams.t_order > 1:
