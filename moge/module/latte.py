@@ -151,15 +151,6 @@ class LATTE(nn.Module):
 
 
 class LATTELayer(MessagePassing, pl.LightningModule):
-    RELATIONS_DIM = 1
-
-    def register_modules(self, modules, name):
-        new_modules_list = []
-        for i, module in enumerate(modules):
-            self.__setattr__(f"{name}_{i}", module)
-            new_modules_list.append(self.__getattr__(f"{name}_{i}"))
-        return new_modules_list
-
     def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity_loss=True,
@@ -192,10 +183,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
 
         self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, attn_heads, bias=False) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_q = nn.Sequential(nn.Dropout(0.5), nn.Tanh(), nn.Linear(attn_heads * 2, 1, bias=False))
+            [torch.nn.Linear(embedding_dim, attn_heads, bias=False) for metapath in self.metapaths])
+        self.attn_q = nn.Sequential(nn.Dropout(0.2), nn.Tanh(), nn.Linear(2 * attn_heads, 1, bias=False))
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
