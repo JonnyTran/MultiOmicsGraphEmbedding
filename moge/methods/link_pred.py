@@ -106,7 +106,7 @@ class LATTELinkPredictor(LinkPredMetrics):
                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
         return [optimizer], [scheduler]

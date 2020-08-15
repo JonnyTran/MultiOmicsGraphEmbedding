@@ -190,11 +190,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.linear = torch.nn.ModuleDict(
             {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_q = nn.Sequential(nn.ReLU(), nn.Linear(attn_heads * 2, 1, bias=False))
+        self.attn_q = nn.Sequential(nn.Dropout(0.5), nn.Tanh(), nn.Linear(attn_heads * 2, 1, bias=False))
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -326,12 +327,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         proximity_loss, edge_pred_dict = None, None
         if self.use_proximity_loss:
-            proximity_loss, edge_pred_dict = self.proximity_loss(
-                edge_index_dict,
-                alpha_l=alpha_l,
-                alpha_r=alpha_r,
-                global_node_idx=global_node_idx)
-
+            proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
+                                                                 alpha_l=alpha_l, alpha_r=alpha_r,
+                                                                 global_node_idx=global_node_idx)
         return out, proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, h_dict, edge_index_dict, global_node_idx):

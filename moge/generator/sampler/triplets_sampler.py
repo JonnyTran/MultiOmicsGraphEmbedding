@@ -90,6 +90,7 @@ class LinkSampler(HeteroNetDataset):
 
         self.train_ratio = self.training_idx.numel() / \
                            sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+        print("train_ratio", self.train_ratio)
         # all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
         # self.training_idx, self.validation_idx, self.testing_idx = \
         #     self.split_train_val_test(train_ratio=train_ratio, sample_indices=node_indices)
