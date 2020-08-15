@@ -434,15 +434,15 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
             # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
             if self.training:
-                num_neg_samples = edge_index.size(1) * self.neg_sampling_ratio
+                # num_neg_samples = edge_index.size(1) * self.neg_sampling_ratio
+                num_neg_samples = self.neg_sampling_ratio
             else:
-                if self.neg_sampling_test_size == 0: continue
-                num_neg_samples = edge_index.size(1) * self.neg_sampling_test_size
+                # num_neg_samples = edge_index.size(1) * self.neg_sampling_test_size
+                num_neg_samples = self.neg_sampling_test_size
             neg_edge_index = negative_sample_head_tail(edge_index,
                                                        M=global_node_idx[metapath[0]].size(0),
                                                        N=global_node_idx[metapath[-1]].size(0),
-                                                       num_neg_samples=num_neg_samples)
-            print("neg_edge_index", neg_edge_index.shape)
+                                                       num_neg_each_edge=num_neg_samples)
             if neg_edge_index.size(1) <= 1: continue
 
             e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
