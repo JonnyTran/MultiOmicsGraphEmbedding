@@ -3,6 +3,8 @@ import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
 from moge.generator.sampler.datasets import HeteroNetDataset
+from moge.module.latte import tag_negative
+from moge.module.sampling import negative_sample, negative_sample_head_tail
 
 
 class LinkSampler(HeteroNetDataset):

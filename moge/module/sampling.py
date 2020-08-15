@@ -35,12 +35,12 @@ def negative_sample_head_tail(edge_index, M: int, N: int, num_neg_samples: int):
     :param num_neg_samples:
     :return:
     """
-    num_neg_samples = int(min(num_neg_samples, M * N - edge_index.size(1))) // 2
+    K = int(min(num_neg_samples, M * N - edge_index.size(1))) // 2
 
-    sampled_tails = torch.randint(0, N, (edge_index[0].size(0) * num_neg_samples,), dtype=torch.long)
-    sampled_heads = torch.randint(0, M, (edge_index[1].size(0) * num_neg_samples,), dtype=torch.long)
-    neg_tail_batch = torch.stack((edge_index[0].repeat(num_neg_samples), sampled_tails))
-    neg_head_batch = torch.stack((sampled_heads, edge_index[1].repeat(num_neg_samples)))
+    sampled_tails = torch.randint(0, N, (edge_index[0].size(0) * K,), dtype=torch.long)
+    sampled_heads = torch.randint(0, M, (edge_index[1].size(0) * K,), dtype=torch.long)
+    neg_tail_batch = torch.stack((edge_index[0].cpu().repeat(K), sampled_tails))
+    neg_head_batch = torch.stack((sampled_heads, edge_index[1].cpu().repeat(K)))
 
     neg_edge_index = torch.cat((neg_tail_batch, neg_head_batch), dim=1)
     return neg_edge_index.to(edge_index.device)
