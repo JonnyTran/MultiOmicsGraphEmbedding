@@ -194,6 +194,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
+        # self.q = nn.Linear(attn_heads, 1, bias=False)
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -391,14 +392,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
                 alpha_l[metapath] = (h_dict[head_type] *
-                                     self.attn_l[i].weight.view(1, self.attn_heads, self.embedding_dim))
-                print("alpha_l[metapath]", alpha_l[metapath].shape)
+                                     self.attn_l[i].weight.view(1, self.attn_heads, self.embedding_dim)).sum(-1)
             else:
                 alpha_l[metapath] = (h1_dict[head_type] * self.attn_l[i].weight.view(1, self.attn_heads,
-                                                                                     self.embedding_dim))
+                                                                                     self.embedding_dim)).sum(-1)
 
             alpha_r[metapath] = (h_dict[tail_type] *
-                                 self.attn_r[i].weight.view(1, self.attn_heads, self.embedding_dim))
+                                 self.attn_r[i].weight.view(1, self.attn_heads, self.embedding_dim)).sum(-1)
         return alpha_l, alpha_r
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
