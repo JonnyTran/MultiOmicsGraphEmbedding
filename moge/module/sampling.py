@@ -4,7 +4,8 @@ import numpy as np
 import torch
 
 
-def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
+def negative_sample(edge_index, M: int, N: int, n_sample_per_edge: int):
+    num_neg_samples = edge_index.size(1) * n_sample_per_edge
     num_neg_samples = int(min(num_neg_samples,
                               M * N - edge_index.size(1)))
     rng = range(M * N)
@@ -26,16 +27,16 @@ def negative_sample(edge_index, M: int, N: int, num_neg_samples: int):
     return neg_edge_index.to(edge_index.device)
 
 
-def negative_sample_head_tail(edge_index, M: int, N: int, num_neg_each_edge: int):
+def negative_sample_head_tail(edge_index, M: int, N: int, n_sample_per_edge: int):
     """
-    Corrupt the tail or head of each edge `num_neg_samples` times.
+    Corrupt the tail or head of each edge `n_sample_per_edge` times.
     :param edge_index:
     :param M:
     :param N:
-    :param num_neg_each_edge:
+    :param n_sample_per_edge:
     :return:
     """
-    K = int(min(num_neg_each_edge, (M * N) / edge_index.size(1))) // 2
+    K = int(min(n_sample_per_edge, (M * N) / edge_index.size(1))) // 2
 
     sampled_tails = torch.randint(0, N, (edge_index[0].size(0) * K,), dtype=torch.long)
     sampled_heads = torch.randint(0, M, (edge_index[1].size(0) * K,), dtype=torch.long)

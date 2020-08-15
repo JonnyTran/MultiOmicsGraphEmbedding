@@ -433,17 +433,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             edge_pred_dict[metapath] = e_pred.detach()
 
             # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
-            if self.training:
-                # num_neg_samples = edge_index.size(1) * self.neg_sampling_ratio
-                num_neg_samples = self.neg_sampling_ratio
-            else:
-                # num_neg_samples = edge_index.size(1) * self.neg_sampling_test_size
-                num_neg_samples = self.neg_sampling_test_size
             neg_edge_index = negative_sample_head_tail(edge_index,
                                                        M=global_node_idx[metapath[0]].size(0),
                                                        N=global_node_idx[metapath[-1]].size(0),
-                                                       num_neg_each_edge=num_neg_samples)
-            if neg_edge_index.size(1) <= 1: continue
+                                                       n_sample_per_edge=self.neg_sampling_ratio if self.training else self.neg_sampling_test_size)
+            if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
 
             e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
             loss += -torch.mean(torch.log(torch.sigmoid(-e_pred_logits)), dim=-1)

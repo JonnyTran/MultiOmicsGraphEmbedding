@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .node_clf import NodeClfMetrics
 from moge.generator.sampler.datasets import HeteroNetDataset
-from ..module.latte import LATTE
+from ..module.latte import LATTE, untag_negative
 
 
 class LinkPredMetrics(NodeClfMetrics):
@@ -21,8 +21,6 @@ class LATTELinkPredictor(LinkPredMetrics):
         self.multilabel = dataset.multilabel
         self._name = f"LATTE-{hparams.t_order}{' Link' if hparams.use_proximity_loss else ''}"
         self.collate_fn = collate_fn
-        self.num_nodes_neg = int(hparams.neg_sampling_ratio * (2 if self.dataset.use_reverse else 1))
-        self.neg_sampling_test_size = hparams.neg_sampling_test_size
 
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
                            t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
@@ -39,18 +37,19 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def get_e_pos_neg(self, edge_pred_dict, training=True):
         """
-        Align e_pos and e_neg to shape shape (num_edge, ) and (num_edge, num_nodes_neg)
+        Align e_pos and e_neg to shape (num_edge, ) and (num_edge, num_nodes_neg). Ignores reverse edges
         :param edge_pred_dict:
         :return:
         """
         e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
                            if "neg" not in metapath and metapath in self.dataset.metapaths], dim=0)
-        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if "neg" in metapath], dim=0)
+        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if
+                           "neg" in metapath and untag_negative(metapath) in self.dataset.metapaths], dim=0)
 
         if training:
-            num_nodes_neg = self.num_nodes_neg
+            num_nodes_neg = int(self.hparams.neg_sampling_ratio)
         else:
-            num_nodes_neg = self.neg_sampling_test_size * (2 if self.dataset.use_reverse else 1)
+            num_nodes_neg = int(self.hparams.neg_sampling_test_size)
 
         if e_neg.size(0) % num_nodes_neg:
             e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % num_nodes_neg]
