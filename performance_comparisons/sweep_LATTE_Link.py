@@ -74,6 +74,7 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--batch_size', type=int, default=262144)
     parser.add_argument('--n_neighbors_1', type=int, default=30)
     parser.add_argument('--activation', type=str, default="tanh")
+    parser.add_argument('--attn_heads', type=int, default=4)
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
     parser.add_argument('--attn_dropout', type=float, default=0.2)
 
