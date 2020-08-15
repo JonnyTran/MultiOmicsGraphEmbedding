@@ -12,7 +12,7 @@ from torch_sparse.tensor import SparseTensor
 from torch_sparse.matmul import matmul
 import pytorch_lightning as pl
 
-from moge.module.sampling import negative_sample
+from moge.module.sampling import negative_sample, negative_sample_head_tail
 from .utils import preprocess_input
 
 
@@ -438,10 +438,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 if self.neg_sampling_test_size == 0: continue
                 num_neg_samples = edge_index.size(1) * self.neg_sampling_test_size
-            neg_edge_index = negative_sample(edge_index,
-                                             M=global_node_idx[metapath[0]].size(0),
-                                             N=global_node_idx[metapath[-1]].size(0),
-                                             num_neg_samples=num_neg_samples)
+            neg_edge_index = negative_sample_head_tail(edge_index,
+                                                       M=global_node_idx[metapath[0]].size(0),
+                                                       N=global_node_idx[metapath[-1]].size(0),
+                                                       num_neg_samples=num_neg_samples)
             if neg_edge_index.size(1) <= 1: continue
 
             e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
