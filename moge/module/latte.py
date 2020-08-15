@@ -442,6 +442,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                        M=global_node_idx[metapath[0]].size(0),
                                                        N=global_node_idx[metapath[-1]].size(0),
                                                        num_neg_samples=num_neg_samples)
+            print("neg_edge_index", neg_edge_index.shape)
             if neg_edge_index.size(1) <= 1: continue
 
             e_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)

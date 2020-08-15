@@ -100,7 +100,7 @@ class LinkSampler(HeteroNetDataset):
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def sample_triples(self, iloc):
+    def sample_triples(self, iloc, num_neg_samples=100):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
@@ -135,6 +135,11 @@ class LinkSampler(HeteroNetDataset):
             sources = triples["head"][mask].apply_(local2batch[head_type].get)
             targets = triples["tail"][mask].apply_(local2batch[tail_type].get)
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
+            X["edge_index_dict"][tag_negative(metapath)] = negative_sample_head_tail(
+                X["edge_index_dict"][metapath],
+                M=X["global_node_index"][head_type].size(0),
+                N=X["global_node_index"][tail_type].size(0),
+                num_neg_samples=num_neg_samples)
 
         if self.use_reverse:
             self.add_reverse_edge_index(X["edge_index_dict"])
