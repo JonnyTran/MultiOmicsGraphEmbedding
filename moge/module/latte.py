@@ -341,8 +341,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                   self.embedding_dim)).type_as(self.conv[node_type].weight)
 
         for i, metapath in enumerate(self.get_head_relations(node_type)):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] == None:
-                continue
+            if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head_type, tail_type = metapath[0], metapath[-1]
             num_node_head, num_node_tail = len(global_node_idx[head_type]), len(global_node_idx[tail_type])
 
@@ -350,10 +349,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
-            print(metapath, {k: global_node_idx[k].size() for k in [metapath[0], metapath[-1]]},
-                  (edge_index[0].max(), edge_index[1].max()))
-            print("h_dict[head_type]", h_dict[head_type].shape)
-            print("h_dict[tail_type]", h_dict[tail_type].shape)
             emb_relations[:, i] = self.propagate(
                 edge_index=edge_index,
                 x=(h_dict[tail_type], h_dict[head_type]),
@@ -368,12 +363,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         # alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_q.forward(torch.cat(alpha_i, alpha_j, dim=1))
-        print("alpha", alpha.shape)
+        alpha = self.attn_q.forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
-        return x_j * alpha.unsqueeze(-1)
+        return x_j * alpha
 
     def get_h_dict(self, x_dict, global_node_idx):
         h_dict = {}
@@ -416,8 +410,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         return beta
 
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
-        e_ij = (alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]).mean(-1)
-        print("e_ij", e_ij.shape)
+        e_ij = self.attn_q.forward(
+            torch.cat([alpha_l[metapath][edge_index[0]], alpha_r[metapath][edge_index[1]]], dim=1)).squeeze(-1)
+
         if logits:
             return e_ij
         else:
