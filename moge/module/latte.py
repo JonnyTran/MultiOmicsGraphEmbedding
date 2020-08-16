@@ -170,12 +170,18 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.activation = activation.lower()
         assert self.activation in ["sigmoid", "tanh", "relu", "none"]
 
+        # self.conv = torch.nn.ModuleDict(
+        #     {node_type: torch.nn.Conv1d(
+        #         in_channels=node_attr_shape[
+        #             node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
+        #         out_channels=self.num_head_relations(node_type),
+        #         kernel_size=1) \
+        #         for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
         self.conv = torch.nn.ModuleDict(
-            {node_type: torch.nn.Conv1d(
-                in_channels=node_attr_shape[
+            {node_type: nn.Linear(
+                in_features=node_attr_shape[
                     node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
-                out_channels=self.num_head_relations(node_type),
-                kernel_size=1) \
+                out_features=self.num_head_relations(node_type)) \
                 for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
 
         self.linear = torch.nn.ModuleDict(
@@ -387,12 +393,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for node_type in global_node_idx:
             if self.first:
                 if node_type in x_dict:
-                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type])
                 else:
                     # node_type is not attributed, use self.embeddings in first layer
-                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type])
             elif not self.first:
-                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
+                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type])
             else:
                 raise Exception()
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
