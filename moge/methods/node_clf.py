@@ -137,8 +137,8 @@ class LATTENodeClassifier(NodeClfMetrics):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
         # print({k: {j: l.shape for j, l in v.items()} for k, v in X.items()})
-        # print("y", y.shape)
         y_hat, proximity_loss = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion(y_hat, y)
 
@@ -410,7 +410,7 @@ class HAN(NodeClfMetrics):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class MetaPath2Vec(NodeClfMetrics, Metapath2vec):
+class MetaPath2Vec(Metapath2vec, pl.LightningModule):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
         # Hparams
         self.train_ratio = hparams.train_ratio
@@ -426,16 +426,36 @@ class MetaPath2Vec(NodeClfMetrics, Metapath2vec):
         # Dataset
         self.dataset = dataset
         num_nodes_dict = None
-        metapath = self.dataset.metapaths
+        metapaths = self.dataset.get_metapaths()
         self.head_node_type = self.dataset.head_node_type
         edge_index_dict = dataset.edge_index_dict
+        first_node_type = metapaths[0][0]
 
-        super(MetaPath2Vec, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics,
-                                           edge_index_dict=edge_index_dict, embedding_dim=embedding_dim,
-                                           metapath=metapath, walk_length=walk_length, context_size=context_size,
-                                           walks_per_node=walks_per_node,
-                                           num_negative_samples=num_negative_samples, num_nodes_dict=num_nodes_dict,
-                                           sparse=hparams.sparse)
+        for metapath in reversed(metapaths):
+            if metapath[-1] == first_node_type:
+                last_metapath = metapath
+                break
+        metapaths.pop(metapaths.index(last_metapath))
+        metapaths.append(last_metapath)
+        print("metapaths", metapaths)
+
+        if dataset.use_reverse:
+            dataset.add_reverse_edge_index(dataset.edge_index_dict)
+
+        super(MetaPath2Vec, self).__init__(edge_index_dict, embedding_dim,
+                                           metapaths, walk_length, context_size,
+                                           walks_per_node,
+                                           num_negative_samples, num_nodes_dict,
+                                           hparams.sparse)
+
+        hparams.name = self.name()
+        self.hparams = hparams
+
+    def name(self):
+        if hasattr(self, "_name"):
+            return self._name
+        else:
+            return self.__class__.__name__
 
     def forward(self, node_type, batch=None):
         return super().forward(node_type, batch=None)
