@@ -393,12 +393,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for node_type in global_node_idx:
             if self.first:
                 if node_type in x_dict:
-                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type])
+                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
                 else:
                     # node_type is not attributed, use self.embeddings in first layer
-                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type])
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             elif not self.first:
-                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type])
+                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
             else:
                 raise Exception()
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
