@@ -170,19 +170,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.activation = activation.lower()
         assert self.activation in ["sigmoid", "tanh", "relu", "none"]
 
-        # self.conv = torch.nn.ModuleDict(
-        #     {node_type: torch.nn.Conv1d(
-        #         in_channels=node_attr_shape[
-        #             node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
-        #         out_channels=self.num_head_relations(node_type),
-        #         kernel_size=1) \
-        #         for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
         self.conv = torch.nn.ModuleDict(
-            {node_type: nn.Linear(
-                in_features=node_attr_shape[
+            {node_type: torch.nn.Conv1d(
+                in_channels=node_attr_shape[
                     node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
-                out_features=self.num_head_relations(node_type)) \
-                for node_type in self.node_types})  # W_phi.shape (H_-1 x F)
+                out_channels=self.num_head_relations(node_type),
+                kernel_size=1) \
+                for node_type in self.node_types})  # W_phi.shape (D x F)
 
         self.linear = torch.nn.ModuleDict(
             {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \

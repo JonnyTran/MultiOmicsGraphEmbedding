@@ -8,7 +8,7 @@ import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
-from torch_geometric.nn import MetaPath2Vec
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -410,7 +410,7 @@ class HAN(NodeClfMetrics):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class MetaPath2Vec(MetaPath2Vec, NodeClfMetrics):
+class MetaPath2Vec(NodeClfMetrics, Metapath2vec):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
         # Hparams
         self.train_ratio = hparams.train_ratio
@@ -430,8 +430,15 @@ class MetaPath2Vec(MetaPath2Vec, NodeClfMetrics):
         self.head_node_type = self.dataset.head_node_type
         edge_index_dict = dataset.edge_index_dict
 
-        super().__init__(edge_index_dict, None, embedding_dim)
-        self.hparams = hparams
+        super(MetaPath2Vec, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics,
+                                           edge_index_dict=edge_index_dict, embedding_dim=embedding_dim,
+                                           metapath=metapath, walk_length=walk_length, context_size=context_size,
+                                           walks_per_node=walks_per_node,
+                                           num_negative_samples=num_negative_samples, num_nodes_dict=num_nodes_dict,
+                                           sparse=hparams.sparse)
+
+    def forward(self, node_type, batch=None):
+        return super().forward(node_type, batch=None)
 
     def training_step(self, batch, batch_nb):
 
