@@ -183,10 +183,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
 
         self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=False) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=False) for metapath in self.metapaths])
-        self.attn_q = nn.Sequential(nn.ReLU(), nn.Linear(2 * attn_heads, 1, bias=False))
+            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
+        self.attn_q = nn.Sequential(nn.Tanh(), nn.Linear(2 * attn_heads, 1, bias=False))
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -375,11 +375,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
             if self.first:
-                alpha_l[metapath] = self.attn_l[i].forward(self.embedding_activation(h_dict[head_type]))
+                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type])
             else:
-                alpha_l[metapath] = self.attn_l[i].forward(self.embedding_activation(h1_dict[head_type]))
+                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type])
 
-            alpha_r[metapath] = self.attn_r[i].forward(self.embedding_activation(h_dict[tail_type]))
+            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type])
         return alpha_l, alpha_r
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):

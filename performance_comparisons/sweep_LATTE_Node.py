@@ -80,9 +80,9 @@ if __name__ == "__main__":
     parser.add_argument('--t_order', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=1250)
     parser.add_argument('--n_neighbors_1', type=int, default=20)
-    parser.add_argument('--activation', type=str, default="relu")
+    parser.add_argument('--activation', type=str, default="tanh")
     parser.add_argument('--attn_heads', type=int, default=64)
-    parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
+    parser.add_argument('--attn_activation', type=str, default="sharpening")
     parser.add_argument('--attn_dropout', type=float, default=0.2)
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
@@ -97,7 +97,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight_decay', type=float, default=1e-5)
 
     # add all the available options to the trainer
-    parser = pl.Trainer.add_argparse_args(parser)
+    # parser = pl.Trainer.add_argparse_args(parser)
 
     args = parser.parse_args()
     train(args)
