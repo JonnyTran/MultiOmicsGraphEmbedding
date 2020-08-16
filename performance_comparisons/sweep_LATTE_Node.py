@@ -86,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument('--attn_dropout', type=float, default=0.2)
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
-    parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
+    parser.add_argument('--nb_cls_dropout', type=float, default=0.5)
 
     parser.add_argument('--use_proximity_loss', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=2.0)
