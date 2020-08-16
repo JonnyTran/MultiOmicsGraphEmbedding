@@ -66,7 +66,6 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument('--num_gpus', type=int, default=4)
-
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
@@ -82,7 +81,7 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
 
     parser.add_argument('--use_proximity_loss', type=bool, default=True)
-    parser.add_argument('--neg_sampling_ratio', type=float, default=50.0)
+    parser.add_argument('--neg_sampling_ratio', type=float, default=100.0)
     parser.add_argument('--neg_sampling_test_size', type=int, default=100)
 
     parser.add_argument('--use_class_weights', type=bool, default=False)

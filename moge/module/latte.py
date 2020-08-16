@@ -362,7 +362,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = {}
         for node_type in global_node_idx:
             if node_type in x_dict:
-                h_dict[node_type] = self.linear[node_type](x_dict[node_type])
+                h_dict[node_type] = self.linear[node_type].forward(x_dict[node_type])
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
                     .to(self.conv[node_type].weight.device)
@@ -422,10 +422,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             edge_pred_dict[metapath] = e_pos_pred.detach()
 
             # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
-            neg_edge_index = negative_sample(edge_index,
-                                             M=global_node_idx[metapath[0]].size(0),
-                                             N=global_node_idx[metapath[-1]].size(0),
-                                             n_sample_per_edge=self.neg_sampling_ratio if self.training else self.neg_sampling_test_size)
+            neg_edge_index = negative_sample_head_tail(edge_index,
+                                                       M=global_node_idx[metapath[0]].size(0),
+                                                       N=global_node_idx[metapath[-1]].size(0),
+                                                       n_sample_per_edge=self.neg_sampling_ratio if self.training else self.neg_sampling_test_size)
             if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
 
             e_neg_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
