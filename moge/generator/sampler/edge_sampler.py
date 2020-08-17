@@ -22,34 +22,26 @@ class EdgeSampler(HeteroNetDataset):
 
         self.edge_index_dict = {self.metapaths[0]: data.edge_index}
         self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
+        self.node_types = list(self.num_nodes_dict.keys())
 
-        if hasattr(data, "num_nodes_dict"):
-            self.num_nodes_dict = data.num_nodes_dict
-        else:
-            self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
-
-        if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
-        self.node_attr_shape = {}
-        self.multilabel = False
-
-        self.metapaths = list(self.edge_index_dict.keys())
+        self.x_dict = {self.head_node_type: data.x} if hasattr(data, "x") else {}
+        self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
 
         split_idx = dataset.get_edge_split()
-        train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
+        train_edges, valid_edges, test_edges = split_idx["train"], split_idx["valid"], split_idx["test"]
         self.triples = {}
-        for key in train_triples.keys():
-            if isinstance(train_triples[key], torch.Tensor):
-                self.triples[key] = torch.cat([train_triples[key], valid_triples[key], test_triples[key]], dim=0)
+        for key in train_edges.keys():
+            if isinstance(train_edges[key], torch.Tensor):
+                self.triples[key] = torch.cat([train_edges[key], valid_edges[key], test_edges[key]], dim=0)
             else:
-                self.triples[key] = np.array(train_triples[key] + valid_triples[key] + test_triples[key])
+                self.triples[key] = np.array(train_edges[key] + valid_edges[key] + test_edges[key])
 
-        self.training_idx = torch.arange(0, len(train_triples["relation"]))
+        self.training_idx = torch.arange(0, len(train_edges["relation"]))
         self.validation_idx = torch.arange(self.training_idx.size(0),
-                                           self.training_idx.size(0) + len(valid_triples["relation"]))
+                                           self.training_idx.size(0) + len(valid_edges["relation"]))
         self.testing_idx = torch.arange(self.training_idx.size(0) + self.validation_idx.size(0),
                                         self.training_idx.size(0) + self.validation_idx.size(0) + len(
-                                            test_triples["relation"]))
+                                            test_edges["relation"]))
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
         if "triples_batch" in collate_fn:

@@ -97,7 +97,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
                            t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
                            metapaths=dataset.get_metapaths(), activation=hparams.activation,
-                           attn_heads=hparams.attn_heads,
+                           attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                            attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
                            neg_sampling_ratio=hparams.neg_sampling_ratio,
                            neg_sampling_test_size=hparams.neg_sampling_ratio)

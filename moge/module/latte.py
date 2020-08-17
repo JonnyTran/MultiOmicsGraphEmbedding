@@ -168,7 +168,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.attn_dropout = attn_dropout
 
         self.activation = activation.lower()
-        assert self.activation in ["sigmoid", "tanh", "relu", "none"]
+        if self.activation not in ["sigmoid", "tanh", "relu"]:
+            print(f"Embedding activation arg `{self.activation}` did not match, so uses linear activation.")
 
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
@@ -318,9 +319,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         proximity_loss, edge_pred_dict = None, None
         if self.use_proximity_loss:
-            proximity_loss, edge_pred_dict = self.loss(edge_index_dict,
-                                                       alpha_l=alpha_l, alpha_r=alpha_r,
-                                                       global_node_idx=global_node_idx)
+            proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
+                                                                 alpha_l=alpha_l, alpha_r=alpha_r,
+                                                                 global_node_idx=global_node_idx)
         return out, proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, h_dict, edge_index_dict, global_node_idx):
@@ -355,7 +356,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         alpha = self.attn_q.forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        # alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
+        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha
 
     def get_h_dict(self, x_dict, global_node_idx):
@@ -407,25 +408,38 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         else:
             return F.sigmoid(e_ij)
 
-    def loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
+    def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
+        """
+        This function both predict link scores for each relation/metapath type given in `edge_index_dict` and computes
+        the NCE loss for both positive and negative (sampled) links. For each relation type in `edge_index_dict`, if the
+        negative metapath is not included, then the function automatically samples for random negative edges. And, if it
+        is included, then computes the NCE loss over the given negative edges. This function returns the scores of the
+        predicted positive and negative edges.
+
+        :param edge_index_dict (dict): Dict of <relation/metapath>: <Tensor(2, num_edges)>
+        :param alpha_l (dict): Dict of <node_type>:<alpha_l tensor>
+        :param alpha_r (dict): Dict of <node_type>:<alpha_r tensor>
+        :param global_node_idx (dict): Dict of <node_type>:<Tensor(node_idx,)>
+        :return loss, edge_pred_dict: NCE loss. edge_pred_dict will contain both positive relations of shape (num_edges,) and negative relations of shape (num_edges*num_neg_edges, )
+        """
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
         edge_pred_dict = {}
-        # KL Divergence over observed positive edges, -\sum_(a_ij) a_ij log(e_ij)
         for metapath, edge_index in edge_index_dict.items():
+            # KL Divergence over observed positive edges or negative edges (if included)
             if isinstance(edge_index, tuple):  # Weighted edges
                 edge_index, values = edge_index
             else:
                 values = 1.0
             if edge_index is None: continue
-            e_pos_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
+            e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
             if not is_negative(metapath):
-                loss += -torch.mean(values * F.logsigmoid(e_pos_logits), dim=-1)
+                loss += -torch.mean(values * F.logsigmoid(e_pred_logits), dim=-1)
             else:
-                loss += -torch.mean(F.logsigmoid(-e_pos_logits), dim=-1)
-            edge_pred_dict[metapath] = F.sigmoid(e_pos_logits).detach()
+                loss += -torch.mean(F.logsigmoid(-e_pred_logits), dim=-1)
+            edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
 
-            # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
-            if is_negative(metapath): continue  # Don't need to sample for negative edges
+            # Only need to sample for negative edges if negative metapath is not included
+            if is_negative(metapath) or tag_negative(metapath) in edge_index_dict: continue
             neg_edge_index = negative_sample(edge_index,
                                              M=global_node_idx[metapath[0]].size(0),
                                              N=global_node_idx[metapath[-1]].size(0),
@@ -434,7 +448,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
             e_neg_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
             loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
-            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_logits).detach()
+            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_logits.detach())
 
         loss = torch.true_divide(loss, len(edge_index_dict) * 2)
         return loss, edge_pred_dict

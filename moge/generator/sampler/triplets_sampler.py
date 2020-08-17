@@ -3,7 +3,7 @@ import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
 from moge.generator.sampler.datasets import HeteroNetDataset
-from moge.module.latte import tag_negative
+from moge.module.latte import tag_negative, is_negative
 from moge.module.sampling import negative_sample, negative_sample_head_tail
 
 
@@ -29,6 +29,13 @@ class TripletSampler(HeteroNetDataset):
 
         if self.node_types is None:
             self.node_types = list(self.num_nodes_dict.keys())
+
+        if hasattr(data, "x"):
+            self.x_dict = {self.head_node_type: data.x}
+        elif hasattr(data, "x_dict"):
+            self.x_dict = data.x_dict
+        else:
+            self.x_dict = {}
 
         self.node_attr_shape = {}
         self.multilabel = False
@@ -65,7 +72,13 @@ class TripletSampler(HeteroNetDataset):
         if self.node_types is None:
             self.node_types = list(data.num_nodes_dict.keys())
         self.node_attr_shape = {}
-        self.multilabel = False
+
+        if hasattr(data, "x"):
+            self.x_dict = {self.head_node_type: data.x}
+        elif hasattr(data, "x_dict"):
+            self.x_dict = data.x_dict
+        else:
+            self.x_dict = {}
 
         self.metapaths = list(self.edge_index_dict.keys())
 
@@ -74,17 +87,26 @@ class TripletSampler(HeteroNetDataset):
         self.triples = {}
         for key in train_triples.keys():
             if isinstance(train_triples[key], torch.Tensor):
-                self.triples[key] = torch.cat([train_triples[key], valid_triples[key], test_triples[key]], dim=0)
+                self.triples[key] = torch.cat([valid_triples[key], test_triples[key], train_triples[key]], dim=0)
             else:
-                self.triples[key] = np.array(train_triples[key] + valid_triples[key] + test_triples[key])
+                self.triples[key] = np.array(valid_triples[key] + test_triples[key] + train_triples[key])
 
-        self.training_idx = torch.arange(0, len(train_triples["relation"]))
-        self.validation_idx = torch.arange(self.training_idx.size(0),
-                                           self.training_idx.size(0) + len(valid_triples["relation"]))
-        self.testing_idx = torch.arange(self.training_idx.size(0) + self.validation_idx.size(0),
-                                        self.training_idx.size(0) + self.validation_idx.size(0) + len(
-                                            test_triples["relation"]))
+        for key in valid_triples.keys():
+            if is_negative(key):  # either head_neg or tail_neg
+                self.triples[key] = torch.cat([valid_triples[key], test_triples[key]], dim=0)
 
+        self.start_idx = {"valid": 0,
+                          "test": len(valid_triples["relation"]),
+                          "train": len(valid_triples["relation"]) + len(test_triples["relation"])}
+
+        self.validation_idx = torch.arange(self.start_idx["valid"],
+                                           self.start_idx["valid"] + len(valid_triples["relation"]))
+        self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["test"] + len(test_triples["relation"]))
+        self.training_idx = torch.arange(self.start_idx["train"],
+                                         self.start_idx["train"] + len(train_triples["relation"]))
+
+        assert self.validation_idx.max() < self.testing_idx.min()
+        assert self.testing_idx.max() < self.training_idx.min()
         # all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
         # self.training_idx, self.validation_idx, self.testing_idx = \
         #     self.split_train_val_test(train_ratio=train_ratio, sample_indices=node_indices)
@@ -101,8 +123,10 @@ class TripletSampler(HeteroNetDataset):
 
         X = {"edge_index_dict": {}, "global_node_index": {}, "x_dict": {}}
 
-        triples = {k: v[iloc] for k, v in self.triples.items()}
+        triples = {k: v[iloc] for k, v in self.triples.items() if not is_negative(k)}
         relation_ids = triples["relation"].unique()
+
+        # if iloc.max() < self.start_idx["training"]:
 
         # Gather all nodes sampled
         for relation_id in relation_ids:
@@ -130,6 +154,9 @@ class TripletSampler(HeteroNetDataset):
             sources = triples["head"][mask].apply_(local2batch[head_type].get)
             targets = triples["tail"][mask].apply_(local2batch[tail_type].get)
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
+
+            # Add neg edges if valid or test
+            # if iloc.max() < self.start_idx["training"]:
 
         if self.use_reverse:
             self.add_reverse_edge_index(X["edge_index_dict"])
