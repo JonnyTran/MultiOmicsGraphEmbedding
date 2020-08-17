@@ -3,6 +3,7 @@ from .multiplex import MultiplexGenerator
 from .sampled_generator import SampledDataGenerator
 from .subgraph_generator import SubgraphGenerator
 from moge.generator.sampler.datasets import GeneratorDataset
-from .sampler.PyG_sampler import HeteroNeighborSampler
+from .sampler.datasets import HeteroNetDataset
+from .sampler.node_sampler import HeteroNeighborSampler
 from .sampler.triplets_sampler import TripletSampler
 from .sampler.edge_sampler import EdgeSampler
