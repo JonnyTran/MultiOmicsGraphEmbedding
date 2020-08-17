@@ -107,9 +107,7 @@ class TripletSampler(HeteroNetDataset):
 
         assert self.validation_idx.max() < self.testing_idx.min()
         assert self.testing_idx.max() < self.training_idx.min()
-        # all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-        # self.training_idx, self.validation_idx, self.testing_idx = \
-        #     self.split_train_val_test(train_ratio=train_ratio, sample_indices=node_indices)
+
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
         if "triples_batch" in collate_fn:
@@ -121,12 +119,20 @@ class TripletSampler(HeteroNetDataset):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
+        # Add neg edges if valid or test
+        if iloc.max() < self.start_idx["train"]:
+            has_neg_edges = True
+        else:
+            has_neg_edges = False
+
         X = {"edge_index_dict": {}, "global_node_index": {}, "x_dict": {}}
 
         triples = {k: v[iloc] for k, v in self.triples.items() if not is_negative(k)}
         relation_ids = triples["relation"].unique()
 
-        # if iloc.max() < self.start_idx["training"]:
+        if has_neg_edges:
+            triples_neg = {k: v[iloc] for k, v in self.triples.items() if is_negative(k)}
+            print({k: v.shape for k, v in triples_neg.items()})
 
         # Gather all nodes sampled
         for relation_id in relation_ids:
@@ -136,6 +142,9 @@ class TripletSampler(HeteroNetDataset):
             mask = triples["relation"] == relation_id
             X["global_node_index"].setdefault(head_type, []).append(triples["head"][mask])
             X["global_node_index"].setdefault(tail_type, []).append(triples["tail"][mask])
+            if has_neg_edges:
+                X["global_node_index"].setdefault(head_type, []).append(triples_neg["head_neg"][mask].view(-1))
+                X["global_node_index"].setdefault(tail_type, []).append(triples_neg["tail_neg"][mask].view(-1))
 
         X["global_node_index"] = {node_type: torch.cat(node_sets, dim=0).unique() \
                                   for node_type, node_sets in X["global_node_index"].items()}
@@ -155,8 +164,9 @@ class TripletSampler(HeteroNetDataset):
             targets = triples["tail"][mask].apply_(local2batch[tail_type].get)
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
 
-            # Add neg edges if valid or test
-            # if iloc.max() < self.start_idx["training"]:
+            if has_neg_edges:
+                tail_neg = triples_neg["tail_neg"][mask].apply_(local2batch[head_type].get)
+                head_neg = triples_neg["head_neg"][mask].apply_(local2batch[tail_type].get)
 
         if self.use_reverse:
             self.add_reverse_edge_index(X["edge_index_dict"])

@@ -86,13 +86,12 @@ class LATTE(nn.Module):
     def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx):
         output_dict = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
-            if edge_index_a is None or (isinstance(edge_index_a, tuple) and edge_index_a[0] is None): continue
+            if is_negative(metapath_a): continue
             edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a)
             if edge_index_a is None: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
-                if edge_index_b is None or (isinstance(edge_index_b, tuple) and edge_index_b[0] is None): continue
-
+                if is_negative(metapath_b): continue
                 if metapath_a[-1] == metapath_b[0]:
                     metapath_join = metapath_a + metapath_b[1:]
                     edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
@@ -105,7 +104,7 @@ class LATTE(nn.Module):
                                                              n=global_node_idx[metapath_b[-1]].size(0),
                                                              coalesced=True)
 
-                        if new_edge_index[0].size(1) <= 5: continue
+                        if new_edge_index[0].size(1) <= 1: continue
                         output_dict[metapath_join] = new_edge_index
 
                     except Exception as e:
