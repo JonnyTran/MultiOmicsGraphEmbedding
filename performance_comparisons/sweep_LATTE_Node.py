@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from ogb.nodeproppred import PygNodePropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
-from moge.generator import HeteroNeighborSampler, LinkSampler
+from moge.generator import HeteroNeighborSampler, TripletSampler
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.methods.node_clf import LATTENodeClassifier

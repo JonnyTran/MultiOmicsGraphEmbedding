@@ -20,7 +20,7 @@ class LATTE(nn.Module):
     def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity_loss=True,
-                 neg_sampling_ratio=2.0, neg_sampling_test_size=128):
+                 neg_sampling_ratio=2.0, neg_sampling_test_size=5):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -418,8 +418,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 values = 1.0
             if edge_index is None: continue
             e_pos_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
-            loss += -torch.mean(values * F.logsigmoid(e_pos_logits), dim=-1)
-            edge_pred_dict[metapath] = e_pos_logits.detach()
+            if not is_negative(metapath):
+                loss += -torch.mean(values * F.logsigmoid(e_pos_logits), dim=-1)
+            else:
+                loss += -torch.mean(F.logsigmoid(-e_pos_logits), dim=-1)
+            edge_pred_dict[metapath] = F.sigmoid(e_pos_logits).detach()
 
             # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
             if is_negative(metapath): continue  # Don't need to sample for negative edges

@@ -3,59 +3,25 @@ import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
 from moge.generator.sampler.datasets import HeteroNetDataset
-from moge.module.latte import tag_negative
-from moge.module.sampling import negative_sample, negative_sample_head_tail
+from .triplets_sampler import TripletSampler
 
 
-class TripletSampler(HeteroNetDataset):
+class EdgeSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True, process_graphs=False):
-        super(TripletSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio,
-                                             add_reverse_metapaths,
-                                             process_graphs)
-        self.n_classes = None
-        self.classes = None
+        super(EdgeSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio,
+                                          add_reverse_metapaths,
+                                          process_graphs)
 
-    def process_edge_reltype_dataset(self, dataset: PygLinkPropPredDataset):
+    def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset, train_ratio):
         data = dataset[0]
         self._name = dataset.name
-        self.edge_reltype = data.edge_reltype
 
-        if hasattr(data, "num_nodes_dict"):
-            self.num_nodes_dict = data.num_nodes_dict
-        elif not hasattr(data, "edge_index_dict"):
-            self.head_node_type = "entity"
-            self.num_nodes_dict = {self.head_node_type: data.edge_index.max().item() + 1}
+        self.head_node_type = "entity"
+        self.metapaths = [(self.head_node_type, "default", self.head_node_type)]
 
-        if self.node_types is None:
-            self.node_types = list(self.num_nodes_dict.keys())
-
-        self.node_attr_shape = {}
-        self.multilabel = False
-
-        self.metapaths = [(self.head_node_type, str(k.item()), self.head_node_type) for k in self.edge_reltype.unique()]
-        self.edge_index_dict = {k: None for k in self.metapaths}
-
-        split_idx = dataset.get_edge_split()
-        train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
-        self.triples = {}
-        for key in train_triples.keys():
-            if isinstance(train_triples[key], torch.Tensor):
-                self.triples[key] = torch.cat([train_triples[key], valid_triples[key], test_triples[key]], dim=0)
-            else:
-                self.triples[key] = np.array(train_triples[key] + valid_triples[key] + test_triples[key])
-
-        self.training_idx = torch.arange(0, len(train_triples["relation"]))
-        self.validation_idx = torch.arange(self.training_idx.size(0),
-                                           self.training_idx.size(0) + len(valid_triples["relation"]))
-        self.testing_idx = torch.arange(self.training_idx.size(0) + self.validation_idx.size(0),
-                                        self.training_idx.size(0) + self.validation_idx.size(0) + len(
-                                            test_triples["relation"]))
-
-    def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset, train_ratio):
-        data = dataset[0]
-        self._name = dataset.name
-        self.edge_index_dict = data.edge_index_dict
+        self.edge_index_dict = {self.metapaths[0]: data.edge_index}
+        self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
         if hasattr(data, "num_nodes_dict"):
             self.num_nodes_dict = data.num_nodes_dict
@@ -84,10 +50,6 @@ class TripletSampler(HeteroNetDataset):
         self.testing_idx = torch.arange(self.training_idx.size(0) + self.validation_idx.size(0),
                                         self.training_idx.size(0) + self.validation_idx.size(0) + len(
                                             test_triples["relation"]))
-
-        # all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-        # self.training_idx, self.validation_idx, self.testing_idx = \
-        #     self.split_train_val_test(train_ratio=train_ratio, sample_indices=node_indices)
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
         if "triples_batch" in collate_fn:
