@@ -39,16 +39,17 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         # PyTorchGeometric Dataset
 
         if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):
-            print("PygNodePropPredDataset Homogenous ")
+            print("PygNodePropPredDataset Homogenous")
             self.process_PygNodeDataset_homo(dataset, train_ratio)
         elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
             print("PygNodePropPredDataset Hetero")
             self.process_PygNodeDataset_hetero(dataset, train_ratio)
-        elif isinstance(dataset, PygLinkPropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):
-            print("PygLink_edge_reltype_dataset")
+        elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and not hasattr(
+                dataset[0], "edge_index_dict"):
+            print("PygLink_edge_reltype_dataset Hetero")
             self.process_edge_reltype_dataset(dataset)
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
-            print("PygLinkDataset")
+            print("PygLinkDataset Hetero")
             self.process_PygLinkDataset(dataset, train_ratio)
         elif isinstance(dataset, InMemoryDataset):
             print("InMemoryDataset")

@@ -8,7 +8,7 @@ from moge.module.sampling import negative_sample, negative_sample_head_tail
 
 
 class LinkSampler(HeteroNetDataset):
-    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
+    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True, process_graphs=False):
         super(LinkSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio,
                                           add_reverse_metapaths,
