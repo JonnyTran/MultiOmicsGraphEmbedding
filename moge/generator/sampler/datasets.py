@@ -44,13 +44,16 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
             print("PygNodePropPredDataset Hetero")
             self.process_PygNodeDataset_hetero(dataset, train_ratio)
-        elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and not hasattr(
-                dataset[0], "edge_index_dict"):
+        elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
+                not hasattr(dataset[0], "edge_index_dict"):
             print("PygLink_edge_reltype_dataset Hetero")
             self.process_edge_reltype_dataset(dataset)
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
             print("PygLinkDataset Hetero")
-            self.process_PygLinkDataset(dataset, train_ratio)
+            self.process_PygLinkDataset_hetero(dataset, train_ratio)
+        elif isinstance(dataset, PygLinkPropPredDataset) and not hasattr(dataset[0], "edge_index_dict") and not hasattr(
+                dataset[0], "edge_reltype"):
+            self.process_PygLinkDataset_homo(dataset, train_ratio)
         elif isinstance(dataset, InMemoryDataset):
             print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio)
@@ -78,6 +81,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
             self.n_classes = self.classes.size(0)
             self.class_weight = torch.tensor(1 / self.class_counts, dtype=torch.float)
+            assert self.class_weight.numel() == self.n_classes
         else:
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 

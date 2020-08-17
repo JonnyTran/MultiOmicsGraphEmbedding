@@ -52,10 +52,7 @@ class LinkSampler(HeteroNetDataset):
                                         self.training_idx.size(0) + self.validation_idx.size(0) + len(
                                             test_triples["relation"]))
 
-        self.train_ratio = self.training_idx.numel() / \
-                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
-
-    def process_PygLinkDataset(self, dataset: PygLinkPropPredDataset, train_ratio):
+    def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset, train_ratio):
         data = dataset[0]
         self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
@@ -88,12 +85,42 @@ class LinkSampler(HeteroNetDataset):
                                         self.training_idx.size(0) + self.validation_idx.size(0) + len(
                                             test_triples["relation"]))
 
-        self.train_ratio = self.training_idx.numel() / \
-                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
-        print("train_ratio", self.train_ratio)
         # all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
         # self.training_idx, self.validation_idx, self.testing_idx = \
         #     self.split_train_val_test(train_ratio=train_ratio, sample_indices=node_indices)
+
+    def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset, train_ratio):
+        data = dataset[0]
+        self._name = dataset.name
+        self.edge_index_dict = data.edge_index_dict
+
+        if hasattr(data, "num_nodes_dict"):
+            self.num_nodes_dict = data.num_nodes_dict
+        else:
+            self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
+
+        if self.node_types is None:
+            self.node_types = list(data.num_nodes_dict.keys())
+        self.node_attr_shape = {}
+        self.multilabel = False
+
+        self.metapaths = list(self.edge_index_dict.keys())
+
+        split_idx = dataset.get_edge_split()
+        train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
+        self.triples = {}
+        for key in train_triples.keys():
+            if isinstance(train_triples[key], torch.Tensor):
+                self.triples[key] = torch.cat([train_triples[key], valid_triples[key], test_triples[key]], dim=0)
+            else:
+                self.triples[key] = np.array(train_triples[key] + valid_triples[key] + test_triples[key])
+
+        self.training_idx = torch.arange(0, len(train_triples["relation"]))
+        self.validation_idx = torch.arange(self.training_idx.size(0),
+                                           self.training_idx.size(0) + len(valid_triples["relation"]))
+        self.testing_idx = torch.arange(self.training_idx.size(0) + self.validation_idx.size(0),
+                                        self.training_idx.size(0) + self.validation_idx.size(0) + len(
+                                            test_triples["relation"]))
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
         if "triples_batch" in collate_fn:

@@ -318,9 +318,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         proximity_loss, edge_pred_dict = None, None
         if self.use_proximity_loss:
-            proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
-                                                                 alpha_l=alpha_l, alpha_r=alpha_r,
-                                                                 global_node_idx=global_node_idx)
+            proximity_loss, edge_pred_dict = self.loss(edge_index_dict,
+                                                       alpha_l=alpha_l, alpha_r=alpha_r,
+                                                       global_node_idx=global_node_idx)
         return out, proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, h_dict, edge_index_dict, global_node_idx):
@@ -407,7 +407,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         else:
             return F.sigmoid(e_ij)
 
-    def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
+    def loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
         edge_pred_dict = {}
         # KL Divergence over observed positive edges, -\sum_(a_ij) a_ij log(e_ij)
@@ -417,20 +417,21 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 values = 1.0
             if edge_index is None: continue
-            e_pos_pred = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=False)
-            loss += -torch.mean(values * torch.log(e_pos_pred), dim=-1)
-            edge_pred_dict[metapath] = e_pos_pred.detach()
+            e_pos_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
+            loss += -torch.mean(values * F.logsigmoid(e_pos_logits), dim=-1)
+            edge_pred_dict[metapath] = e_pos_logits.detach()
 
             # KL Divergence over sampled negative edges, -\sum_(a'_uv) a_uv log(-e'_uv)
+            if is_negative(metapath): continue  # Don't need to sample for negative edges
             neg_edge_index = negative_sample(edge_index,
                                              M=global_node_idx[metapath[0]].size(0),
                                              N=global_node_idx[metapath[-1]].size(0),
                                              n_sample_per_edge=self.neg_sampling_ratio if self.training else self.neg_sampling_test_size)
             if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
 
-            e_neg_pred_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
-            loss += -torch.mean(torch.log(torch.sigmoid(-e_neg_pred_logits)), dim=-1)
-            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_pred_logits).detach()
+            e_neg_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
+            loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
+            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_logits).detach()
 
         loss = torch.true_divide(loss, len(edge_index_dict) * 2)
         return loss, edge_pred_dict
@@ -440,7 +441,7 @@ def tag_negative(metapath):
     if isinstance(metapath, tuple):
         return metapath + ("neg",)
     elif isinstance(metapath, str):
-        return metapath + "neg"
+        return metapath + "_neg"
     else:
         return "neg"
 
@@ -448,10 +449,18 @@ def untag_negative(metapath):
     if isinstance(metapath, tuple) and metapath[-1] == "neg":
         return metapath[:-1]
     elif isinstance(metapath, str):
-        return metapath.strip("neg")
+        return metapath.strip("_neg")
     else:
         return metapath
 
+
+def is_negative(metapath):
+    if isinstance(metapath, tuple) and metapath[-1] == "neg":
+        return True
+    elif isinstance(metapath, str) and "_neg" in metapath:
+        return True
+    else:
+        return False
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,

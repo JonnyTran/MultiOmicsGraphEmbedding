@@ -14,7 +14,7 @@ from .utils import filter_samples
 
 
 class Metrics():
-    def __init__(self, prefix, loss_type: str, threshold=0.35, top_k=[1, 5, 10], n_classes: int = None,
+    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
                  multilabel: bool = None,
                  metrics=["precision", "recall", "top_k", "accuracy"]):
         self.loss_type = loss_type.upper()
