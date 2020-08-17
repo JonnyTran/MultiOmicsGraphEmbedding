@@ -10,7 +10,7 @@ from moge.generator.sampler.datasets import HeteroNetDataset
 
 
 class HeteroNeighborSampler(HeteroNetDataset):
-    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
+    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True, neighbor_sizes=[25, 20], process_graphs=True):
         self.neighbor_sizes = neighbor_sizes
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
@@ -22,12 +22,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
         if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
+            self.node_types = list(self.num_nodes_dict.keys())
         self.x_dict = data.x_dict
         self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
         self.y_dict = data.y_dict
-        self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
-                             data.y_dict.keys()}
+        self.y_index_dict = {node_type: torch.arange(self.num_nodes_dict[node_type]) for node_type in
+                             self.y_dict.keys()}
 
         if self.head_node_type is None:
             if hasattr(self, "y_dict"):
@@ -41,8 +41,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
                                                                    split_idx["valid"][self.head_node_type], \
                                                                    split_idx["test"][self.head_node_type]
-        train_ratio = self.get_train_ratio()
-        print("train_ratio", train_ratio)
 
     def process_PygNodeDataset_homo(self, dataset: PygNodePropPredDataset, train_ratio):
         data = dataset[0]
@@ -53,26 +51,19 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
         if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
+            self.node_types = list(self.num_nodes_dict.keys())
 
         self.x_dict = {self.head_node_type: data.x} if hasattr(data, "x") else {}
         self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
         self.y_dict = {self.head_node_type: data.y} if hasattr(data, "y") else {}
-        self.y_index_dict = {node_type: torch.arange(data.num_nodes_dict[node_type]) for node_type in
-                             data.y_dict.keys()}
+        self.y_index_dict = {node_type: torch.arange(self.num_nodes_dict[node_type]) for node_type in
+                             self.y_dict.keys()}
 
         self.metapaths = list(self.edge_index_dict.keys())
 
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
-        train_ratio = self.get_train_ratio()
-        print("train_ratio", train_ratio)
-
-    def get_train_ratio(self):
-        train_ratio = self.training_idx.numel() / \
-                      sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
-        return train_ratio
 
     def process_graph_sampler(self):
         if self.use_reverse:

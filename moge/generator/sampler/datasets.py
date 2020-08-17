@@ -16,8 +16,8 @@ from torch_geometric.data import InMemoryDataset
 import torch_sparse
 
 class HeteroNetDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True, process_graphs=True):
+    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
+                 add_reverse_metapaths=True, process_graphs=False):
         """
         This class handles processing of the data & train/test spliting.
         :param process_graphs:
@@ -90,6 +90,9 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.x_dict = {}
         else:
             self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
+
+        train_ratio = self.get_train_ratio()
+        print("train_ratio", train_ratio)
 
     def process_graph_sampler(self):
         raise NotImplementedError()
@@ -372,6 +375,11 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
+
+    def get_train_ratio(self):
+        train_ratio = self.training_idx.numel() / \
+                      sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+        return train_ratio
 
 
 class GeneratorDataset(torch.utils.data.Dataset):
