@@ -355,7 +355,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         alpha = self.attn_q.forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
+        # alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha
 
     def get_h_dict(self, x_dict, global_node_idx):
