@@ -30,9 +30,9 @@ class TripletSampler(HeteroNetDataset):
         if self.node_types is None:
             self.node_types = list(self.num_nodes_dict.keys())
 
-        if hasattr(data, "x"):
+        if hasattr(data, "x") and data.x is not None:
             self.x_dict = {self.head_node_type: data.x}
-        elif hasattr(data, "x_dict"):
+        elif hasattr(data, "x_dict") and data.x_dict is not None:
             self.x_dict = data.x_dict
         else:
             self.x_dict = {}
@@ -73,9 +73,9 @@ class TripletSampler(HeteroNetDataset):
             self.node_types = list(data.num_nodes_dict.keys())
         self.node_attr_shape = {}
 
-        if hasattr(data, "x"):
+        if hasattr(data, "x") and data.x is not None:
             self.x_dict = {self.head_node_type: data.x}
-        elif hasattr(data, "x_dict"):
+        elif hasattr(data, "x_dict") and data.x_dict is not None:
             self.x_dict = data.x_dict
         else:
             self.x_dict = {}
