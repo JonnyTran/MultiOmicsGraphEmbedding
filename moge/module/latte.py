@@ -187,14 +187,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
-        # if first:
-        self.linear = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
-             for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
-        # else:
-        #     self.linear = torch.nn.ModuleDict(
-        #         {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
-        #          for node_type in self.node_types})  # W.shape (F x D_m)
+        if first:
+            self.linear = torch.nn.ModuleDict(
+                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+                 for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+        else:
+            self.linear = torch.nn.ModuleDict(
+                {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (D_m x D_m)
 
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
@@ -315,7 +315,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        h_dict = self.get_h_dict(x_dict, global_node_idx)
+        if self.first:
+            h_dict = self.get_h_dict(x_dict, global_node_idx)
+        else:
+            h_dict = self.get_h_dict(h1_dict, global_node_idx)
 
         # Compute relations attention coefficients
 
@@ -332,10 +335,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
             out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
                                                          global_node_idx)
-            if self.first:
-                out[node_type][:, -1] = h_dict[node_type]
-            else:
-                out[node_type][:, -1] = h1_dict[node_type]
+            # if self.first:
+            out[node_type][:, -1] = h_dict[node_type]
+            # else:
+            #     out[node_type][:, -1] = h1_dict[node_type]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
