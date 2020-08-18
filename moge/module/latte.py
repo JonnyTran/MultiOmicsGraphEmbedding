@@ -178,9 +178,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
-        self.linear = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
-             for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+        if first:
+            self.linear = torch.nn.ModuleDict(
+                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+                 for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+        else:
+            self.linear = torch.nn.ModuleDict(
+                {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (F x D_m)
 
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
@@ -292,7 +297,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        h_dict = self.get_h_dict(x_dict, global_node_idx)
+        if self.first:
+            h_dict = self.get_h_dict(x_dict, global_node_idx)
+        else:
+            h_dict = self.get_h_dict(h1_dict, global_node_idx)
 
         # Compute relations attention coefficients
         beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
@@ -393,8 +401,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             elif not self.first:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
-            else:
-                raise Exception()
+
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         return beta
 
