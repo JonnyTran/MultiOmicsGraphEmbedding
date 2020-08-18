@@ -35,26 +35,33 @@ class EdgeSampler(HeteroNetDataset):
 
         split_idx = dataset.get_edge_split()
         train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
-        self.triples = {}
-        for key in train_triples.keys():
-            if isinstance(train_triples[key], torch.Tensor):
-                self.triples[key] = torch.cat([valid_triples[key], test_triples[key], train_triples[key]], dim=0)
-            else:
-                self.triples[key] = np.array(valid_triples[key] + test_triples[key] + train_triples[key])
+
+        self.edge_index = []
+        self.edge_index.extend([valid_triples["edge"], valid_triples["edge_neg"]])
+        self.edge_index.extend([test_triples["edge"], test_triples["edge_neg"]])
+        self.edge_index.extend([train_triples["edge"]])
+        self.edge_index = torch.cat(self.edge_index, dim=0)
+
+        self.edge_reltype = []
+        self.edge_reltype.extend([torch.ones(valid_triples["edge"].size(0)),  # Ones correspond to pos edges
+                                  torch.zeros(valid_triples["edge_neg"].size(0)),  # Zeroes correspond to neg edges
+                                  torch.ones(test_triples["edge"].size(0)),
+                                  torch.zeros(test_triples["edge_neg"].size(0)),
+                                  torch.ones(train_triples["edge"].size(0))])
+        self.edge_reltype = torch.cat(self.edge_reltype, dim=0).to(torch.int)
 
         for key in valid_triples.keys():
             if is_negative(key):  # either head_neg or tail_neg
                 self.triples_neg[key] = torch.cat([valid_triples[key], test_triples[key]], dim=0)
 
         self.start_idx = {"valid": 0,
-                          "test": len(valid_triples["relation"]),
-                          "train": len(valid_triples["relation"]) + len(test_triples["relation"])}
+                          "test": len(valid_triples["edge"]) + len(valid_triples["edge_neg"]),
+                          "train": len(test_triples["edge"]) + len(test_triples["edge_neg"])}
 
-        self.validation_idx = torch.arange(self.start_idx["valid"],
-                                           self.start_idx["valid"] + len(valid_triples["relation"]))
-        self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["test"] + len(test_triples["relation"]))
+        self.validation_idx = torch.arange(self.start_idx["valid"], self.start_idx["test"])
+        self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["train"])
         self.training_idx = torch.arange(self.start_idx["train"],
-                                         self.start_idx["train"] + len(train_triples["relation"]))
+                                         self.start_idx["train"] + train_triples["edge"].size(0))
 
         assert self.validation_idx.max() < self.testing_idx.min()
         assert self.testing_idx.max() < self.training_idx.min()
@@ -71,20 +78,12 @@ class EdgeSampler(HeteroNetDataset):
 
         X = {"edge_index_dict": {}, "global_node_index": {}, "x_dict": {}}
 
-        triples = {k: v[iloc] for k, v in self.triples.items()}
-        relation_ids = triples["relation"].unique()
+        edge_index = self.edge_index[iloc]
+        edge_reltype = self.edge_reltype[iloc]
+        reltype_ids = self.edge_reltype[iloc].unique()
 
         # Gather all nodes sampled
-        for relation_id in relation_ids:
-            metapath = self.metapaths[relation_id]
-            head_type, tail_type = metapath[0], metapath[-1]
-
-            mask = triples["relation"] == relation_id
-            X["global_node_index"].setdefault(head_type, []).append(triples["head"][mask])
-            X["global_node_index"].setdefault(tail_type, []).append(triples["tail"][mask])
-
-        X["global_node_index"] = {node_type: torch.cat(node_sets, dim=0).unique() \
-                                  for node_type, node_sets in X["global_node_index"].items()}
+        X["global_node_index"][self.head_node_type] = torch.cat([edge_index[0], edge_index[1]], dim=0).unique()
 
         local2batch = {
             node_type: dict(zip(X["global_node_index"][node_type].numpy(),
@@ -92,14 +91,15 @@ class EdgeSampler(HeteroNetDataset):
                             ) for node_type in X["global_node_index"]}
 
         # Get edge_index with batch id
-        for relation_id in relation_ids:
-            metapath = self.metapaths[relation_id]
-            head_type, tail_type = metapath[0], metapath[-1]
-
-            mask = triples["relation"] == relation_id
-            sources = triples["head"][mask].apply_(local2batch[head_type].get)
-            targets = triples["tail"][mask].apply_(local2batch[tail_type].get)
-            X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
+        for relation_id in reltype_ids:
+            if relation_id == 1:
+                mask = edge_reltype == relation_id
+                X["edge_index_dict"][self.metapaths[0]] = edge_index[mask, :].apply_(
+                    local2batch[self.head_node_type].get).t()
+            elif relation_id == 0:
+                mask = edge_reltype == relation_id
+                X["edge_index_dict"][tag_negative(self.metapaths[0])] = edge_index[mask, :].apply_(
+                    local2batch[self.head_node_type].get).t()
 
         if self.use_reverse:
             self.add_reverse_edge_index(X["edge_index_dict"])
