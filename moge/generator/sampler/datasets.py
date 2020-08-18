@@ -90,6 +90,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             assert self.class_weight.numel() == self.n_classes
         else:
             self.multilabel = False
+            self.n_classes = None
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
         if process_graphs:
