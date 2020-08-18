@@ -179,14 +179,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
-        if first:
-            self.linear = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
-                 for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
-        else:
-            self.linear = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
-                 for node_type in self.node_types})  # W.shape (F x D_m)
+        # if first:
+        self.linear = torch.nn.ModuleDict(
+            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+             for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+        # else:
+        #     self.linear = torch.nn.ModuleDict(
+        #         {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+        #          for node_type in self.node_types})  # W.shape (F x D_m)
 
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
