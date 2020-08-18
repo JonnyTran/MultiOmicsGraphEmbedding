@@ -1,5 +1,6 @@
 from typing import Callable, Optional, Union
 import pandas as pd
+import numpy as np
 
 import torch
 from ignite.exceptions import NotComputableError
@@ -37,7 +38,8 @@ class Metrics():
                 if self.multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
-                    self.metrics[metric] = TopKCategoricalAccuracy(k=top_k[-1], output_transform=None)
+                    self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 3),
+                                                                   output_transform=None)
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=multilabel, output_transform=None)
             elif "ogbn" in metric:

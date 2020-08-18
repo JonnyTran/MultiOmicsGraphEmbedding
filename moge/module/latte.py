@@ -76,7 +76,7 @@ class LATTE(nn.Module):
                 edge_values = edge_values.to(torch.float)
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 1:
             edge_index = edge_index_tup
-            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float, device=edge_index_tup.device)
+            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float, device=edge_index.device)
         else:
             return None, None  # Should raise an exception
 
@@ -108,7 +108,8 @@ class LATTE(nn.Module):
                         output_dict[metapath_join] = new_edge_index
 
                     except Exception as e:
-                        print(f"{metapath_a}, {edge_index_a.size(1)}", f"{metapath_b}, {edge_index_b.size(1)}")
+                        print(f"{e.__class__.__name__} {metapath_a}, {edge_index_a.size(1)}",
+                              f"{metapath_b}, {edge_index_b.size(1)}")
                         continue
 
         return output_dict
@@ -224,6 +225,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.metapaths):
             glorot(self.attn_l[i].weight)
             glorot(self.attn_r[i].weight)
+
+        glorot(self.attn_q[-1].weight)
 
         for node_type in self.linear:
             glorot(self.linear[node_type].weight)

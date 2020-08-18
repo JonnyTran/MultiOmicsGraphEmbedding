@@ -104,7 +104,6 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.x_dict = {}
             self.node_attr_shape = {}
         else:
-            print("x_dict", self.x_dict)
             self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
 
         train_ratio = self.get_train_ratio()
