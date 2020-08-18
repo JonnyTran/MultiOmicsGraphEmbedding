@@ -16,7 +16,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
                                                     train_ratio, add_reverse_metapaths, process_graphs)
 
-    def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, train_ratio):
+    def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
         self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
@@ -42,7 +42,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                                    split_idx["valid"][self.head_node_type], \
                                                                    split_idx["test"][self.head_node_type]
 
-    def process_PygNodeDataset_homo(self, dataset: PygNodePropPredDataset, train_ratio):
+    def process_PygNodeDataset_homo(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
         self._name = dataset.name
         self.head_node_type = "entity"

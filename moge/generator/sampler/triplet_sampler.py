@@ -69,7 +69,7 @@ class TripletSampler(HeteroNetDataset):
         assert self.validation_idx.max() < self.testing_idx.min()
         assert self.testing_idx.max() < self.training_idx.min()
 
-    def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset, train_ratio):
+    def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
         self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
