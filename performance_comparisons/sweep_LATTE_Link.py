@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from ogb.nodeproppred import PygNodePropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
-from moge.generator import HeteroNeighborSampler, TripletSampler
+from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.methods.node_clf import LATTENodeClassifier
@@ -30,11 +30,18 @@ def train(hparams):
 
     if "ogbl" in hparams.dataset:
         ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB")
-        dataset = TripletSampler(ogbl, directed=True,
-                                 node_types=list(ogbl[0].num_nodes_dict.keys()) if hasattr(ogbl[0],
-                                                                                           "num_nodes_dict") else None,
-                                 head_node_type=None,
-                                 add_reverse_metapaths=hparams.use_reverse)
+        if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
+                and not hasattr(ogbl[0], "edge_reltype"):
+            dataset = EdgeSampler(ogbl, directed=True,
+                                  node_types=None,
+                                  head_node_type=None,
+                                  add_reverse_metapaths=hparams.use_reverse)
+        else:
+            dataset = TripletSampler(ogbl, directed=True,
+                                     node_types=list(ogbl[0].num_nodes_dict.keys()) if hasattr(ogbl[0],
+                                                                                               "num_nodes_dict") else None,
+                                     head_node_type=None,
+                                     add_reverse_metapaths=hparams.use_reverse)
         hparams.n_classes = dataset.n_classes
         model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=[hparams.dataset])
     else:
