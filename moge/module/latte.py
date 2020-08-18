@@ -108,7 +108,7 @@ class LATTE(nn.Module):
                         output_dict[metapath_join] = new_edge_index
 
                     except Exception as e:
-                        print(f"{str(e)} {metapath_a}, {edge_index_a.size(1)}",
+                        print(f"{str(e)} \n {metapath_a}, {edge_index_a.size(1)}",
                               f"{metapath_b}, {edge_index_b.size(1)}")
                         continue
 
@@ -185,14 +185,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                  for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
         else:
             self.linear = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (F x D_m)
 
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_q = nn.Sequential(nn.Tanh(), nn.Linear(2 * attn_heads, 1, bias=False))
+        self.attn_q = nn.Sequential(nn.ReLU(), nn.Linear(2 * attn_heads, 1, bias=False))
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -300,10 +300,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        if self.first:
-            h_dict = self.get_h_dict(x_dict, global_node_idx)
-        else:
-            h_dict = self.get_h_dict(h1_dict, global_node_idx)
+        h_dict = self.get_h_dict(x_dict, global_node_idx)
 
         # Compute relations attention coefficients
         beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
@@ -319,6 +316,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
             out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
                                                          global_node_idx)
+            if self.first:
+                out[node_type][:, -1] = h_dict[node_type]
+            else:
+                out[node_type][:, -1] = h1_dict[node_type]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
@@ -355,9 +356,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 alpha=(alpha_r[metapath], alpha_l[metapath]),
                 size=(num_node_tail, num_node_head),
                 metapath_idx=self.metapaths.index(metapath))
-
-        # Assign the "self" embedding representation
-        emb_relations[:, -1] = h_dict[node_type]
 
         return emb_relations
 
