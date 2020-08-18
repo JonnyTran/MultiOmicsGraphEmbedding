@@ -15,6 +15,9 @@ from torch.utils import data
 from torch_geometric.data import InMemoryDataset
 import torch_sparse
 
+from ...module.latte import is_negative
+
+
 class HeteroNetDataset(torch.utils.data.Dataset):
     def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
                  add_reverse_metapaths=True, process_graphs=False):
@@ -217,7 +220,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
     def add_reverse_edge_index(edge_index_dict) -> None:
         reverse_edge_index_dict = {}
         for metapath in edge_index_dict:
-            if edge_index_dict[metapath] == None: continue
+            if is_negative(metapath) or edge_index_dict[metapath] == None: continue
             reverse_metapath = HeteroNetDataset.get_reverse_metapath_name(metapath, edge_index_dict)
 
             reverse_edge_index_dict[reverse_metapath] = edge_index_dict[metapath][[1, 0], :]

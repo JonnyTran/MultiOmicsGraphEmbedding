@@ -165,8 +165,11 @@ class TripletSampler(HeteroNetDataset):
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
 
             if has_neg_edges:
-                tail_neg = triples_neg["tail_neg"][mask].apply_(local2batch[head_type].get)
-                head_neg = triples_neg["head_neg"][mask].apply_(local2batch[tail_type].get)
+                head_neg = triples_neg["head_neg"][mask].apply_(local2batch[head_type].get)
+                tail_neg = triples_neg["tail_neg"][mask].apply_(local2batch[tail_type].get)
+                head_batch = torch.stack((head_neg.view(-1), targets.repeat(head_neg.size(1))))
+                tail_batch = torch.stack((sources.repeat(tail_neg.size(1)), tail_neg.view(-1)))
+                X["edge_index_dict"][tag_negative(metapath)] = torch.cat([head_batch, tail_batch], dim=1)
 
         if self.use_reverse:
             self.add_reverse_edge_index(X["edge_index_dict"])
