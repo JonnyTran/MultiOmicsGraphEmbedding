@@ -88,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
 
     parser.add_argument('--use_proximity_loss', type=bool, default=True)
-    parser.add_argument('--neg_sampling_ratio', type=float, default=50.0)
+    parser.add_argument('--neg_sampling_ratio', type=float, default=10.0)
     parser.add_argument('--neg_sampling_test_size', type=int, default=100)
 
     parser.add_argument('--use_class_weights', type=bool, default=False)

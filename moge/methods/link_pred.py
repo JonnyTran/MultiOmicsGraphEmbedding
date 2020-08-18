@@ -97,12 +97,12 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn=self.collate_fn,
-                                           batch_size=self.hparams.batch_size // 4,
+                                           batch_size=self.hparams.batch_size // 10,
                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size // 4,
+                                            batch_size=self.hparams.batch_size // 10,
                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def configure_optimizers(self):
