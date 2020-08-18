@@ -5,5 +5,5 @@ from .subgraph_generator import SubgraphGenerator
 from moge.generator.sampler.datasets import GeneratorDataset
 from .sampler.datasets import HeteroNetDataset
 from .sampler.node_sampler import HeteroNeighborSampler
-from .sampler.triplets_sampler import TripletSampler
+from .sampler.triplet_sampler import TripletSampler
 from .sampler.edge_sampler import EdgeSampler

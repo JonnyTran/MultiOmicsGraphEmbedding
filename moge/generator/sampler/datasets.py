@@ -42,21 +42,24 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         # PyTorchGeometric Dataset
 
         if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):
-            print("PygNodePropPredDataset Homogenous")
-            self.process_PygNodeDataset_homo(dataset, train_ratio)
+            print("PygNodePropPredDataset Homogenous (use HeteroNeighborSampler class)")
+            self.process_PygNodeDataset_homo(dataset)
         elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
-            print("PygNodePropPredDataset Hetero")
-            self.process_PygNodeDataset_hetero(dataset, train_ratio)
+            print("PygNodePropPredDataset Hetero (use HeteroNeighborSampler class)")
+            self.process_PygNodeDataset_hetero(dataset)
+
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
                 not hasattr(dataset[0], "edge_index_dict"):
-            print("PygLink_edge_reltype_dataset Hetero")
+            print("PygLink_edge_reltype_dataset Hetero (use TripletSampler class)")
             self.process_edge_reltype_dataset(dataset)
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
-            print("PygLinkDataset Hetero")
-            self.process_PygLinkDataset_hetero(dataset, train_ratio)
-        elif isinstance(dataset, PygLinkPropPredDataset) and not hasattr(dataset[0], "edge_index_dict") and not hasattr(
-                dataset[0], "edge_reltype"):
-            self.process_PygLinkDataset_homo(dataset, train_ratio)
+            print("PygLinkDataset Hetero (use TripletSampler class)")
+            self.process_PygLinkDataset_hetero(dataset)
+        elif isinstance(dataset, PygLinkPropPredDataset) and not hasattr(dataset[0], "edge_index_dict") \
+                and not hasattr(dataset[0], "edge_reltype"):
+            print("PygLinkDataset Homo (use EdgeSampler class)")
+            self.process_PygLinkDataset_homo(dataset)
+
         elif isinstance(dataset, InMemoryDataset):
             print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio)
@@ -90,7 +93,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
         if process_graphs:
-            self.process_graph_sampler()
+            self.process_graph_sampler()  # only needed for networkx sampler
 
         assert hasattr(self, "num_nodes_dict")
         if not hasattr(self, "node_attr_shape"):
