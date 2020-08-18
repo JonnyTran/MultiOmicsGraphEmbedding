@@ -75,7 +75,7 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
-        print("X", {k: v.shape for k, v in X["edge_index_dict"].items()})
+        # print("X", {k: v.shape for k, v in X["edge_index_dict"].items()})
         _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=False)
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
@@ -98,12 +98,12 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn=self.collate_fn,
-                                           batch_size=self.hparams.batch_size // 4,
+                                           batch_size=self.hparams.batch_size // (10 * len(self.latte.metapaths)),
                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size // 4,
+                                            batch_size=self.hparams.batch_size // (10 * len(self.latte.metapaths)),
                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def configure_optimizers(self):

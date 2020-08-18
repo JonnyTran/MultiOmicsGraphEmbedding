@@ -215,7 +215,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
         if len(non_attr_node_types) > 0:
-            if embedding_dim > 500 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
+            if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 100000:
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
                                                            sparse=True).cpu() for node_type in non_attr_node_types}
@@ -391,7 +391,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
                     .to(self.conv[node_type].weight.device)
-            h_dict[node_type] = self.embedding_activation(h_dict[node_type])
         return h_dict
 
     def get_alphas(self, edge_index_dict, h_dict, h1_dict):
