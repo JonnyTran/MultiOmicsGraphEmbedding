@@ -131,8 +131,7 @@ class TripletSampler(HeteroNetDataset):
         relation_ids = triples["relation"].unique()
 
         if has_neg_edges:
-            triples_neg = {k: v[iloc] for k, v in self.triples.items() if is_negative(k)}
-            print({k: v.shape for k, v in triples_neg.items()})
+            triples.update({k: v[iloc] for k, v in self.triples.items() if is_negative(k)})
 
         # Gather all nodes sampled
         for relation_id in relation_ids:
@@ -143,8 +142,8 @@ class TripletSampler(HeteroNetDataset):
             X["global_node_index"].setdefault(head_type, []).append(triples["head"][mask])
             X["global_node_index"].setdefault(tail_type, []).append(triples["tail"][mask])
             if has_neg_edges:
-                X["global_node_index"].setdefault(head_type, []).append(triples_neg["head_neg"][mask].view(-1))
-                X["global_node_index"].setdefault(tail_type, []).append(triples_neg["tail_neg"][mask].view(-1))
+                X["global_node_index"].setdefault(head_type, []).append(triples["head_neg"][mask].view(-1))
+                X["global_node_index"].setdefault(tail_type, []).append(triples["tail_neg"][mask].view(-1))
 
         X["global_node_index"] = {node_type: torch.cat(node_sets, dim=0).unique() \
                                   for node_type, node_sets in X["global_node_index"].items()}
@@ -165,8 +164,8 @@ class TripletSampler(HeteroNetDataset):
             X["edge_index_dict"][metapath] = torch.stack([sources, targets], dim=1).t()
 
             if has_neg_edges:
-                head_neg = triples_neg["head_neg"][mask].apply_(local2batch[head_type].get)
-                tail_neg = triples_neg["tail_neg"][mask].apply_(local2batch[tail_type].get)
+                head_neg = triples["head_neg"][mask].apply_(local2batch[head_type].get)
+                tail_neg = triples["tail_neg"][mask].apply_(local2batch[tail_type].get)
                 head_batch = torch.stack((head_neg.view(-1), targets.repeat(head_neg.size(1))))
                 tail_batch = torch.stack((sources.repeat(tail_neg.size(1)), tail_neg.view(-1)))
                 X["edge_index_dict"][tag_negative(metapath)] = torch.cat([head_batch, tail_batch], dim=1)
