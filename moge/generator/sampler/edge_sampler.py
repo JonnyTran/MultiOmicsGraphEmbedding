@@ -50,13 +50,10 @@ class EdgeSampler(HeteroNetDataset):
                                   torch.ones(train_triples["edge"].size(0))])
         self.edge_reltype = torch.cat(self.edge_reltype, dim=0).to(torch.int)
 
-        for key in valid_triples.keys():
-            if is_negative(key):  # either head_neg or tail_neg
-                self.triples_neg[key] = torch.cat([valid_triples[key], test_triples[key]], dim=0)
-
+        # Build train/test/valid idx
         self.start_idx = {"valid": 0,
-                          "test": len(valid_triples["edge"]) + len(valid_triples["edge_neg"]),
-                          "train": len(test_triples["edge"]) + len(test_triples["edge_neg"])}
+                          "test": len(valid_triples["edge"]) + len(valid_triples["edge_neg"])}
+        self.start_idx["train"] = self.start_idx["test"] + len(test_triples["edge"]) + len(test_triples["edge_neg"])
 
         self.validation_idx = torch.arange(self.start_idx["valid"], self.start_idx["test"])
         self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["train"])
@@ -67,10 +64,7 @@ class EdgeSampler(HeteroNetDataset):
         assert self.testing_idx.max() < self.training_idx.min()
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
-        if "triples_batch" in collate_fn:
-            return self.sample
-        else:
-            raise Exception(f"Correct collate function {collate_fn} not found.")
+        return self.sample
 
     def sample(self, iloc):
         if not isinstance(iloc, torch.Tensor):
@@ -83,7 +77,7 @@ class EdgeSampler(HeteroNetDataset):
         reltype_ids = self.edge_reltype[iloc].unique()
 
         # Gather all nodes sampled
-        X["global_node_index"][self.head_node_type] = torch.cat([edge_index[0], edge_index[1]], dim=0).unique()
+        X["global_node_index"][self.head_node_type] = edge_index.view(-1).unique()
 
         local2batch = {
             node_type: dict(zip(X["global_node_index"][node_type].numpy(),

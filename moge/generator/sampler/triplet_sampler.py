@@ -18,19 +18,19 @@ class TripletSampler(HeteroNetDataset):
         self.n_classes = None
         self.classes = None
 
-    def process_edge_reltype_dataset(self, dataset: PygLinkPropPredDataset):
+    def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
         self._name = dataset.name
-        self.edge_reltype = data.edge_reltype
+        self.edge_index_dict = data.edge_index_dict
 
         if hasattr(data, "num_nodes_dict"):
             self.num_nodes_dict = data.num_nodes_dict
-        elif not hasattr(data, "edge_index_dict"):
-            self.head_node_type = "entity"
-            self.num_nodes_dict = {self.head_node_type: data.edge_index.max().item() + 1}
+        else:
+            self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
         if self.node_types is None:
-            self.node_types = list(self.num_nodes_dict.keys())
+            self.node_types = list(data.num_nodes_dict.keys())
+        self.node_attr_shape = {}
 
         if hasattr(data, "x") and data.x is not None:
             self.x_dict = {self.head_node_type: data.x}
@@ -40,8 +40,7 @@ class TripletSampler(HeteroNetDataset):
             self.x_dict = {}
         self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
 
-        self.metapaths = [(self.head_node_type, str(k.item()), self.head_node_type) for k in self.edge_reltype.unique()]
-        self.edge_index_dict = {k: None for k in self.metapaths}
+        self.metapaths = list(self.edge_index_dict.keys())
 
         split_idx = dataset.get_edge_split()
         train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
@@ -69,19 +68,19 @@ class TripletSampler(HeteroNetDataset):
         assert self.validation_idx.max() < self.testing_idx.min()
         assert self.testing_idx.max() < self.training_idx.min()
 
-    def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset):
+    def process_edge_reltype_dataset(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
         self._name = dataset.name
-        self.edge_index_dict = data.edge_index_dict
+        self.edge_reltype = data.edge_reltype
 
         if hasattr(data, "num_nodes_dict"):
             self.num_nodes_dict = data.num_nodes_dict
-        else:
-            self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
+        elif not hasattr(data, "edge_index_dict"):
+            self.head_node_type = "entity"
+            self.num_nodes_dict = {self.head_node_type: data.edge_index.max().item() + 1}
 
         if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
-        self.node_attr_shape = {}
+            self.node_types = list(self.num_nodes_dict.keys())
 
         if hasattr(data, "x") and data.x is not None:
             self.x_dict = {self.head_node_type: data.x}
@@ -91,7 +90,8 @@ class TripletSampler(HeteroNetDataset):
             self.x_dict = {}
         self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
 
-        self.metapaths = list(self.edge_index_dict.keys())
+        self.metapaths = [(self.head_node_type, str(k.item()), self.head_node_type) for k in self.edge_reltype.unique()]
+        self.edge_index_dict = {k: None for k in self.metapaths}
 
         split_idx = dataset.get_edge_split()
         train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
