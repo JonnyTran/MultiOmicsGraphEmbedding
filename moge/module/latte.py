@@ -430,11 +430,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 values = 1.0
             if edge_index is None: continue
-            e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
+
             if not is_negative(metapath):
+                e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
                 loss += -torch.mean(values * F.logsigmoid(e_pred_logits), dim=-1)
             else:
+                e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, untag_negative(metapath), logits=True)
                 loss += -torch.mean(F.logsigmoid(-e_pred_logits), dim=-1)
+
             edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
 
             # Only need to sample for negative edges if negative metapath is not included
