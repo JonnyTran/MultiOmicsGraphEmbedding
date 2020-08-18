@@ -39,8 +39,8 @@ def negative_sample_head_tail(edge_index, M: int, N: int, n_sample_per_edge: int
 
     sampled_tails = torch.randint(0, N, (edge_index[0].size(0) * K,), dtype=torch.long)
     sampled_heads = torch.randint(0, M, (edge_index[1].size(0) * K,), dtype=torch.long)
-    neg_tail_batch = torch.stack((edge_index[0].cpu().repeat(K), sampled_tails))
-    neg_head_batch = torch.stack((sampled_heads, edge_index[1].cpu().repeat(K)))
+    neg_tail_batch = torch.stack((edge_index[0].cpu().repeat_interleave(K), sampled_tails))
+    neg_head_batch = torch.stack((sampled_heads, edge_index[1].cpu().repeat_interleave(K)))
 
     neg_edge_index = torch.cat((neg_tail_batch, neg_head_batch), dim=1)
     return neg_edge_index.to(edge_index.device)

@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .node_clf import NodeClfMetrics
 from moge.generator.sampler.datasets import HeteroNetDataset
-from ..module.latte import LATTE, untag_negative
+from ..module.latte import LATTE, untag_negative, is_negative
 
 
 class LinkPredMetrics(NodeClfMetrics):
@@ -42,14 +42,14 @@ class LATTELinkPredictor(LinkPredMetrics):
         :return:
         """
         e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
-                           if "neg" not in metapath and metapath in self.dataset.metapaths], dim=0)
+                           if not is_negative(metapath) and metapath in self.dataset.metapaths], dim=0)
         e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if
-                           "neg" in metapath and untag_negative(metapath) in self.dataset.metapaths], dim=0)
+                           is_negative(metapath) and untag_negative(metapath) in self.dataset.metapaths], dim=0)
 
         if training:
             num_nodes_neg = int(self.hparams.neg_sampling_ratio)
         else:
-            num_nodes_neg = int(self.hparams.neg_sampling_test_size)
+            num_nodes_neg = int(e_neg.numel() // e_pos.numel())
 
         if e_neg.size(0) % num_nodes_neg:
             e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % num_nodes_neg]
@@ -97,12 +97,12 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.val_dataloader(collate_fn=self.collate_fn,
-                                           batch_size=self.hparams.batch_size // 10,
+                                           batch_size=self.hparams.batch_size // 4,
                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size // 10,
+                                            batch_size=self.hparams.batch_size // 4,
                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def configure_optimizers(self):
