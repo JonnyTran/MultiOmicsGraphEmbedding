@@ -112,8 +112,8 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
 
-    def forward(self, x_dict, global_node_index, edge_index_dict):
-        embeddings, proximity_loss, _ = self.latte.forward(x_dict, global_node_index, edge_index_dict)
+    def forward(self, x_dict, global_node_index, edge_index_dict, **kwargs):
+        embeddings, proximity_loss, _ = self.latte.forward(x_dict, global_node_index, edge_index_dict, **kwargs)
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 

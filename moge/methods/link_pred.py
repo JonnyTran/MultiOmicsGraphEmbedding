@@ -31,8 +31,9 @@ class LATTELinkPredictor(LinkPredMetrics):
                            neg_sampling_test_size=hparams.neg_sampling_test_size)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-    def forward(self, x_dict, global_node_index, edge_index_dict):
-        embeddings, proximity_loss, edge_pred_dict = self.latte.forward(x_dict, global_node_index, edge_index_dict)
+    def forward(self, x_dict, global_node_index, edge_index_dict, **kwargs):
+        embeddings, proximity_loss, edge_pred_dict = self.latte.forward(x_dict, global_node_index, edge_index_dict,
+                                                                        **kwargs)
         return embeddings, proximity_loss, edge_pred_dict
 
     def get_e_pos_neg(self, edge_pred_dict, training=True):

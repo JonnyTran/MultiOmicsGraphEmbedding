@@ -134,8 +134,10 @@ class LATTE(nn.Module):
                     x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
                     h1_dict=h_dict, save_betas=save_betas)
 
-                t_order_edge_index_dict = LATTE.join_edge_indexes(t_order_edge_index_dict, edge_index_dict,
-                                                                  global_node_idx)
+                # Only needed if there is a next t-order
+                if t < self.t_order - 1:
+                    t_order_edge_index_dict = LATTE.join_edge_indexes(t_order_edge_index_dict, edge_index_dict,
+                                                                      global_node_idx)
 
             for node_type in global_node_idx:
                 h_all_dict[node_type].append(h_dict[node_type])
@@ -147,6 +149,12 @@ class LATTE(nn.Module):
                             for node_type, h_emb_list in h_all_dict.items() if len(h_emb_list) > 0}
 
         return embedding_output, proximity_loss, edge_pred_dict
+
+    def get_attn_activation_weights(self, t):
+        return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
+
+    def get_relation_weights(self, t):
+        return self.layers[t].get_relation_weights()
 
 
 class LATTELayer(MessagePassing, pl.LightningModule):
