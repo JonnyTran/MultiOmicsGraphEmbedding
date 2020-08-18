@@ -180,8 +180,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
-                in_channels=node_attr_shape[
-                    node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
+                # in_channels=node_attr_shape[
+                #     node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
+                in_channels=self.embedding_dim,
                 out_channels=self.num_head_relations(node_type),
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (D x F)
@@ -265,16 +266,17 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self._beta_avg = {}
         self._beta_std = {}
         for node_type in beta:
-            self._betas[node_type] = pd.DataFrame(beta[node_type].detach().squeeze(-1).cpu().numpy(),
-                                                  columns=self.get_head_relations(node_type) + [node_type, ],
-                                                  index=global_node_idx[node_type].cpu().numpy())
+            with torch.no_grad():
+                self._betas[node_type] = pd.DataFrame(beta[node_type].squeeze(-1).cpu().numpy(),
+                                                      columns=self.get_head_relations(node_type) + [node_type, ],
+                                                      index=global_node_idx[node_type].cpu().numpy())
 
-            _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
-            _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
-            self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type) + ["self"])}
-            self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type) + ["self"])}
+                _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
+                _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
+                self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
+                                             enumerate(self.get_head_relations(node_type) + ["self"])}
+                self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
+                                             enumerate(self.get_head_relations(node_type) + ["self"])}
 
     def get_relation_weights(self):
         """
@@ -319,7 +321,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
         # Save beta weights from testing samples
-        if not self.training and save_betas: self.save_relation_weights(beta, global_node_idx)
+        if save_betas: self.save_relation_weights(beta, global_node_idx)
 
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h1_dict)
@@ -389,6 +391,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
                     .to(self.conv[node_type].weight.device)
+            h_dict[node_type] = self.embedding_activation(h_dict[node_type])
         return h_dict
 
     def get_alphas(self, edge_index_dict, h_dict, h1_dict):
@@ -409,11 +412,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         beta = {}
         for node_type in global_node_idx:
             if self.first:
-                if node_type in x_dict:
-                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-                else:
-                    # node_type is not attributed, use self.embeddings in first layer
-                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+                # if node_type in x_dict:
+                #     beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+                # else:
+                # node_type is not attributed, use h_dict contains self.embeddings
+                beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             else:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
 
