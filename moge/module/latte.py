@@ -108,7 +108,7 @@ class LATTE(nn.Module):
                         output_dict[metapath_join] = new_edge_index
 
                     except Exception as e:
-                        print(f"{e.__class__.__name__} {metapath_a}, {edge_index_a.size(1)}",
+                        print(f"{str(e)} {metapath_a}, {edge_index_a.size(1)}",
                               f"{metapath_b}, {edge_index_b.size(1)}")
                         continue
 

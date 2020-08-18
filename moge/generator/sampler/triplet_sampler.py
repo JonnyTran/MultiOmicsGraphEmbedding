@@ -177,8 +177,8 @@ class TripletSampler(HeteroNetDataset):
                 head_neg = triples["head_neg"][mask].apply_(local2batch[head_type].get)
                 tail_neg = triples["tail_neg"][mask].apply_(local2batch[tail_type].get)
                 head_batch = torch.stack([head_neg.view(-1),
-                                          targets.repeat_interleave(head_neg.size(1))])
-                tail_batch = torch.stack([sources.repeat_interleave(tail_neg.size(1)),
+                                          targets.repeat(head_neg.size(1))])
+                tail_batch = torch.stack([sources.repeat(tail_neg.size(1)),
                                           tail_neg.view(-1)])
                 X["edge_index_dict"][tag_negative(metapath)] = torch.cat([head_batch, tail_batch], dim=1)
 
