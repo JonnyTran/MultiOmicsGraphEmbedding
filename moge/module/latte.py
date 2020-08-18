@@ -411,7 +411,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
         """
-        This function both predict link scores for each relation/metapath type given in `edge_index_dict` and computes
+        For each relation/metapath type given in `edge_index_dict`, this function both predict link scores and computes
         the NCE loss for both positive and negative (sampled) links. For each relation type in `edge_index_dict`, if the
         negative metapath is not included, then the function automatically samples for random negative edges. And, if it
         is included, then computes the NCE loss over the given negative edges. This function returns the scores of the
@@ -443,16 +443,16 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
 
             # Only need to sample for negative edges if negative metapath is not included
-            if is_negative(metapath) or tag_negative(metapath) in edge_index_dict: continue
-            neg_edge_index = negative_sample(edge_index,
-                                             M=global_node_idx[metapath[0]].size(0),
-                                             N=global_node_idx[metapath[-1]].size(0),
-                                             n_sample_per_edge=self.neg_sampling_ratio if self.training else self.neg_sampling_test_size)
-            if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
+            if not is_negative(metapath) and tag_negative(metapath) not in edge_index_dict:
+                neg_edge_index = negative_sample(edge_index,
+                                                 M=global_node_idx[metapath[0]].size(0),
+                                                 N=global_node_idx[metapath[-1]].size(0),
+                                                 n_sample_per_edge=self.neg_sampling_ratio if self.training else self.neg_sampling_test_size)
+                if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
 
-            e_neg_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
-            loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
-            edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_logits.detach())
+                e_neg_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
+                loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
+                edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_logits.detach())
 
         loss = torch.true_divide(loss, len(edge_index_dict) * 2)
         return loss, edge_pred_dict
