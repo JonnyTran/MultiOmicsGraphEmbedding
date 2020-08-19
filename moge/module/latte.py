@@ -112,7 +112,15 @@ class LATTE(nn.Module):
 
         return output_dict
 
-    def forward(self, x_dict, global_node_idx, edge_index_dict, save_betas=False):
+    def forward(self, x_dict: dict, global_node_idx: dict, edge_index_dict: dict, save_betas=False):
+        """
+        This
+        :param x_dict: Dict of <node_type>:<tensor size (batch_size, in_channels)>
+        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
+        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
+        :param save_betas: whether to save _beta values for batch
+        :return embedding_output, proximity_loss, edge_pred_dict:
+        """
         device = global_node_idx[list(global_node_idx.keys())[0]].device
         proximity_loss = torch.tensor(0.0, device=device) if self.use_proximity_loss else None
 

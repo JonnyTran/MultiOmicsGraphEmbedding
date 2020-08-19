@@ -16,7 +16,7 @@ from moge.generator.sampler.datasets import HeteroNetDataset
 from moge.module.metrics import Metrics
 from moge.module.trainer import _fix_dp_return_type
 from moge.module.latte import LATTE
-from moge.module.classifier import DenseClassification
+from moge.module.classifier import DenseClassification, MulticlassClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.utils import filter_samples, pad_tensors
 
@@ -101,21 +101,21 @@ class LATTENodeClassifier(NodeClfMetrics):
                            attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-        self.classifier = DenseClassification(hparams)
-        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
-        #                                            num_class=hparams.n_classes,
-        #                                            loss_type=hparams.loss_type)
+        # self.classifier = DenseClassification(hparams)
+        self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
+                                                   num_class=hparams.n_classes,
+                                                   loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
 
-    def forward(self, X, **kwargs):
+    def forward(self, X: dict, **kwargs):
         embeddings, proximity_loss, _ = self.latte.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"],
                                                            **kwargs)
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
-        return y_hat, proximity_loss
+        return y_hat
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
