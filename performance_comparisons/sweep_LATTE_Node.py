@@ -89,7 +89,7 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dropout', type=float, default=0.3)
 
     parser.add_argument('--use_proximity_loss', action='store_true')
-    parser.add_argument('--neg_sampling_ratio', type=float, default=2.0)
+    parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
     parser.add_argument('--use_class_weights', action='store_true')
     parser.add_argument('--use_reverse', action='store_true')
 
