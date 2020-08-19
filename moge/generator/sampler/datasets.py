@@ -282,6 +282,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.node_types = node_types
         self.edge_types = list(range(dataset.num_edge))
         self.metapaths = list(self.edge_index_dict.keys())
+        assert self.head_node_type is not None
         self.x_dict = {self.head_node_type: data["x"]}
         self.in_features = data["x"].size(1)
 
