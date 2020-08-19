@@ -251,10 +251,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
             out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
                                                          global_node_idx)
-            # if self.first:
-            out[node_type][:, -1] = h_dict[node_type]
-            # else:
-            #     out[node_type][:, -1] = h1_dict[node_type]
+            if self.first:
+                out[node_type][:, -1] = h_dict[node_type]
+            else:
+                out[node_type][:, -1] = h1_dict[node_type]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
@@ -308,6 +308,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if node_type in x_dict:
                 h_dict[node_type] = self.linear[node_type].forward(x_dict[node_type])
             else:
+                # Should only go here in first layer
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
                     .to(self.conv[node_type].weight.device)
         return h_dict
