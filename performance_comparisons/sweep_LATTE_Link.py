@@ -26,7 +26,7 @@ def train(hparams):
     MAX_EPOCHS = 50
 
     if "ogbl" in hparams.dataset:
-        ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB")
+        ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB/")
         if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
                 and not hasattr(ogbl[0], "edge_reltype"):
             dataset = EdgeSampler(ogbl, directed=True,
