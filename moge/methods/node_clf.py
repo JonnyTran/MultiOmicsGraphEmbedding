@@ -115,7 +115,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         embeddings, proximity_loss, _ = self.latte.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"],
                                                            **kwargs)
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
-        return y_hat
+        return y_hat, proximity_loss
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
