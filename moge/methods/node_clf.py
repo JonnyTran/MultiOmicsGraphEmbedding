@@ -106,8 +106,8 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                                            num_class=hparams.n_classes,
         #                                            loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
-                                            class_weight=dataset.class_weight if hasattr(dataset,
-                                                                                         "class_weight") and hparams.use_class_weights else None,
+                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
+                                                                                 hparams.use_class_weights else None,
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
 
@@ -164,35 +164,6 @@ class LATTENodeClassifier(NodeClfMetrics):
             test_loss = test_loss + proximity_loss
 
         return {"test_loss": test_loss}
-
-    @staticmethod
-    def multiplex_collate_fn(node_types, layers):
-        def collate_fn(batch):
-            y_all, idx_all = [], []
-            node_type_concat = dict()
-            layer_concat = dict()
-            for node_type in node_types:
-                node_type_concat[node_type] = []
-            for layer in layers:
-                layer_concat[layer] = []
-
-            for X, y, idx in batch:
-                for node_type in node_types:
-                    node_type_concat[node_type].append(torch.tensor(X[node_type]))
-                for layer in layers:
-                    layer_concat[layer].append(torch.tensor(X[layer]))
-                y_all.append(torch.tensor(y))
-                idx_all.append(torch.tensor(idx))
-
-            X_all = {}
-            for node_type in node_types:
-                X_all[node_type] = torch.cat(node_type_concat[node_type])
-            for layer in layers:
-                X_all[layer] = pad_tensors(layer_concat[layer])
-
-            return X_all, torch.cat(y_all), torch.cat(idx_all)
-
-        return collate_fn
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
