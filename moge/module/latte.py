@@ -21,7 +21,7 @@ class LATTE(nn.Module):
     def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity_loss=True,
-                 neg_sampling_ratio=2.0, neg_sampling_test_size=5):
+                 neg_sampling_ratio=2.0):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -29,7 +29,6 @@ class LATTE(nn.Module):
         self.use_proximity_loss = use_proximity_loss
         self.t_order = t_order
         self.neg_sampling_ratio = neg_sampling_ratio
-        self.neg_sampling_test_size = neg_sampling_test_size
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -42,7 +41,6 @@ class LATTE(nn.Module):
                                use_proximity_loss=use_proximity_loss,
                                neg_sampling_ratio=neg_sampling_ratio \
                                    if isinstance(neg_sampling_ratio, (int, float)) else neg_sampling_ratio[t],
-                               neg_sampling_test_size=neg_sampling_test_size,
                                first=True))
             else:
                 layers.append(
@@ -52,7 +50,6 @@ class LATTE(nn.Module):
                                use_proximity_loss=use_proximity_loss,
                                neg_sampling_ratio=neg_sampling_ratio \
                                    if isinstance(neg_sampling_ratio, (int, float)) else neg_sampling_ratio[t],
-                               neg_sampling_test_size=0,  # don't need to sample higher_order edges for testing
                                first=False))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
         self.layers = nn.ModuleList(layers)
@@ -161,7 +158,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity_loss=True,
-                 neg_sampling_ratio=1.0, neg_sampling_test_size=128, first=True) -> None:
+                 neg_sampling_ratio=1.0, first=True) -> None:
         super(LATTELayer, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
@@ -170,7 +167,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.embedding_dim = embedding_dim
         self.use_proximity_loss = use_proximity_loss
         self.neg_sampling_ratio = neg_sampling_ratio
-        self.neg_sampling_test_size = neg_sampling_test_size
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
 
@@ -215,10 +211,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
         if len(non_attr_node_types) > 0:
-            if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 100000:
+            if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
+                print("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
-                                                           sparse=True).cpu() for node_type in non_attr_node_types}
+                                                           sparse=False).cpu() for node_type in non_attr_node_types}
             else:
                 self.embeddings = torch.nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],

@@ -99,8 +99,7 @@ class LATTENodeClassifier(NodeClfMetrics):
                            metapaths=dataset.get_metapaths(), activation=hparams.activation,
                            attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                            attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
-                           neg_sampling_ratio=hparams.neg_sampling_ratio,
-                           neg_sampling_test_size=hparams.neg_sampling_ratio)
+                           neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,

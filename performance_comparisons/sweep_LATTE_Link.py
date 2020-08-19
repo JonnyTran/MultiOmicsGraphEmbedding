@@ -25,9 +25,6 @@ def train(hparams):
     USE_AMP = False  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 50
 
-    if hparams.embedding_dim > 128:
-        hparams.batch_size = hparams.batch_size // 2
-
     if "ogbl" in hparams.dataset:
         ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB")
         if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
@@ -36,21 +33,20 @@ def train(hparams):
                                   node_types=None,
                                   head_node_type=None,
                                   add_reverse_metapaths=hparams.use_reverse)
+            print(dataset.node_types, dataset.metapaths)
         else:
             dataset = TripletSampler(ogbl, directed=True,
                                      node_types=list(ogbl[0].num_nodes_dict.keys()) if hasattr(ogbl[0],
                                                                                                "num_nodes_dict") else None,
                                      head_node_type=None,
                                      add_reverse_metapaths=hparams.use_reverse)
+            print(dataset.node_types, dataset.metapaths)
         hparams.n_classes = dataset.n_classes
         model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=[hparams.dataset])
     else:
         raise Exception(f"Dataset `{hparams.dataset}` not compatible")
 
-    # logger = WandbLogger()
-    wandb_logger = WandbLogger(name=model.name(),
-                               tags=[dataset.name()],
-                               project="multiplex-comparison")
+    wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
 
     trainer = Trainer(
         gpus=NUM_GPUS,
@@ -67,7 +63,6 @@ def train(hparams):
     )
 
     trainer.fit(model)
-    model.neg_sampling_test_size = 1000
     trainer.test(model)
 
 if __name__ == "__main__":
@@ -76,8 +71,8 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
-    parser.add_argument('-t', '--t_order', type=int, default=1)
-    parser.add_argument('-b', '--batch_size', type=int, default=65536)
+    parser.add_argument('-t', '--t_order', type=int, default=2)
+    parser.add_argument('-b', '--batch_size', type=int, default=32000)
     parser.add_argument('--n_neighbors_1', type=int, default=30, help="Not used - only for compatibility")
     parser.add_argument('--activation', type=str, default="relu")
     parser.add_argument('--attn_heads', type=int, default=32)
