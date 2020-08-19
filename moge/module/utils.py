@@ -83,26 +83,28 @@ def get_multiplex_collate_fn(node_types, layers):
 
     return multiplex_collate_fn
 
-def _preprocess_tuple(X, cuda=True, device=None, half=False):
-    new_tuple = []
-    for tensor in X:
-        if device:
-            tensor = tensor.to(device)
-        else:
-            if cuda:
-                tensor = tensor.cuda()
-            else:
-                tensor = tensor.cpu()
 
-def preprocess_input(dict_tensor, cuda=True, device=None, half=False):
-    if isinstance(dict_tensor, dict):
-        dict_tensor = {k: _preprocess_input(v, cuda=cuda, device=device, half=half) if not isinstance(v,
-                                                                                                      tuple) else _preprocess_tuple(
-            v, cuda, device, half) for k, v in dict_tensor.items()}
+def preprocess_input(input, device=None, half=False):
+    if isinstance(input, dict):
+        input = {k: preprocess_input(v, device=device, half=half) for k, v in input.items()}
+    elif isinstance(input, tuple):
+        input = tuple(preprocess_input(v, device, half) for v in input)
     else:
-        dict_tensor = _preprocess_input(dict_tensor, cuda=cuda, device=device, half=half)
+        input = process_tensor(input, device=device, half=half)
 
-    return dict_tensor
+    return input
+
+
+def process_tensor(input, device=None, half=False):
+    if not isinstance(input, torch.Tensor):
+        input = torch.tensor(input)
+
+    if device:
+        input = input.to(device)
+    if half:
+        input = input.half()
+
+    return input
 
 
 def _preprocess_tuple(X, cuda=True, device=None, half=False):
@@ -121,19 +123,3 @@ def _preprocess_tuple(X, cuda=True, device=None, half=False):
         new_tuple.append(tensor)
     return tuple(new_tuple)
 
-def _preprocess_input(X, cuda=True, device=None, half=False):
-    if not isinstance(X, torch.Tensor):
-        X = torch.tensor(X)
-
-    if device:
-        X = X.to(device)
-    else:
-        if cuda:
-            X = X.cuda()
-        else:
-            X = X.cpu()
-
-    if half:
-        X = X.half()
-
-    return X

@@ -30,8 +30,9 @@ class LATTELinkPredictor(LinkPredMetrics):
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-    def forward(self, x_dict, global_node_index, edge_index_dict, **kwargs):
-        embeddings, proximity_loss, edge_pred_dict = self.latte.forward(x_dict, global_node_index, edge_index_dict,
+    def forward(self, X, **kwargs):
+        embeddings, proximity_loss, edge_pred_dict = self.latte.forward(X["x_dict"], X["global_node_index"],
+                                                                        X["edge_index_dict"],
                                                                         **kwargs)
         return embeddings, proximity_loss, edge_pred_dict
 
@@ -65,7 +66,7 @@ class LATTELinkPredictor(LinkPredMetrics):
     def training_step(self, batch, batch_nb):
         X, _, _ = batch
         # print("X", {k: v.shape for k, v in X.items()})
-        _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        _, loss, edge_pred_dict = self.forward(X)
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=True)
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
@@ -75,7 +76,7 @@ class LATTELinkPredictor(LinkPredMetrics):
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
         # print("X", {k: v.shape for k, v in X["edge_index_dict"].items()})
-        _, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        _, loss, edge_pred_dict = self.forward(X)
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=False)
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
 
@@ -83,7 +84,7 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def test_step(self, batch, batch_nb):
         X, _, _ = batch
-        y_hat, loss, edge_pred_dict = self.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"])
+        y_hat, loss, edge_pred_dict = self.forward(X)
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=False)
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
