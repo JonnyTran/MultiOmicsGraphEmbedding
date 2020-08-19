@@ -141,6 +141,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             if not directed:
                 self.node_degrees.loc[(metapath[-1], metapath)] = (
                         self.node_degrees.loc[(metapath[-1], metapath)] + D.storage.colcount().numpy()).values
+
         return self.node_degrees
 
     def get_embedding_dfs(self, embeddings_dict, global_node_index):
