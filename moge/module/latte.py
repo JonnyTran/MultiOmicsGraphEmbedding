@@ -211,7 +211,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
-        if len(non_attr_node_types) > 0:
+        if first and len(non_attr_node_types) > 0:
             if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
                 print("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
@@ -240,7 +240,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = self.get_h_dict(x_dict, global_node_idx)
 
         # Compute relations attention coefficients
-
         beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
         # Save beta weights from testing samples
         if save_betas: self.save_relation_weights(beta, global_node_idx)

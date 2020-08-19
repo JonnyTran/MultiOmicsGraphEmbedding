@@ -35,7 +35,7 @@ class Metrics():
             elif "recall" in metric:
                 self.metrics[metric] = Recall(average=True, is_multilabel=multilabel, output_transform=None)
             elif "top_k" in metric:
-                if self.multilabel:
+                if multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 3),
