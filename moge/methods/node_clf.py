@@ -91,6 +91,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
+        self.y_types = list(dataset.y_dict.keys())
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
         self.collate_fn = collate_fn
 
@@ -101,10 +102,10 @@ class LATTENodeClassifier(NodeClfMetrics):
                            attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-        # self.classifier = DenseClassification(hparams)
-        self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
-                                                   num_class=hparams.n_classes,
-                                                   loss_type=hparams.loss_type)
+        self.classifier = DenseClassification(hparams)
+        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
+        #                                            num_class=hparams.n_classes,
+        #                                            loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
@@ -114,12 +115,17 @@ class LATTENodeClassifier(NodeClfMetrics):
     def forward(self, X: dict, **kwargs):
         embeddings, proximity_loss, _ = self.latte.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"],
                                                            **kwargs)
+
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X)
+
+        if isinstance(y, dict) and len(y) > 1:
+            y = y[self.head_node_type]
+
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.criterion(y_hat, y)
 
@@ -139,7 +145,8 @@ class LATTENodeClassifier(NodeClfMetrics):
         X, y, weights = batch
         # print({k: {j: l.shape for j, l in v.items()} for k, v in X.items()})
         y_hat, proximity_loss = self.forward(X)
-
+        if isinstance(y, dict) and len(y) > 1:
+            y = y[self.head_node_type]
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion(y_hat, y)
 
@@ -153,6 +160,8 @@ class LATTENodeClassifier(NodeClfMetrics):
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat, proximity_loss = self.forward(X)
+        if isinstance(y, dict) and len(y) > 1:
+            y = y[self.head_node_type]
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         test_loss = self.criterion(y_hat, y)
 
