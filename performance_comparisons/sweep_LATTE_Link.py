@@ -82,12 +82,11 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
 
-    parser.add_argument('--use_proximity_loss', type=bool, default=True)
+    parser.add_argument('--use_proximity_loss', action='store_true')
     parser.add_argument('--neg_sampling_ratio', type=float, default=10.0)
-    parser.add_argument('--neg_sampling_test_size', type=int, default=100)
 
-    parser.add_argument('--use_class_weights', type=bool, default=False)
-    parser.add_argument('--use_reverse', type=bool, default=True)
+    parser.add_argument('--use_class_weights', action='store_true')
+    parser.add_argument('--use_reverse', action='store_true')
 
     parser.add_argument('--loss_type', type=str, default="KL_DIVERGENCE")
     parser.add_argument('--lr', type=float, default=0.001)
