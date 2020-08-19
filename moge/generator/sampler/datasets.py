@@ -125,25 +125,22 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
         return self.G
 
-    def get_node_degrees(self):
-        if hasattr(self, "node_degrees"):
-            return self.node_degrees
-
+    def get_node_degrees(self, directed=True):
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
         multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
-        self.node_degrees = pd.DataFrame(data=0, index=multi_index, columns=[k[1] for k in self.metapaths])
+        self.node_degrees = pd.DataFrame(data=0, index=multi_index, columns=[k for k in self.metapaths])
 
         for metapath in self.metapaths:
             edge_index = self.edge_index_dict[metapath]
             D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
-                                          sparse_sizes=(
-                                              self.num_nodes_dict[metapath[0]], self.num_nodes_dict[metapath[-1]]))
-            self.node_degrees.loc[(metapath[0], metapath[1])] = (
-                    self.node_degrees.loc[(metapath[0], metapath[1])] + D.storage.rowcount().numpy()).values
-            if metapath[0] != metapath[-1]:
-                self.node_degrees.loc[(metapath[-1], metapath[1])] = (
-                        self.node_degrees.loc[(metapath[-1], metapath[1])] + D.storage.colcount().numpy()).values
+                                          sparse_sizes=(self.num_nodes_dict[metapath[0]],
+                                                        self.num_nodes_dict[metapath[-1]]))
+            self.node_degrees.loc[(metapath[0], metapath)] = (
+                    self.node_degrees.loc[(metapath[0], metapath)] + D.storage.rowcount().numpy()).values
+            if not directed:
+                self.node_degrees.loc[(metapath[-1], metapath)] = (
+                        self.node_degrees.loc[(metapath[-1], metapath)] + D.storage.colcount().numpy()).values
         return self.node_degrees
 
     def get_embedding_dfs(self, embeddings_dict, global_node_index):
@@ -278,11 +275,13 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
     def process_HANdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
         data = dataset.data
-        self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
+        assert self.head_node_type is not None
+        assert metapath is not None
+        assert node_types is not None
         self.node_types = node_types
+        self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.edge_types = list(range(dataset.num_edge))
         self.metapaths = list(self.edge_index_dict.keys())
-        assert self.head_node_type is not None
         self.x_dict = {self.head_node_type: data["x"]}
         self.in_features = data["x"].size(1)
 
