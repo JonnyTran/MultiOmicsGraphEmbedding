@@ -25,6 +25,31 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
 
     return Y_hat, Y
 
+
+def preprocess_input(input, device, half=False):
+    if isinstance(input, dict):
+        input = {k: preprocess_input(v, device, half) for k, v in input.items()}
+    elif isinstance(input, tuple):
+        input = tuple(preprocess_input(v, device, half) for v in input)
+    elif isinstance(input, list):
+        input = [preprocess_input(v, device, half) for v in input]
+    else:
+        input = process_tensor(input, device=device, half=half)
+    return input
+
+
+def process_tensor(input, device=None, half=False):
+    if not isinstance(input, torch.Tensor):
+        input = torch.tensor(input)
+
+    if device:
+        input = input.to(device)
+    if half:
+        input = input.half()
+
+    return input
+
+
 def pad_tensors(sequences):
     num = len(sequences)
     max_len = max([s.size(-1) for s in sequences])
@@ -82,44 +107,3 @@ def get_multiplex_collate_fn(node_types, layers):
         return X_all, torch.cat(y_all), torch.cat(idx_all)
 
     return multiplex_collate_fn
-
-
-def preprocess_input(input, device=None, half=False):
-    if isinstance(input, dict):
-        input = {k: preprocess_input(v, device=device, half=half) for k, v in input.items()}
-    elif isinstance(input, tuple):
-        input = tuple(preprocess_input(v, device, half) for v in input)
-    else:
-        input = process_tensor(input, device=device, half=half)
-
-    return input
-
-
-def process_tensor(input, device=None, half=False):
-    if not isinstance(input, torch.Tensor):
-        input = torch.tensor(input)
-
-    if device:
-        input = input.to(device)
-    if half:
-        input = input.half()
-
-    return input
-
-
-def _preprocess_tuple(X, cuda=True, device=None, half=False):
-    new_tuple = []
-    for tensor in X:
-        if device:
-            tensor = tensor.to(device)
-        else:
-            if cuda:
-                tensor = tensor.cuda()
-            else:
-                tensor = tensor.cpu()
-
-        if half:
-            tensor = tensor.half()
-        new_tuple.append(tensor)
-    return tuple(new_tuple)
-
