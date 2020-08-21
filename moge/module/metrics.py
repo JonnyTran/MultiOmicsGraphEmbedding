@@ -38,7 +38,8 @@ class Metrics():
                 precision = Precision(average=False)
                 recall = Recall(average=False)
                 self.metrics[metric] = MetricsLambda(
-                    lambda precision, recall: (precision * recall * 2 / (precision + recall)).mean(), precision, recall)
+                    lambda precision, recall: (precision * recall * 2 / (precision + recall)).mean(),
+                    precision, recall)
             elif "top_k" in metric:
                 if multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
@@ -77,7 +78,7 @@ class Metrics():
             y_pred = torch.softmax(y_pred, dim=1)
 
         for metric in self.metrics:
-            if "precision" in metric or "recall" in metric:
+            if "precision" in metric or "recall" in metric or "f1" in metric:
                 if not self.multilabel and y_true.dim() == 1:
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
