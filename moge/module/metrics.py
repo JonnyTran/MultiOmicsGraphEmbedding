@@ -38,7 +38,7 @@ class Metrics():
                 if multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
-                    self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 3),
+                    self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
             elif "f1" == metric:
                 continue
