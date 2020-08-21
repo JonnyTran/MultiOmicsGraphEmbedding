@@ -4,8 +4,8 @@ import numpy as np
 import pytorch_lightning as pl
 import pandas as pd
 import torch
-from cogdl.models.nn.pyg_gtn import GTN
-from cogdl.models.nn.pyg_han import HAN
+from cogdl.models.nn.pyg_gtn import GTN as Gtn
+from cogdl.models.nn.pyg_han import HAN as Han
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
@@ -21,9 +21,10 @@ from moge.module.classifier import DenseClassification, MulticlassClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.utils import filter_samples, pad_tensors
 
+
 class NodeClfMetrics(pl.LightningModule):
-    def __init__(self, hparams, dataset, metrics):
-        super(NodeClfMetrics, self).__init__()
+    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
+        super(NodeClfMetrics, self).__init__(*args, **kwargs)
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
@@ -205,7 +206,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         return [optimizer], [scheduler]
 
 
-class GTN(GTN, NodeClfMetrics):
+class GTN(NodeClfMetrics, Gtn):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
@@ -222,7 +223,8 @@ class GTN(GTN, NodeClfMetrics):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super().__init__(num_edge, None, num_channels)
+        super().__init__(hparams, dataset, metrics, num_edge, num_channels, w_in, w_out, num_class, num_nodes,
+                         num_layers)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
@@ -310,7 +312,7 @@ class GTN(GTN, NodeClfMetrics):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class HAN(HAN, NodeClfMetrics):
+class HAN(NodeClfMetrics, Han):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
@@ -327,7 +329,8 @@ class HAN(HAN, NodeClfMetrics):
 
         w_out = hparams.embedding_dim
 
-        super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
+        super().__init__(hparams, dataset, metrics, num_edge=num_edge, w_in=w_in, w_out=w_out, num_class=num_class,
+                         num_nodes=num_nodes, num_layers=num_layers)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
@@ -368,8 +371,11 @@ class HAN(HAN, NodeClfMetrics):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-
+        print({k: {j: l.shape for j, l in v.items()} if isinstance(v, dict) else [(m[0].shape, m[1].shape) for m in
+                                                                                  v] if isinstance(v, (
+        list, tuple)) else v.shape for k, v in X.items()})
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        print("y_hat", y_hat.shape, y.shape)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)

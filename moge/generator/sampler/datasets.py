@@ -390,7 +390,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         else:
             X = {
                 "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapaths],
-                "x": None,
+                "x": self.data["x"] if hasattr(self.data, "x") else None,
                 "idx": iloc}
 
         y = self.y_dict[self.head_node_type][iloc]
