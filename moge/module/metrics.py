@@ -55,9 +55,10 @@ class Metrics():
 
         if "f1" in metrics:
             assert "precision" in self.metrics and "recall" in self.metrics
-            self.metrics["f1"] = MetricsLambda(
-                lambda precision, recall: (precision * recall * 2 / (precision + recall)).mean(),
-                self.metrics["precision"], self.metrics["recall"])
+
+            def f1(precision, recall): return (precision * recall * 2 / (precision + recall)).mean()
+
+            self.metrics["f1"] = MetricsLambda(f1, self.metrics["precision"], self.metrics["recall"])
 
         self.reset_metrics()
 
