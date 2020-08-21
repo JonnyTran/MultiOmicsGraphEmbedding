@@ -4,8 +4,8 @@ import numpy as np
 import pytorch_lightning as pl
 import pandas as pd
 import torch
-# from cogdl.models.nn.pyg_gtn import GTN
-# from cogdl.models.nn.pyg_han import HAN
+from cogdl.models.nn.pyg_gtn import GTN
+from cogdl.models.nn.pyg_han import HAN
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
@@ -77,13 +77,15 @@ class NodeClfMetrics(pl.LightningModule):
             y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
             print(f"y_pred {len(y_pred_dict)} classes",
                   {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print("y_true classes", {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+            print(f"y_true {len(y_true_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
         else:
             y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
             y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
             print(f"y_pred {len(y_pred_dict)} classes",
                   {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print("y_true classes", {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+            print(f"y_true {len(y_true_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
 
 
 class LATTENodeClassifier(NodeClfMetrics):
@@ -203,7 +205,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         return [optimizer], [scheduler]
 
 
-class GTN(NodeClfMetrics):
+class GTN(GTN, NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
@@ -308,7 +310,7 @@ class GTN(NodeClfMetrics):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class HAN(NodeClfMetrics):
+class HAN(HAN, NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = len(dataset.edge_index_dict)
@@ -325,11 +327,12 @@ class HAN(NodeClfMetrics):
 
         w_out = hparams.embedding_dim
 
-        super().__init__(num_edge, None, w_in)
+        super().__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers)
 
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
+        self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
 
