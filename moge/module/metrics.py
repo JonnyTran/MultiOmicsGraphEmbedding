@@ -57,6 +57,8 @@ class Metrics():
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
+        self.reset_metrics()
+
     def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights):
         """
         Remember to call this AFTER calculating the loss function, as it may modify y_pred.
