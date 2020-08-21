@@ -194,7 +194,9 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             t_order=self.hparams.t_order)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        optimizer = torch.optim.SGD(self.parameters(),
+                                    lr=self.hparams.lr, momentum=self.hparams.momentum,
+                                    weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
         return [optimizer], [scheduler]

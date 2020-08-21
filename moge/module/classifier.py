@@ -6,7 +6,6 @@ import networkx as nx
 import numpy as np
 import torch
 from torch import nn
-from torch_geometric.nn.inits import glorot
 from torch_geometric.nn.inits import glorot, zeros
 
 

@@ -279,6 +279,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         assert self.head_node_type is not None
         assert metapath is not None
         assert node_types is not None
+        print(f"Edge_types: {len(data['adj'])}")
         self.node_types = node_types
         self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
         self.edge_types = list(range(dataset.num_edge))
