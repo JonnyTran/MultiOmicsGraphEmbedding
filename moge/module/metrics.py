@@ -56,7 +56,8 @@ class Metrics():
         if "f1" in metrics:
             assert "precision" in self.metrics and "recall" in self.metrics
 
-            def f1(precision, recall): return (precision * recall * 2 / (precision + recall)).mean()
+            def f1(precision, recall):
+                return (precision * recall * 2 / (precision + recall)).mean()
 
             self.metrics["f1"] = MetricsLambda(f1, self.metrics["precision"], self.metrics["recall"])
 
@@ -74,16 +75,21 @@ class Metrics():
         y_pred, y_true = filter_samples(y_pred, y_true, weights)
 
         # Apply softmax/sigmoid activation if needed
-        if "LOGITS" in self.loss_type or \
-                "FOCAL" in self.loss_type:
-            y_pred = torch.softmax(y_pred, dim=1) if "SOFTMAX" in self.loss_type else torch.sigmoid(y_pred)
-        elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type:
+        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
+            if "SOFTMAX" in self.loss_type:
+                y_pred = torch.softmax(y_pred, dim=1)
+                is_softmax = True
+            else:
+                torch.sigmoid(y_pred)
+        elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type or "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
-        elif "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
-            y_pred = torch.softmax(y_pred, dim=1)
+            is_softmax = True
+
+        if is_softmax:
+            self.threshold = y_pred.max(1).mean()
 
         for metric in self.metrics:
-            if "precision" in metric or "recall" in metric or "f1" in metric:
+            if "precision" == metric or "recall" == metric or "f1" == metric:
                 if not self.multilabel and y_true.dim() == 1:
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
@@ -91,7 +97,7 @@ class Metrics():
                 else:
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true),
                                                  y_true))
-            elif "accuracy" in metric:
+            elif "accuracy" == metric:
                 if not self.multilabel and y_true.dim() == 1:
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
