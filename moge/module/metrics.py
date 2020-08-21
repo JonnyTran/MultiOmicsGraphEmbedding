@@ -78,14 +78,11 @@ class Metrics():
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
             if "SOFTMAX" in self.loss_type:
                 y_pred = torch.softmax(y_pred, dim=1)
-                is_softmax = True
+                self.threshold = y_pred.max(1).mean()
             else:
                 torch.sigmoid(y_pred)
         elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type or "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
-            is_softmax = True
-
-        if is_softmax:
             self.threshold = y_pred.max(1).mean()
 
         for metric in self.metrics:
