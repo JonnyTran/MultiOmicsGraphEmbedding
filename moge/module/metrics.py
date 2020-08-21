@@ -29,7 +29,7 @@ class Metrics():
             top_k = [k for k in top_k if k < n_classes]
 
         self.metrics = {}
-        for metric in set(metrics):
+        for metric in metrics:
             if "precision" == metric:
                 self.metrics[metric] = Precision(average=False, is_multilabel=multilabel, output_transform=None)
             elif "recall" == metric:
