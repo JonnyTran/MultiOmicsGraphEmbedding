@@ -88,7 +88,6 @@ class Metrics():
                 else:
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true),
                                                  y_true))
-
             elif "accuracy" in metric:
                 if not self.multilabel and y_true.dim() == 1:
                     self.metrics[metric].update(
@@ -96,7 +95,6 @@ class Metrics():
                          self.hot_encode(y_true, y_pred)))
                 else:
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
-
             elif metric == "top_k":
                 self.metrics[metric].update((y_pred, y_true))
             elif "ogb" in metric:
@@ -114,14 +112,18 @@ class Metrics():
     def compute_metrics(self):
         logs = {}
         for metric in self.metrics:
-            if "ogb" in metric or (metric == "top_k" and isinstance(self.metrics[metric], TopKMultilabelAccuracy)):
-                logs.update(self.metrics[metric].compute(prefix=self.prefix))
-            elif metric == "top_k" and isinstance(self.metrics[metric], TopKCategoricalAccuracy):
-                metric_name = (metric if self.prefix is None else self.prefix + metric) + f"@{self.top_ks[-1]}"
-                logs[metric_name] = self.metrics[metric].compute()
-            else:
-                metric_name = metric if self.prefix is None else self.prefix + metric
-                logs[metric_name] = self.metrics[metric].compute()
+            try:
+                if "ogb" in metric or (metric == "top_k" and isinstance(self.metrics[metric], TopKMultilabelAccuracy)):
+                    logs.update(self.metrics[metric].compute(prefix=self.prefix))
+                elif metric == "top_k" and isinstance(self.metrics[metric], TopKCategoricalAccuracy):
+                    metric_name = (
+                                      metric if self.prefix is None else self.prefix + metric) + f"@{self.netrics[metric]._k}"
+                    logs[metric_name] = self.metrics[metric].compute()
+                else:
+                    metric_name = metric if self.prefix is None else self.prefix + metric
+                    logs[metric_name] = self.metrics[metric].compute()
+            except:
+                print(f"Had problem with metric {metric}")
 
         return logs
 
