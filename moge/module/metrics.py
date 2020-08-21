@@ -28,18 +28,16 @@ class Metrics():
         if n_classes:
             top_k = [k for k in top_k if k < n_classes]
 
-        self.metrics = {}
+        self.metrics = {s: None for s in metrics}
         for metric in set(metrics):
             if "precision" in metric:
-                self.metrics[metric] = Precision(average=True, is_multilabel=multilabel, output_transform=None)
+                self.metrics[metric] = Precision(average=False, is_multilabel=multilabel, output_transform=None)
             elif "recall" in metric:
-                self.metrics[metric] = Recall(average=True, is_multilabel=multilabel, output_transform=None)
+                self.metrics[metric] = Recall(average=False, is_multilabel=multilabel, output_transform=None)
             elif "f1" in metric:
-                precision = Precision(average=False)
-                recall = Recall(average=False)
                 self.metrics[metric] = MetricsLambda(
                     lambda precision, recall: (precision * recall * 2 / (precision + recall)).mean(),
-                    precision, recall)
+                    self.metrics["precision"], self.metrics["recall"])
             elif "top_k" in metric:
                 if multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
@@ -117,13 +115,13 @@ class Metrics():
                     logs.update(self.metrics[metric].compute(prefix=self.prefix))
                 elif metric == "top_k" and isinstance(self.metrics[metric], TopKCategoricalAccuracy):
                     metric_name = (
-                                      metric if self.prefix is None else self.prefix + metric) + f"@{self.netrics[metric]._k}"
+                                      metric if self.prefix is None else self.prefix + metric) + f"@{self.metrics[metric]._k}"
                     logs[metric_name] = self.metrics[metric].compute()
                 else:
                     metric_name = metric if self.prefix is None else self.prefix + metric
                     logs[metric_name] = self.metrics[metric].compute()
-            except:
-                print(f"Had problem with metric {metric}")
+            except Exception as e:
+                print(f"Had problem with metric {metric}, {str(e)}\r")
 
         return logs
 
