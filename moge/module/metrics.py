@@ -28,22 +28,20 @@ class Metrics():
         if n_classes:
             top_k = [k for k in top_k if k < n_classes]
 
-        self.metrics = {s: None for s in metrics}
+        self.metrics = {}
         for metric in set(metrics):
-            if "precision" in metric:
+            if "precision" == metric:
                 self.metrics[metric] = Precision(average=False, is_multilabel=multilabel, output_transform=None)
-            elif "recall" in metric:
+            elif "recall" == metric:
                 self.metrics[metric] = Recall(average=False, is_multilabel=multilabel, output_transform=None)
-            elif "f1" in metric:
-                self.metrics[metric] = MetricsLambda(
-                    lambda precision, recall: (precision * recall * 2 / (precision + recall)).mean(),
-                    self.metrics["precision"], self.metrics["recall"])
             elif "top_k" in metric:
                 if multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 3),
                                                                    output_transform=None)
+            elif "f1" == metric:
+                continue
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=multilabel, output_transform=None)
             elif "ogbn" in metric:
@@ -54,6 +52,12 @@ class Metrics():
                 self.metrics[metric] = LinkPredEvaluator(LinkEvaluator(metric))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
+
+        if "f1" in metrics:
+            assert "precision" in self.metrics and "recall" in self.metrics
+            self.metrics["f1"] = MetricsLambda(
+                lambda precision, recall: (precision * recall * 2 / (precision + recall)).mean(),
+                self.metrics["precision"], self.metrics["recall"])
 
         self.reset_metrics()
 
