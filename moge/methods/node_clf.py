@@ -232,12 +232,15 @@ class GTN(NodeClfMetrics, Gtn):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
                                                 sparse=True)
 
+        if num_nodes > 10000:
+            self.embedding = self.embedding.cpu()
+
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
         if X is None:
-            X = self.embedding.weight
+            X = self.embedding.weight.to(self.layers[0].device)
 
         Ws = []
         for i in range(self.num_layers):
@@ -335,13 +338,16 @@ class HAN(NodeClfMetrics, Han):
         if not hasattr(dataset, "x"):
             self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
+        if num_nodes > 10000:
+            self.embedding = self.embedding.cpu()
+
         self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
         if X is None:
-            X = self.embedding.weight
+            X = self.embedding.weight.to(self.layers[0].device)
 
         for i in range(self.num_layers):
             X = self.layers[i].forward(X, A)
