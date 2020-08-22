@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
 from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
 
-from moge.methods.node_clf import MetaPath2Vec, HAN, GTN
+from moge.methods.node_clf import MetaPath2Vec, HAN, GTN, LATTENodeClassifier
 from moge.generator import HeteroNetDataset, HeteroNeighborSampler
 from pytorch_lightning.loggers import WandbLogger
 
@@ -24,7 +24,7 @@ from pytorch_lightning.loggers import WandbLogger
 def train(hparams):
     EMBEDDING_DIM = 128
     NUM_GPUS = 1
-    METRICS = ["accuracy", "precision", "recall", "top_k"]
+    METRICS = ["precision", "recall", "f1", "top_k" if hparams.dataset.multilabel else "ogbn-mag", ]
 
     if hparams.dataset == "ACM":
         if hparams.method == "HAN":
@@ -105,22 +105,47 @@ def train(hparams):
             "lr": 0.001 * NUM_GPUS,
         }
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
+    elif hparams.method == "LATTE":
+        num_gpus = 1
+        batch_order = 11
+        model_hparams = {
+            "embedding_dim": 128,
+            "t_order": 2,
+            "batch_size": 2 ** batch_order * max(num_gpus, 1),
+            "nb_cls_dense_size": 0,
+            "nb_cls_dropout": 0.3,
+            "activation": "relu",
+            "attn_heads": 64,
+            "attn_activation": "LeakyReLU",
+            "attn_dropout": 0.2,
+            "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "use_proximity_loss": False,
+            "neg_sampling_ratio": 2.0,
+            "n_classes": dataset.n_classes,
+            "use_class_weights": False,
+            "lr": 0.001 * num_gpus,
+            "momentum": 0.9,
+            "weight_decay": 1e-5,
+        }
+
+        metrics = ["precision", "recall", "f1",
+                   "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
+
+        model = LATTENodeClassifier(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
 
     MAX_EPOCHS = 250
-    wandb_logger = WandbLogger(name=model.__class__.__name__,
-                               tags=[dataset.name],
+    wandb_logger = WandbLogger(name=model.name(),
+                               tags=[dataset.name()],
                                project="multiplex-comparison")
     wandb_logger.log_hyperparams(model_hparams)
 
     trainer = Trainer(
         gpus=NUM_GPUS,
         distributed_backend='dp' if NUM_GPUS > 1 else None,
-        # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='loss', patience=2, min_delta=0.0001, strict=False),
                    EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0001, strict=False)],
         logger=wandb_logger,
-        # regularizers=regularizers,
         weights_summary='top',
         use_amp=USE_AMP,
         amp_level='O1' if USE_AMP else None,
@@ -135,7 +160,7 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--embedding_dim', type=int, default=128)
 
-    parser.add_argument('--dataset', type=str, default="ACM_HANDataset")
+    parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
     parser.add_argument('--train_ratio', type=float, default=None)
 

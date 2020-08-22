@@ -203,6 +203,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.training_idx, self.validation_idx, self.testing_idx = \
             self.split_train_val_test(train_ratio=train_ratio, sample_indices=all_idx)
 
+        print("Resampled training set at ", self.get_train_ratio())
+
     def get_metapaths(self):
         if self.use_reverse:
             return self.metapaths + self.get_reverse_metapath(self.metapaths, self.edge_index_dict)

@@ -8,6 +8,7 @@ from cogdl.models.nn.pyg_gtn import GTN as Gtn
 from cogdl.models.nn.pyg_han import HAN as Han
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
+from sklearn.metrics import precision_recall_fscore_support
 from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 from torch_geometric.utils import remove_self_loops, add_self_loops
@@ -444,7 +445,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             return self.__class__.__name__
 
     def forward(self, node_type, batch=None):
-        return super().forward(node_type, batch=None)
+        return super().forward(node_type, batch=batch)
 
     def training_step(self, batch, batch_nb):
 
@@ -464,29 +465,27 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).sum().item()
-        accuracy = self.node_classification(training=True)
+        results = self.classification_results(training=True)
 
-        return {"progress_bar": {"accuracy": accuracy},
-                "log": {"loss": avg_loss, "accuracy": accuracy}}
+        return {"progress_bar": results,
+                "log": {"loss": avg_loss, **results}}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
-        logs = {"val_loss": avg_loss,
-                "val_accuracy": self.node_classification(training=False)}
-        return {"progress_bar": logs,
-                "log": logs}
+        logs = {"val_loss": avg_loss}
+        logs.update({"val_" + k: v for k, v in self.classification_results(training=False).items()})
+        return {"progress_bar": logs, "log": logs}
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
-        logs = {"test_loss": avg_loss,
-                "test_accuracy": self.node_classification(training=False)}
-        return {"progress_bar": logs,
-                "log": logs}
+        logs = {"test_loss": avg_loss}
+        logs.update({"test_" + k: v for k, v in self.classification_results(training=False).items()})
+        return {"progress_bar": logs, "log": logs}
 
-    def node_classification(self, training=True):
+    def classification_results(self, training=True):
         if training:
             z = self.forward(self.head_node_type,
-                             batch=self.dataset.y_index_dict[self.head_node_type][self.dataset.training_idx])
+                             batch=self.dataset.training_idx)
             y = self.dataset.y_dict[self.head_node_type][self.dataset.training_idx]
 
             perm = torch.randperm(z.size(0))
@@ -494,36 +493,41 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             test_perm = perm[int(z.size(0) * self.dataset.train_ratio):]
 
             if y.dim() > 1 and y.size(1) > 1:
+                multilabel = True
                 clf = OneVsRestClassifier(LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150))
             else:
+                multilabel = False
                 clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150)
 
             clf.fit(z[train_perm].detach().cpu().numpy(),
                     y[train_perm].detach().cpu().numpy())
 
-            accuracy = clf.score(z[test_perm].detach().cpu().numpy(),
-                                 y[test_perm].detach().cpu().numpy())
+            y_pred = clf.predict(z[test_perm].detach().cpu().numpy())
+            y_test = y[test_perm].detach().cpu().numpy()
         else:
             z_train = self.forward(self.head_node_type,
-                                   batch=self.dataset.y_index_dict[self.head_node_type][self.dataset.training_idx])
+                                   batch=self.dataset.training_idx)
             y_train = self.dataset.y_dict[self.head_node_type][self.dataset.training_idx]
 
-            z_val = self.forward(self.head_node_type,
-                                 batch=self.dataset.y_index_dict[self.head_node_type][self.dataset.validation_idx])
-            y_val = self.dataset.y_dict[self.head_node_type][self.dataset.validation_idx]
+            z = self.forward(self.head_node_type,
+                             batch=self.dataset.validation_idx)
+            y = self.dataset.y_dict[self.head_node_type][self.dataset.validation_idx]
 
             if y_train.dim() > 1 and y_train.size(1) > 1:
+                multilabel = True
                 clf = OneVsRestClassifier(LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150))
             else:
+                multilabel = False
                 clf = LogisticRegression(solver="lbfgs", multi_class="auto", max_iter=150)
 
-            clf.fit(z_train.detach().cpu().numpy(),
-                    y_train.detach().cpu().numpy())
+            clf.fit(z_train.detach().cpu().numpy(), y_train.detach().cpu().numpy())
+            y_pred = clf.predict(z.detach().cpu().numpy())
+            y_test = y.detach().cpu().numpy()
 
-            accuracy = clf.score(z_val.detach().cpu().numpy(),
-                                 y_val.detach().cpu().numpy())
-
-        return accuracy
+        result = dict(zip(["precision", "recall", "f1"],
+                          precision_recall_fscore_support(y_test, y_pred, average="micro")))
+        result["acc" if not multilabel else "accuracy"] = result["precision"]
+        return result
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
