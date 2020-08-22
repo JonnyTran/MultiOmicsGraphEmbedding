@@ -381,12 +381,14 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         return loader
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
-        if "HAN_batch" in collate_fn:
+        if "HAN" in collate_fn:
+            return self.collate_HAN
+        elif "HAN" in collate_fn:
             return self.collate_HAN_batch
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def collate_HAN_batch(self, iloc):
+    def collate_HAN(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
@@ -400,6 +402,42 @@ class HeteroNetDataset(torch.utils.data.Dataset):
                 "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapaths],
                 "x": self.data["x"] if hasattr(self.data, "x") else None,
                 "idx": iloc}
+
+        y = self.y_dict[self.head_node_type][iloc]
+        return X, y, None
+
+    def collate_HAN_batch(self, iloc):
+        if not isinstance(iloc, torch.Tensor):
+            iloc = torch.tensor(iloc)
+
+        if isinstance(self.dataset, HANDataset):
+            X = {"adj": [],
+                 "x": self.data["x"][iloc] if hasattr(self.data, "x") else None,
+                 "idx": iloc}
+
+            local2batch = dict(zip(iloc.numpy(), range(len(iloc))))
+
+            for edge_index, values in self.data["adj"][:len(self.metapaths)]:
+                mask = np.isin(edge_index[0], iloc) & np.isin(edge_index[1], iloc)
+                edge_index = edge_index[:, mask]
+                edge_index = edge_index.apply_(local2batch.get)
+                values = values[mask]
+                X["adj"].append(remove_self_loops(edge_index, values))
+
+        else:
+            X = {"adj": [],
+                 "x": self.data["x"][iloc] if hasattr(self.data, "x") else None,
+                 "idx": iloc}
+
+            local2batch = dict(zip(iloc.numpy(), range(len(iloc))))
+
+            for i in self.metapaths:
+                edge_index = self.edge_index_dict[i]
+                mask = np.isin(edge_index[0], iloc) & np.isin(edge_index[1], iloc)
+                edge_index = edge_index[:, mask]
+                edge_index = edge_index.apply_(local2batch.get)
+                values = torch.ones(self.edge_index_dict[i].size(1))
+                X["adj"].append(remove_self_loops(edge_index, values))
 
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None

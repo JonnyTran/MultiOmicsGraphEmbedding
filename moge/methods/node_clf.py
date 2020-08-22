@@ -229,18 +229,21 @@ class GTN(NodeClfMetrics, Gtn):
                          num_layers)
 
         if not hasattr(dataset, "x"):
-            self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim,
-                                                sparse=True)
-
-        if num_nodes > 10000:
-            self.embedding = self.embedding.cpu()
+            if num_nodes > 10000:
+                self.embedding = {self.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
+                                                                          embedding_dim=hparams.embedding_dim).cpu()}
+            else:
+                self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
         if X is None:
-            X = self.embedding.weight.to(self.layers[0].device)
+            if isinstance(self.embedding, dict):
+                X = self.embedding[self.head_node_type].weight[x_idx].to(self.layers[0].device)
+            else:
+                X = self.embedding.weight[x_idx]
 
         Ws = []
         for i in range(self.num_layers):
@@ -262,10 +265,11 @@ class GTN(NodeClfMetrics, Gtn):
         X_ = self.linear1(X_)
         X_ = F.relu(X_)
         # X_ = F.dropout(X_, p=0.5)
-        if x_idx is None:
-            y = self.linear2(X_)
-        else:
+        if "batch" not in self.collate_fn and x_idx is not None:
             y = self.linear2(X_[x_idx])
+        else:
+            y = self.linear2(X_)
+
         return y
 
     def loss(self, y_hat, y):
@@ -336,10 +340,11 @@ class HAN(NodeClfMetrics, Han):
                          num_nodes=num_nodes, num_layers=num_layers)
 
         if not hasattr(dataset, "x"):
-            self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
-
-        if num_nodes > 10000:
-            self.embedding = self.embedding.cpu()
+            if num_nodes > 10000:
+                self.embedding = {self.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
+                                                                          embedding_dim=hparams.embedding_dim).cpu()}
+            else:
+                self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
         self.hparams = hparams
         self.dataset = dataset
@@ -347,12 +352,15 @@ class HAN(NodeClfMetrics, Han):
 
     def forward(self, A, X, x_idx):
         if X is None:
-            X = self.embedding.weight.to(self.layers[0].device)
+            if isinstance(self.embedding, dict):
+                X = self.embedding[self.head_node_type].weight[x_idx].to(self.layers[0].device)
+            else:
+                X = self.embedding.weight[x_idx]
 
         for i in range(self.num_layers):
             X = self.layers[i].forward(X, A)
 
-        if x_idx is not None:
+        if "batch" not in self.collate_fn and x_idx is not None:
             y = self.linear(X[x_idx])
         else:
             y = self.linear(X)

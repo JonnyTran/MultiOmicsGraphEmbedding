@@ -118,7 +118,7 @@ class NetworkXSampler(HeteroNetDataset):
         if "LATTENode_batch" in collate_fn:
             return self.collate_LATTENode_batch
         elif "HAN_batch" in collate_fn:
-            return self.collate_HAN_batch
+            return self.collate_HAN
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
@@ -164,7 +164,7 @@ class NetworkXSampler(HeteroNetDataset):
             y = self.y_dict[self.head_node_type][iloc].squeeze(-1)
         return X, y, None
 
-    def collate_HAN_batch(self, iloc):
+    def collate_HAN(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 

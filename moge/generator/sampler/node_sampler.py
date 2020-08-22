@@ -92,7 +92,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if "neighbor_sampler" in collate_fn:
             return collate_wrapper
         if "HAN" in collate_fn:
-            return self.collate_HAN_batch
+            return self.collate_HAN
         else:
             raise Exception(f"Collate function {collate_fn} not found.")
 
@@ -164,15 +164,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                               sampled_local_nodes=sampled_local_nodes,
                                                               local2batch=local2batch,
                                                               filter_nodes=filter_nodes)
-
-        # for t in range(2, t_order + 1):
-        #     if t == 2:
-        #         t_order_edge_index = LATTE.join_edge_indexes(X["edge_index_dict"], X["edge_index_dict"],
-        #                                                      X["global_node_index"])
-        #     else:
-        #         t_order_edge_index = LATTE.join_edge_indexes(t_order_edge_index, X["edge_index_dict"],
-        #                                                      X["global_node_index"])
-        #     X["edge_index_dict"].update(t_order_edge_index)
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
