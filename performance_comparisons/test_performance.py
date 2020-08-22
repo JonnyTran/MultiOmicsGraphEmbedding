@@ -23,7 +23,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 def train(hparams):
     EMBEDDING_DIM = 128
-    NUM_GPUS = 1
+    NUM_GPUS = hparams.num_gpus
 
     if hparams.dataset == "ACM":
         if hparams.method == "HAN":
@@ -112,6 +112,7 @@ def train(hparams):
         }
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "LATTE":
+        USE_AMP = False
         num_gpus = 1
         batch_order = 11
         model_hparams = {
@@ -169,6 +170,8 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
     parser.add_argument('--train_ratio', type=float, default=0.5)
+
+    parser.add_argument('--num_gpus', type=int, default=1)
 
     # add all the available options to the trainer
     args = parser.parse_args()

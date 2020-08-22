@@ -1,7 +1,7 @@
 program: performance_comparisons/test_performance.py
 method: grid
 metric:
-  name: val_accuracy
+  name: val_f1
   goal: maximize
 parameters:
   dataset:
