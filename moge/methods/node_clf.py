@@ -340,19 +340,19 @@ class HAN(NodeClfMetrics, Han):
         self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
-        if X is None and "batch" in self.collate_fn:
+        if x_idx is not None:
             X = self.embedding.weight[x_idx]
             print("batch")
-        elif X is None and "batch" not in self.collate_fn:
+        else:
             X = self.embedding.weight
 
         for i in range(self.num_layers):
             X = self.layers[i](X, A)
 
-        if "batch" in self.collate_fn:
-            y = self.linear(X)
-        else:
+        if x_idx is not None:
             y = self.linear(X[x_idx])
+        else:
+            y = self.linear(X)
         return y
 
     def loss(self, y_hat, y):
