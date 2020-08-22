@@ -26,6 +26,17 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
     return Y_hat, Y
 
 
+def tensor_sizes(input):
+    if isinstance(input, dict):
+        return {k: tensor_sizes(v) for k, v in input.items()}
+    elif isinstance(input, tuple):
+        return tuple(tensor_sizes(v) for v in input)
+    elif isinstance(input, list):
+        return [tensor_sizes(v) for v in input]
+    else:
+        return input.shape
+
+
 def preprocess_input(input, device, half=False):
     if isinstance(input, dict):
         input = {k: preprocess_input(v, device, half) for k, v in input.items()}

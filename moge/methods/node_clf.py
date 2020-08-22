@@ -20,7 +20,7 @@ from moge.module.trainer import _fix_dp_return_type
 from moge.module.latte import LATTE
 from moge.module.classifier import DenseClassification, MulticlassClassification
 from moge.module.losses import ClassificationLoss
-from moge.module.utils import filter_samples, pad_tensors
+from moge.module.utils import filter_samples, pad_tensors, tensor_sizes
 
 
 class NodeClfMetrics(pl.LightningModule):
@@ -341,7 +341,6 @@ class HAN(NodeClfMetrics, Han):
         self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
-        print("X", X if not isinstance(X, torch.Tensor) else X.shape)
         if X is None:
             X = self.embedding.weight
 
