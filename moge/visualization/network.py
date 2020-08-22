@@ -25,14 +25,14 @@ import plotly.graph_objects as go
 #     # Log
 #     verbose=False)
 
-def node_degree_viz(node_degrees, x_label, y_label):
+def node_degree_viz(node_degrees, x_label, y_label, width=500, height=90):
     fig = go.Figure(data=go.Heatmap(z=node_degrees.applymap(lambda x: np.log10(x + 1)),
                                     x=node_degrees.columns, y=node_degrees.index, colorscale="Greys"),
                     layout=go.Layout(
                         xaxis=dict(title=x_label),
                         yaxis=dict(title=y_label),
-                        width=500,
-                        height=90,
+                        width=width,
+                        height=height,
                         margin=dict(l=5, r=5, b=5, t=5, pad=5),
                         font=dict(size=12, ),
                         # xaxis_nticks=36

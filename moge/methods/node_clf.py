@@ -342,7 +342,8 @@ class HAN(NodeClfMetrics, Han):
     def forward(self, A, X, x_idx):
         if X is None and "batch" in self.collate_fn:
             X = self.embedding.weight[x_idx]
-        elif X is None:
+            print("batch")
+        elif X is None and "batch" not in self.collate_fn:
             X = self.embedding.weight
 
         for i in range(self.num_layers):
@@ -371,9 +372,9 @@ class HAN(NodeClfMetrics, Han):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-        print({k: {j: l.shape for j, l in v.items()} if isinstance(v, dict) else [(m[0].shape, m[1].shape) for m in
-                                                                                  v] if isinstance(v, (
-        list, tuple)) else v.shape for k, v in X.items()})
+        # print({k: {j: l.shape for j, l in v.items()} if isinstance(v, dict) else [(m[0].shape, m[1].shape) for m in
+        #                                                                           v] if isinstance(v, (
+        # list, tuple)) else v.shape for k, v in X.items()})
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         print("y_hat", y_hat.shape, y.shape)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)

@@ -373,13 +373,12 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         return loader
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
-        if "HAN" in collate_fn:
-            return self.collate_HAN
+        if "HAN_batch" in collate_fn:
+            return self.collate_HAN_batch
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-
-    def collate_HAN(self, iloc):
+    def collate_HAN_batch(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
