@@ -24,11 +24,11 @@ from pytorch_lightning.loggers import WandbLogger
 def train(hparams):
     EMBEDDING_DIM = 128
     NUM_GPUS = 1
-    METRICS = ["precision", "recall", "f1", "top_k" if hparams.dataset.multilabel else "ogbn-mag", ]
 
     if hparams.dataset == "ACM":
         if hparams.method == "HAN":
             dataset = HeteroNetDataset(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
+                                       head_node_type="P",
                                        train_ratio=hparams.train_ratio)
         else:
             dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
@@ -38,6 +38,7 @@ def train(hparams):
     elif hparams.dataset == "DBLP":
         if hparams.method == "HAN":
             dataset = HeteroNetDataset(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
+                                       head_node_type="A",
                                        train_ratio=hparams.train_ratio)
         else:
             dataset = HeteroNeighborSampler(DBLP_GTNDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA", "AGA"],
@@ -47,6 +48,7 @@ def train(hparams):
     elif hparams.dataset == "IMDB":
         if hparams.method == "HAN":
             dataset = HeteroNetDataset(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
+                                       head_node_type="M",
                                        train_ratio=hparams.train_ratio)
         else:
             dataset = HeteroNeighborSampler(IMDB_GTNDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
@@ -62,6 +64,10 @@ def train(hparams):
         dataset = HeteroNeighborSampler("dataset/blogcatalog6k.mat", node_types=["user", "tag"], head_node_type="user",
                                         train_ratio=hparams.train_ratio)
         dataset.name = "BlogCatalog3"
+    else:
+        raise Exception(f"dataset {hparams.dataset} not found")
+
+    METRICS = ["precision", "recall", "f1", "top_k" if dataset.multilabel else "ogbn-mag", ]
 
     if hparams.method == "HAN":
         USE_AMP = False
@@ -109,7 +115,7 @@ def train(hparams):
         num_gpus = 1
         batch_order = 11
         model_hparams = {
-            "embedding_dim": 128,
+            "embedding_dim": EMBEDDING_DIM,
             "t_order": 2,
             "batch_size": 2 ** batch_order * max(num_gpus, 1),
             "nb_cls_dense_size": 0,
@@ -162,7 +168,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
-    parser.add_argument('--train_ratio', type=float, default=None)
+    parser.add_argument('--train_ratio', type=float, default=0.5)
 
     # add all the available options to the trainer
     args = parser.parse_args()

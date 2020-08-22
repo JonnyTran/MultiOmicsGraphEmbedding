@@ -66,8 +66,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio)
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
-            print("HANDataset/GTNDataset")
-            self.process_HANdataset(dataset, metapaths, node_types, train_ratio)
+            print(f"{dataset.__class__.__name__}")
+            self.process_COGDLdataset(dataset, metapaths, node_types, train_ratio)
         elif "blogcatalog6k" in dataset:
             self.process_BlogCatalog6k(dataset, train_ratio)
         else:
@@ -109,8 +109,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
 
         if train_ratio is not None and train_ratio > 0:
-            self.resample_training_idx(train_ratio)
-
+            if not isinstance(dataset, (HANDataset, GTNDataset)):
+                self.resample_training_idx(train_ratio)
         print("train_ratio", self.get_train_ratio())
 
     def process_graph_sampler(self):
@@ -280,7 +280,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
-    def process_HANdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
+    def process_COGDLdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
         data = dataset.data
         assert self.head_node_type is not None
         assert metapath is not None
