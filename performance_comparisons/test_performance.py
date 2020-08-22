@@ -159,6 +159,7 @@ def train(hparams):
     )
 
     trainer.fit(model)
+    trainer.test(model)
 
 
 if __name__ == "__main__":

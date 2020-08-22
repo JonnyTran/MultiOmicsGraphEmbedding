@@ -297,24 +297,24 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.validation_idx, self.validation_target = data["valid_node"], data["valid_target"]
         self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
 
-        node_indices = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-        self.y_index_dict = {self.head_node_type: node_indices}
+        self.y_index_dict = {self.head_node_type: torch.cat([self.training_idx, self.validation_idx, self.testing_idx])}
         self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
+        # Create new labels vector for all nodes, with -1 for nodes without label
         self.y_dict = {
             self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
 
-        new_y_dict = {nodetype: -torch.ones(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) for
-                      nodetype in self.y_dict}
+        new_y_dict = {nodetype: -torch.ones(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) \
+                      for nodetype in self.y_dict}
         for node_type in self.y_dict:
             new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
         self.y_dict = new_y_dict
 
-        if train_ratio is None:
-            train_ratio = self.get_train_ratio()
-
-        self.training_idx, self.validation_idx, self.testing_idx = \
-            self.split_train_val_test(train_ratio=train_ratio, sample_indices=self.y_index_dict[self.head_node_type])
+        # if train_ratio is None:
+        #     train_ratio = self.get_train_ratio()
+        #
+        # self.training_idx, self.validation_idx, self.testing_idx = \
+        #     self.split_train_val_test(train_ratio=train_ratio, sample_indices=self.y_index_dict[self.head_node_type])
         self.data = data
 
     def process_stellargraph(self, dataset, metapath, node_types, train_ratio):
@@ -406,7 +406,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         return X, y, None
 
     def get_train_ratio(self):
-        if not self.validation_idx.size() == self.testing_idx.size() and not (
+        if not self.validation_idx.size() == self.testing_idx.size() or not (
                 self.validation_idx == self.testing_idx).all():
             train_ratio = self.training_idx.numel() / \
                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
