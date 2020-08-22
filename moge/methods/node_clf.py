@@ -235,9 +235,7 @@ class GTN(NodeClfMetrics, Gtn):
         self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
-        if X is None and "batch" in self.collate_fn:
-            X = self.embedding.weight[x_idx]
-        elif X is None:
+        if X is None:
             X = self.embedding.weight
 
         Ws = []
@@ -345,7 +343,7 @@ class HAN(NodeClfMetrics, Han):
             X = self.embedding.weight
 
         for i in range(self.num_layers):
-            X = self.layers[i](X, A)
+            X = self.layers[i].forward(X, A)
 
         if x_idx is not None:
             y = self.linear(X[x_idx])
