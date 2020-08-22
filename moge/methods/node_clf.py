@@ -10,6 +10,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+from torch_geometric.utils import remove_self_loops, add_self_loops
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -340,10 +341,8 @@ class HAN(NodeClfMetrics, Han):
         self.head_node_type = self.dataset.head_node_type
 
     def forward(self, A, X, x_idx):
-        if x_idx is not None:
-            X = self.embedding.weight[x_idx]
-            print("batch")
-        else:
+        print("X", X if not isinstance(X, torch.Tensor) else X.shape)
+        if X is None:
             X = self.embedding.weight
 
         for i in range(self.num_layers):
@@ -372,9 +371,9 @@ class HAN(NodeClfMetrics, Han):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-        # print({k: {j: l.shape for j, l in v.items()} if isinstance(v, dict) else [(m[0].shape, m[1].shape) for m in
-        #                                                                           v] if isinstance(v, (
-        # list, tuple)) else v.shape for k, v in X.items()})
+        print({k: {j: l.shape for j, l in v.items()} if isinstance(v, dict) else [(m[0].shape, m[1].shape) for m in
+                                                                                  v] if isinstance(v, (
+            list, tuple)) else v.shape for k, v in X.items()})
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         print("y_hat", y_hat.shape, y.shape)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)

@@ -13,6 +13,8 @@ from ogb.nodeproppred import PygNodePropPredDataset
 
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
+from torch_geometric.utils import remove_self_loops, add_self_loops
+
 import torch_sparse
 
 from ...module.latte import is_negative
@@ -383,7 +385,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             iloc = torch.tensor(iloc)
 
         if isinstance(self.dataset, HANDataset):
-            X = {"adj": self.data["adj"][:len(self.metapaths)],
+            X = {"adj": [remove_self_loops(edge_index, values) for edge_index, values in
+                         self.data["adj"][:len(self.metapaths)]],
                  "x": self.data["x"] if hasattr(self.data, "x") else None,
                  "idx": iloc}
         else:
