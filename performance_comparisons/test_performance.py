@@ -26,7 +26,7 @@ def train(hparams):
     NUM_GPUS = hparams.num_gpus
 
     if hparams.dataset == "ACM":
-        if hparams.method == "HAN":
+        if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
             dataset = HeteroNetDataset(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
                                        head_node_type="P",
                                        train_ratio=hparams.train_ratio)
@@ -36,7 +36,7 @@ def train(hparams):
                                             train_ratio=hparams.train_ratio)
 
     elif hparams.dataset == "DBLP":
-        if hparams.method == "HAN":
+        if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
             dataset = HeteroNetDataset(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
                                        head_node_type="A",
                                        train_ratio=hparams.train_ratio)
@@ -46,7 +46,7 @@ def train(hparams):
                                             train_ratio=hparams.train_ratio)
 
     elif hparams.dataset == "IMDB":
-        if hparams.method == "HAN":
+        if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
             dataset = HeteroNetDataset(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
                                        head_node_type="M",
                                        train_ratio=hparams.train_ratio)
@@ -61,7 +61,7 @@ def train(hparams):
                                         head_node_type="author",
                                         train_ratio=hparams.train_ratio)
     elif hparams.dataset == "BlogCatalog":
-        dataset = HeteroNeighborSampler("dataset/blogcatalog6k.mat", node_types=["user", "tag"], head_node_type="user",
+        dataset = HeteroNeighborSampler("datasets/blogcatalog6k.mat", node_types=["user", "tag"], head_node_type="user",
                                         train_ratio=hparams.train_ratio)
         dataset.name = "BlogCatalog3"
     else:
@@ -150,8 +150,7 @@ def train(hparams):
         gpus=NUM_GPUS,
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         max_epochs=MAX_EPOCHS,
-        callbacks=[EarlyStopping(monitor='loss', patience=2, min_delta=0.0001, strict=False),
-                   EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0001, strict=False)],
+        callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001, strict=False)],
         logger=wandb_logger,
         weights_summary='top',
         use_amp=USE_AMP,
