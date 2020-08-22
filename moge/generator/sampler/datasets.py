@@ -109,7 +109,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
 
         if train_ratio is not None and train_ratio > 0:
-            if not isinstance(dataset, (HANDataset, GTNDataset)):
+            if not isinstance(dataset, (HANDataset, GTNDataset)):  # Already resampled
                 self.resample_training_idx(train_ratio)
         print("train_ratio", self.get_train_ratio())
 
@@ -403,8 +403,12 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         return X, y, None
 
     def get_train_ratio(self):
-        train_ratio = self.training_idx.numel() / \
-                      sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+        if not self.validation_idx.size() == self.testing_idx.size() and not (
+                self.validation_idx == self.testing_idx).all():
+            train_ratio = self.training_idx.numel() / \
+                          sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+        else:
+            train_ratio = self.training_idx.numel() / sum([self.training_idx.numel(), self.validation_idx.numel()])
         return train_ratio
 
 
