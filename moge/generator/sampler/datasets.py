@@ -310,6 +310,9 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
         self.y_dict = new_y_dict
 
+        if train_ratio is None:
+            train_ratio = self.get_train_ratio()
+
         self.training_idx, self.validation_idx, self.testing_idx = \
             self.split_train_val_test(train_ratio=train_ratio, sample_indices=self.y_index_dict[self.head_node_type])
         self.data = data

@@ -108,7 +108,7 @@ def train(hparams):
             "batch_size": 128 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "n_classes": dataset.n_classes,
-            "lr": 0.001 * NUM_GPUS,
+            "lr": 0.01 * NUM_GPUS,
         }
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "LATTE":
