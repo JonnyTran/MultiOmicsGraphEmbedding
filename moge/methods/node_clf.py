@@ -217,7 +217,7 @@ class GTN(NodeClfMetrics, Gtn):
         self.val_collate_fn = hparams.val_collate_fn
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
-        if hasattr(dataset, "x"):
+        if dataset.in_features:
             w_in = dataset.in_features
         else:
             w_in = hparams.embedding_dim
@@ -258,7 +258,7 @@ class GTN(NodeClfMetrics, Gtn):
         X_ = self.linear1(X_)
         X_ = F.relu(X_)
         # X_ = F.dropout(X_, p=0.5)
-        if "batch" in self.collate_fn:
+        if x_idx is None:
             y = self.linear2(X_)
         else:
             y = self.linear2(X_[x_idx])
@@ -276,7 +276,7 @@ class GTN(NodeClfMetrics, Gtn):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        self.train_metricss.update_metrics(y_hat, y, weights=None)
+        self.train_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
         return {'loss': loss}
 
@@ -321,7 +321,7 @@ class HAN(NodeClfMetrics, Han):
         self.multilabel = dataset.multilabel
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
-        if hasattr(dataset, "x"):
+        if dataset.in_features:
             w_in = dataset.in_features
         else:
             w_in = hparams.embedding_dim
@@ -368,11 +368,7 @@ class HAN(NodeClfMetrics, Han):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-        print({k: {j: l.shape for j, l in v.items()} if isinstance(v, dict) else [(m[0].shape, m[1].shape) for m in
-                                                                                  v] if isinstance(v, (
-            list, tuple)) else v.shape for k, v in X.items()})
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        print("y_hat", y_hat.shape, y.shape)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)

@@ -14,9 +14,10 @@ from torch_geometric.datasets import AMiner
 from pytorch_lightning.callbacks import EarlyStopping
 
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
+from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
 
 from moge.methods.node_clf import MetaPath2Vec, HAN, GTN
-from moge.generator.sampler.datasets import HeteroNetDataset
+from moge.generator import HeteroNetDataset, HeteroNeighborSampler
 from pytorch_lightning.loggers import WandbLogger
 
 
@@ -26,22 +27,40 @@ def train(hparams):
     METRICS = ["accuracy", "precision", "recall", "top_k"]
 
     if hparams.dataset == "ACM":
-        dataset = HeteroNetDataset(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
-                                   train_ratio=hparams.train_ratio)
+        if hparams.method == "HAN":
+            dataset = HeteroNetDataset(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
+                                       train_ratio=hparams.train_ratio)
+        else:
+            dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
+                                            head_node_type="P",
+                                            train_ratio=hparams.train_ratio)
+
     elif hparams.dataset == "DBLP":
-        dataset = HeteroNetDataset(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
-                                   train_ratio=hparams.train_ratio)
+        if hparams.method == "HAN":
+            dataset = HeteroNetDataset(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
+                                       train_ratio=hparams.train_ratio)
+        else:
+            dataset = HeteroNeighborSampler(DBLP_GTNDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA", "AGA"],
+                                            head_node_type="A",
+                                            train_ratio=hparams.train_ratio)
+
     elif hparams.dataset == "IMDB":
-        dataset = HeteroNetDataset(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
-                                   train_ratio=hparams.train_ratio)
+        if hparams.method == "HAN":
+            dataset = HeteroNetDataset(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
+                                       train_ratio=hparams.train_ratio)
+        else:
+            dataset = HeteroNeighborSampler(IMDB_GTNDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
+                                            head_node_type="M",
+                                            train_ratio=hparams.train_ratio)
     elif hparams.dataset == "AMiner":
-        dataset = HeteroNetDataset(AMiner("datasets/aminer"), node_types=None,
-                                   metapaths=[('paper', 'written by', 'author'),
-                                              ('venue', 'published', 'paper')], head_node_type="author",
-                                   train_ratio=hparams.train_ratio)
+        dataset = HeteroNeighborSampler(AMiner("datasets/aminer"), node_types=None,
+                                        metapaths=[('paper', 'written by', 'author'),
+                                                   ('venue', 'published', 'paper')],
+                                        head_node_type="author",
+                                        train_ratio=hparams.train_ratio)
     elif hparams.dataset == "BlogCatalog":
-        dataset = HeteroNetDataset("/home/jonny/Downloads/blogcatalog6k.mat", node_types=["user", "tag"],
-                                   train_ratio=hparams.train_ratio)
+        dataset = HeteroNeighborSampler("dataset/blogcatalog6k.mat", node_types=["user", "tag"], head_node_type="user",
+                                        train_ratio=hparams.train_ratio)
         dataset.name = "BlogCatalog3"
 
     if hparams.method == "HAN":
@@ -98,9 +117,8 @@ def train(hparams):
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=10, min_delta=0.001),
-        # callbacks=[EarlyStopping(monitor='loss', patience=1, min_delta=0.0001),
-        #            EarlyStopping(monitor='val_loss', patience=2, min_delta=0.0001), ],
+        callbacks=[EarlyStopping(monitor='loss', patience=2, min_delta=0.0001, strict=False),
+                   EarlyStopping(monitor='val_loss', patience=5, min_delta=0.0001, strict=False)],
         logger=wandb_logger,
         # regularizers=regularizers,
         weights_summary='top',
@@ -115,14 +133,12 @@ def train(hparams):
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
-    parser.add_argument('--embedding_dim', type=int, default=64)
+    parser.add_argument('--embedding_dim', type=int, default=128)
 
     parser.add_argument('--dataset', type=str, default="ACM_HANDataset")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
-    parser.add_argument('--train_ratio', type=float, default=0.7)
+    parser.add_argument('--train_ratio', type=float, default=None)
 
     # add all the available options to the trainer
-    parser = pl.Trainer.add_argparse_args(parser)
-
     args = parser.parse_args()
     train(args)

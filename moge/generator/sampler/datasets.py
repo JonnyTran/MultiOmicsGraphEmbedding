@@ -21,7 +21,7 @@ from ...module.latte import is_negative
 
 
 class HeteroNetDataset(torch.utils.data.Dataset):
-    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
+    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=None,
                  add_reverse_metapaths=True, process_graphs=False):
         """
         This class handles processing of the data & train/test spliting.
@@ -108,8 +108,10 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         else:
             self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
 
-        train_ratio = self.get_train_ratio()
-        print("train_ratio", train_ratio)
+        if train_ratio is not None and train_ratio > 0:
+            self.resample_training_idx(train_ratio)
+
+        print("train_ratio", self.get_train_ratio())
 
     def process_graph_sampler(self):
         raise NotImplementedError()
