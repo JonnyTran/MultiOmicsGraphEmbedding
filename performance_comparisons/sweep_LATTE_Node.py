@@ -53,28 +53,28 @@ def train(hparams):
     if hparams.dataset == "ACM":
         dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
                                         head_node_type="P", neighbor_sizes=neighbor_sizes,
-                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+                                        add_reverse_metapaths=hparams.use_reverse)
 
     elif hparams.dataset == "DBLP":
         dataset = HeteroNeighborSampler(DBLP_GTNDataset(), node_types=["A"], neighbor_sizes=neighbor_sizes,
                                         metapaths=["APA", "ACA", "ATA", "AGA"],
                                         head_node_type="A",
-                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+                                        add_reverse_metapaths=hparams.use_reverse)
 
     elif hparams.dataset == "IMDB":
         dataset = HeteroNeighborSampler(IMDB_GTNDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
                                         head_node_type="M", neighbor_sizes=neighbor_sizes,
-                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+                                        add_reverse_metapaths=hparams.use_reverse)
     elif hparams.dataset == "AMiner":
         dataset = HeteroNeighborSampler(AMiner("datasets/aminer"), node_types=None,
                                         metapaths=[('paper', 'written by', 'author'),
                                                    ('venue', 'published', 'paper')],
                                         head_node_type="author", neighbor_sizes=neighbor_sizes,
-                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+                                        add_reverse_metapaths=hparams.use_reverse)
     elif hparams.dataset == "BlogCatalog":
         dataset = HeteroNeighborSampler("datasets/blogcatalog6k.mat", node_types=["user", "tag"],
                                         head_node_type="user", neighbor_sizes=neighbor_sizes,
-                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+                                        add_reverse_metapaths=hparams.use_reverse)
     else:
         raise Exception(f"Dataset `{hparams.dataset}` not found")
 
