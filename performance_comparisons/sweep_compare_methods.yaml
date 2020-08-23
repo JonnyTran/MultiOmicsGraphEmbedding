@@ -9,4 +9,4 @@ parameters:
   method:
     values: ["LATTE", "HAN", "GTN", "MetaPath2Vec"]
   train_ratio:
-    values: [0.2, 0.4, 0.6, 0.8]
+    values: [0.2, 0.4, 0.6, 0.8, None]

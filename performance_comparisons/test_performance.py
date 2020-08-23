@@ -168,7 +168,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
-    parser.add_argument('--train_ratio', type=float, default=0.5)
+    parser.add_argument('--train_ratio', type=float, default=None)
 
     parser.add_argument('--num_gpus', type=int, default=1)
 
