@@ -23,9 +23,10 @@ from pytorch_lightning.callbacks import EarlyStopping
 from moge.generator import HeteroNeighborSampler, TripletSampler
 from moge.methods.node_clf import LATTENodeClassifier
 from moge.methods.link_pred import LATTELinkPredictor
+from .utils import load_node_dataset
 
 
-def train(hparams):
+def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = False  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 250
@@ -36,44 +37,12 @@ def train(hparams):
     else:
         neighbor_sizes = [hparams.n_neighbors_1]
         hparams.batch_size = int(2 * hparams.batch_size)
+        hparams.neighbor_sizes = neighbor_sizes
 
     if hparams.embedding_dim > 128:
         hparams.batch_size = hparams.batch_size // 2
 
-    if "ogbn" in hparams.dataset:
-        ogbn = PygNodePropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB/")
-        dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=neighbor_sizes,
-                                        node_types=list(ogbn[0].num_nodes_dict.keys()),
-                                        head_node_type=None,
-                                        add_reverse_metapaths=hparams.use_reverse)
-
-    elif hparams.dataset == "ACM":
-        dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
-                                        head_node_type="P", neighbor_sizes=neighbor_sizes,
-                                        add_reverse_metapaths=hparams.use_reverse)
-
-    elif hparams.dataset == "DBLP":
-        dataset = HeteroNeighborSampler(DBLP_GTNDataset(), node_types=["A"], neighbor_sizes=neighbor_sizes,
-                                        metapaths=["APA", "ACA", "ATA", "AGA"],
-                                        head_node_type="A",
-                                        add_reverse_metapaths=hparams.use_reverse)
-
-    elif hparams.dataset == "IMDB":
-        dataset = HeteroNeighborSampler(IMDB_GTNDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
-                                        head_node_type="M", neighbor_sizes=neighbor_sizes,
-                                        add_reverse_metapaths=hparams.use_reverse)
-    elif hparams.dataset == "AMiner":
-        dataset = HeteroNeighborSampler(AMiner("datasets/aminer"), node_types=None,
-                                        metapaths=[('paper', 'written by', 'author'),
-                                                   ('venue', 'published', 'paper')],
-                                        head_node_type="author", neighbor_sizes=neighbor_sizes,
-                                        add_reverse_metapaths=hparams.use_reverse)
-    elif hparams.dataset == "BlogCatalog":
-        dataset = HeteroNeighborSampler("datasets/blogcatalog6k.mat", node_types=["user", "tag"],
-                                        head_node_type="user", neighbor_sizes=neighbor_sizes,
-                                        add_reverse_metapaths=hparams.use_reverse)
-    else:
-        raise Exception(f"Dataset `{hparams.dataset}` not found")
+    dataset = load_node_dataset(hparams.dataset, method=LATTENodeClassifier.name(), train_ratio=None, hparams=hparams)
 
     METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
     hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"

@@ -1,4 +1,4 @@
-program: performance_comparisons/sweep_LATTE_Node.py
+program: run/run_LATTE_node.py
 method: bayes
 metric:
   name: val_f1
@@ -8,8 +8,6 @@ early_terminate:
   max_iter: 27
   s: 2
 parameters:
-  dataset:
-    values: ["DBLP"]
   embedding_dim:
     values: [64, 128, 256]
   t_order:

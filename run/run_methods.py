@@ -2,22 +2,18 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 
+from run.utils import load_node_dataset
+
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
-import pytorch_lightning as pl
 from pytorch_lightning.trainer import Trainer
-from torch_geometric.datasets import AMiner
 
 from pytorch_lightning.callbacks import EarlyStopping
 
-from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
-from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
-
 from moge.methods.node_clf import MetaPath2Vec, HAN, GTN, LATTENodeClassifier
-from moge.generator import HeteroNetDataset, HeteroNeighborSampler
 from pytorch_lightning.loggers import WandbLogger
 
 
@@ -25,46 +21,7 @@ def train(hparams):
     EMBEDDING_DIM = 128
     NUM_GPUS = hparams.num_gpus
 
-    if hparams.dataset == "ACM":
-        if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
-            dataset = HeteroNeighborSampler(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
-                                            head_node_type="P",
-                                            train_ratio=hparams.train_ratio)
-        else:
-            dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
-                                            head_node_type="P",
-                                            train_ratio=hparams.train_ratio)
-
-    elif hparams.dataset == "DBLP":
-        if hparams.method == "HAN" or hparams.method == "MetaPath2Vec" or hparams.method == "LATTE":
-            dataset = HeteroNeighborSampler(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
-                                            head_node_type="A",
-                                            train_ratio=hparams.train_ratio)
-        else:
-            dataset = HeteroNeighborSampler(DBLP_GTNDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA", "AGA"],
-                                            head_node_type="A",
-                                            train_ratio=hparams.train_ratio)
-
-    elif hparams.dataset == "IMDB":
-        if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
-            dataset = HeteroNeighborSampler(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
-                                            head_node_type="M",
-                                            train_ratio=hparams.train_ratio)
-        else:
-            dataset = HeteroNeighborSampler(IMDB_GTNDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
-                                            head_node_type="M",
-                                            train_ratio=hparams.train_ratio)
-    elif hparams.dataset == "AMiner":
-        dataset = HeteroNeighborSampler(AMiner("datasets/aminer"), node_types=None,
-                                        metapaths=[('paper', 'written by', 'author'),
-                                                   ('venue', 'published', 'paper')],
-                                        head_node_type="author",
-                                        train_ratio=hparams.train_ratio)
-    elif hparams.dataset == "BlogCatalog":
-        dataset = HeteroNeighborSampler("datasets/blogcatalog6k.mat", node_types=["user", "tag"], head_node_type="user",
-                                        train_ratio=hparams.train_ratio)
-    else:
-        raise Exception(f"dataset {hparams.dataset} not found")
+    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams.train_ratio)
 
     METRICS = ["precision", "recall", "f1", "accuracy", "top_k" if dataset.multilabel else "ogbn-mag", ]
 

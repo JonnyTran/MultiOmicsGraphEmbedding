@@ -18,34 +18,17 @@ from pytorch_lightning.loggers import WandbLogger
 
 from moge.methods.node_clf import LATTENodeClassifier
 from moge.methods.link_pred import LATTELinkPredictor
-
+from .utils import load_link_dataset
 
 def train(hparams):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = False  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 50
 
-    if "ogbl" in hparams.dataset:
-        ogbl = PygLinkPropPredDataset(name=hparams.dataset, root="~/Bioinformatics_ExternalData/OGB/")
-        if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
-                and not hasattr(ogbl[0], "edge_reltype"):
-            dataset = EdgeSampler(ogbl, directed=True,
-                                  node_types=None,
-                                  head_node_type=None,
-                                  add_reverse_metapaths=hparams.use_reverse)
-            print(dataset.node_types, dataset.metapaths)
-        else:
-            dataset = TripletSampler(ogbl, directed=True,
-                                     node_types=list(ogbl[0].num_nodes_dict.keys()) if hasattr(ogbl[0],
-                                                                                               "num_nodes_dict") else None,
-                                     head_node_type=None,
-                                     add_reverse_metapaths=hparams.use_reverse)
-            print(dataset.node_types, dataset.metapaths)
-        hparams.n_classes = dataset.n_classes
-        model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=[hparams.dataset])
-    else:
-        raise Exception(f"Dataset `{hparams.dataset}` not compatible")
+    dataset = load_link_dataset(hparams.dataset, hparams=hparams)
+    hparams.n_classes = dataset.n_classes
 
+    model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=[hparams.dataset])
     wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
 
     trainer = Trainer(

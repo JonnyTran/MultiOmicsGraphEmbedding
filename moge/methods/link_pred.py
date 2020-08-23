@@ -30,7 +30,7 @@ class LATTELinkPredictor(LinkPredMetrics):
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-    def forward(self, X, **kwargs):
+    def forward(self, X: dict, **kwargs):
         embeddings, proximity_loss, edge_pred_dict = self.latte.forward(X["x_dict"], X["global_node_index"],
                                                                         X["edge_index_dict"],
                                                                         **kwargs)

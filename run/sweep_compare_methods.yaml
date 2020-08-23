@@ -1,4 +1,4 @@
-program: performance_comparisons/test_performance.py
+program: run/run_methods.py
 method: grid
 metric:
   name: val_f1
