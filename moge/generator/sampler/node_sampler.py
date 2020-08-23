@@ -10,7 +10,7 @@ from moge.generator.sampler.datasets import HeteroNetDataset
 
 
 class HeteroNeighborSampler(HeteroNetDataset):
-    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
+    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=None,
                  add_reverse_metapaths=True, neighbor_sizes=[25, 20], process_graphs=True):
         self.neighbor_sizes = neighbor_sizes
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
