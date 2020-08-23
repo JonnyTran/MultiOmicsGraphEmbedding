@@ -28,7 +28,7 @@ from moge.methods.link_pred import LATTELinkPredictor
 def train(hparams):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = False  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 50
+    MAX_EPOCHS = 250
 
     if hparams.t_order > 1:
         hparams.n_neighbors_2 = max(1, 153600 // (hparams.n_neighbors_1 * hparams.batch_size))
@@ -103,7 +103,7 @@ def train(hparams):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument('--num_gpus', type=int, default=4)
+    parser.add_argument('--num_gpus', type=int, default=1)
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
     parser.add_argument('--embedding_dim', type=int, default=128)
