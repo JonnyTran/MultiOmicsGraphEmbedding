@@ -64,7 +64,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
         elif isinstance(dataset, InMemoryDataset):
             print("InMemoryDataset")
-            self.process_inmemorydataset(dataset, train_ratio)
+            self.process_inmemorydataset(dataset, train_ratio=0.5)
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             print(f"{dataset.__class__.__name__}")
             self.process_COGDLdataset(dataset, metapaths, node_types, train_ratio)
@@ -347,11 +347,10 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         self.y_dict = new_y_dict
 
         self.metapaths = list(self.edge_index_dict.keys())
+        assert train_ratio is not None
         self.training_idx, self.validation_idx, self.testing_idx = \
             self.split_train_val_test(train_ratio,
                                       sample_indices=self.y_index_dict[self.head_node_type])
-
-
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
