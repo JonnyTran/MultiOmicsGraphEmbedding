@@ -304,6 +304,7 @@ class GTN(NodeClfMetrics, Gtn):
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         loss = self.loss(y_hat, y)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        self.test_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"test_loss": loss}
 
@@ -396,6 +397,7 @@ class HAN(NodeClfMetrics, Han):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        self.test_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
 
         return {"test_loss": loss}
