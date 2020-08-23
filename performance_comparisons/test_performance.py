@@ -36,7 +36,7 @@ def train(hparams):
                                             train_ratio=hparams.train_ratio)
 
     elif hparams.dataset == "DBLP":
-        if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
+        if hparams.method == "HAN" or hparams.method == "MetaPath2Vec" or hparams.method == "LATTE":
             dataset = HeteroNetDataset(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
                                        head_node_type="A",
                                        train_ratio=hparams.train_ratio)
@@ -119,7 +119,7 @@ def train(hparams):
             "t_order": 2,
             "batch_size": 2 ** batch_order * max(num_gpus, 1),
             "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0.3,
+            "nb_cls_dropout": 0.4,
             "activation": "relu",
             "attn_heads": 64,
             "attn_activation": "LeakyReLU",
