@@ -24,6 +24,8 @@ from pytorch_lightning.loggers import WandbLogger
 def train(hparams):
     EMBEDDING_DIM = 128
     NUM_GPUS = hparams.num_gpus
+    if hparams.train_ratio == 0:
+        hparams.train_ratio = None
 
     if hparams.dataset == "ACM":
         if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
