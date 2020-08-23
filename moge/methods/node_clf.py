@@ -214,6 +214,7 @@ class GTN(NodeClfMetrics, Gtn):
         num_layers = len(dataset.edge_index_dict)
         num_class = dataset.n_classes
         self.multilabel = dataset.multilabel
+        self.head_node_type = dataset.head_node_type
         self.collate_fn = hparams.collate_fn
         self.val_collate_fn = hparams.val_collate_fn
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
@@ -265,7 +266,7 @@ class GTN(NodeClfMetrics, Gtn):
         X_ = self.linear1(X_)
         X_ = F.relu(X_)
         # X_ = F.dropout(X_, p=0.5)
-        if "batch" not in self.collate_fn and x_idx is not None:
+        if x_idx is not None and X_.size(0) > x_idx.size(0):
             y = self.linear2(X_[x_idx])
         else:
             y = self.linear2(X_)
@@ -357,10 +358,11 @@ class HAN(NodeClfMetrics, Han):
             else:
                 X = self.embedding.weight[x_idx]
 
+
         for i in range(self.num_layers):
             X = self.layers[i].forward(X, A)
 
-        if "batch" not in self.collate_fn and x_idx is not None:
+        if x_idx is not None and X.size(0) > x_idx.size(0):
             y = self.linear(X[x_idx])
         else:
             y = self.linear(X)

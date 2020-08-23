@@ -13,9 +13,14 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from ogb.nodeproppred import PygNodePropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
-from moge.generator import HeteroNeighborSampler, TripletSampler
-from pytorch_lightning.loggers import WandbLogger
+from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
+from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
+from torch_geometric.datasets import AMiner
 
+from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import EarlyStopping
+
+from moge.generator import HeteroNeighborSampler, TripletSampler
 from moge.methods.node_clf import LATTENodeClassifier
 from moge.methods.link_pred import LATTELinkPredictor
 
@@ -40,15 +45,41 @@ def train(hparams):
         dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=neighbor_sizes,
                                         node_types=list(ogbn[0].num_nodes_dict.keys()),
                                         head_node_type=None,
-                                        add_reverse_metapaths=True)
+                                        add_reverse_metapaths=hparams.use_reverse)
 
         hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
         hparams.n_classes = dataset.n_classes
-        METRICS = ["accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
 
-        model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
+    if hparams.dataset == "ACM":
+        dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
+                                        head_node_type="P", neighbor_sizes=neighbor_sizes,
+                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+
+    elif hparams.dataset == "DBLP":
+        dataset = HeteroNeighborSampler(DBLP_GTNDataset(), node_types=["A"], neighbor_sizes=neighbor_sizes,
+                                        metapaths=["APA", "ACA", "ATA", "AGA"],
+                                        head_node_type="A",
+                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+
+    elif hparams.dataset == "IMDB":
+        dataset = HeteroNeighborSampler(IMDB_GTNDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
+                                        head_node_type="M", neighbor_sizes=neighbor_sizes,
+                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+    elif hparams.dataset == "AMiner":
+        dataset = HeteroNeighborSampler(AMiner("datasets/aminer"), node_types=None,
+                                        metapaths=[('paper', 'written by', 'author'),
+                                                   ('venue', 'published', 'paper')],
+                                        head_node_type="author", neighbor_sizes=neighbor_sizes,
+                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
+    elif hparams.dataset == "BlogCatalog":
+        dataset = HeteroNeighborSampler("datasets/blogcatalog6k.mat", node_types=["user", "tag"],
+                                        head_node_type="user", neighbor_sizes=neighbor_sizes,
+                                        train_ratio=hparams.train_ratio, add_reverse_metapaths=hparams.use_reverse)
     else:
         raise Exception(f"Dataset `{hparams.dataset}` not found")
+
+    METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
+    model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
 
     logger = WandbLogger(name=model.name(),
                          tags=[dataset.name()],

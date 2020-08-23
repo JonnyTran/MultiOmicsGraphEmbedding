@@ -381,10 +381,10 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         return loader
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
-        if "HAN" in collate_fn:
-            return self.collate_HAN
-        elif "HAN" in collate_fn:
+        if "HAN_batch" in collate_fn:
             return self.collate_HAN_batch
+        elif "HAN" in collate_fn:
+            return self.collate_HAN
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
@@ -433,10 +433,12 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
             for i in self.metapaths:
                 edge_index = self.edge_index_dict[i]
-                mask = np.isin(edge_index[0], iloc) & np.isin(edge_index[1], iloc)
+                mask = np.isin(edge_index[0].numpy(), iloc.numpy()) & np.isin(edge_index[1].numpy(), iloc.numpy())
+                print("mask", mask.shape, mask.sum())
                 edge_index = edge_index[:, mask]
+                print("edge_index", edge_index.shape)
                 edge_index = edge_index.apply_(local2batch.get)
-                values = torch.ones(self.edge_index_dict[i].size(1))
+                values = torch.ones(edge_index.size(1))
                 X["adj"].append(remove_self_loops(edge_index, values))
 
         y = self.y_dict[self.head_node_type][iloc]

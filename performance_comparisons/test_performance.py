@@ -63,17 +63,16 @@ def train(hparams):
     elif hparams.dataset == "BlogCatalog":
         dataset = HeteroNeighborSampler("datasets/blogcatalog6k.mat", node_types=["user", "tag"], head_node_type="user",
                                         train_ratio=hparams.train_ratio)
-        dataset.name = "BlogCatalog3"
     else:
         raise Exception(f"dataset {hparams.dataset} not found")
 
     METRICS = ["precision", "recall", "f1", "top_k" if dataset.multilabel else "ogbn-mag", ]
 
     if hparams.method == "HAN":
-        USE_AMP = False
+        USE_AMP = True
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "batch_size": 512 * NUM_GPUS,
+            "batch_size": 128 * NUM_GPUS,
             "collate_fn": "HAN_batch",
             "val_collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
@@ -87,7 +86,7 @@ def train(hparams):
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
             "num_channels": len(dataset.metapaths),
-            "batch_size": 512 * NUM_GPUS,
+            "batch_size": 128 * NUM_GPUS,
             "collate_fn": "HAN_batch",
             "val_collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
@@ -97,7 +96,7 @@ def train(hparams):
         }
         model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "MetaPath2Vec":
-        USE_AMP = False
+        USE_AMP = True
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
             "walk_length": 50,
