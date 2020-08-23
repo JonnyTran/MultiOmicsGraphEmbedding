@@ -380,7 +380,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
                                                                                                         **kwargs))
         return loader
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
+    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None, **kwargs):
         if "HAN_batch" in collate_fn:
             return self.collate_HAN_batch
         elif "HAN" in collate_fn:

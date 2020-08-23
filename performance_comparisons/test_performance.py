@@ -27,9 +27,9 @@ def train(hparams):
 
     if hparams.dataset == "ACM":
         if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
-            dataset = HeteroNetDataset(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
-                                       head_node_type="P",
-                                       train_ratio=hparams.train_ratio)
+            dataset = HeteroNeighborSampler(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
+                                            head_node_type="P",
+                                            train_ratio=hparams.train_ratio)
         else:
             dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
                                             head_node_type="P",
@@ -37,9 +37,9 @@ def train(hparams):
 
     elif hparams.dataset == "DBLP":
         if hparams.method == "HAN" or hparams.method == "MetaPath2Vec" or hparams.method == "LATTE":
-            dataset = HeteroNetDataset(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
-                                       head_node_type="A",
-                                       train_ratio=hparams.train_ratio)
+            dataset = HeteroNeighborSampler(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
+                                            head_node_type="A",
+                                            train_ratio=hparams.train_ratio)
         else:
             dataset = HeteroNeighborSampler(DBLP_GTNDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA", "AGA"],
                                             head_node_type="A",
@@ -47,9 +47,9 @@ def train(hparams):
 
     elif hparams.dataset == "IMDB":
         if hparams.method == "HAN" or hparams.method == "MetaPath2Vec":
-            dataset = HeteroNetDataset(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
-                                       head_node_type="M",
-                                       train_ratio=hparams.train_ratio)
+            dataset = HeteroNeighborSampler(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
+                                            head_node_type="M",
+                                            train_ratio=hparams.train_ratio)
         else:
             dataset = HeteroNeighborSampler(IMDB_GTNDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
                                             head_node_type="M",
