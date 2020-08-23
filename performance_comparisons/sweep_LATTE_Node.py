@@ -47,10 +47,7 @@ def train(hparams):
                                         head_node_type=None,
                                         add_reverse_metapaths=hparams.use_reverse)
 
-        hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
-        hparams.n_classes = dataset.n_classes
-
-    if hparams.dataset == "ACM":
+    elif hparams.dataset == "ACM":
         dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
                                         head_node_type="P", neighbor_sizes=neighbor_sizes,
                                         add_reverse_metapaths=hparams.use_reverse)
@@ -79,6 +76,8 @@ def train(hparams):
         raise Exception(f"Dataset `{hparams.dataset}` not found")
 
     METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
+    hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
+    hparams.n_classes = dataset.n_classes
     model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
 
     logger = WandbLogger(name=model.name(),
