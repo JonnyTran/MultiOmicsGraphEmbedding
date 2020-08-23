@@ -7,6 +7,6 @@ parameters:
   dataset:
     values: ["ACM", "DBLP", "IMDB", "BlogCatalog", "AMiner"]
   method:
-    values: ["LATTE", "HAN", "GTN", "MetaPath2Vec"]
-  run:
-    values: [1,2,3,4,5,6,7,8,9,10]
+    values: ["LATTE", "LATTE proximity", "HAN", "GTN", "MetaPath2Vec"]
+  train_ratio:
+    values: [0.2, 0.4, 0.6, 0.8]

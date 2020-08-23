@@ -66,7 +66,7 @@ def train(hparams):
     else:
         raise Exception(f"dataset {hparams.dataset} not found")
 
-    METRICS = ["precision", "recall", "f1", "top_k" if dataset.multilabel else "ogbn-mag", ]
+    METRICS = ["precision", "recall", "f1", "accuracy", "top_k" if dataset.multilabel else "ogbn-mag", ]
 
     if hparams.method == "HAN":
         USE_AMP = True
@@ -110,7 +110,7 @@ def train(hparams):
             "lr": 0.01 * NUM_GPUS,
         }
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
-    elif hparams.method == "LATTE":
+    elif "LATTE" in hparams.method:
         USE_AMP = False
         num_gpus = 1
         batch_order = 11
@@ -125,7 +125,7 @@ def train(hparams):
             "attn_activation": "LeakyReLU",
             "attn_dropout": 0.2,
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
-            "use_proximity_loss": False,
+            "use_proximity_loss": True if "proximity" in hparams.method else False,
             "neg_sampling_ratio": 2.0,
             "n_classes": dataset.n_classes,
             "use_class_weights": False,

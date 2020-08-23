@@ -445,8 +445,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         return X, y, None
 
     def get_train_ratio(self):
-        if not self.validation_idx.size() == self.testing_idx.size() or not (
-                self.validation_idx == self.testing_idx).all():
+        if self.validation_idx.size() != self.testing_idx.size() or not (self.validation_idx == self.testing_idx).all():
             train_ratio = self.training_idx.numel() / \
                           sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
         else:
