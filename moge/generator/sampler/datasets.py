@@ -69,7 +69,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             print(f"{dataset.__class__.__name__}")
             self.process_COGDLdataset(dataset, metapaths, node_types, train_ratio)
         elif "blogcatalog6k" in dataset:
-            self.process_BlogCatalog6k(dataset, train_ratio)
+            self.process_BlogCatalog6k(dataset, train_ratio=0.5)
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
@@ -277,6 +277,7 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             ("user", "usertag", "tag"): self.sps_adj_to_edgeindex(data["usertag"]),
             ("tag", "tagnetwork", "tag"): self.sps_adj_to_edgeindex(data["tagnetwork"])}
         self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
+        assert train_ratio is not None
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def process_COGDLdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
