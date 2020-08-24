@@ -63,10 +63,7 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
 
         if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
                 and not hasattr(ogbl[0], "edge_reltype"):
-            dataset = EdgeSampler(ogbl, directed=True,
-                                  node_types=None,
-                                  head_node_type=None,
-                                  add_reverse_metapaths=hparams.use_reverse)
+            dataset = EdgeSampler(ogbl, directed=True, add_reverse_metapaths=hparams.use_reverse)
             print(dataset.node_types, dataset.metapaths)
         else:
             dataset = TripletSampler(ogbl, directed=True,
