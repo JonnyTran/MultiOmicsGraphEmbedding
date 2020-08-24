@@ -23,7 +23,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 from moge.generator import HeteroNeighborSampler, TripletSampler
 from moge.methods.node_clf import LATTENodeClassifier
 from moge.methods.link_pred import LATTELinkPredictor
-from .utils import load_node_dataset
+from run.utils import load_node_dataset
 
 
 def train(hparams: Namespace):
