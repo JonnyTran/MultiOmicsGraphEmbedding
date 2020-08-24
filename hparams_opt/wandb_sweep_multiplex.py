@@ -19,7 +19,7 @@ from moge.module.trainer import ModelTrainer
 from moge.module.multiplex import HeterogeneousMultiplexEmbedder
 from moge.module.utils import get_multiplex_collate_fn
 from moge.generator.multiplex import MultiplexGenerator
-from moge.generator.sampler.datasets import GeneratorDataset
+from moge.generator import GeneratorDataset
 
 DATASET = '../MultiOmicsGraphEmbedding/data/proteinatlas_biogrid_multi_network.pickle'
 HIER_TAXONOMY_FILE = "../MultiOmicsGraphEmbedding/data/go_term.taxonomy"

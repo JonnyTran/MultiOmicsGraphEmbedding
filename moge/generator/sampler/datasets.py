@@ -3,7 +3,6 @@ import networkx as nx
 import pandas as pd
 import numpy as np
 
-import tensorflow as tf
 import torch
 from cogdl.datasets.gtn_data import GTNDataset
 from cogdl.datasets.han_data import HANDataset
@@ -13,14 +12,80 @@ from ogb.nodeproppred import PygNodePropPredDataset
 
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
-from torch_geometric.utils import remove_self_loops, add_self_loops
+from torch_geometric.utils import remove_self_loops
 
 import torch_sparse
 
 from ...module.latte import is_negative
 
 
-class HeteroNetDataset(torch.utils.data.Dataset):
+class Network:
+    def get_networkx(self):
+        if not hasattr(self, "G"):
+            G = nx.Graph()
+            for metapath in self.edge_index_dict:
+                edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
+                edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
+                edge_type = "".join([n for i, n in enumerate(metapath) if i % 2 == 1])
+                G.add_edges_from(edgelist, edge_type=edge_type)
+
+            self.G = G
+
+        return self.G
+
+    def get_projection_pos(self, embeddings_all, UMAP: classmethod, n_components=2):
+        pos = UMAP(n_components=n_components).fit_transform(embeddings_all)
+        pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
+        return pos
+
+    def get_node_degrees(self, directed=True):
+        index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
+                          axis=0).reset_index()
+        multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
+        self.node_degrees = pd.DataFrame(data=0, index=multi_index, columns=[k for k in self.metapaths])
+
+        for metapath in self.metapaths:
+            edge_index = self.edge_index_dict[metapath]
+            D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
+                                          sparse_sizes=(self.num_nodes_dict[metapath[0]],
+                                                        self.num_nodes_dict[metapath[-1]]))
+            self.node_degrees.loc[(metapath[0], metapath)] = (
+                    self.node_degrees.loc[(metapath[0], metapath)] + D.storage.rowcount().numpy()).values
+            if not directed:
+                self.node_degrees.loc[(metapath[-1], metapath)] = (
+                        self.node_degrees.loc[(metapath[-1], metapath)] + D.storage.colcount().numpy()).values
+
+        return self.node_degrees
+
+    def get_embedding_dfs(self, embeddings_dict, global_node_index):
+        embeddings = []
+        for node_type in self.node_types:
+            nodes = global_node_index[node_type].numpy().astype(str)
+            nodes = np.core.defchararray.add(node_type[0], nodes)
+            if isinstance(embeddings_dict[node_type], torch.Tensor):
+                df = pd.DataFrame(embeddings_dict[node_type].detach().cpu().numpy(), index=nodes)
+            else:
+                df = pd.DataFrame(embeddings_dict[node_type], index=nodes)
+            embeddings.append(df)
+
+        return embeddings
+
+    def get_embeddings_types_labels(self, embeddings, global_node_index):
+        embeddings_all = pd.concat(embeddings, axis=0)
+
+        types_all = embeddings_all.index.to_series().str.slice(0, 1)
+        if hasattr(self, "y_dict") and len(self.y_dict) > 0:
+            labels = pd.Series(
+                self.y_dict[self.head_node_type][global_node_index[self.head_node_type]].squeeze(-1).numpy(),
+                index=embeddings[0].index,
+                dtype=str)
+        else:
+            labels = None
+
+        return embeddings_all, types_all, labels
+
+
+class HeteroNetDataset(torch.utils.data.Dataset, Network):
     def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=None,
                  add_reverse_metapaths=True, process_graphs=False):
         """
@@ -95,9 +160,6 @@ class HeteroNetDataset(torch.utils.data.Dataset):
             self.n_classes = None
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
-        if process_graphs:
-            self.process_graph_sampler()  # only needed for networkx sampler
-
         assert hasattr(self, "num_nodes_dict")
         if not hasattr(self, "node_attr_shape"):
             self.node_attr_shape = {}
@@ -110,74 +172,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
 
         if train_ratio is not None and train_ratio > 0:
             self.resample_training_idx(train_ratio)
-        print("train_ratio", self.get_train_ratio())
-
-    def process_graph_sampler(self):
-        raise NotImplementedError()
-
-    def get_networkx(self):
-        if not hasattr(self, "G"):
-            G = nx.Graph()
-            for metapath in self.edge_index_dict:
-                edgelist = self.edge_index_dict[metapath].t().numpy().astype(str)
-                edgelist = np.core.defchararray.add([metapath[0][0], metapath[-1][0]], edgelist)
-                edge_type = "".join([n for i, n in enumerate(metapath) if i % 2 == 1])
-                G.add_edges_from(edgelist, edge_type=edge_type)
-
-            self.G = G
-
-        return self.G
-
-    def get_node_degrees(self, directed=True):
-        index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
-                          axis=0).reset_index()
-        multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
-        self.node_degrees = pd.DataFrame(data=0, index=multi_index, columns=[k for k in self.metapaths])
-
-        for metapath in self.metapaths:
-            edge_index = self.edge_index_dict[metapath]
-            D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
-                                          sparse_sizes=(self.num_nodes_dict[metapath[0]],
-                                                        self.num_nodes_dict[metapath[-1]]))
-            self.node_degrees.loc[(metapath[0], metapath)] = (
-                    self.node_degrees.loc[(metapath[0], metapath)] + D.storage.rowcount().numpy()).values
-            if not directed:
-                self.node_degrees.loc[(metapath[-1], metapath)] = (
-                        self.node_degrees.loc[(metapath[-1], metapath)] + D.storage.colcount().numpy()).values
-
-        return self.node_degrees
-
-    def get_embedding_dfs(self, embeddings_dict, global_node_index):
-        embeddings = []
-        for node_type in self.node_types:
-            nodes = global_node_index[node_type].numpy().astype(str)
-            nodes = np.core.defchararray.add(node_type[0], nodes)
-            if isinstance(embeddings_dict[node_type], torch.Tensor):
-                df = pd.DataFrame(embeddings_dict[node_type].detach().cpu().numpy(), index=nodes)
-            else:
-                df = pd.DataFrame(embeddings_dict[node_type], index=nodes)
-            embeddings.append(df)
-
-        return embeddings
-
-    def get_embeddings_types_labels(self, embeddings, global_node_index):
-        embeddings_all = pd.concat(embeddings, axis=0)
-
-        types_all = embeddings_all.index.to_series().str.slice(0, 1)
-        if hasattr(self, "y_dict") and len(self.y_dict) > 0:
-            labels = pd.Series(
-                self.y_dict[self.head_node_type][global_node_index[self.head_node_type]].squeeze(-1).numpy(),
-                index=embeddings[0].index,
-                dtype=str)
         else:
-            labels = None
-
-        return embeddings_all, types_all, labels
-
-    def get_projection_pos(self, embeddings_all, UMAP: classmethod, n_components=2):
-        pos = UMAP(n_components=n_components).fit_transform(embeddings_all)
-        pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
-        return pos
+            print("train_ratio", self.get_train_ratio())
 
     def name(self):
         if not hasattr(self, "_name"):
@@ -201,8 +197,8 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
         self.training_idx, self.validation_idx, self.testing_idx = \
             self.split_train_val_test(train_ratio=train_ratio, sample_indices=all_idx)
+        print(f"Resampled training set at {self.get_train_ratio()}%")
 
-        print("Resampled training set at ", self.get_train_ratio())
 
     def get_metapaths(self):
         if self.use_reverse:
@@ -451,51 +447,3 @@ class HeteroNetDataset(torch.utils.data.Dataset):
         else:
             train_ratio = self.training_idx.numel() / sum([self.training_idx.numel(), self.validation_idx.numel()])
         return train_ratio
-
-
-class GeneratorDataset(torch.utils.data.Dataset):
-    def __init__(self, generator):
-        self._generator = generator
-        self.node_list = self._generator.get_connected_nodelist()
-        self.n_steps = self._generator.n_steps
-
-    def __len__(self):
-        if self.n_steps is not None:
-            return self.n_steps
-        else:
-            return len(self.node_list)
-
-    def __getitem__(self, item=None):
-        # seed_node = self.node_list[item]
-        sampled_nodes = self._generator.traverse_network(batch_size=self._generator.batch_size, seed_node=None)
-        X, y, sample_weights = self._generator.__getdata__(sampled_nodes, variable_length=False)
-        X = {k: np.expand_dims(v, 0) for k, v in X.items()}
-        y = np.expand_dims(y, 0)
-        sample_weights = np.expand_dims(sample_weights, 0)
-        return X, y, sample_weights
-
-
-class TFDataset(tf.data.Dataset):
-    def __new__(cls, generator, output_types=None, output_shapes=None):
-        """
-        A tf.data wrapper for keras.utils.Sequence generator
-        >>> generator = DataGenerator()
-        >>> dataset = GeneratorDataset(generator)
-        >>> strategy = tf.distribute.MirroredStrategy()
-        >>> train_dist_dataset = strategy.experimental_distribute_dataset(dataset)
-
-        :param generator: a keras.utils.Sequence generator.
-        """
-
-        def generate():
-            while True:
-                batch_xs, batch_ys, dset_index = generator.__getitem__(0)
-                yield batch_xs, batch_ys, dset_index
-
-        queue = tf.keras.utils.GeneratorEnqueuer(generate, use_multiprocessing=True)
-
-        return tf.data.Dataset.from_generator(
-            queue.sequence,
-            output_types=generator.get_output_types() if output_types is None else output_types,
-            output_shapes=generator.get_output_shapes() if output_shapes is None else output_shapes,
-        )
