@@ -95,12 +95,12 @@ class LATTE(nn.Module):
                     edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                     if edge_index_b is None: continue
                     try:
-                        new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
-                                                             indexB=edge_index_b, valueB=values_b,
-                                                             m=global_node_idx[metapath_a[0]].size(0),
-                                                             k=global_node_idx[metapath_a[-1]].size(0),
-                                                             n=global_node_idx[metapath_b[-1]].size(0),
-                                                             coalesced=True)
+                        new_edge_index = adamic_adar(indexA=edge_index_a, valueA=values_a,
+                                                     indexB=edge_index_b, valueB=values_b,
+                                                     m=global_node_idx[metapath_a[0]].size(0),
+                                                     k=global_node_idx[metapath_a[-1]].size(0),
+                                                     n=global_node_idx[metapath_b[-1]].size(0),
+                                                     coalesced=True)
 
                         if new_edge_index[0].size(1) <= 1: continue
                         output_dict[metapath_join] = new_edge_index
@@ -241,7 +241,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         :param x_dict: a dict of node attributes indexed node_type
         :param global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
         :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
-        :param h1_dict: Context embedding of the previous order. Default: None (if first order). A dict of (node_type: tensor)
+        :param h1_dict: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
         :return: output_emb, loss
         """
         # H_t = W_t * x
