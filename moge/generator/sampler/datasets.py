@@ -86,22 +86,21 @@ class Network:
 
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):
-    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=None,
-                 add_reverse_metapaths=True, process_graphs=False):
+    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
+                 resample_train: float = None, add_reverse_metapaths=True):
         """
         This class handles processing of the data & train/test spliting.
-        :param process_graphs:
         :param dataset:
         :param node_types:
         :param metapaths:
         :param head_node_type:
         :param directed:
-        :param train_ratio:
+        :param resample_train:
         :param add_reverse_metapaths:
         """
         self.dataset = dataset
         self.directed = directed
-        self.train_ratio = train_ratio
+        self.train_ratio = resample_train
         self.use_reverse = add_reverse_metapaths
         self.node_types = node_types
         self.head_node_type = head_node_type
@@ -132,7 +131,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.process_inmemorydataset(dataset, train_ratio=0.5)
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             print(f"{dataset.__class__.__name__}")
-            self.process_COGDLdataset(dataset, metapaths, node_types, train_ratio)
+            self.process_COGDLdataset(dataset, metapaths, node_types, resample_train)
         elif "blogcatalog6k" in dataset:
             self.process_BlogCatalog6k(dataset, train_ratio=0.5)
         else:
@@ -170,8 +169,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         else:
             self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
 
-        if train_ratio is not None and train_ratio > 0:
-            self.resample_training_idx(train_ratio)
+        if resample_train is not None and resample_train > 0:
+            self.resample_training_idx(resample_train)
         else:
             print("train_ratio", self.get_train_ratio())
 

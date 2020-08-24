@@ -13,45 +13,45 @@ def load_node_dataset(name, method, train_ratio=None, hparams=None, dir_path="~/
         dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=hparams.neighbor_sizes,
                                         node_types=list(ogbn[0].num_nodes_dict.keys()),
                                         head_node_type=None,
-                                        add_reverse_metapaths=hparams.use_reverse, train_ratio=None)
+                                        add_reverse_metapaths=hparams.use_reverse, resample_train=None)
     elif name == "ACM":
         if method == "HAN" or method == "MetaPath2Vec":
             dataset = HeteroNeighborSampler(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
                                             head_node_type="P",
-                                            train_ratio=train_ratio)
+                                            resample_train=train_ratio)
         else:
             dataset = HeteroNeighborSampler(ACM_GTNDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
                                             head_node_type="P",
-                                            train_ratio=train_ratio)
+                                            resample_train=train_ratio)
 
     elif name == "DBLP":
         if method == "HAN" or method == "MetaPath2Vec" or method == "LATTE":
             dataset = HeteroNeighborSampler(DBLP_HANDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA"],
                                             head_node_type="A",
-                                            train_ratio=train_ratio)
+                                            resample_train=train_ratio)
         else:
             dataset = HeteroNeighborSampler(DBLP_GTNDataset(), node_types=["A"], metapaths=["APA", "ACA", "ATA", "AGA"],
                                             head_node_type="A",
-                                            train_ratio=train_ratio)
+                                            resample_train=train_ratio)
 
     elif name == "IMDB":
         if method == "HAN" or method == "MetaPath2Vec":
             dataset = HeteroNeighborSampler(IMDB_HANDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
                                             head_node_type="M",
-                                            train_ratio=train_ratio)
+                                            resample_train=train_ratio)
         else:
             dataset = HeteroNeighborSampler(IMDB_GTNDataset(), node_types=["M"], metapaths=["MAM", "MDM", "MYM"],
                                             head_node_type="M",
-                                            train_ratio=train_ratio)
+                                            resample_train=train_ratio)
     elif name == "AMiner":
         dataset = HeteroNeighborSampler(AMiner("datasets/aminer"), node_types=None,
                                         metapaths=[('paper', 'written by', 'author'),
                                                    ('venue', 'published', 'paper')],
                                         head_node_type="author",
-                                        train_ratio=train_ratio)
+                                        resample_train=train_ratio)
     elif name == "BlogCatalog":
         dataset = HeteroNeighborSampler("datasets/blogcatalog6k.mat", node_types=["user", "tag"], head_node_type="user",
-                                        train_ratio=train_ratio)
+                                        resample_train=train_ratio)
     else:
         raise Exception(f"dataset {name} not found")
     return dataset

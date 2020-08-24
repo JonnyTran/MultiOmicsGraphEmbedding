@@ -8,11 +8,11 @@ from ...module.latte import is_negative, tag_negative
 
 
 class EdgeSampler(HeteroNetDataset):
-    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True, process_graphs=False):
-        super(EdgeSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio,
-                                          add_reverse_metapaths,
-                                          process_graphs)
+    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
+                 resample_train=None,
+                 add_reverse_metapaths=True):
+        super(EdgeSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
+                                          add_reverse_metapaths)
 
     def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]

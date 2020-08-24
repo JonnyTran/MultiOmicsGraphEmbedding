@@ -15,8 +15,7 @@ class NetworkXSampler(HeteroNetDataset):
                  add_reverse_metapaths=True, multiworker=True, process_graphs=True):
         self.multiworker = multiworker
         super(NetworkXSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio,
-                                              add_reverse_metapaths,
-                                              process_graphs)
+                                              add_reverse_metapaths)
         self.char_to_node_type = {node_type[0]: node_type for node_type in self.node_types}
 
     def process_graph_sampler(self):

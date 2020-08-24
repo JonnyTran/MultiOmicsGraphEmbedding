@@ -10,11 +10,11 @@ from moge.module.sampling import negative_sample, negative_sample_head_tail
 
 
 class TripletSampler(HeteroNetDataset):
-    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True, train_ratio=0.7,
-                 add_reverse_metapaths=True, process_graphs=False):
-        super(TripletSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, train_ratio,
-                                             add_reverse_metapaths,
-                                             process_graphs)
+    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
+                 resample_train=None,
+                 add_reverse_metapaths=True):
+        super(TripletSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
+                                             add_reverse_metapaths)
         self.n_classes = None
         self.classes = None
 
