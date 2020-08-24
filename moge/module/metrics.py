@@ -84,18 +84,10 @@ class Metrics():
         elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type or "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
 
-        self.threshold = y_pred.max(1).values.min()
-
         for metric in self.metrics:
-            if "precision" == metric or "recall" == metric or "f1" == metric:
-                if not self.multilabel and y_true.dim() == 1:
-                    self.metrics[metric].update(
-                        ((y_pred > self.threshold).type_as(y_true),
-                         self.hot_encode(y_true, y_pred)))
-                else:
-                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true),
-                                                 y_true))
-            elif "accuracy" == metric:
+            if "precision" == metric or "recall" == metric or "f1" == metric or "accuracy" == metric:
+                self.threshold = y_pred.max(1).values.min()
+
                 if not self.multilabel and y_true.dim() == 1:
                     self.metrics[metric].update(
                         ((y_pred > self.threshold).type_as(y_true),
