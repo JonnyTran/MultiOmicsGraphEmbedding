@@ -1,4 +1,4 @@
-program: run/run_LATTE_link.py
+program: run/latte_link.py
 method: grid
 metric:
   name: val_mrr

@@ -16,7 +16,6 @@ import pytorch_lightning as pl
 from moge.module.sampling import negative_sample, negative_sample_head_tail
 from .utils import preprocess_input
 
-
 class LATTE(nn.Module):
     def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
@@ -90,25 +89,25 @@ class LATTE(nn.Module):
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if is_negative(metapath_b): continue
-                if metapath_a[-1] == metapath_b[0]:
-                    metapath_join = metapath_a + metapath_b[1:]
-                    edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
-                    if edge_index_b is None: continue
-                    try:
-                        new_edge_index = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                     indexB=edge_index_b, valueB=values_b,
-                                                     m=global_node_idx[metapath_a[0]].size(0),
-                                                     k=global_node_idx[metapath_a[-1]].size(0),
-                                                     n=global_node_idx[metapath_b[-1]].size(0),
-                                                     coalesced=True)
+                if metapath_a[-1] != metapath_b[0]: continue
 
-                        if new_edge_index[0].size(1) <= 1: continue
-                        output_dict[metapath_join] = new_edge_index
+                metapath_join = metapath_a + metapath_b[1:]
+                edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
+                if edge_index_b is None: continue
+                try:
+                    new_edge_index = adamic_adar(indexA=edge_index_a, valueA=values_a, indexB=edge_index_b,
+                                                 valueB=values_b,
+                                                 m=global_node_idx[metapath_a[0]].size(0),
+                                                 k=global_node_idx[metapath_a[-1]].size(0),
+                                                 n=global_node_idx[metapath_b[-1]].size(0),
+                                                 coalesced=True)
 
-                    except Exception as e:
-                        print(f"{str(e)} \n {metapath_a}, {edge_index_a.size(1)}",
-                              f"{metapath_b}, {edge_index_b.size(1)}")
-                        continue
+                    if new_edge_index[0].size(1) <= 1: continue
+                    output_dict[metapath_join] = new_edge_index
+
+                except Exception as e:
+                    print(f"{str(e)} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
+                    continue
 
         return output_dict
 
@@ -124,10 +123,9 @@ class LATTE(nn.Module):
         device = global_node_idx[list(global_node_idx.keys())[0]].device
         proximity_loss = torch.tensor(0.0, device=device) if self.use_proximity_loss else None
 
-        h_all_dict = {node_type: [] for node_type in global_node_idx}
+        h_layers = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                # t_order_edge_index_dict = {k: v for k, v in edge_index_dict.items() if k in self.layers[t].metapaths}
                 h_dict, t_proximity_loss, edge_pred_dict = self.layers[t].forward(
                     x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=edge_index_dict,
                     save_betas=save_betas)
@@ -136,7 +134,6 @@ class LATTE(nn.Module):
                 if self.t_order >= 2:
                     t_order_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict, edge_index_dict, global_node_idx)
             else:
-                # t_order_edge_index_dict = {k: v for k, v in edge_index_dict.items() if k in self.layers[t].metapaths}
                 h_dict, t_proximity_loss, _ = self.layers[t].forward(
                     x_dict=h1_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
                     h1_dict=h_dict, save_betas=save_betas)
@@ -147,13 +144,13 @@ class LATTE(nn.Module):
                                                                       global_node_idx)
 
             for node_type in global_node_idx:
-                h_all_dict[node_type].append(h_dict[node_type])
+                h_layers[node_type].append(h_dict[node_type])
 
             if self.use_proximity_loss:
                 proximity_loss += t_proximity_loss
 
         embedding_output = {node_type: torch.cat(h_emb_list, dim=1) \
-                            for node_type, h_emb_list in h_all_dict.items() if len(h_emb_list) > 0}
+                            for node_type, h_emb_list in h_layers.items() if len(h_emb_list) > 0}
 
         return embedding_output, proximity_loss, edge_pred_dict
 
@@ -288,8 +285,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
-            head_type, tail_type = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = len(global_node_idx[head_type]), len(global_node_idx[tail_type])
+            head, tail = metapath[0], metapath[-1]
+            num_node_head, num_node_tail = len(global_node_idx[head]), len(global_node_idx[tail])
 
             edge_index, _ = LATTE.get_edge_index_values(edge_index_dict[metapath])
             if edge_index is None: continue
@@ -297,7 +294,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Propapate flows from target nodes to source nodes
             emb_relations[:, i] = self.propagate(
                 edge_index=edge_index,
-                x=(h_dict[tail_type], h_dict[head_type]),
+                x=(h_dict[tail], h_dict[head]),
                 alpha=(alpha_r[metapath], alpha_l[metapath]),
                 size=(num_node_tail, num_node_head),
                 metapath_idx=self.metapaths.index(metapath))
@@ -328,13 +325,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.metapaths):
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
                 continue
-            head_type, tail_type = metapath[0], metapath[-1]
+            head, tail = metapath[0], metapath[-1]
             if self.first:
-                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type])
+                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head])
             else:
-                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head_type])
+                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head])
 
-            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type])
+            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail])
         return alpha_l, alpha_r
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):

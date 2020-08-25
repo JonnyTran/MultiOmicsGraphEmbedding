@@ -1,4 +1,4 @@
-program: run/run_LATTE_node.py
+program: run/latte_node.py
 method: bayes
 metric:
   name: val_loss
