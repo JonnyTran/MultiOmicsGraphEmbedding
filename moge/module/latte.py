@@ -189,7 +189,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
         self.linear = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(node_attr_shape, embedding_dim, bias=True) \
+            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
              for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
 
         assert embedding_dim % attn_heads == 0
