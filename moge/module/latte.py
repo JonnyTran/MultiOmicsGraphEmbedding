@@ -175,17 +175,17 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         if self.activation not in ["sigmoid", "tanh", "relu"]:
             print(f"Embedding activation arg `{self.activation}` did not match, so uses linear activation.")
 
-        self.conv = torch.nn.ModuleDict(
-            {node_type: torch.nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=attn_heads, dropout=attn_dropout) \
+        self.conv = nn.ModuleDict(
+            {node_type: nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=attn_heads, dropout=attn_dropout) \
              for node_type in self.node_types})
 
         if first:
-            self.linear = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+            self.linear = nn.ModuleDict(
+                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
         else:
-            self.linear = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
+            self.linear = nn.ModuleDict(
+                {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (D_m x D_m)
 
         self.out_channels = self.embedding_dim // self.attn_heads
@@ -193,7 +193,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         if use_proximity_loss:
-            self.attn_q = torch.nn.ModuleList([torch.nn.Linear(attn_heads * 2, 1) for m in self.metapaths])
+            self.attn_q = nn.ModuleList([nn.Linear(attn_heads * 2, 1) for m in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -214,7 +214,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                            embedding_dim=embedding_dim,
                                                            sparse=True).cpu() for node_type in non_attr_node_types}
             else:
-                self.embeddings = torch.nn.ModuleDict(
+                self.embeddings = nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
                                              sparse=False) for node_type in non_attr_node_types})
