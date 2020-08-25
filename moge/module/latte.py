@@ -126,18 +126,17 @@ class LATTE(nn.Module):
         h_layers = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_proximity_loss, edge_pred_dict = self.layers[t].forward(
-                    x_dict=x_dict, global_node_idx=global_node_idx,
-                    edge_index_dict=edge_index_dict,
-                    save_betas=save_betas)
+                h_dict, t_proximity_loss, edge_pred_dict = self.layers[t].forward(x_dict=x_dict,
+                                                                                  global_node_idx=global_node_idx,
+                                                                                  edge_index_dict=edge_index_dict,
+                                                                                  save_betas=save_betas)
                 h1_dict = h_dict  # Save 1-order embeddings
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_proximity_loss, _ = self.layers[t].forward(
-                    x_dict=h1_dict, global_node_idx=global_node_idx,
-                    edge_index_dict=next_edge_index_dict,
-                    h1_dict=h_dict, save_betas=save_betas)
+                h_dict, t_proximity_loss, _ = self.layers[t].forward(x_dict=h1_dict, global_node_idx=global_node_idx,
+                                                                     edge_index_dict=next_edge_index_dict,
+                                                                     h1_dict=h_dict, save_betas=save_betas)
 
             for node_type in global_node_idx:
                 h_layers[node_type].append(h_dict[node_type])
@@ -441,8 +440,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         else:
             return alpha
 
-    def get_head_relations(self, head_node_type) -> list:
-        relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
+    def get_head_relations(self, head_node_type, to_str=False) -> list:
+        if not to_str:
+            relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
+        else:
+            relations = [".".join(metapath) for metapath in self.metapaths if metapath[0] == head_node_type]
         return relations
 
     def num_head_relations(self, node_type) -> int:
@@ -464,15 +466,15 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for node_type in beta:
             with torch.no_grad():
                 self._betas[node_type] = pd.DataFrame(beta[node_type].squeeze(-1).cpu().numpy(),
-                                                      columns=self.get_head_relations(node_type) + [node_type, ],
+                                                      columns=self.get_head_relations(node_type, True) + [node_type, ],
                                                       index=global_node_idx[node_type].cpu().numpy())
 
                 _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
                 _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
                 self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type) + ["self"])}
+                                             enumerate(self.get_head_relations(node_type, True) + ["self"])}
                 self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type) + ["self"])}
+                                             enumerate(self.get_head_relations(node_type, True) + ["self"])}
 
     def get_relation_weights(self):
         """

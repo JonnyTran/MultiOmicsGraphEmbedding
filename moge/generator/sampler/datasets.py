@@ -42,18 +42,21 @@ class Network:
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
         multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
-        self.node_degrees = pd.DataFrame(data=0, index=multi_index, columns=[k for k in self.metapaths])
+        self.node_degrees = pd.DataFrame(data=0, index=multi_index,
+                                         columns=[".".join(metapath) for metapath in self.metapaths])
 
         for metapath in self.metapaths:
             edge_index = self.edge_index_dict[metapath]
+
             D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
                                           sparse_sizes=(self.num_nodes_dict[metapath[0]],
                                                         self.num_nodes_dict[metapath[-1]]))
-            self.node_degrees.loc[(metapath[0], metapath)] = (
-                    self.node_degrees.loc[(metapath[0], metapath)] + D.storage.rowcount().numpy()).values
+            metapath_name = ".".join(metapath)
+            self.node_degrees.loc[(metapath[0], metapath_name)] = (
+                    self.node_degrees.loc[(metapath[0], metapath_name)] + D.storage.rowcount().numpy()).values
             if not directed:
-                self.node_degrees.loc[(metapath[-1], metapath)] = (
-                        self.node_degrees.loc[(metapath[-1], metapath)] + D.storage.colcount().numpy()).values
+                self.node_degrees.loc[(metapath[-1], metapath_name)] = (
+                        self.node_degrees.loc[(metapath[-1], metapath_name)] + D.storage.colcount().numpy()).values
 
         return self.node_degrees
 
