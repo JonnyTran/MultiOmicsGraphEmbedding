@@ -130,11 +130,12 @@ class LATTE(nn.Module):
                     x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=edge_index_dict,
                     save_betas=save_betas)
 
+                h1_dict = h_dict  # Save 1-order embeddings
                 if self.t_order >= 2:
                     t_order_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict, edge_index_dict, global_node_idx)
             else:
                 h_dict, t_proximity_loss, _ = self.layers[t].forward(
-                    x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
+                    x_dict=h1_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
                     h1_dict=h_dict, save_betas=save_betas)
 
                 # Only needed if there is a next t-order
@@ -188,9 +189,14 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
-        self.linear = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
-             for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+        if first:
+            self.linear = torch.nn.ModuleDict(
+                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+                 for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+        else:
+            self.linear = torch.nn.ModuleDict(
+                {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (D_m x D_m)
 
         assert embedding_dim % attn_heads == 0
         self.out_channels = self.embedding_dim // self.attn_heads
@@ -210,7 +216,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
-        if len(non_attr_node_types) > 0:
+        if first and len(non_attr_node_types) > 0:
             if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
                 print("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
@@ -358,8 +364,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
                 else:
                     # node_type is not attributed, use h_dict contains self.embeddings
-                    beta[node_type] = self.conv[node_type].forward(
-                        h_dict[node_type].view(-1, self.embedding_dim).unsqueeze(-1))
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             else:
                 beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
 

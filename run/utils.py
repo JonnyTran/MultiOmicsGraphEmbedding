@@ -11,7 +11,6 @@ def load_node_dataset(name, method, train_ratio=None, hparams=None, dir_path="~/
     if "ogbn" in name:
         ogbn = PygNodePropPredDataset(name=name, root=dir_path)
         dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=hparams.neighbor_sizes,
-                                        node_types=list(ogbn[0].num_nodes_dict.keys()),
                                         head_node_type=None,
                                         add_reverse_metapaths=hparams.use_reverse, resample_train=None)
     elif name == "ACM":
