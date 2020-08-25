@@ -198,11 +198,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (D_m x D_m)
 
-        self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_q = nn.Sequential(nn.Tanh(), nn.Linear(2 * attn_heads, 1, bias=False))
+        self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, embedding_dim // attn_heads))
+        self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, embedding_dim // attn_heads))
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -231,6 +228,22 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             self.embeddings = None
 
         self.reset_parameters()
+
+    def reset_parameters(self):
+        for i, metapath in enumerate(self.metapaths):
+            glorot(self.attn_l[i])
+            glorot(self.attn_r[i])
+
+        # glorot(self.attn_q[-1].weight)
+
+        for node_type in self.linear:
+            glorot(self.linear[node_type].weight)
+        for node_type in self.conv:
+            glorot(self.conv[node_type].weight)
+
+        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
+            for node_type in self.embeddings:
+                self.embeddings[node_type].reset_parameters()
 
     def forward(self, x_dict, global_node_idx, edge_index_dict, h1_dict=None, save_betas=False):
         """
@@ -292,28 +305,31 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
-            emb_relations[:, i] = self.propagate(
+            out = self.propagate(
                 edge_index=edge_index,
                 x=(h_dict[tail], h_dict[head]),
                 alpha=(alpha_r[metapath], alpha_l[metapath]),
                 size=(num_node_tail, num_node_head),
                 metapath_idx=self.metapaths.index(metapath))
+            print("out", out.shape)
+            emb_relations[:, i] = out.view(-1, self.embedding_dim)
 
         return emb_relations
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        # alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_q.forward(torch.cat([alpha_i, alpha_j], dim=1))
+        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
+        # alpha = self.attn_q.forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
-        return x_j * alpha
+        return x_j * alpha.unsqueeze(-1)
 
     def get_h_dict(self, x_dict, global_node_idx):
         h_dict = {}
         for node_type in global_node_idx:
             if node_type in x_dict:
-                h_dict[node_type] = self.linear[node_type].forward(x_dict[node_type])
+                h_dict[node_type] = self.linear[node_type].forward(x_dict[node_type]).view(-1, self.attn_heads,
+                                                                                           self.embedding_dim // self.attn_heads)
             else:
                 # Should only go here in first layer
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
@@ -323,15 +339,17 @@ class LATTELayer(MessagePassing, pl.LightningModule):
     def get_alphas(self, edge_index_dict, h_dict, h1_dict):
         alpha_l, alpha_r = {}, {}
         for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
-                continue
+            if metapath not in edge_index_dict or edge_index_dict[metapath] is None: continue
+
             head, tail = metapath[0], metapath[-1]
             if self.first:
-                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head])
+                alpha_l[metapath] = (h_dict[head] * self.attn_l[i]).sum(dim=-1)
             else:
-                alpha_l[metapath] = self.attn_l[i].forward(h1_dict[head])
+                alpha_l[metapath] = (h1_dict[head] * self.attn_l[i]).sum(dim=-1)
 
-            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail])
+            alpha_r[metapath] = (h_dict[tail] * self.attn_r[i]).sum(dim=-1)
+            print(f"alpha[{metapath}]", alpha_l[metapath].shape, alpha_r[metapath].shape)
+
         return alpha_l, alpha_r
 
     def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
@@ -425,22 +443,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             return self.alpha_activation.forward(alpha)
         else:
             return alpha
-
-    def reset_parameters(self):
-        for i, metapath in enumerate(self.metapaths):
-            glorot(self.attn_l[i].weight)
-            glorot(self.attn_r[i].weight)
-
-        glorot(self.attn_q[-1].weight)
-
-        for node_type in self.linear:
-            glorot(self.linear[node_type].weight)
-        for node_type in self.conv:
-            glorot(self.conv[node_type].weight)
-
-        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
-            for node_type in self.embeddings:
-                self.embeddings[node_type].reset_parameters()
 
     def get_head_relations(self, head_node_type) -> list:
         relations = [metapath for metapath in self.metapaths if metapath[0] == head_node_type]
