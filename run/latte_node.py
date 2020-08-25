@@ -88,7 +88,7 @@ if __name__ == "__main__":
     parser.add_argument('--use_reverse', type=bool, default=True)
 
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=0)
 
     # add all the available options to the trainer
