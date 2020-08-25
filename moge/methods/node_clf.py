@@ -361,7 +361,7 @@ class HAN(NodeClfMetrics, Han):
 
 
         for i in range(self.num_layers):
-            X = self.layers[i].forward(X, A)
+            X = self.layers[i].forward(X, A, )
 
         if x_idx is not None and X.size(0) > x_idx.size(0):
             y = self.linear(X[x_idx])

@@ -88,19 +88,18 @@ class LATTE(nn.Module):
             if edge_index_a is None: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
-                if is_negative(metapath_b): continue
-                if metapath_a[-1] != metapath_b[0]: continue
+                if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
 
                 metapath_join = metapath_a + metapath_b[1:]
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                 if edge_index_b is None: continue
                 try:
-                    new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a, indexB=edge_index_b,
-                                                         valueB=values_b,
-                                                         m=global_node_idx[metapath_a[0]].size(0),
-                                                         k=global_node_idx[metapath_a[-1]].size(0),
-                                                         n=global_node_idx[metapath_b[-1]].size(0),
-                                                         coalesced=True)
+                    new_edge_index = adamic_adar(indexA=edge_index_a, valueA=values_a, indexB=edge_index_b,
+                                                 valueB=values_b,
+                                                 m=global_node_idx[metapath_a[0]].size(0),
+                                                 k=global_node_idx[metapath_a[-1]].size(0),
+                                                 n=global_node_idx[metapath_b[-1]].size(0),
+                                                 coalesced=True)
 
                     if new_edge_index[0].size(1) <= 1: continue
                     output_dict[metapath_join] = new_edge_index
@@ -136,7 +135,7 @@ class LATTE(nn.Module):
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
                 h_dict, t_proximity_loss, _ = self.layers[t].forward(x_dict=h1_dict, global_node_idx=global_node_idx,
                                                                      edge_index_dict=next_edge_index_dict,
-                                                                     h1_dict=h_dict, save_betas=save_betas)
+                                                                     h_prev=h_dict, save_betas=save_betas)
 
             for node_type in global_node_idx:
                 h_layers[node_type].append(h_dict[node_type])
@@ -189,8 +188,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (D_m x D_m)
 
-        assert embedding_dim % attn_heads == 0
         self.out_channels = self.embedding_dim // self.attn_heads
+        assert embedding_dim % attn_heads == 0
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_q = torch.nn.ModuleList([torch.nn.Linear(attn_heads * 2, 1) for m in self.metapaths])
@@ -212,7 +211,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 print("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
-                                                           sparse=False).cpu() for node_type in non_attr_node_types}
+                                                           sparse=True).cpu() for node_type in non_attr_node_types}
             else:
                 self.embeddings = torch.nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
@@ -238,13 +237,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             for node_type in self.embeddings:
                 self.embeddings[node_type].reset_parameters()
 
-    def forward(self, x_dict, global_node_idx, edge_index_dict, h1_dict=None, save_betas=False):
+    def forward(self, x_dict, global_node_idx, edge_index_dict, h_prev=None, save_betas=False):
         """
 
         :param x_dict: a dict of node attributes indexed node_type
         :param global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
         :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
-        :param h1_dict: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
+        :param h_prev: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
         :return: output_emb, loss
         """
         # H_t = W_t * x
@@ -255,7 +254,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # if save_betas: self.save_relation_weights(beta, global_node_idx)
 
         # Compute node-level attention coefficients
-        alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h1_dict)
+        alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h_prev)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
@@ -269,7 +268,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             attn_out, self.attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
                                                                        key=out[node_type].permute(1, 0, 2),
                                                                        value=out[node_type].permute(1, 0, 2))
-            # print("attn_weights", attn_weights.shape)
             out[node_type] = attn_out.permute(1, 0, 2).mean(1)
 
             # Apply \sigma activation to all embeddings
@@ -328,7 +326,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             h_dict[node_type] = h_dict[node_type].view(-1, self.attn_heads, self.out_channels)
         return h_dict
 
-    def get_alphas(self, edge_index_dict, h_dict, h1_dict):
+    def get_alphas(self, edge_index_dict, h_dict, h_prev):
         alpha_l, alpha_r = {}, {}
 
         for i, metapath in enumerate(self.metapaths):
@@ -338,8 +336,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             if self.first:
                 alpha_l[metapath] = (h_dict[head] * self.attn_l[i]).sum(dim=-1)
             else:
-                alpha_l[metapath] = (h1_dict[head].view(-1, self.attn_heads, self.out_channels) * self.attn_l[i]).sum(
-                    dim=-1)
+                alpha_l[metapath] = (h_prev[head].view(-1, self.attn_heads, self.out_channels) * self.attn_l[i]).sum(-1)
 
             alpha_r[metapath] = (h_dict[tail] * self.attn_r[i]).sum(dim=-1)
 
