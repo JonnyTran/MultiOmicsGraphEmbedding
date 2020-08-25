@@ -37,11 +37,11 @@ def train(hparams: Namespace):
     else:
         neighbor_sizes = [hparams.n_neighbors_1]
         hparams.batch_size = int(2 * hparams.batch_size)
-        hparams.neighbor_sizes = neighbor_sizes
 
     if hparams.embedding_dim > 128:
         hparams.batch_size = hparams.batch_size // 2
 
+    hparams.neighbor_sizes = neighbor_sizes
     dataset = load_node_dataset(hparams.dataset, method="LATTE", train_ratio=None, hparams=hparams)
 
     METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
