@@ -165,7 +165,7 @@ class LATTENodeClassifier(NodeClfMetrics):
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat, proximity_loss = self.forward(X)
+        y_hat, proximity_loss = self.forward(X, save_betas=True)
         if isinstance(y, dict) and len(y) > 1:
             y = y[self.head_node_type]
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)

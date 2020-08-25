@@ -192,7 +192,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         assert embedding_dim % attn_heads == 0
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
-        self.attn_q = torch.nn.ModuleList([torch.nn.Linear(attn_heads * 2, 1) for m in self.metapaths])
+        if use_proximity_loss:
+            self.attn_q = torch.nn.ModuleList([torch.nn.Linear(attn_heads * 2, 1) for m in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -226,7 +227,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.metapaths):
             glorot(self.attn_l[i])
             glorot(self.attn_r[i])
-            glorot(self.attn_q[i].weight)
+            # glorot(self.attn_q[i].weight)
 
         for node_type in self.linear:
             glorot(self.linear[node_type].weight)
@@ -261,7 +262,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
             out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
                                                          global_node_idx)
-            out[node_type][:, -1] = h_prev[node_type].view(-1, self.embedding_dim)
+            if self.first:
+                out[node_type][:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
+            else:
+                out[node_type][:, -1] = h_prev[node_type].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             attn_out, attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
