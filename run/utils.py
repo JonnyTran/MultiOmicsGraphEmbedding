@@ -67,8 +67,6 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
             print(dataset.node_types, dataset.metapaths)
         else:
             dataset = TripletSampler(ogbl, directed=True,
-                                     node_types=list(ogbl[0].num_nodes_dict.keys()) if hasattr(ogbl[0],
-                                                                                               "num_nodes_dict") else None,
                                      head_node_type=None,
                                      add_reverse_metapaths=hparams.use_reverse)
             print(dataset.node_types, dataset.metapaths)

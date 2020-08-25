@@ -127,21 +127,17 @@ class LATTE(nn.Module):
         for t in range(self.t_order):
             if t == 0:
                 h_dict, t_proximity_loss, edge_pred_dict = self.layers[t].forward(
-                    x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=edge_index_dict,
+                    x_dict=x_dict, global_node_idx=global_node_idx,
+                    edge_index_dict=edge_index_dict,
                     save_betas=save_betas)
-
                 h1_dict = h_dict  # Save 1-order embeddings
-                if self.t_order >= 2:
-                    t_order_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict, edge_index_dict, global_node_idx)
+                next_edge_index_dict = edge_index_dict
             else:
+                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
                 h_dict, t_proximity_loss, _ = self.layers[t].forward(
-                    x_dict=h1_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
+                    x_dict=h1_dict, global_node_idx=global_node_idx,
+                    edge_index_dict=next_edge_index_dict,
                     h1_dict=h_dict, save_betas=save_betas)
-
-                # Only needed if there is a next t-order
-                if t < self.t_order - 1:
-                    t_order_edge_index_dict = LATTE.join_edge_indexes(t_order_edge_index_dict, edge_index_dict,
-                                                                      global_node_idx)
 
             for node_type in global_node_idx:
                 h_layers[node_type].append(h_dict[node_type])
