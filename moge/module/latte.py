@@ -130,12 +130,12 @@ class LATTE(nn.Module):
                     x_dict=x_dict, global_node_idx=global_node_idx, edge_index_dict=edge_index_dict,
                     save_betas=save_betas)
 
-                h1_dict = h_dict  # Save 1-order embeddings
+                # h1_dict = h_dict  # Save 1-order embeddings
                 if self.t_order >= 2:
                     t_order_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict, edge_index_dict, global_node_idx)
             else:
                 h_dict, t_proximity_loss, _ = self.layers[t].forward(
-                    x_dict=h1_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
+                    x_dict=h_dict, global_node_idx=global_node_idx, edge_index_dict=t_order_edge_index_dict,
                     h1_dict=h_dict, save_betas=save_betas)
 
                 # Only needed if there is a next t-order
@@ -274,10 +274,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
             out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
                                                          global_node_idx)
-            if self.first:
-                out[node_type][:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
-            else:
-                out[node_type][:, -1] = h1_dict[node_type].view(-1, self.embedding_dim)
+            out[node_type][:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
