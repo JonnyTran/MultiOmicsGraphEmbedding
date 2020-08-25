@@ -95,12 +95,12 @@ class LATTE(nn.Module):
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                 if edge_index_b is None: continue
                 try:
-                    new_edge_index = adamic_adar(indexA=edge_index_a, valueA=values_a, indexB=edge_index_b,
-                                                 valueB=values_b,
-                                                 m=global_node_idx[metapath_a[0]].size(0),
-                                                 k=global_node_idx[metapath_a[-1]].size(0),
-                                                 n=global_node_idx[metapath_b[-1]].size(0),
-                                                 coalesced=True)
+                    new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a, indexB=edge_index_b,
+                                                         valueB=values_b,
+                                                         m=global_node_idx[metapath_a[0]].size(0),
+                                                         k=global_node_idx[metapath_a[-1]].size(0),
+                                                         n=global_node_idx[metapath_b[-1]].size(0),
+                                                         coalesced=True)
 
                     if new_edge_index[0].size(1) <= 1: continue
                     output_dict[metapath_join] = new_edge_index
@@ -266,9 +266,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             out[node_type][:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            attn_out, attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
-                                                                  key=out[node_type].permute(1, 0, 2),
-                                                                  value=out[node_type].permute(1, 0, 2))
+            attn_out, self.attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
+                                                                       key=out[node_type].permute(1, 0, 2),
+                                                                       value=out[node_type].permute(1, 0, 2))
             # print("attn_weights", attn_weights.shape)
             out[node_type] = attn_out.permute(1, 0, 2).mean(1)
 
@@ -323,7 +323,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             else:
                 # Should only go here in first layer
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
-                    .to(self.conv[node_type].weight.device)
+                    .to(self.attn_l.device)
 
             h_dict[node_type] = h_dict[node_type].view(-1, self.attn_heads, self.out_channels)
         return h_dict

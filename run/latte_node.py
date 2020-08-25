@@ -31,15 +31,10 @@ def train(hparams: Namespace):
     USE_AMP = False  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 250
 
-    if hparams.t_order > 1:
-        hparams.n_neighbors_2 = max(1, 153600 // (hparams.n_neighbors_1 * hparams.batch_size))
-        neighbor_sizes = [hparams.n_neighbors_1, hparams.n_neighbors_2]
-    else:
-        neighbor_sizes = [hparams.n_neighbors_1]
-        hparams.batch_size = int(2 * hparams.batch_size)
+    neighbor_sizes = [hparams.n_neighbors_1, ]
+    for t in range(1, hparams.t_order):
+        neighbor_sizes.extend([neighbor_sizes[-1] // 2])
 
-    if hparams.embedding_dim > 128:
-        hparams.batch_size = hparams.batch_size // 2
     print("neighbor_sizes", neighbor_sizes)
     hparams.neighbor_sizes = neighbor_sizes
     dataset = load_node_dataset(hparams.dataset, method="LATTE", train_ratio=None, hparams=hparams)
