@@ -347,7 +347,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
         return alpha_l, alpha_r
 
-    def get_beta_weights(self, x_dict, h_dict, h1_dict, global_node_idx):
+    def get_beta_weights(self, x_dict, h_dict, h_prev, global_node_idx):
         beta = {}
         for node_type in global_node_idx:
             if self.first:
@@ -357,7 +357,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                     # node_type is not attributed, use h_dict contains self.embeddings
                     beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             else:
-                beta[node_type] = self.conv[node_type].forward(h1_dict[node_type].unsqueeze(-1))
+                beta[node_type] = self.conv[node_type].forward(h_prev[node_type].unsqueeze(-1))
 
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         return beta
