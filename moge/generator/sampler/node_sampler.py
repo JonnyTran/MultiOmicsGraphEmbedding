@@ -17,6 +17,23 @@ class HeteroNeighborSampler(HeteroNetDataset):
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
                                                     resample_train, add_reverse_metapaths)
 
+        if self.use_reverse:
+            self.add_reverse_edge_index(self.edge_index_dict)
+
+        # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
+        num_nodes_dict = OrderedDict([(node_type, self.num_nodes_dict[node_type]) for node_type in self.node_types])
+
+        out = group_hetero_graph(self.edge_index_dict, num_nodes_dict)
+        self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = out
+
+        self.int2node_type = {type_int: node_type for node_type, type_int in self.key2int.items() if
+                              node_type in self.node_types}
+        self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
+                              edge_type in self.edge_index_dict}
+
+        self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
+                                                sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
+
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
         self._name = dataset.name
@@ -65,24 +82,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
-
-    def process_graph_sampler(self):
-        if self.use_reverse:
-            self.add_reverse_edge_index(self.edge_index_dict)
-
-        # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
-        num_nodes_dict = OrderedDict([(node_type, self.num_nodes_dict[node_type]) for node_type in self.node_types])
-
-        out = group_hetero_graph(self.edge_index_dict, num_nodes_dict)
-        self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = out
-
-        self.int2node_type = {type_int: node_type for node_type, type_int in self.key2int.items() if
-                              node_type in self.node_types}
-        self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
-                              edge_type in self.edge_index_dict}
-
-        self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
-                                                sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None, t_order=1):
         assert mode is not None, "Must pass arg mode at get_collate_fn()"

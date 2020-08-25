@@ -40,7 +40,7 @@ def train(hparams: Namespace):
 
     if hparams.embedding_dim > 128:
         hparams.batch_size = hparams.batch_size // 2
-
+    print("neighbor_sizes", neighbor_sizes)
     hparams.neighbor_sizes = neighbor_sizes
     dataset = load_node_dataset(hparams.dataset, method="LATTE", train_ratio=None, hparams=hparams)
 
