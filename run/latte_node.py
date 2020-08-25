@@ -42,7 +42,7 @@ def train(hparams: Namespace):
     if hparams.embedding_dim > 128:
         hparams.batch_size = hparams.batch_size // 2
 
-    dataset = load_node_dataset(hparams.dataset, method=LATTENodeClassifier.name(), train_ratio=None, hparams=hparams)
+    dataset = load_node_dataset(hparams.dataset, method="LATTE", train_ratio=None, hparams=hparams)
 
     METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
     hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
