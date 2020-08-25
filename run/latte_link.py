@@ -54,7 +54,7 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
-    parser.add_argument('-t', '--t_order', type=int, default=2)
+    parser.add_argument('-t', '--t_order', type=int, default=1)
     parser.add_argument('-b', '--batch_size', type=int, default=32000)
     parser.add_argument('--n_neighbors_1', type=int, default=30, help="Not used - only for compatibility")
     parser.add_argument('--activation', type=str, default="relu")
