@@ -177,12 +177,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             print(f"Embedding activation arg `{self.activation}` did not match, so uses linear activation.")
 
         self.conv = torch.nn.ModuleDict(
-            {node_type: torch.nn.Conv1d(
-                in_channels=node_attr_shape[
-                    node_type] if self.first and node_type in node_attr_shape else self.embedding_dim,
-                out_channels=self.num_head_relations(node_type),
-                kernel_size=1) \
-                for node_type in self.node_types})  # W_phi.shape (D x F)
+            {node_type: torch.nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=attn_heads, dropout=attn_dropout) \
+             for node_type in self.node_types})
 
         if first:
             self.linear = torch.nn.ModuleDict(
@@ -231,13 +227,12 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.metapaths):
             glorot(self.attn_l[i])
             glorot(self.attn_r[i])
-
-        # glorot(self.attn_q[-1].weight)
+            glorot(self.attn_q[i].weight)
 
         for node_type in self.linear:
             glorot(self.linear[node_type].weight)
-        for node_type in self.conv:
-            glorot(self.conv[node_type].weight)
+        # for node_type in self.conv:
+        #     glorot(self.conv[node_type].weight)
 
         if self.embeddings is not None and len(self.embeddings.keys()) > 0:
             for node_type in self.embeddings:
@@ -256,9 +251,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         h_dict = self.get_h_dict(x_dict, global_node_idx)
 
         # Compute relations attention coefficients
-        beta = self.get_beta_weights(x_dict, h_dict, h1_dict, global_node_idx)
-        # Save beta weights from testing samples
-        if save_betas: self.save_relation_weights(beta, global_node_idx)
+        # # Save beta weights from testing samples
+        # if save_betas: self.save_relation_weights(beta, global_node_idx)
 
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h1_dict)
@@ -272,8 +266,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             out[node_type][:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
-            # out[node_type] = out[node_type].mean(dim=1)
+            attn_out, attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
+                                                                  key=out[node_type].permute(1, 0, 2),
+                                                                  value=out[node_type].permute(1, 0, 2))
+            # print("attn_weights", attn_weights.shape)
+            out[node_type] = attn_out.permute(1, 0, 2).mean(1)
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
@@ -289,7 +286,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         emb_relations = torch.zeros(
             size=(global_node_idx[node_type].size(0),
                   self.num_head_relations(node_type),
-                  self.embedding_dim)).type_as(self.conv[node_type].weight)
+                  self.embedding_dim)).type_as(self.attn_l)
 
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
