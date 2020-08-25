@@ -75,8 +75,8 @@ if __name__ == "__main__":
     parser.add_argument('--num_gpus', type=int, default=1)
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
-    parser.add_argument('--embedding_dim', type=int, default=128)
-    parser.add_argument('--t_order', type=int, default=2)
+    parser.add_argument("-d", '--embedding_dim', type=int, default=128)
+    parser.add_argument("-t", '--t_order', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=2000)
     parser.add_argument('--n_neighbors_1', type=int, default=20)
     parser.add_argument('--activation', type=str, default="relu")
@@ -87,14 +87,14 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.3)
 
-    parser.add_argument('--use_proximity_loss', type=bool, default=True)
+    parser.add_argument('--use_proximity_loss', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
     parser.add_argument('--use_class_weights', type=bool, default=True)
     parser.add_argument('--use_reverse', type=bool, default=True)
 
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
     parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--weight_decay', type=float, default=1e-5)
+    parser.add_argument('--weight_decay', type=float, default=0)
 
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
