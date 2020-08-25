@@ -440,7 +440,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             return alpha
 
     def get_head_relations(self, head_node_type, to_str=False) -> list:
-        relations = [metapath if not to_str else ".".join(metapath) for metapath in self.metapaths if
+        relations = [".".join(metapath) if to_str and isinstance(metapath, tuple) else metapath for metapath in
+                     self.metapaths if
                      metapath[0] == head_node_type]
         return relations
 
@@ -481,7 +482,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         if not hasattr(self, "_beta_std"):
             self._beta_std = {}
 
-        betas = attn_weights.sum(2)
+        betas = attn_weights.sum(1)
         with torch.no_grad():
             self._betas[node_type] = pd.DataFrame(betas.cpu().numpy(),
                                                   columns=self.get_head_relations(node_type, True) + [node_type, ],

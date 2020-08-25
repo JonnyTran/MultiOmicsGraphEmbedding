@@ -42,21 +42,24 @@ class Network:
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
         multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
+        metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
+                          self.metapaths]
         self.node_degrees = pd.DataFrame(data=0, index=multi_index,
-                                         columns=[".".join(metapath) for metapath in self.metapaths])
+                                         columns=metapath_names)
 
-        for metapath in self.metapaths:
+        for metapath, name in zip(self.metapaths, metapath_names):
             edge_index = self.edge_index_dict[metapath]
 
+            head, tail = metapath[0], metapath[-1]
             D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
-                                          sparse_sizes=(self.num_nodes_dict[metapath[0]],
-                                                        self.num_nodes_dict[metapath[-1]]))
-            metapath_name = ".".join(metapath)
-            self.node_degrees.loc[(metapath[0], metapath_name)] = (
-                    self.node_degrees.loc[(metapath[0], metapath_name)] + D.storage.rowcount().numpy()).values
+                                          sparse_sizes=(self.num_nodes_dict[head],
+                                                        self.num_nodes_dict[tail]))
+
+            self.node_degrees.loc[(head, name)] = (
+                    self.node_degrees.loc[(head, name)] + D.storage.rowcount().numpy()).values
             if not directed:
-                self.node_degrees.loc[(metapath[-1], metapath_name)] = (
-                        self.node_degrees.loc[(metapath[-1], metapath_name)] + D.storage.colcount().numpy()).values
+                self.node_degrees.loc[(tail, name)] = (
+                        self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
 
         return self.node_degrees
 
