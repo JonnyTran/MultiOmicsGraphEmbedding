@@ -271,12 +271,13 @@ class LATTELayer(MessagePassing, pl.LightningModule):
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             attn_out, attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
                                                                   key=out[node_type].permute(1, 0, 2),
-                                                                  value=out[node_type].permute(1, 0, 2))
+                                                                  value=out[node_type].permute(1, 0, 2),
+                                                                  need_weights=save_betas)
             if save_betas: self.save_attn_weights(node_type, attn_weights, global_node_idx[node_type])
 
             # out[node_type] = attn_out.permute(1, 0, 2).mean(1)
             out[node_type] = self.linear_out[node_type].forward(
-                attn_out.permute(1, 0, 2).view(-1, self.embedding_dim * self.num_head_relations(node_type)))
+                attn_out.permute(1, 0, 2).reshape(-1, self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
