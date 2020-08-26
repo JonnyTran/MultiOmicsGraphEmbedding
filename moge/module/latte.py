@@ -188,6 +188,10 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                 {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (D_m x D_m)
 
+        self.linear_out = nn.ModuleDict(
+            {node_type: nn.Linear(embedding_dim * self.num_head_relations(node_type), embedding_dim, bias=True) \
+             for node_type in self.node_types})
+
         self.out_channels = self.embedding_dim // self.attn_heads
         assert embedding_dim % attn_heads == 0
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
@@ -250,9 +254,6 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         # H_t = W_t * x
         h_dict = self.get_h_dict(x_dict, global_node_idx)
 
-        # Compute relations attention coefficients
-        # # Save beta weights from testing samples
-
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h_prev)
 
@@ -273,7 +274,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                                                                   value=out[node_type].permute(1, 0, 2))
             if save_betas: self.save_attn_weights(node_type, attn_weights, global_node_idx[node_type])
 
-            out[node_type] = attn_out.permute(1, 0, 2).mean(1)
+            # out[node_type] = attn_out.permute(1, 0, 2).mean(1)
+            out[node_type] = self.linear_out[node_type].forward(
+                attn_out.permute(1, 0, 2).view(-1, self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
@@ -497,11 +500,11 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
     def get_relation_weights(self):
         """
-        Get the mean and std of relation attention weights for all nodes in testing/validation steps
+        Get the mean and std of relation attention weights for all nodes
         :return:
         """
-        return {".".join(relation) if isinstance(relation, tuple) else node_type: (avg, std) \
-                for node_type in self._beta_avg for (relation, avg), (relation_b, std) in
+        return {(metapath if "." in metapath else node_type): (avg, std) \
+                for node_type in self._beta_avg for (metapath, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
 
