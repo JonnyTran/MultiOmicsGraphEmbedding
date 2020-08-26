@@ -189,7 +189,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
                  for node_type in self.node_types})  # W.shape (D_m x D_m)
 
         self.linear_out = nn.ModuleDict(
-            {node_type: nn.Linear(embedding_dim * self.num_head_relations(node_type), embedding_dim, bias=True) \
+            {node_type: nn.Sequential(nn.ReLU(),
+                                      nn.Linear(embedding_dim * self.num_head_relations(node_type), embedding_dim,
+                                                bias=True)) \
              for node_type in self.node_types})
 
         self.out_channels = self.embedding_dim // self.attn_heads
@@ -277,8 +279,9 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
             # out[node_type] = attn_out.permute(1, 0, 2).mean(1)
             out[node_type] = self.linear_out[node_type].forward(
-                attn_out.permute(1, 0, 2).contiguous().view(-1,
-                                                            self.embedding_dim * self.num_head_relations(node_type)))
+                attn_out.permute(1, 0, 2) \
+                    .contiguous() \
+                    .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
@@ -554,7 +557,7 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
 
     out = A @ D @ B
     row, col, values = out.coo()
-    if sampling:
+    if sampling and (values.numel() > valueA.numel() or values.numel() > valueB.numel()):
         idx = torch.multinomial(values, num_samples=min(valueA.numel(), valueB.numel(), values.numel()),
                                 replacement=False)
         row, col, values = row[idx], col[idx], values[idx]
