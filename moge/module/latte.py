@@ -277,7 +277,8 @@ class LATTELayer(MessagePassing, pl.LightningModule):
 
             # out[node_type] = attn_out.permute(1, 0, 2).mean(1)
             out[node_type] = self.linear_out[node_type].forward(
-                attn_out.permute(1, 0, 2).reshape(-1, self.embedding_dim * self.num_head_relations(node_type)))
+                attn_out.permute(1, 0, 2).contiguous().view(-1,
+                                                            self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
@@ -534,7 +535,8 @@ def is_negative(metapath):
     else:
         return False
 
-def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
+
+def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
                      sparse_sizes=(m, k), is_sorted=not coalesced)
     B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
@@ -550,7 +552,11 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False):
                      value=deg_normalized.type_as(valueA),
                      sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
 
-    C = matmul(matmul(A, D), B)
-    row, col, value = C.coo()
+    out = A @ D @ B
+    row, col, values = out.coo()
+    if sampling:
+        idx = torch.multinomial(values, num_samples=min(valueA.numel(), valueB.numel(), values.numel()),
+                                replacement=False)
+        row, col, values = row[idx], col[idx], values[idx]
 
-    return torch.stack([row, col], dim=0), value
+    return torch.stack([row, col], dim=0), values
