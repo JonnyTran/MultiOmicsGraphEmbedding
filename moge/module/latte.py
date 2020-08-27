@@ -71,11 +71,11 @@ class LATTE(nn.Module):
 
             if edge_values.dtype != torch.float:
                 edge_values = edge_values.to(torch.float)
-        elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 1:
+        elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
-            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float, device=edge_index.device)
+            edge_values = torch.ones_like(edge_index_tup[0], dtype=torch.float)
         else:
-            return None, None  # Should raise an exception
+            return None, None
 
         return edge_index, edge_values
 
@@ -90,7 +90,7 @@ class LATTE(nn.Module):
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
 
-                metapath_join = metapath_a + metapath_b[1:]
+                new_metapath = metapath_a + metapath_b[1:]
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                 if edge_index_b is None: continue
                 try:
@@ -102,7 +102,7 @@ class LATTE(nn.Module):
                                                  coalesced=True)
 
                     if new_edge_index[0].size(1) == 0: continue
-                    output_dict[metapath_join] = new_edge_index
+                    output_dict[new_metapath] = new_edge_index
 
                 except Exception as e:
                     print(f"{str(e)} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
@@ -129,11 +129,11 @@ class LATTE(nn.Module):
                                                                                   edge_index_dict=edge_index_dict,
                                                                                   global_node_idx=global_node_idx,
                                                                                   save_betas=save_betas)
-                h1_dict = h_dict  # Save 1-order embeddings
+                # h1_dict = h_dict  # Save 1-order embeddings
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_proximity_loss, _ = self.layers[t].forward(X=h1_dict, edge_index_dict=next_edge_index_dict,
+                h_dict, t_proximity_loss, _ = self.layers[t].forward(X=X, edge_index_dict=next_edge_index_dict,
                                                                      global_node_idx=global_node_idx,
                                                                      h_prev=h_dict, save_betas=save_betas)
 
@@ -179,25 +179,23 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             {node_type: nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=4, dropout=attn_dropout) \
              for node_type in self.node_types})
 
-        if first:
-            self.linear = nn.ModuleDict(
-                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
-                 for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
-        else:
-            self.linear = nn.ModuleDict(
-                {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
-                 for node_type in self.node_types})  # W.shape (D_m x D_m)
+        # if first:
+        self.linear = nn.ModuleDict(
+            {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
+             for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+        # else:
+        #     self.linear = nn.ModuleDict(
+        #         {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
+        #          for node_type in self.node_types})  # W.shape (D_m x D_m)
 
         self.linear_out = nn.ModuleDict(
-            {node_type: nn.Sequential(nn.ReLU(),
-                                      nn.Linear(embedding_dim * self.num_head_relations(node_type), embedding_dim,
-                                                bias=True)) \
+            {node_type: nn.Linear(embedding_dim * self.num_head_relations(node_type), embedding_dim, bias=True) \
              for node_type in self.node_types})
 
         self.out_channels = embedding_dim // attn_heads
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
-        self.attn_q = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, attn_heads))
+        # self.attn_q = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, attn_heads))
         # self.attn_q = nn.ModuleList([nn.Sequential(nn.Tanh(), nn.Linear(attn_heads * 2, 1)) for m in self.metapaths])
 
         if attn_activation == "sharpening":
@@ -212,7 +210,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
-        if first and len(non_attr_node_types) > 0:
+        if len(non_attr_node_types) > 0:
             if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
                 print("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
@@ -263,10 +261,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for node_type in global_node_idx:
             out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
                                                          global_node_idx)
-            if self.first:
-                out[node_type][:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
-            else:
-                out[node_type][:, -1] = h_prev[node_type].view(-1, self.embedding_dim)
+            # if self.first:
+            out[node_type][:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
+            # else:
+            #     out[node_type][:, -1] = h_prev[node_type].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             attn_out, attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
@@ -305,7 +303,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             edge_index, _ = LATTE.get_edge_index_values(edge_index_dict[metapath])
             if edge_index is None: continue
-
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,

@@ -56,10 +56,10 @@ class Metrics():
         if "f1" in metrics:
             assert "precision" in self.metrics and "recall" in self.metrics
 
-            def f1(precision, recall):
+            def macro_f1(precision, recall):
                 return (precision * recall * 2 / (precision + recall)).mean()
 
-            self.metrics["f1"] = MetricsLambda(f1, self.metrics["precision"], self.metrics["recall"])
+            self.metrics["macro_f1"] = MetricsLambda(macro_f1, self.metrics["precision"], self.metrics["recall"])
 
         self.reset_metrics()
 
@@ -84,7 +84,7 @@ class Metrics():
             y_pred = torch.softmax(y_pred, dim=1)
 
         for metric in self.metrics:
-            if "precision" == metric or "recall" == metric or "f1" == metric or "accuracy" == metric:
+            if "precision" in metric or "recall" in metric or "f1" in metric or "accuracy" in metric:
                 self.threshold = y_pred.max(1).values.min()
 
                 if not self.multilabel and y_true.dim() == 1:
