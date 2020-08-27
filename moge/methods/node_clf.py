@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 from torch_geometric.utils import remove_self_loops, add_self_loops
 
-from torch.optim.lr_scheduler import ReduceLROnPlateau, OneCycleLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.generator.sampler.datasets import HeteroNetDataset
 from moge.module.metrics import Metrics
@@ -117,12 +117,12 @@ class LATTENodeClassifier(NodeClfMetrics):
                            attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                            attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
-        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        # self.classifier = DenseClassification(hparams)
-        self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
-                                                   num_class=hparams.n_classes,
-                                                   loss_type=hparams.loss_type)
+        self.classifier = DenseClassification(hparams)
+        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
+        #                                            num_class=hparams.n_classes,
+        #                                            loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
