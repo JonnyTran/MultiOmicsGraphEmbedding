@@ -110,6 +110,7 @@ class LATTE(nn.Module):
                     del values_a
                     del edge_index_b
                     del values_b
+                    torch.cuda.empty_cache()
                     continue
 
         return output_dict

@@ -31,7 +31,7 @@ def train(hparams: Namespace):
     USE_AMP = False  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 250
 
-    neighbor_sizes = [hparams.n_neighbors_1, ]
+    neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.t_order):
         neighbor_sizes.extend([neighbor_sizes[-1] // 2])
 
@@ -71,14 +71,14 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
     parser.add_argument("-d", '--embedding_dim', type=int, default=128)
     parser.add_argument("-t", '--t_order', type=int, default=2)
-    parser.add_argument('--batch_size', type=int, default=2000)
-    parser.add_argument('--n_neighbors_1', type=int, default=20)
+    parser.add_argument('-n', '--batch_size', type=int, default=2000)
+    parser.add_argument('--n_neighbors', type=int, default=20)
     parser.add_argument('--activation', type=str, default="relu")
-    parser.add_argument('--attn_heads', type=int, default=8)
+    parser.add_argument('--attn_heads', type=int, default=64)
     parser.add_argument('--attn_activation', type=str, default="sharpening")
     parser.add_argument('--attn_dropout', type=float, default=0.2)
 
-    parser.add_argument('--nb_cls_dense_size', type=int, default=0)
+    parser.add_argument('--nb_cls_dense_size', type=int, default=512)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.3)
 
     parser.add_argument('--use_proximity_loss', type=bool, default=False)
