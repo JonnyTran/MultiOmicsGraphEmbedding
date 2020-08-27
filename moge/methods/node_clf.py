@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 from torch_geometric.utils import remove_self_loops, add_self_loops
 
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import ReduceLROnPlateau, OneCycleLR
 
 from moge.generator.sampler.datasets import HeteroNetDataset
 from moge.module.metrics import Metrics
@@ -34,6 +34,7 @@ class NodeClfMetrics(pl.LightningModule):
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
         hparams.name = self.name()
+        hparams.n_params = self.get_n_params()
         self.hparams = hparams
 
     def name(self):
@@ -89,6 +90,15 @@ class NodeClfMetrics(pl.LightningModule):
                   {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
             print(f"y_true {len(y_true_dict)} classes",
                   {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+
+    def get_n_params(self):
+        pp = 0
+        for p in list(self.parameters()):
+            nn = 1
+            for s in list(p.size()):
+                nn = nn * s
+            pp += nn
+        return pp
 
 
 class LATTENodeClassifier(NodeClfMetrics):
@@ -191,10 +201,10 @@ class LATTENodeClassifier(NodeClfMetrics):
                                              t_order=self.hparams.t_order)
 
     def val_dataloader(self, batch_size=None):
-        return self.dataset.val_dataloader(collate_fn=self.collate_fn,
-                                           batch_size=self.hparams.batch_size,
-                                           num_workers=max(1, int(0.1 * multiprocessing.cpu_count())),
-                                           t_order=self.hparams.t_order)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())),
+                                             t_order=self.hparams.t_order)
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
@@ -203,10 +213,23 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             t_order=self.hparams.t_order)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=self.hparams.weight_decay)
-        scheduler = ReduceLROnPlateau(optimizer)
+        # optimizer = torch.optim.Adam(self.parameters(),
+        #                              lr=self.hparams.lr,  # momentum=self.hparams.momentum,
+        #                              weight_decay=self.hparams.weight_decay)
+        # scheduler = ReduceLROnPlateau(optimizer)
+        param_optimizer = list(self.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+
+        n_batch = self.dataset.training_idx.numel() // self.hparams.batch_size
+
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, pct_start=0.05, anneal_strategy='linear',
+                                                        final_div_factor=10,
+                                                        max_lr=5e-4, epochs=50, steps_per_epoch=n_batch)
 
         return [optimizer], [scheduler]
 
@@ -315,7 +338,7 @@ class GTN(NodeClfMetrics, Gtn):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.valid_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
@@ -409,7 +432,7 @@ class HAN(NodeClfMetrics, Han):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.val_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.valid_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
@@ -554,7 +577,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.val_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+        return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)

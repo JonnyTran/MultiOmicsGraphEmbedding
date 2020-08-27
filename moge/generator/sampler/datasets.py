@@ -371,7 +371,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                                                         **kwargs))
         return loader
 
-    def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
