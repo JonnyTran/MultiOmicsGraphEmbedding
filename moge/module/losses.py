@@ -52,10 +52,9 @@ class ClassificationLoss(nn.Module):
                                           "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
                 target = target.type_as(logits)
             else:
-                if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
+                if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
-                    pass
-                    # target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
+                    target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
             return self.criterion.forward(logits, target)
 
     def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):

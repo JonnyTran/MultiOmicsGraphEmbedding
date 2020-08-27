@@ -55,8 +55,6 @@ def train(hparams: Namespace):
         max_epochs=MAX_EPOCHS,
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False),
         logger=logger,
-        # regularizers=regularizers,
-        weights_summary='top',
         amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32
     )
@@ -87,8 +85,8 @@ if __name__ == "__main__":
     parser.add_argument('--use_reverse', type=bool, default=True)
 
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
-    parser.add_argument('--lr', type=float, default=0.01)
-    parser.add_argument('--weight_decay', type=float, default=0)
+    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--weight_decay', type=float, default=1e-4)
 
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
