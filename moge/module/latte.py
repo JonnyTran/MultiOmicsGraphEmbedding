@@ -101,11 +101,15 @@ class LATTE(nn.Module):
                                                  n=global_node_idx[metapath_b[-1]].size(0),
                                                  coalesced=True)
 
-                    if new_edge_index[0].size(1) <= 1: continue
+                    if new_edge_index[0].size(1) == 0: continue
                     output_dict[metapath_join] = new_edge_index
 
                 except Exception as e:
                     print(f"{str(e)} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
+                    del edge_index_a
+                    del values_a
+                    del edge_index_b
+                    del values_b
                     continue
 
         return output_dict
