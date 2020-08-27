@@ -224,7 +224,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         else:
             self.embeddings = None
 
-        # self.reset_parameters()
+        self.reset_parameters()
 
     def reset_parameters(self):
         for i, metapath in enumerate(self.metapaths):

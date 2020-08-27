@@ -34,19 +34,17 @@ def train(hparams: Namespace):
     neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.t_order):
         neighbor_sizes.extend([neighbor_sizes[-1] // 2])
-
     print("neighbor_sizes", neighbor_sizes)
     hparams.neighbor_sizes = neighbor_sizes
+
     dataset = load_node_dataset(hparams.dataset, method="LATTE", train_ratio=None, hparams=hparams)
 
     METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
-    hparams.loss_type = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
+    hparams.loss_type = "BCE" if dataset.multilabel else hparams.loss_type
     hparams.n_classes = dataset.n_classes
     model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
 
-    logger = WandbLogger(name=model.name(),
-                         tags=[dataset.name()],
-                         project="multiplex-comparison")
+    logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
 
     trainer = Trainer(
         gpus=NUM_GPUS,
