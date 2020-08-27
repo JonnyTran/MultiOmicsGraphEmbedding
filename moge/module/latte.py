@@ -17,39 +17,25 @@ from moge.module.sampling import negative_sample, negative_sample_head_tail
 from .utils import preprocess_input
 
 class LATTE(nn.Module):
-    def __init__(self, in_channels_dict: dict, embedding_dim: int, t_order: int, num_nodes_dict: dict, metapaths: list,
+    def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
-                 use_proximity_loss=True,
-                 neg_sampling_ratio=2.0):
+                 use_proximity=True, neg_sampling_ratio=2.0):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
         self.embedding_dim = embedding_dim * t_order
-        self.use_proximity_loss = use_proximity_loss
+        self.use_proximity = use_proximity
         self.t_order = t_order
         self.neg_sampling_ratio = neg_sampling_ratio
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
         for t in range(t_order):
-            if t == 0:
-                layers.append(
-                    LATTEConv(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
-                              num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
-                              attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
-                              use_proximity_loss=use_proximity_loss,
-                              neg_sampling_ratio=neg_sampling_ratio \
-                                  if isinstance(neg_sampling_ratio, (int, float)) else neg_sampling_ratio[t],
-                              first=True))
-            else:
-                layers.append(
-                    LATTEConv(embedding_dim=embedding_dim, node_attr_shape=in_channels_dict,
-                              num_nodes_dict=num_nodes_dict, metapaths=t_order_metapaths, activation=activation,
-                              attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
-                              use_proximity_loss=use_proximity_loss,
-                              neg_sampling_ratio=neg_sampling_ratio \
-                                  if isinstance(neg_sampling_ratio, (int, float)) else neg_sampling_ratio[t],
-                              first=False))
+            layers.append(
+                LATTEConv(embedding_dim=embedding_dim, in_channels_dict=in_channels_dict, num_nodes_dict=num_nodes_dict,
+                          metapaths=t_order_metapaths, activation=activation, attn_heads=attn_heads,
+                          attn_activation=attn_activation, attn_dropout=attn_dropout, use_proximity=use_proximity,
+                          neg_sampling_ratio=neg_sampling_ratio, first=True if t == 0 else False))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
         self.layers = nn.ModuleList(layers)
 
@@ -118,34 +104,33 @@ class LATTE(nn.Module):
         :param save_betas: whether to save _beta values for batch
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
-        device = global_node_idx[list(global_node_idx.keys())[0]].device
-        proximity_loss = torch.tensor(0.0, device=device) if self.use_proximity_loss else None
+        # device = global_node_idx[list(global_node_idx.keys())[0]].device
+        proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
 
         h_layers = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_proximity_loss, edge_pred_dict = self.layers[t].forward(X=X,
-                                                                                  edge_index_dict=edge_index_dict,
-                                                                                  global_node_idx=global_node_idx,
-                                                                                  save_betas=save_betas)
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(X=X, edge_index_dict=edge_index_dict,
+                                                                        global_node_idx=global_node_idx,
+                                                                        save_betas=save_betas)
                 # h1_dict = h_dict  # Save 1-order embeddings
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_proximity_loss, _ = self.layers[t].forward(X=X, edge_index_dict=next_edge_index_dict,
-                                                                     global_node_idx=global_node_idx,
-                                                                     h_prev=h_dict, save_betas=save_betas)
+                h_dict, t_loss, _ = self.layers[t].forward(X=X, edge_index_dict=next_edge_index_dict,
+                                                           global_node_idx=global_node_idx,
+                                                           h_prev=h_dict, save_betas=save_betas)
 
             for node_type in global_node_idx:
                 h_layers[node_type].append(h_dict[node_type])
 
-            if self.use_proximity_loss:
-                proximity_loss += t_proximity_loss
+            if self.use_proximity:
+                proximity_loss += t_loss
 
-        embedding_output = {node_type: torch.cat(h_emb_list, dim=1) \
-                            for node_type, h_emb_list in h_layers.items() if len(h_emb_list) > 0}
+        concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                      if len(h_list) > 0}
 
-        return embedding_output, proximity_loss, edge_pred_dict
+        return concat_out, proximity_loss, edge_pred_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -155,17 +140,16 @@ class LATTE(nn.Module):
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
-    def __init__(self, embedding_dim: int, node_attr_shape: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
+    def __init__(self, embedding_dim: int, in_channels_dict: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.5,
-                 use_proximity_loss=True,
-                 neg_sampling_ratio=1.0, first=True) -> None:
+                 use_proximity=False, neg_sampling_ratio=1.0, first=True) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = embedding_dim
-        self.use_proximity_loss = use_proximity_loss
+        self.use_proximity_loss = use_proximity
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
@@ -181,7 +165,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # if first:
         self.linear = nn.ModuleDict(
             {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
-             for node_type, in_channels in node_attr_shape.items()})  # W.shape (F x D_m)
+             for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
         # else:
         #     self.linear = nn.ModuleDict(
         #         {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
@@ -210,7 +194,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self.alpha_activation = None
 
         # If some node type are not attributed, assign embeddings for them
-        non_attr_node_types = (num_nodes_dict.keys() - node_attr_shape.keys())
+        non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         if len(non_attr_node_types) > 0:
             if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
                 print("Embedding.device = 'cpu'")
@@ -270,15 +254,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             attn_out, attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
                                                                   key=out[node_type].permute(1, 0, 2),
-                                                                  value=out[node_type].permute(1, 0, 2),
-                                                                  need_weights=save_betas)
+                                                                  value=out[node_type].permute(1, 0, 2))
             if save_betas: self.save_attn_weights(node_type, attn_weights, global_node_idx[node_type])
 
-            # out[node_type] = attn_out.permute(1, 0, 2).mean(1)
-            out[node_type] = self.linear_out[node_type].forward(
-                attn_out.permute(1, 0, 2) \
-                    .contiguous() \
-                    .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
+            out[node_type] = attn_out.permute(1, 0, 2).mean(1)
+            # out[node_type] = self.linear_out[node_type].forward(
+            #     attn_out.permute(1, 0, 2) \
+            #         .contiguous() \
+            #         .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.layer_norm(out[node_type])

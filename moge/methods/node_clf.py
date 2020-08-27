@@ -92,13 +92,13 @@ class NodeClfMetrics(pl.LightningModule):
                   {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
 
     def get_n_params(self):
-        pp = 0
-        for p in list(self.parameters()):
+        size = 0
+        for name, param in dict(self.named_parameters()).items():
             nn = 1
-            for s in list(p.size()):
+            for s in list(param.size()):
                 nn = nn * s
-            pp += nn
-        return pp
+            size += nn
+        return size
 
 
 class LATTENodeClassifier(NodeClfMetrics):
@@ -108,14 +108,14 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity_loss else ''}"
+        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.latte = LATTE(in_channels_dict=dataset.node_attr_shape, embedding_dim=hparams.embedding_dim,
-                           t_order=hparams.t_order, num_nodes_dict=dataset.num_nodes_dict,
+        self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+                           in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
                            metapaths=dataset.get_metapaths(), activation=hparams.activation,
                            attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-                           attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
+                           attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
@@ -218,10 +218,11 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                              weight_decay=self.hparams.weight_decay)
         # scheduler = ReduceLROnPlateau(optimizer)
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        no_decay = ['bias', 'layer_norm']
         optimizer_grouped_parameters = [
-            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+            {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
+             'weight_decay': 0.01},
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
         n_batch = self.dataset.training_idx.numel() // self.hparams.batch_size
