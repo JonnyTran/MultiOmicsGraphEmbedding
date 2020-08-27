@@ -172,14 +172,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
         assert hasattr(self, "num_nodes_dict")
-        if not hasattr(self, "node_attr_shape"):
-            self.node_attr_shape = {}
 
         if not hasattr(self, "x_dict") or len(self.x_dict) == 0:
             self.x_dict = {}
-            self.node_attr_shape = {}
-        else:
-            self.node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
 
         if resample_train is not None and resample_train > 0:
             self.resample_training_idx(resample_train)
@@ -191,6 +186,14 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             return self.dataset.__class__.__name__
         else:
             return self._name
+
+    @property
+    def node_attr_shape(self):
+        if not hasattr(self, "x_dict") or len(self.x_dict) == 0:
+            node_attr_shape = {}
+        else:
+            node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
+        return node_attr_shape
 
     def split_train_val_test(self, train_ratio, sample_indices=None):
         if sample_indices is not None:

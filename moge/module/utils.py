@@ -37,19 +37,19 @@ def tensor_sizes(input):
         return input.shape
 
 
-def preprocess_input(input, device, half=False):
+def preprocess_input(input, device, dtype, half=False):
     if isinstance(input, dict):
-        input = {k: preprocess_input(v, device, half) for k, v in input.items()}
+        input = {k: preprocess_input(v, device, dtype, half) for k, v in input.items()}
     elif isinstance(input, tuple):
-        input = tuple(preprocess_input(v, device, half) for v in input)
+        input = tuple(preprocess_input(v, device, dtype, half) for v in input)
     elif isinstance(input, list):
-        input = [preprocess_input(v, device, half) for v in input]
+        input = [preprocess_input(v, device, dtype, half) for v in input]
     else:
-        input = process_tensor(input, device=device, half=half)
+        input = process_tensor(input, device=device, dtype=dtype, half=half)
     return input
 
 
-def process_tensor(input, device=None, half=False):
+def process_tensor(input, device=None, dtype=None, half=False):
     if not isinstance(input, torch.Tensor):
         input = torch.tensor(input)
 
@@ -57,6 +57,8 @@ def process_tensor(input, device=None, half=False):
         input = input.to(device)
     if half:
         input = input.half()
+    if dtype:
+        input = input.type(dtype)
 
     return input
 
