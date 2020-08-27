@@ -1,18 +1,25 @@
+import os
+import dill
 from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
 from ogb.nodeproppred import PygNodePropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
+import torch
 from torch_geometric.datasets import AMiner
 
 from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler
-
+from moge.module.utils import preprocess_input
 
 def load_node_dataset(name, method, train_ratio=None, hparams=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
     if "ogbn" in name:
         ogbn = PygNodePropPredDataset(name=name, root=dir_path)
         dataset = HeteroNeighborSampler(ogbn, directed=True, neighbor_sizes=hparams.neighbor_sizes,
-                                        head_node_type=None,
                                         add_reverse_metapaths=hparams.use_reverse, resample_train=None)
+        if os.path.exists(ogbn.processed_dir + "/features.pk"):
+            features = dill.load(open(ogbn.processed_dir + "/features.pk", 'rb'))
+            dataset.x_dict = preprocess_input(features, device="cpu", dtype=torch.float)
+            print('added features')
+
     elif name == "ACM":
         if method == "HAN" or method == "MetaPath2Vec":
             dataset = HeteroNeighborSampler(ACM_HANDataset(), node_types=["P"], metapaths=["PAP", "PLP"],
