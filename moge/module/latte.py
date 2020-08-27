@@ -196,7 +196,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         # self.attn_q = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, attn_heads))
-        # self.attn_q = nn.ModuleList([nn.Sequential(nn.Tanh(), nn.Linear(attn_heads * 2, 1)) for m in self.metapaths])
+        self.attn_q = nn.ModuleList([nn.Sequential(nn.Tanh(), nn.Linear(attn_heads * 2, 1)) for m in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
