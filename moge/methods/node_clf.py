@@ -204,11 +204,10 @@ class LATTENodeClassifier(NodeClfMetrics):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
                                      lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=0 if not hasattr(self.hparams,
-                                                                   "weight_decay") else self.hparams.weight_decay)
-        # scheduler = ReduceLROnPlateau(optimizer)
+                                     weight_decay=self.hparams.weight_decay)
+        scheduler = ReduceLROnPlateau(optimizer)
 
-        return optimizer
+        return [optimizer], [scheduler]
 
 
 class GTN(NodeClfMetrics, Gtn):
