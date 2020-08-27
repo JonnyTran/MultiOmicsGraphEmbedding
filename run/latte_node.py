@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--use_proximity_loss', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
-    parser.add_argument('--use_class_weights', type=bool, default=True)
+    parser.add_argument('--use_class_weights', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
 
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")

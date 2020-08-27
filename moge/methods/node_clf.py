@@ -121,7 +121,6 @@ class LATTENodeClassifier(NodeClfMetrics):
     def forward(self, X: dict, **kwargs):
         embeddings, proximity_loss, _ = self.latte.forward(X["x_dict"], X["global_node_index"], X["edge_index_dict"],
                                                            **kwargs)
-
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 
@@ -133,7 +132,7 @@ class LATTENodeClassifier(NodeClfMetrics):
             y = y[self.head_node_type]
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.criterion(y_hat, y)
+        loss = self.criterion.forward(y_hat, y)
 
         self.train_metrics.update_metrics(y_hat, y, weights=None)
 
@@ -154,9 +153,9 @@ class LATTENodeClassifier(NodeClfMetrics):
         if isinstance(y, dict) and len(y) > 1:
             y = y[self.head_node_type]
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        val_loss = self.criterion.forward(y_hat, y)
         if batch_nb == 0:
             self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
-        val_loss = self.criterion(y_hat, y)
 
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
@@ -202,12 +201,12 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             t_order=self.hparams.t_order)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=self.hparams.weight_decay)
-        scheduler = ReduceLROnPlateau(optimizer)
+        optimizer = torch.optim.SGD(self.parameters(),
+                                    lr=self.hparams.lr, momentum=self.hparams.momentum,
+                                    weight_decay=self.hparams.weight_decay)
+        # scheduler = ReduceLROnPlateau(optimizer)
 
-        return [optimizer], [scheduler]
+        return optimizer
 
 
 class GTN(NodeClfMetrics, Gtn):

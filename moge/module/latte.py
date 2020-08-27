@@ -106,11 +106,6 @@ class LATTE(nn.Module):
 
                 except Exception as e:
                     print(f"{str(e)} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
-                    del edge_index_a
-                    del values_a
-                    del edge_index_b
-                    del values_b
-                    torch.cuda.empty_cache()
                     continue
 
         return output_dict
@@ -229,7 +224,7 @@ class LATTELayer(MessagePassing, pl.LightningModule):
         else:
             self.embeddings = None
 
-        self.reset_parameters()
+        # self.reset_parameters()
 
     def reset_parameters(self):
         for i, metapath in enumerate(self.metapaths):

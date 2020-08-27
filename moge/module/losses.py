@@ -14,6 +14,7 @@ class ClassificationLoss(nn.Module):
         self.hierar_relations = hierar_relations
         self.multilabel = multilabel
         self.use_hierar = use_hierar
+        print(f"Using {loss_type}")
         print(f"class_weight for {class_weight.shape} classes") if class_weight is not None else None
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
@@ -53,7 +54,8 @@ class ClassificationLoss(nn.Module):
             else:
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
-                    target = torch.eye(self.n_classes)[target]
+                    pass
+                    # target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
             return self.criterion.forward(logits, target)
 
     def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):
