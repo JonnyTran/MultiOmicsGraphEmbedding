@@ -29,7 +29,6 @@ class TripletSampler(HeteroNetDataset):
 
         if self.node_types is None:
             self.node_types = list(data.num_nodes_dict.keys())
-        self.node_attr_shape = {}
 
         if hasattr(data, "x") and data.x is not None:
             self.x_dict = {self.head_node_type: data.x}
@@ -37,7 +36,6 @@ class TripletSampler(HeteroNetDataset):
             self.x_dict = data.x_dict
         else:
             self.x_dict = {}
-        self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
 
         self.metapaths = list(self.edge_index_dict.keys())
 
@@ -87,7 +85,6 @@ class TripletSampler(HeteroNetDataset):
             self.x_dict = data.x_dict
         else:
             self.x_dict = {}
-        self.node_attr_shape = {node_type: x.size(1) for node_type, x in self.x_dict.items()}
 
         self.metapaths = [(self.head_node_type, str(k.item()), self.head_node_type) for k in self.edge_reltype.unique()]
         self.edge_index_dict = {k: None for k in self.metapaths}

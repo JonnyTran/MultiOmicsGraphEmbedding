@@ -108,10 +108,11 @@ class LATTENodeClassifier(NodeClfMetrics):
                            attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-        self.classifier = DenseClassification(hparams)
-        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
-        #                                            num_class=hparams.n_classes,
-        #                                            loss_type=hparams.loss_type)
+
+        # self.classifier = DenseClassification(hparams)
+        self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
+                                                   num_class=hparams.n_classes,
+                                                   loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
@@ -155,8 +156,8 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion.forward(y_hat, y)
-        if batch_nb == 0:
-            self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
+        # if batch_nb == 0:
+        #     self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
 

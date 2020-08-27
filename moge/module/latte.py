@@ -192,6 +192,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             {node_type: nn.Linear(embedding_dim * self.num_head_relations(node_type), embedding_dim, bias=True) \
              for node_type in self.node_types})
 
+        # self.layer_norm = nn.LayerNorm(normalized_shape=self.embedding_dim)
+
         self.out_channels = embedding_dim // attn_heads
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
@@ -280,6 +282,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
+            # out[node_type] = self.layer_norm(out[node_type])
             out[node_type] = self.embedding_activation(out[node_type])
 
         proximity_loss, edge_pred_dict = None, None
