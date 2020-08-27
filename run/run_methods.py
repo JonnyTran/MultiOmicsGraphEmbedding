@@ -109,7 +109,6 @@ def train(hparams):
         callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001, strict=False)],
         logger=wandb_logger,
         weights_summary='top',
-        use_amp=USE_AMP,
         amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32
     )

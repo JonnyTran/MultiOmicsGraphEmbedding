@@ -40,7 +40,6 @@ def train(hparams):
         logger=wandb_logger,
         # regularizers=regularizers,
         weights_summary='top',
-        use_amp=USE_AMP,
         amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32
     )

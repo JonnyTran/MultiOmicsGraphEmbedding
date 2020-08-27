@@ -19,6 +19,8 @@ def load_node_dataset(name, method, train_ratio=None, hparams=None, dir_path="~/
             features = dill.load(open(ogbn.processed_dir + "/features.pk", 'rb'))
             dataset.x_dict = preprocess_input(features, device="cpu", dtype=torch.float)
             print('added features')
+        else:
+            print("features.pk not found")
 
     elif name == "ACM":
         if method == "HAN" or method == "MetaPath2Vec":
