@@ -18,7 +18,6 @@ class NetworkXSampler(HeteroNetDataset):
                                               add_reverse_metapaths)
         self.char_to_node_type = {node_type[0]: node_type for node_type in self.node_types}
 
-    def process_graph_sampler(self):
         try:
             cpus = multiprocessing.cpu_count()
         except NotImplementedError:
@@ -115,13 +114,11 @@ class NetworkXSampler(HeteroNetDataset):
             self.batch_size = batch_size * len(self.node_types)
 
         if "LATTENode_batch" in collate_fn:
-            return self.collate_LATTENode_batch
-        elif "HAN_batch" in collate_fn:
-            return self.collate_HAN
+            return self.sample
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def collate_LATTENode_batch(self, iloc):
+    def sample(self, iloc):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
