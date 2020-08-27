@@ -148,7 +148,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.train_metrics.update_metrics(y_hat, y, weights=None)
 
         logs = None
-        if self.hparams.use_proximity_loss:
+        if self.hparams.use_proximity:
             loss = loss + proximity_loss
             logs = {"proximity_loss": proximity_loss}
 
@@ -171,7 +171,7 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
-        if self.hparams.use_proximity_loss:
+        if self.hparams.use_proximity:
             val_loss = val_loss + proximity_loss
 
         return {"val_loss": val_loss}
@@ -189,7 +189,7 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         self.test_metrics.update_metrics(y_hat, y, weights=None)
 
-        if self.hparams.use_proximity_loss:
+        if self.hparams.use_proximity:
             test_loss = test_loss + proximity_loss
 
         return {"test_loss": test_loss}

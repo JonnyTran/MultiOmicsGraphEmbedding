@@ -78,7 +78,7 @@ if __name__ == "__main__":
     parser.add_argument('--nb_cls_dense_size', type=int, default=512)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.3)
 
-    parser.add_argument('--use_proximity_loss', type=bool, default=False)
+    parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
     parser.add_argument('--use_class_weights', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)

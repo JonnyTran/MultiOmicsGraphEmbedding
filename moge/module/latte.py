@@ -149,7 +149,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.metapaths = list(metapaths)
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = embedding_dim
-        self.use_proximity_loss = use_proximity
+        self.use_proximity = use_proximity
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
@@ -244,31 +244,31 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
         for node_type in global_node_idx:
-            out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
-                                                         global_node_idx)
-            # if self.first:
-            out[node_type][:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
-            # else:
-            #     out[node_type][:, -1] = h_prev[node_type].view(-1, self.embedding_dim)
+            rel_embs = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
+                                                   global_node_idx)
+            if self.first:
+                rel_embs[:, -1] = h_dict[node_type].view(-1, self.embedding_dim)
+            else:
+                rel_embs[:, -1] = h_prev[node_type].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            attn_out, attn_weights = self.conv[node_type].forward(query=out[node_type].permute(1, 0, 2),
-                                                                  key=out[node_type].permute(1, 0, 2),
-                                                                  value=out[node_type].permute(1, 0, 2))
+            rel_embs, attn_weights = self.conv[node_type].forward(query=rel_embs.permute(1, 0, 2),
+                                                                  key=rel_embs.permute(1, 0, 2),
+                                                                  value=rel_embs.permute(1, 0, 2))
             if save_betas: self.save_attn_weights(node_type, attn_weights, global_node_idx[node_type])
 
-            out[node_type] = attn_out.permute(1, 0, 2).mean(1)
-            # out[node_type] = self.linear_out[node_type].forward(
-            #     attn_out.permute(1, 0, 2) \
-            #         .contiguous() \
-            #         .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
+            # out[node_type] = attn_out.permute(1, 0, 2).mean(1)
+            out[node_type] = self.linear_out[node_type].forward(
+                rel_embs.permute(1, 0, 2) \
+                    .contiguous() \
+                    .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.layer_norm(out[node_type])
             out[node_type] = self.embedding_activation(out[node_type])
 
         proximity_loss, edge_pred_dict = None, None
-        if self.use_proximity_loss:
+        if self.use_proximity:
             proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
                                                                  alpha_l=alpha_l, alpha_r=alpha_r,
                                                                  global_node_idx=global_node_idx)
