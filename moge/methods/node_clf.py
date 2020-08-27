@@ -117,7 +117,7 @@ class LATTENodeClassifier(NodeClfMetrics):
                            attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                            attn_dropout=hparams.attn_dropout, use_proximity_loss=hparams.use_proximity_loss,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
-        # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
@@ -226,7 +226,7 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         n_batch = self.dataset.training_idx.numel() // self.hparams.batch_size
 
-        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06)
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, pct_start=0.05, anneal_strategy='linear',
                                                         final_div_factor=10,
                                                         max_lr=5e-4, epochs=50, steps_per_epoch=n_batch)

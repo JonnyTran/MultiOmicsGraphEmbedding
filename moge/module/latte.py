@@ -99,8 +99,7 @@ class LATTE(nn.Module):
                                                  m=global_node_idx[metapath_a[0]].size(0),
                                                  k=global_node_idx[metapath_a[-1]].size(0),
                                                  n=global_node_idx[metapath_b[-1]].size(0),
-                                                 coalesced=True)
-
+                                                 coalesced=True, sampling=True)
                     if new_edge_index[0].size(1) == 0: continue
                     output_dict[new_metapath] = new_edge_index
 
@@ -541,8 +540,10 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
 
     out = A @ D @ B
     row, col, values = out.coo()
-    if sampling and (values.numel() > valueA.numel() or values.numel() > valueB.numel()):
-        idx = torch.multinomial(values, num_samples=min(valueA.numel(), valueB.numel(), values.numel()),
+
+    num_samples = min(int(np.sqrt(valueA.numel())), int(np.sqrt(valueB.numel())), values.numel())
+    if sampling and values.numel() > num_samples:
+        idx = torch.multinomial(values, num_samples=num_samples,
                                 replacement=False)
         row, col, values = row[idx], col[idx], values[idx]
 

@@ -49,6 +49,7 @@ def train(hparams: Namespace):
     trainer = Trainer(
         gpus=NUM_GPUS,
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
+        gradient_clip_val=hparams.gradient_clip_val,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
         early_stop_callback=EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False),
@@ -85,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
-
+    parser.add_argument('--gradient_clip_val', type=float, default=1.0)
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
 

@@ -15,12 +15,12 @@ def load_node_dataset(name, method, train_ratio=None, hparams=None, dir_path="~/
         ogbn = PygNodePropPredDataset(name=name, root=dir_path)
         dataset = HeteroNeighborSampler(ogbn, neighbor_sizes=hparams.neighbor_sizes, directed=True, resample_train=None,
                                         add_reverse_metapaths=hparams.use_reverse)
-        if os.path.exists(ogbn.processed_dir + "/features.pk"):
-            features = dill.load(open(ogbn.processed_dir + "/features.pk", 'rb'))
-            dataset.x_dict = preprocess_input(features, device="cpu", dtype=torch.float)
-            print('added features')
-        else:
-            print("features.pk not found")
+        # if os.path.exists(ogbn.processed_dir + "/features.pk"):
+        #     features = dill.load(open(ogbn.processed_dir + "/features.pk", 'rb'))
+        #     dataset.x_dict = preprocess_input(features, device="cpu", dtype=torch.float)
+        #     print('added features')
+        # else:
+        #     print("features.pk not found")
 
     elif name == "ACM":
         if method == "HAN" or method == "MetaPath2Vec":
