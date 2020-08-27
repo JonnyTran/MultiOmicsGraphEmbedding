@@ -53,12 +53,12 @@ def process_tensor(input, device=None, dtype=None, half=False):
     if not isinstance(input, torch.Tensor):
         input = torch.tensor(input)
 
-    if device:
-        input = input.to(device)
-    if half:
-        input = input.half()
     if dtype:
         input = input.type(dtype)
+    if half:
+        input = input.half()
+    if device:
+        input = input.to(device)
 
     return input
 

@@ -345,7 +345,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         data = dataset[0]
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict
-        self.node_attr_shape = {}
         if self.node_types is None:
             self.node_types = list(data.num_nodes_dict.keys())
         self.y_dict = data.y_dict

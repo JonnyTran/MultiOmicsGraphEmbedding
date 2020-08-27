@@ -129,11 +129,11 @@ class LATTE(nn.Module):
                                                                                   global_node_idx=global_node_idx,
                                                                                   edge_index_dict=edge_index_dict,
                                                                                   save_betas=save_betas)
-                # h1_dict = h_dict  # Save 1-order embeddings
+                h1_dict = h_dict  # Save 1-order embeddings
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_proximity_loss, _ = self.layers[t].forward(x_dict=h_dict, global_node_idx=global_node_idx,
+                h_dict, t_proximity_loss, _ = self.layers[t].forward(x_dict=h1_dict, global_node_idx=global_node_idx,
                                                                      edge_index_dict=next_edge_index_dict,
                                                                      h_prev=h_dict, save_betas=save_betas)
 
