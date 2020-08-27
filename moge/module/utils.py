@@ -37,7 +37,7 @@ def tensor_sizes(input):
         return input.shape
 
 
-def preprocess_input(input, device, dtype, half=False):
+def preprocess_input(input, device, dtype=None, half=False):
     if isinstance(input, dict):
         input = {k: preprocess_input(v, device, dtype, half) for k, v in input.items()}
     elif isinstance(input, tuple):
