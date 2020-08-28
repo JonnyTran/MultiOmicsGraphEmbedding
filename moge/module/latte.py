@@ -252,17 +252,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 rel_embs[:, -1] = h_prev[node_type].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            # rel_embs, attn_weights = self.conv[node_type].forward(query=rel_embs.permute(1, 0, 2),
-            #                                                       key=rel_embs.permute(1, 0, 2),
-            #                                                       value=rel_embs.permute(1, 0, 2))
-            # if save_betas: self.save_attn_weights(node_type, attn_weights, global_node_idx[node_type])
+            rel_embs, attn_weights = self.conv[node_type].forward(query=rel_embs.permute(1, 0, 2),
+                                                                  key=rel_embs.permute(1, 0, 2),
+                                                                  value=rel_embs.permute(1, 0, 2))
+            if save_betas: self.save_attn_weights(node_type, attn_weights, global_node_idx[node_type])
 
             # out[node_type] = attn_out.permute(1, 0, 2).mean(1)
-            out[node_type] = rel_embs.mean(1)
-            # out[node_type] = self.linear_out[node_type].forward(
-            #     rel_embs.permute(1, 0, 2) \
-            #         .contiguous() \
-            #         .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
+            out[node_type] = self.linear_out[node_type].forward(
+                rel_embs.permute(1, 0, 2) \
+                    .contiguous() \
+                    .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
             # out[node_type] = self.layer_norm(out[node_type])
