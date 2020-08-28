@@ -225,14 +225,8 @@ class LATTENodeClassifier(NodeClfMetrics):
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
-        n_batch = self.dataset.training_idx.numel() // self.hparams.batch_size
-
         optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, pct_start=0.05, anneal_strategy='linear',
-                                                        final_div_factor=10,
-                                                        max_lr=5e-4, epochs=50, steps_per_epoch=n_batch)
-
-        return [optimizer], [scheduler]
+        return optimizer
 
 
 class GTN(NodeClfMetrics, Gtn):

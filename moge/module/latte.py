@@ -113,11 +113,11 @@ class LATTE(nn.Module):
                 h_dict, t_loss, edge_pred_dict = self.layers[t].forward(X=X, edge_index_dict=edge_index_dict,
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
-                # h1_dict = h_dict  # Save 1-order embeddings
+                h1_dict = h_dict  # Save 1-order embeddings
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_loss, _ = self.layers[t].forward(X=X, edge_index_dict=next_edge_index_dict,
+                h_dict, t_loss, _ = self.layers[t].forward(X=h1_dict, edge_index_dict=next_edge_index_dict,
                                                            global_node_idx=global_node_idx,
                                                            h_prev=h_dict, save_betas=save_betas)
 
@@ -162,20 +162,18 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             {node_type: nn.MultiheadAttention(embed_dim=embedding_dim, num_heads=4, dropout=attn_dropout) \
              for node_type in self.node_types})
 
-        # if first:
-        self.linear = nn.ModuleDict(
-            {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
-             for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
-        # else:
-        #     self.linear = nn.ModuleDict(
-        #         {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
-        #          for node_type in self.node_types})  # W.shape (D_m x D_m)
+        if first:
+            self.linear = nn.ModuleDict(
+                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
+                 for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
+        else:
+            self.linear = nn.ModuleDict(
+                {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (D_m x D_m)
 
         self.linear_out = nn.ModuleDict(
             {node_type: nn.Linear(embedding_dim * self.num_head_relations(node_type), embedding_dim, bias=True) \
              for node_type in self.node_types})
-
-        self.layer_norm = nn.LayerNorm(normalized_shape=self.embedding_dim)
 
         self.out_channels = embedding_dim // attn_heads
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
@@ -264,7 +262,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     .view(-1, self.embedding_dim * self.num_head_relations(node_type)))
 
             # Apply \sigma activation to all embeddings
-            out[node_type] = self.layer_norm(out[node_type])
             out[node_type] = self.embedding_activation(out[node_type])
 
         proximity_loss, edge_pred_dict = None, None
