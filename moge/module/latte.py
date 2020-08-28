@@ -141,7 +141,7 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, in_channels_dict: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.5,
+                 activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  use_proximity=False, neg_sampling_ratio=1.0, first=True) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
