@@ -14,7 +14,7 @@ class ClassificationLoss(nn.Module):
         self.hierar_relations = hierar_relations
         self.multilabel = multilabel
         self.use_hierar = use_hierar
-        print(f"Using {loss_type}")
+        print(f"INFO: Using {loss_type}")
         print(f"class_weight for {class_weight.shape} classes") if class_weight is not None else None
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":

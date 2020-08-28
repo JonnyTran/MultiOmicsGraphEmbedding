@@ -34,7 +34,6 @@ class NodeClfMetrics(pl.LightningModule):
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
         hparams.name = self.name()
-        hparams.n_params = self.get_n_params()
         self.hparams = hparams
 
     def name(self):
@@ -128,6 +127,7 @@ class LATTENodeClassifier(NodeClfMetrics):
                                                                                  hparams.use_class_weights else None,
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
+        self.hparams.n_params = self.get_n_params()
 
     def forward(self, input: dict, **kwargs):
         embeddings, proximity_loss, _ = self.latte.forward(X=input["x_dict"], edge_index_dict=input["edge_index_dict"],
@@ -213,20 +213,20 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             t_order=self.hparams.t_order)
 
     def configure_optimizers(self):
-        # optimizer = torch.optim.Adam(self.parameters(),
-        #                              lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-        #                              weight_decay=self.hparams.weight_decay)
-        # scheduler = ReduceLROnPlateau(optimizer)
-        param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'layer_norm']
-        optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
-             'weight_decay': 0.01},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
-        ]
-
-        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
-        return optimizer
+        optimizer = torch.optim.Adam(self.parameters(),
+                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
+                                     weight_decay=self.hparams.weight_decay)
+        scheduler = ReduceLROnPlateau(optimizer)
+        # param_optimizer = list(self.named_parameters())
+        # no_decay = ['bias', 'layer_norm']
+        # optimizer_grouped_parameters = [
+        #     {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
+        #      'weight_decay': 0.01},
+        #     {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
+        # ]
+        #
+        # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
+        return [optimizer], [scheduler]
 
 
 class GTN(NodeClfMetrics, Gtn):
@@ -259,6 +259,7 @@ class GTN(NodeClfMetrics, Gtn):
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
+        self.hparams.n_params = self.get_n_params()
 
     def forward(self, A, X, x_idx):
         if X is None:
@@ -372,6 +373,7 @@ class HAN(NodeClfMetrics, Han):
         self.hparams = hparams
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
+        self.hparams.n_params = self.get_n_params()
 
     def forward(self, A, X, x_idx):
         if X is None:
@@ -476,6 +478,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
         hparams.name = self.name()
         self.hparams = hparams
+        self.hparams.n_params = self.get_n_params()
 
     def name(self):
         if hasattr(self, "_name"):
