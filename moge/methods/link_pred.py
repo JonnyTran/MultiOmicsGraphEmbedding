@@ -29,10 +29,10 @@ class LATTELinkPredictor(LinkPredMetrics):
                            use_proximity=True, neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-    def forward(self, X: dict, **kwargs):
-        embeddings, proximity_loss, edge_pred_dict = self.latte.forward(X["x_dict"],
-                                                                        edge_index_dict=X["edge_index_dict"],
-                                                                        global_node_idx=X["global_node_index"],
+    def forward(self, input: dict, **kwargs):
+        embeddings, proximity_loss, edge_pred_dict = self.latte.forward(input["x_dict"],
+                                                                        edge_index_dict=input["edge_index_dict"],
+                                                                        global_node_idx=input["global_node_index"],
                                                                         **kwargs)
         return embeddings, proximity_loss, edge_pred_dict
 
