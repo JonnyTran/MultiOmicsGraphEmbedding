@@ -29,7 +29,7 @@ from run.utils import load_node_dataset
 def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = False  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 250
+    MAX_EPOCHS = 50
 
     neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.t_order):
@@ -52,7 +52,7 @@ def train(hparams: Namespace):
         gradient_clip_val=hparams.gradient_clip_val,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False),
+        # early_stop_callback=EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False),
         logger=logger,
         amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32
@@ -71,11 +71,11 @@ if __name__ == "__main__":
     parser.add_argument('-n', '--batch_size', type=int, default=2000)
     parser.add_argument('--n_neighbors', type=int, default=20)
     parser.add_argument('--activation', type=str, default="relu")
-    parser.add_argument('--attn_heads', type=int, default=8)
+    parser.add_argument('--attn_heads', type=int, default=64)
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
     parser.add_argument('--attn_dropout', type=float, default=0.2)
 
-    parser.add_argument('--nb_cls_dense_size', type=int, default=512)
+    parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.3)
 
     parser.add_argument('--use_proximity', type=bool, default=False)
@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
     parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--weight_decay', type=float, default=1e-4)
+    parser.add_argument('--weight_decay', type=float, default=1e-2)
     parser.add_argument('--gradient_clip_val', type=float, default=1.0)
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
