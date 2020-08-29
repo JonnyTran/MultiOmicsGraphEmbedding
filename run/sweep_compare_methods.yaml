@@ -5,8 +5,10 @@ metric:
   goal: maximize
 parameters:
   dataset:
-    values: ["ACM", "DBLP", "IMDB", "BlogCatalog", "AMiner"]
+    values: ["ACM", "DBLP", "IMDB"]
   method:
     values: ["LATTE", "LATTE proximity", "HAN", "GTN", "MetaPath2Vec"]
   train_ratio:
-    values: [0.2, 0.4, 0.6, 0.8]
+    values: [0.05, 0.2, 0.4, 0.6, 0.8]
+  run:
+    values: [1,2,3,4,5,6,7,8,9,10]
