@@ -114,11 +114,10 @@ class LATTE(nn.Module):
                                                                         edge_index_dict=edge_index_dict,
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
-                h1_dict = h_dict  # Save 1-order embeddings
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=h1_dict,
+                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=X,
                                                            edge_index_dict=next_edge_index_dict,
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
@@ -177,10 +176,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             self.linear_l = torch.nn.ModuleDict(
                 {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
-                 for node_type in self.node_types})  # W.shape (F x D_m)
+                 for node_type in self.node_types})  # W.shape (F x F)
             self.linear_r = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
-                 for node_type in self.node_types})  # W.shape (F x D_m
+                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+                 for node_type, in_channels in in_channels_dict})  # W.shape (F x D_m}
 
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
@@ -269,7 +268,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # out[node_type] = out[node_type].mean(dim=1)
 
             # Apply \sigma activation to all embeddings
-            # out[node_type] = self.layer_norm(out[node_type])
             out[node_type] = self.embedding_activation(out[node_type])
 
         proximity_loss, edge_pred_dict = None, None
