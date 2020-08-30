@@ -60,7 +60,8 @@ class Metrics():
                 return (precision * recall * 2 / (precision + recall + 1e-12)).mean()
 
             self.metrics["macro_f1"] = MetricsLambda(macro_f1, self.metrics["precision"], self.metrics["recall"])
-            self.metrics["micro_f1"] = Fbeta(beta=1.0, average=True)
+            self.metrics["micro_f1"] = Fbeta(beta=1.0, average=True, precision=self.metrics["precision"],
+                                             recall=self.metrics["recall"])
 
         self.reset_metrics()
 
