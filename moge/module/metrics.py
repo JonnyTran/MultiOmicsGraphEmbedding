@@ -4,7 +4,7 @@ import numpy as np
 
 import torch
 from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, Accuracy, TopKCategoricalAccuracy, MetricsLambda
+from ignite.metrics import Precision, Recall, Accuracy, TopKCategoricalAccuracy, MetricsLambda, Fbeta
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from ogb.graphproppred import Evaluator as GraphEvaluator
@@ -57,9 +57,10 @@ class Metrics():
             assert "precision" in self.metrics and "recall" in self.metrics
 
             def macro_f1(precision, recall):
-                return (precision * recall * 2 / (precision + recall)).mean()
+                return (precision * recall * 2 / (precision + recall + 1e-12)).mean()
 
             self.metrics["macro_f1"] = MetricsLambda(macro_f1, self.metrics["precision"], self.metrics["recall"])
+            self.metrics["micro_f1"] = Fbeta(beta=1.0, average=True)
 
         self.reset_metrics()
 
@@ -84,14 +85,15 @@ class Metrics():
 
         for metric in self.metrics:
             if "precision" in metric or "recall" in metric or "f1" in metric or "accuracy" in metric:
-                self.threshold = y_pred.max(1).values.min()
-
                 if not self.multilabel and y_true.dim() == 1:
-                    self.metrics[metric].update(
-                        ((y_pred > self.threshold).type_as(y_true),
-                         self.hot_encode(y_true, y_pred)))
+                    self.metrics[metric].update((self.hot_encode(y_pred.argmax(1, keepdim=False), type_as=y_true),
+                                                 self.hot_encode(y_true, type_as=y_pred)))
+                    # self.metrics[metric].update(
+                    # ((y_pred > self.threshold).type_as(y_true),
+                    #  self.hot_encode(y_true, y_pred)))
                 else:
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
+
             elif metric == "top_k":
                 self.metrics[metric].update((y_pred, y_true))
             elif "ogb" in metric:
@@ -99,12 +101,12 @@ class Metrics():
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
 
-    def hot_encode(self, y_true, y_pred):
-        if y_true.dim() == 2:
-            return y_true
-        elif y_true.dim() == 1:
-            y_true = torch.eye(self.n_classes)[y_true].type_as(y_pred)
-            return y_true
+    def hot_encode(self, labels, type_as):
+        if labels.dim() == 2:
+            return labels
+        elif labels.dim() == 1:
+            labels = torch.eye(self.n_classes)[labels].type_as(type_as)
+            return labels
 
     def compute_metrics(self):
         logs = {}

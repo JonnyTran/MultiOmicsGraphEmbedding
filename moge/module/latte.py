@@ -193,7 +193,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
-        if len(non_attr_node_types) > 0:
+        if first and len(non_attr_node_types) > 0:
             if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
                 print("INFO: Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
@@ -532,7 +532,7 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
     out = A @ D @ B
     row, col, values = out.coo()
 
-    num_samples = min(int(np.sqrt(valueA.numel())), int(np.sqrt(valueB.numel())), values.numel())
+    num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
     if sampling and values.numel() > num_samples:
         idx = torch.multinomial(values, num_samples=num_samples,
                                 replacement=False)
