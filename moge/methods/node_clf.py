@@ -247,8 +247,9 @@ class GTN(NodeClfMetrics, Gtn):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super().__init__(hparams, dataset, metrics, num_edge, num_channels, w_in, w_out, num_class, num_nodes,
-                         num_layers)
+        super().__init__(hparams, dataset, metrics, num_edge=num_edge, num_channels=num_channels, w_in=w_in,
+                         w_out=w_out, num_class=num_class, num_nodes=num_nodes,
+                         num_layers=num_layers)
 
         if not hasattr(dataset, "x"):
             if num_nodes > 10000:
