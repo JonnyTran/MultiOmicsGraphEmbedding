@@ -32,8 +32,13 @@ class Metrics():
         for metric in metrics:
             if "precision" == metric:
                 self.metrics[metric] = Precision(average=False, is_multilabel=multilabel, output_transform=None)
+                if "micro_f1" in metrics:
+                    self.metrics["precision_avg"] = Precision(average=True, is_multilabel=multilabel,
+                                                              output_transform=None)
             elif "recall" == metric:
                 self.metrics[metric] = Recall(average=False, is_multilabel=multilabel, output_transform=None)
+                if "micro_f1" in metrics:
+                    self.metrics["recall_avg"] = Recall(average=True, is_multilabel=multilabel, output_transform=None)
             elif "top_k" in metric:
                 if multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
@@ -60,8 +65,9 @@ class Metrics():
                 return (precision * recall * 2 / (precision + recall + 1e-12)).mean()
 
             self.metrics["macro_f1"] = MetricsLambda(macro_f1, self.metrics["precision"], self.metrics["recall"])
-            self.metrics["micro_f1"] = Fbeta(beta=1.0, average=True, precision=self.metrics["precision"],
-                                             recall=self.metrics["recall"])
+        elif "micro_f1" in metrics:
+            self.metrics["micro_f1"] = Fbeta(beta=1.0, average=True, precision=self.metrics["precision_avg"],
+                                             recall=self.metrics["recall_avg"])
 
         self.reset_metrics()
 
