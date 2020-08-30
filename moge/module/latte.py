@@ -110,16 +110,18 @@ class LATTE(nn.Module):
         h_layers = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(X=X, edge_index_dict=edge_index_dict,
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=X, x_r=None,
+                                                                        edge_index_dict=edge_index_dict,
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
                 h1_dict = h_dict  # Save 1-order embeddings
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_loss, _ = self.layers[t].forward(X=h1_dict, edge_index_dict=next_edge_index_dict,
+                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=h1_dict,
+                                                           edge_index_dict=next_edge_index_dict,
                                                            global_node_idx=global_node_idx,
-                                                           h_prev=h_dict, save_betas=save_betas)
+                                                           save_betas=save_betas)
 
             for node_type in global_node_idx:
                 h_layers[node_type].append(h_dict[node_type])
@@ -160,20 +162,25 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
-                in_channels=in_channels_dict[
-                    node_type] if first and node_type in in_channels_dict else embedding_dim,
+                in_channels=embedding_dim,
                 out_channels=self.num_head_relations(node_type),
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
         if first:
-            self.linear = torch.nn.ModuleDict(
+            self.linear_l = torch.nn.ModuleDict(
+                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+                 for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
+            self.linear_r = torch.nn.ModuleDict(
                 {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
         else:
-            self.linear = torch.nn.ModuleDict(
+            self.linear_l = torch.nn.ModuleDict(
                 {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (F x D_m)
+            self.linear_r = torch.nn.ModuleDict(
+                {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (F x D_m
 
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
@@ -216,8 +223,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         glorot(self.attn_q[-1].weight)
 
-        for node_type in self.linear:
-            glorot(self.linear[node_type].weight)
+        for node_type in self.linear_l:
+            glorot(self.linear_l[node_type].weight)
         for node_type in self.conv:
             glorot(self.conv[node_type].weight)
 
@@ -225,35 +232,37 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             for node_type in self.embeddings:
                 self.embeddings[node_type].reset_parameters()
 
-    def forward(self, X, edge_index_dict, global_node_idx, h_prev=None, save_betas=False):
+    def forward(self, x_l, edge_index_dict, global_node_idx, x_r=None, save_betas=False):
         """
 
-        :param X: a dict of node attributes indexed node_type
+        :param x_l: a dict of node attributes indexed node_type
         :param global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
         :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
-        :param h_prev: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
+        :param x_r: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        h_dict = self.get_h_dict(X, global_node_idx)
+        l_dict = self.get_h_dict(x_l, global_node_idx, left_right="left")
+        if self.first:
+            r_dict = self.get_h_dict(x_l, global_node_idx, left_right="right")
+        else:
+            r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
 
         # Compute relations attention coefficients
-        beta = self.get_beta_weights(x_dict=X, h_dict=h_dict, h_prev=h_prev, global_node_idx=global_node_idx)
+        beta = self.get_beta_weights(l_dict)
         # Save beta weights from testing samples
         if not self.training: self.save_relation_weights(beta, global_node_idx)
 
         # Compute node-level attention coefficients
-        alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict, h_prev)
+        alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
         for node_type in global_node_idx:
-            out[node_type] = self.agg_relation_neighbors(node_type, alpha_l, alpha_r, h_dict, edge_index_dict,
-                                                         global_node_idx)
-            if self.first:
-                out[node_type][:, -1] = h_dict[node_type]
-            else:
-                out[node_type][:, -1] = h_prev[node_type]
+            out[node_type] = self.agg_relation_neighbors(node_type=node_type, alpha_l=alpha_l, alpha_r=alpha_r,
+                                                         l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
+                                                         global_node_idx=global_node_idx)
+            out[node_type][:, -1] = l_dict[node_type]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
@@ -270,7 +279,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                  global_node_idx=global_node_idx)
         return out, proximity_loss, edge_pred_dict
 
-    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, h_dict, edge_index_dict, global_node_idx):
+    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
             size=(global_node_idx[node_type].size(0),
@@ -287,7 +296,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(h_dict[tail], h_dict[head]),
+                x=(r_dict[tail], l_dict[head]),
                 alpha=(alpha_r[metapath], alpha_l[metapath]),
                 size=(num_node_tail, num_node_head),
                 metapath_idx=self.metapaths.index(metapath))
@@ -303,44 +312,35 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha
 
-    def get_h_dict(self, x_dict, global_node_idx):
+    def get_h_dict(self, input, global_node_idx, left_right="left"):
         h_dict = {}
         for node_type in global_node_idx:
-            if node_type in x_dict:
-                h_dict[node_type] = self.linear[node_type].forward(x_dict[node_type])
+            if node_type in input:
+                if left_right == "left":
+                    h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
+                elif left_right == "right":
+                    h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
             else:
                 # Should only go here in first layer
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
                     .to(self.conv[node_type].weight.device)
         return h_dict
 
-    def get_alphas(self, edge_index_dict, h_dict, h_prev):
+    def get_alphas(self, edge_index_dict, l_dict, r_dict):
         alpha_l, alpha_r = {}, {}
 
         for i, metapath in enumerate(self.metapaths):
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
-            if self.first:
-                alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type])
-            else:
-                alpha_l[metapath] = self.attn_l[i].forward(h_prev[head_type])
-
-            alpha_r[metapath] = self.attn_r[i].forward(h_dict[tail_type])
+            alpha_l[metapath] = self.attn_l[i].forward(l_dict[head_type])
+            alpha_r[metapath] = self.attn_r[i].forward(r_dict[tail_type])
         return alpha_l, alpha_r
 
-    def get_beta_weights(self, x_dict, h_dict, h_prev, global_node_idx):
+    def get_beta_weights(self, l_dict):
         beta = {}
-        for node_type in global_node_idx:
-            if self.first:
-                if node_type in x_dict:
-                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-                else:
-                    # node_type is not attributed, use h_dict contains self.embeddings in first layer
-                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            else:
-                beta[node_type] = self.conv[node_type].forward(h_prev[node_type].unsqueeze(-1))
-
+        for node_type in l_dict:
+            beta[node_type] = self.conv[node_type].forward(l_dict[node_type].unsqueeze(-1))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         return beta
 

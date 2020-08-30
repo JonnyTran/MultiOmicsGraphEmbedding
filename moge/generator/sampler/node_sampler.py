@@ -173,7 +173,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
 
-        weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], iloc), dtype=torch.float)
+        weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], allowed_nodes), dtype=torch.float)
 
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
