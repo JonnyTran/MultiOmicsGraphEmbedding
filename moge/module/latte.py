@@ -179,13 +179,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  for node_type in self.node_types})  # W.shape (F x F)
             self.linear_r = torch.nn.ModuleDict(
                 {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
-                 for node_type, in_channels in in_channels_dict})  # W.shape (F x D_m}
+                 for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m}
 
         self.attn_l = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
             [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_q = nn.Sequential(nn.Tanh(), nn.Linear(2 * attn_heads, 1, bias=False))
+        self.attn_q = torch.nn.ModuleList(
+            [nn.Sequential(nn.Tanh(), nn.Linear(2 * attn_heads, 1, bias=False)) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -199,7 +200,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
-        if first and len(non_attr_node_types) > 0:
+        if len(non_attr_node_types) > 0:
             if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
                 print("INFO: Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
@@ -220,10 +221,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             glorot(self.attn_l[i].weight)
             glorot(self.attn_r[i].weight)
 
-        glorot(self.attn_q[-1].weight)
+        # glorot(self.attn_q[-1].weight)
 
         for node_type in self.linear_l:
             glorot(self.linear_l[node_type].weight)
+        for node_type in self.linear_r:
+            glorot(self.linear_r[node_type].weight)
         for node_type in self.conv:
             glorot(self.conv[node_type].weight)
 
@@ -304,7 +307,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         # alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_q.forward(torch.cat([alpha_i, alpha_j], dim=1))
+        alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
@@ -345,7 +348,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
         assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
 
-        e_ij = self.attn_q.forward(
+        e_ij = self.attn_q[self.metapaths.index(metapath)].forward(
             torch.cat([alpha_l[metapath][edge_index[0]], alpha_r[metapath][edge_index[1]]], dim=1)).squeeze(-1)
 
         if logits:
