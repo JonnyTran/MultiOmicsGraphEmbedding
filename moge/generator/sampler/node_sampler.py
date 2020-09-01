@@ -96,7 +96,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if self.node_types is None:
             self.node_types = list(self.num_nodes_dict.keys())
 
-        self.x_dict = {self.head_node_type: data.x} if hasattr(data, "x") else {}
+        self.x_dict = {self.head_node_type: data.x} if hasattr(data, "x") and data.x is not None else {}
         self.y_dict = {self.head_node_type: data.y} if hasattr(data, "y") else {}
 
         self.metapaths = list(self.edge_index_dict.keys())
