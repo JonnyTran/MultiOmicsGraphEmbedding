@@ -474,16 +474,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             _beta_avg = np.around(betas.mean(dim=0).cpu().numpy(), decimals=3)
             _beta_std = np.around(betas.std(dim=0).cpu().numpy(), decimals=2)
             self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type, True) + ["self"])}
+                                         enumerate(self.get_head_relations(node_type, True) + [node_type])}
             self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type, True) + ["self"])}
+                                         enumerate(self.get_head_relations(node_type, True) + [node_type])}
 
     def get_relation_weights(self):
         """
         Get the mean and std of relation attention weights for all nodes
         :return:
         """
-        return {(metapath if "." in metapath else node_type): (avg, std) \
+        return {(metapath if "." in metapath or len(metapath) > 1 else node_type): (avg, std) \
                 for node_type in self._beta_avg for (metapath, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 

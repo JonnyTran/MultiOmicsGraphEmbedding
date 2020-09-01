@@ -34,14 +34,28 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                 sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
-        data = dataset[0]
+        data = dataset.data
         self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
-        self.num_nodes_dict = data.num_nodes_dict
+        self.num_nodes_dict = data.num_nodes_dict if hasattr(data, "num_nodes_dict") else self.get_num_nodes_dict(
+            self.edge_index_dict)
         if self.node_types is None:
             self.node_types = list(self.num_nodes_dict.keys())
-        self.x_dict = data.x_dict
-        self.y_dict = data.y_dict
+
+        if hasattr(data, "x_dict"):
+            self.x_dict = data.x_dict
+        elif hasattr(data, "x"):
+            self.x_dict = {self.head_node_type: data.x}
+        else:
+            self.x_dict = {}
+
+        if hasattr(data, "y_dict"):
+            self.y_dict = data.y_dict
+        elif hasattr(data, "y"):
+            self.y_dict = {self.head_node_type: data.y}
+        else:
+            self.y_dict = {}
+
         self.y_index_dict = {node_type: torch.arange(self.num_nodes_dict[node_type]) for node_type in
                              self.y_dict.keys()}
 
@@ -59,11 +73,24 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                                    split_idx["test"][self.head_node_type]
 
     def process_PygNodeDataset_homo(self, dataset: PygNodePropPredDataset, ):
-        data = dataset[0]
+        data = dataset.data
         self._name = dataset.name
         self.head_node_type = "entity"
-        self.metapaths = [(self.head_node_type, "default", self.head_node_type)]
-        self.edge_index_dict = {self.metapaths[0]: data.edge_index}
+
+        if not hasattr(data, "edge_reltype") and not hasattr(data, "edge_attr"):
+            self.metapaths = [(self.head_node_type, "default", self.head_node_type)]
+            self.edge_index_dict = {self.metapaths[0]: data.edge_index}
+        elif hasattr(data, "edge_attr"):  # for ogbn-proteins
+            self.edge_index_dict = {}
+            for edge_type in range(data.edge_attr.size(1)):
+                mask = data.edge_attr.argmax(1) == edge_type
+                edge_index = data.edge_index[:, mask]
+                self.edge_index_dict[("protein", str(edge_type), "protein")] = edge_index
+
+            self.metapaths = list(self.edge_index_dict.keys())
+        else:
+            raise Exception("Something wrong here")
+
         self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
         if self.node_types is None:
