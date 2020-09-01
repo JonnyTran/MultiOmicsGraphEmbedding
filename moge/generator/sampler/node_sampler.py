@@ -34,11 +34,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                 sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
-        data = dataset.data
+        data = dataset[0]
         self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict if hasattr(data, "num_nodes_dict") else self.get_num_nodes_dict(
             self.edge_index_dict)
+
         if self.node_types is None:
             self.node_types = list(self.num_nodes_dict.keys())
 
@@ -73,7 +74,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                                                    split_idx["test"][self.head_node_type]
 
     def process_PygNodeDataset_homo(self, dataset: PygNodePropPredDataset, ):
-        data = dataset.data
+        data = dataset[0]
         self._name = dataset.name
         self.head_node_type = "entity"
 

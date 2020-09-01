@@ -100,7 +100,7 @@ class LATTE(nn.Module):
     def forward(self, X: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
         """
         This
-        :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>
+        :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
         :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
         :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
         :param save_betas: whether to save _beta values for batch
@@ -201,7 +201,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # If some node type are not attributed, assign embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         if first and len(non_attr_node_types) > 0:
-            if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 100000:
+            if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
                 print("INFO: Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
