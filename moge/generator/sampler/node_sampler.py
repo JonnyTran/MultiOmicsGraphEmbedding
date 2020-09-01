@@ -76,6 +76,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         data = dataset.data
         self._name = dataset.name
         self.head_node_type = "entity"
+
         if not hasattr(data, "edge_reltype") and not hasattr(data, "edge_attr"):
             self.metapaths = [(self.head_node_type, "default", self.head_node_type)]
             self.edge_index_dict = {self.metapaths[0]: data.edge_index}
