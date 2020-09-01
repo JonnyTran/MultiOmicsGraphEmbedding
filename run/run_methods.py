@@ -84,9 +84,9 @@ def train(hparams):
             "t_order": t_order,
             "batch_size": 2 ** batch_order * max(num_gpus, 1),
             "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0.3,
+            "nb_cls_dropout": 0.4,
             "activation": "relu",
-            "attn_heads": 64,
+            "attn_heads": 2,
             "attn_activation": "LeakyReLU",
             "attn_dropout": 0.2,
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
@@ -99,7 +99,7 @@ def train(hparams):
             "weight_decay": 1e-2,
         }
 
-        metrics = ["precision", "recall", "f1",
+        metrics = ["precision", "recall", "micro_f1",
                    "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
 
         model = LATTENodeClassifier(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
