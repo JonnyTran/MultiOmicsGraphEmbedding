@@ -85,7 +85,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             for edge_type in range(data.edge_attr.size(1)):
                 mask = data.edge_attr.argmax(1) == edge_type
                 edge_index = data.edge_index[:, mask]
-                self.edge_index_dict[("protein", str(edge_type), "protein")] = edge_index
+                self.edge_index_dict[(self.head_node_type, str(edge_type), self.head_node_type)] = edge_index
 
             self.metapaths = list(self.edge_index_dict.keys())
         else:
