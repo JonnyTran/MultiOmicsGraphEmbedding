@@ -113,10 +113,10 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         # PyTorchGeometric Dataset
 
-        if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):
+        if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset.data, "edge_index_dict"):
             print("PygNodePropPredDataset Homogenous (use HeteroNeighborSampler class)")
             self.process_PygNodeDataset_homo(dataset)
-        elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
+        elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset.data, "edge_index_dict"):
             print("PygNodePropPredDataset Hetero (use HeteroNeighborSampler class)")
             self.process_PygNodeDataset_hetero(dataset)
 
