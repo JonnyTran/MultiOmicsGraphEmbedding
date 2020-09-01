@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from torch import nn as nn
 
-import torch.nn.functional as F
+import nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.inits import glorot
 from torch_geometric.utils import softmax
@@ -159,33 +159,31 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if self.activation not in ["sigmoid", "tanh", "relu"]:
             print(f"Embedding activation arg `{self.activation}` did not match, so uses linear activation.")
 
-        self.conv = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(
-                in_features=embedding_dim,
-                out_features=1) \
-                for node_type in self.node_types})  # W_phi.shape (D x F)
+        self.conv = nn.ModuleDict(
+            {node_type: nn.Linear(in_features=embedding_dim, out_features=1) \
+             for node_type in self.node_types})  # W_phi.shape (D x F)
 
         if first:
-            self.linear_l = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+            self.linear_l = nn.ModuleDict(
+                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
-            self.linear_r = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+            self.linear_r = nn.ModuleDict(
+                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
         else:
-            self.linear_l = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(embedding_dim, embedding_dim, bias=True) \
+            self.linear_l = nn.ModuleDict(
+                {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (F x F)
-            self.linear_r = torch.nn.ModuleDict(
-                {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
+            self.linear_r = nn.ModuleDict(
+                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m}
 
         self.out_channels = self.embedding_dim // attn_heads
-        self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
-        self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
-        self.attn_q = torch.nn.ModuleList(
+        self.attn_l = nn.ModuleList(
+            [nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
+        self.attn_r = nn.ModuleList(
+            [nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
+        self.attn_q = nn.ModuleList(
             [nn.Sequential(nn.Tanh(), nn.Linear(2 * self.out_channels, 1, bias=False)) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
