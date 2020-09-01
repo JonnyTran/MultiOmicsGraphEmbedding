@@ -83,7 +83,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
 
-        elif hasattr(data, "edge_attr") and hasattr(data, "node_species"):  # for ogbn-proteins
+        elif False and hasattr(data, "edge_attr") and hasattr(data, "node_species"):  # for ogbn-proteins
             self.edge_index_dict = {}
             edge_reltype = data.edge_attr.argmax(1)
 
@@ -102,6 +102,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
                                    data.node_species.unique()}
             self.metapaths = list(self.edge_index_dict.keys())
             self.head_node_type = self.metapaths[0][0]
+            self.y_dict = {node_type: data.y for node_type in self.num_nodes_dict}
 
         elif hasattr(data, "edge_attr"):  # for ogbn-proteins
             self.edge_index_dict = {}
@@ -120,12 +121,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             raise Exception("Something wrong here")
 
-
         if self.node_types is None:
             self.node_types = list(self.num_nodes_dict.keys())
 
         self.x_dict = {self.head_node_type: data.x} if hasattr(data, "x") and data.x is not None else {}
-        self.y_dict = {self.head_node_type: data.y} if hasattr(data, "y") else {}
+        if not hasattr(self, "y_dict"):
+            self.y_dict = {self.head_node_type: data.y} if hasattr(data, "y") else {}
 
         self.metapaths = list(self.edge_index_dict.keys())
 
