@@ -37,11 +37,25 @@ class HeteroNeighborSampler(HeteroNetDataset):
         data = dataset.data
         self._name = dataset.name
         self.edge_index_dict = data.edge_index_dict
-        self.num_nodes_dict = data.num_nodes_dict
+        self.num_nodes_dict = data.num_nodes_dict if hasattr(data, "num_nodes_dict") else self.get_num_nodes_dict(
+            self.edge_index_dict)
         if self.node_types is None:
             self.node_types = list(self.num_nodes_dict.keys())
-        self.x_dict = data.x_dict
-        self.y_dict = data.y_dict
+
+        if hasattr(data, "x_dict"):
+            self.x_dict = data.x_dict
+        elif hasattr(data, "x"):
+            self.x_dict = {self.head_node_type: data.x}
+        else:
+            self.x_dict = {}
+
+        if hasattr(data, "y_dict"):
+            self.y_dict = data.y_dict
+        elif hasattr(data, "y"):
+            self.y_dict = {self.head_node_type: data.y}
+        else:
+            self.y_dict = {}
+
         self.y_index_dict = {node_type: torch.arange(self.num_nodes_dict[node_type]) for node_type in
                              self.y_dict.keys()}
 
