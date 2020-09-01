@@ -103,6 +103,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             self.metapaths = list(self.edge_index_dict.keys())
             self.head_node_type = self.metapaths[0][0]
             self.y_dict = {node_type: data.y for node_type in self.num_nodes_dict}
+            # TODO need to convert global node_index to local index
 
         elif hasattr(data, "edge_attr"):  # for ogbn-proteins
             self.edge_index_dict = {}

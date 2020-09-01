@@ -37,7 +37,8 @@ def train(hparams: Namespace):
     print("neighbor_sizes", neighbor_sizes)
     hparams.neighbor_sizes = neighbor_sizes
 
-    dataset = load_node_dataset(hparams.dataset, method="LATTE", train_ratio=None, hparams=hparams)
+    dataset = load_node_dataset(hparams.dataset, method="LATTE", train_ratio=None, hparams=hparams,
+                                dir_path=hparams.dir_path)
 
     METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
     hparams.loss_type = "BCE" if dataset.multilabel else hparams.loss_type
@@ -66,6 +67,8 @@ if __name__ == "__main__":
     parser.add_argument('--num_gpus', type=int, default=1)
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
+    parser.add_argument('--dir_path', type=str, default="~/Bioinformatics_ExternalData/OGB/")
+
     parser.add_argument("-d", '--embedding_dim', type=int, default=128)
     parser.add_argument("-t", '--t_order', type=int, default=2)
     parser.add_argument('-n', '--batch_size', type=int, default=2000)
