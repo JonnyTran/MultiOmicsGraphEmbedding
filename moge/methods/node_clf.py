@@ -166,8 +166,8 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion.forward(y_hat, y)
-        # if batch_nb == 0:
-        #     self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
+        if batch_nb == 0:
+            self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
 

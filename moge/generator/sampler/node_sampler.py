@@ -80,17 +80,41 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if not hasattr(data, "edge_reltype") and not hasattr(data, "edge_attr"):
             self.metapaths = [(self.head_node_type, "default", self.head_node_type)]
             self.edge_index_dict = {self.metapaths[0]: data.edge_index}
+
+        elif hasattr(data, "edge_attr") and hasattr(data, "node_species"):  # for ogbn-proteins
+            self.edge_index_dict = {}
+            edge_reltype = data.edge_attr.argmax(1)
+
+            for node_type in data.node_species.unique():
+                for edge_type in range(data.edge_attr.size(1)):
+                    edge_mask = edge_reltype == edge_type
+                    node_mask = (data.node_species[data.edge_index[0]].squeeze(-1) == node_type).logical_and(
+                        data.node_species[data.edge_index[1]].squeeze(-1) == node_type)
+
+                    edge_index = data.edge_index[:, node_mask.logical_and(edge_mask)]
+
+                    if edge_index.size(1) == 0: continue
+                    self.edge_index_dict[(str(node_type.item()), str(edge_type), str(node_type.item()))] = edge_index
+
+            self.metapaths = list(self.edge_index_dict.keys())
+            self.head_node_type = self.metapaths[0][0]
+
         elif hasattr(data, "edge_attr"):  # for ogbn-proteins
             self.edge_index_dict = {}
+            edge_reltype = data.edge_attr.argmax(1)
+
             for edge_type in range(data.edge_attr.size(1)):
-                mask = data.edge_attr.argmax(1) == edge_type
+                mask = edge_reltype == edge_type
                 edge_index = data.edge_index[:, mask]
+
+                if edge_index.size(1) == 0: continue
                 self.edge_index_dict[(self.head_node_type, str(edge_type), self.head_node_type)] = edge_index
 
             self.metapaths = list(self.edge_index_dict.keys())
         else:
             raise Exception("Something wrong here")
 
+        print(self.edge_index_dict)
         self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
         if self.node_types is None:

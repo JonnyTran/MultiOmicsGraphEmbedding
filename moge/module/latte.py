@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 from torch import nn as nn
 
-import nn.functional as F
+import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.inits import glorot
 from torch_geometric.utils import softmax
@@ -267,7 +267,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             betas[node_type] = beta
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[node_type] = torch.matmul(out[node_type].permute(0, 2, 1), beta).squeeze(-1)
+            out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta).squeeze(-1)
             # out[node_type] = out[node_type].mean(dim=1)
 
             # Apply \sigma activation to all embeddings
@@ -458,9 +458,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
                 _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
                 self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type, True) + ["self"])}
+                                             enumerate(self.get_head_relations(node_type, True) + [node_type])}
                 self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type, True) + ["self"])}
+                                             enumerate(self.get_head_relations(node_type, True) + [node_type])}
 
     def save_attn_weights(self, node_type, attn_weights, node_idx):
         if not hasattr(self, "_betas"):
