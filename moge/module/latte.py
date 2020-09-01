@@ -35,7 +35,9 @@ class LATTE(nn.Module):
                 LATTEConv(embedding_dim=embedding_dim, in_channels_dict=in_channels_dict, num_nodes_dict=num_nodes_dict,
                           metapaths=t_order_metapaths, activation=activation, attn_heads=attn_heads,
                           attn_activation=attn_activation, attn_dropout=attn_dropout, use_proximity=use_proximity,
-                          neg_sampling_ratio=neg_sampling_ratio, first=True if t == 0 else False))
+                          neg_sampling_ratio=neg_sampling_ratio,
+                          first=True if t == 0 else False,
+                          embeddings=layers[0].embeddings if t > 0 else None))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
         self.layers = nn.ModuleList(layers)
 
@@ -98,7 +100,7 @@ class LATTE(nn.Module):
     def forward(self, X: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
         """
         This
-        :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>
+        :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
         :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
         :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
         :param save_betas: whether to save _beta values for batch
@@ -142,7 +144,7 @@ class LATTE(nn.Module):
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, in_channels_dict: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
-                 use_proximity=False, neg_sampling_ratio=1.0, first=True) -> None:
+                 use_proximity=False, neg_sampling_ratio=1.0, first=True, embeddings=None) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
@@ -204,6 +206,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
                                              sparse=False) for node_type in non_attr_node_types})
+        elif embeddings is not None:
+            self.embeddings = embeddings
         else:
             self.embeddings = None
 
@@ -452,9 +456,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
                 _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
                 self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type, True) + ["self"])}
+                                             enumerate(self.get_head_relations(node_type, True) + [node_type])}
                 self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type, True) + ["self"])}
+                                             enumerate(self.get_head_relations(node_type, True) + [node_type])}
 
     def save_attn_weights(self, node_type, attn_weights, node_idx):
         if not hasattr(self, "_betas"):
@@ -473,16 +477,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             _beta_avg = np.around(betas.mean(dim=0).cpu().numpy(), decimals=3)
             _beta_std = np.around(betas.std(dim=0).cpu().numpy(), decimals=2)
             self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type, True) + ["self"])}
+                                         enumerate(self.get_head_relations(node_type, True) + [node_type])}
             self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type, True) + ["self"])}
+                                         enumerate(self.get_head_relations(node_type, True) + [node_type])}
 
     def get_relation_weights(self):
         """
         Get the mean and std of relation attention weights for all nodes
         :return:
         """
-        return {(metapath if "." in metapath else node_type): (avg, std) \
+        return {(metapath if "." in metapath or len(metapath) > 1 else node_type): (avg, std) \
                 for node_type in self._beta_avg for (metapath, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
