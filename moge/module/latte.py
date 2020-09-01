@@ -181,12 +181,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 {node_type: torch.nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m}
 
+        self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, attn_heads, bias=True) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
         self.attn_q = torch.nn.ModuleList(
-            [nn.Sequential(nn.Tanh(), nn.Linear(2 * attn_heads, 1, bias=False)) for metapath in self.metapaths])
+            [nn.Sequential(nn.Tanh(), nn.Linear(2 * self.out_channels, 1, bias=False)) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
