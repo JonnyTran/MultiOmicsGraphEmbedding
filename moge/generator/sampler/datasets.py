@@ -42,12 +42,14 @@ class Network:
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
         multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
+
+        metapaths = list(self.edge_index_dict.keys())
         metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
-                          self.metapaths]
+                          metapaths]
         self.node_degrees = pd.DataFrame(data=0, index=multi_index,
                                          columns=metapath_names)
 
-        for metapath, name in zip(self.metapaths, metapath_names):
+        for metapath, name in zip(metapaths, metapath_names):
             edge_index = self.edge_index_dict[metapath]
 
             head, tail = metapath[0], metapath[-1]
