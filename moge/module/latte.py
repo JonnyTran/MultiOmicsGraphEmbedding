@@ -207,7 +207,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
                                              sparse=False) for node_type in non_attr_node_types})
-        elif embeddings is not None:
+        elif embeddings is not None:  # Link embeddings from first LATTE layer
             self.embeddings = embeddings
         else:
             self.embeddings = None
