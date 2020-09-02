@@ -87,7 +87,7 @@ def train(hparams):
             "nb_cls_dropout": 0.4,
             "activation": "relu",
             "attn_heads": 2,
-            "attn_activation": "LeakyReLU",
+            "attn_activation": "sharpening",
             "attn_dropout": 0.2,
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "use_proximity": True if "proximity" in hparams.method else False,
