@@ -131,6 +131,8 @@ class Metrics():
                     metric_name = (
                                       metric if self.prefix is None else self.prefix + metric) + f"@{self.metrics[metric]._k}"
                     logs[metric_name] = self.metrics[metric].compute()
+                elif "_avg" in metric:
+                    continue
                 else:
                     metric_name = metric if self.prefix is None else self.prefix + metric
                     logs[metric_name] = self.metrics[metric].compute()
