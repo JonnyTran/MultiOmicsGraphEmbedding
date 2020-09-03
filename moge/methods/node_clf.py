@@ -1,5 +1,6 @@
 import multiprocessing
 import itertools
+from abc import ABCMeta
 import numpy as np
 import pytorch_lightning as pl
 import pandas as pd
@@ -17,7 +18,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.generator.sampler.datasets import HeteroNetDataset
 from moge.module.metrics import Metrics
-from moge.module.trainer import _fix_dp_return_type
 from moge.module.latte import LATTE
 from moge.module.classifier import DenseClassification, MulticlassClassification
 from moge.module.losses import ClassificationLoss
@@ -26,7 +26,8 @@ from moge.module.utils import filter_samples, pad_tensors, tensor_sizes
 
 class NodeClfMetrics(pl.LightningModule):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
-        super(NodeClfMetrics, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
@@ -244,9 +245,9 @@ class GTN(NodeClfMetrics, Gtn):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super().__init__(hparams, dataset, metrics, num_edge=num_edge, num_channels=num_channels, w_in=w_in,
-                         w_out=w_out, num_class=num_class, num_nodes=num_nodes,
-                         num_layers=num_layers)
+        super(GTN, self).__init__(hparams, dataset, metrics, num_edge, num_channels, w_in,
+                                  w_out, num_class, num_nodes,
+                                  num_layers)
 
         if not hasattr(dataset, "x"):
             if num_nodes > 10000:
@@ -358,8 +359,9 @@ class HAN(NodeClfMetrics, Han):
 
         w_out = hparams.embedding_dim
 
-        super().__init__(hparams, dataset, metrics, num_edge=num_edge, w_in=w_in, w_out=w_out, num_class=num_class,
-                         num_nodes=num_nodes, num_layers=num_layers)
+        super(HAN, self).__init__(hparams, dataset, metrics, num_edge=num_edge, w_in=w_in, w_out=w_out,
+                                  num_class=num_class,
+                                  num_nodes=num_nodes, num_layers=num_layers)
 
         if not hasattr(dataset, "x"):
             if num_nodes > 10000:
