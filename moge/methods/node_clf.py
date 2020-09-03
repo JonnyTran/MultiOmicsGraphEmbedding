@@ -198,19 +198,19 @@ class LATTENodeClassifier(NodeClfMetrics):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
                                              batch_size=self.hparams.batch_size,
                                              num_workers=int(0.4 * multiprocessing.cpu_count()),
-                                             t_order=self.hparams.t_order)
+                                             )
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
                                              batch_size=self.hparams.batch_size,
                                              num_workers=max(1, int(0.1 * multiprocessing.cpu_count())),
-                                             t_order=self.hparams.t_order)
+                                             )
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
                                             batch_size=self.hparams.batch_size,
                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())),
-                                            t_order=self.hparams.t_order)
+                                            )
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),
