@@ -425,6 +425,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         elif "test" in mode:
             filter = False
             allowed_nodes = self.testing_idx
+        else:
+            filter = False
 
         if isinstance(self.dataset, HANDataset):
             X = {"adj": [(edge_index if not filter else self.filter_edge_index(edge_index, allowed_nodes), values) \
