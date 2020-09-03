@@ -11,7 +11,7 @@ from moge.generator.sampler.datasets import HeteroNetDataset
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
-                 resample_train=None, add_reverse_metapaths=True, inductive=False):
+                 resample_train=None, add_reverse_metapaths=True, inductive=True):
         self.neighbor_sizes = neighbor_sizes
         self.inductive = inductive
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,

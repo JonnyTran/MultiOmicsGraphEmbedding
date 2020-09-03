@@ -130,6 +130,7 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--run', type=int, default=0)
+    parser.add_argument('--inductive', type=bool, default=True)
 
     parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")

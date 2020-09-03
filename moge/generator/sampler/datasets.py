@@ -95,7 +95,7 @@ class Network:
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):
     def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
-                 resample_train: float = None, add_reverse_metapaths=True):
+                 resample_train: float = None, add_reverse_metapaths=True, inductive=True):
         """
         This class handles processing of the data & train/test spliting.
         :param dataset:
@@ -112,6 +112,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         self.use_reverse = add_reverse_metapaths
         self.node_types = node_types
         self.head_node_type = head_node_type
+        self.inductive = inductive
 
         # PyTorchGeometric Dataset
 
@@ -404,7 +405,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             iloc = torch.tensor(iloc)
 
         if isinstance(self.dataset, HANDataset):
-            X = {"adj": [remove_self_loops(edge_index, values) for edge_index, values in
+            X = {"adj": [(edge_index, values) for edge_index, values in
                          self.data["adj"][:len(self.metapaths)]],
                  "x": self.data["x"] if hasattr(self.data, "x") else None,
                  "idx": iloc}
