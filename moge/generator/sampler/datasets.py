@@ -370,7 +370,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         batch_size,
-                                                                                                        mode="training",
+                                                                                                        mode="train_valid",
                                                                                                         **kwargs))
         return loader
 
@@ -393,25 +393,50 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         return loader
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None, **kwargs):
-        if "HAN_batch" in collate_fn:
-            return self.collate_HAN_batch
-        elif "HAN" in collate_fn:
-            return self.collate_HAN
-        else:
-            raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def collate_HAN(self, iloc):
+        def collate_wrapper(iloc):
+            if "HAN_batch" in collate_fn:
+                return self.collate_HAN_batch(iloc)
+            elif "HAN" in collate_fn:
+                return self.collate_HAN(iloc, mode=mode)
+            else:
+                raise Exception(f"Correct collate function {collate_fn} not found.")
+
+        return collate_wrapper
+
+    def filter_edge_index(self, edge_index, allowed_nodes):
+        mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
+        edge_index = edge_index[:, mask]
+        return edge_index
+
+    def collate_HAN(self, iloc, mode=None):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
+        if "train" in mode:
+            filter = True if self.inductive else False
+            allowed_nodes = self.training_idx
+        elif "train_valid" in mode:
+            filter = True if self.inductive else False
+            allowed_nodes = torch.cat([self.training_idx, self.validation_idx], dim=0)
+        elif "valid" in mode:
+            filter = False
+            allowed_nodes = self.validation_idx
+        elif "test" in mode:
+            filter = False
+            allowed_nodes = self.testing_idx
+
         if isinstance(self.dataset, HANDataset):
-            X = {"adj": [(edge_index, values) for edge_index, values in
-                         self.data["adj"][:len(self.metapaths)]],
+            X = {"adj": [(edge_index if not filter else self.filter_edge_index(edge_index, allowed_nodes), values) \
+                         for edge_index, values in self.data["adj"][:len(self.metapaths)]],
                  "x": self.data["x"] if hasattr(self.data, "x") else None,
                  "idx": iloc}
         else:
             X = {
-                "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapaths],
+                "adj": [(self.edge_index_dict[i] if not filter else self.filter_edge_index(self.edge_index_dict[i],
+                                                                                           allowed_nodes),
+                         torch.ones(self.edge_index_dict[i].size(1))) \
+                        for i in self.metapaths],
                 "x": self.data["x"] if hasattr(self.data, "x") else None,
                 "idx": iloc}
 
