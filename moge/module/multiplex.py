@@ -114,14 +114,14 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         if X[self.node_types[0]].dim() > 2:
             X[self.node_types[0]] = X[self.node_types[0]].squeeze(0)
 
-        encodings = self.get_encoder(self.node_types[0]).forward(X[self.node_types[0]],,
+        encodings = self.get_encoder(self.node_types[0]).forward(X[self.node_types[0]])
 
-                    embeddings = []
+        embeddings = []
         for layer in self.layers:
             if X[layer].dim() > 2:
                 X[layer] = X[layer].squeeze(0)
                 X[layer], _ = remove_self_loops(X[layer], None)
-        embeddings.append(self.get_embedder(layer).forward(encodings, X[layer],, )
+        embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
         if hasattr(self, "_multiplex_embedder"):
             embeddings = self._multiplex_embedder.forward(embeddings)
@@ -158,7 +158,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
             if X[layer].dim() > 2:
                 X[layer] = X[layer].squeeze(0)
                 X[layer], _ = remove_self_loops(X[layer], None)
-            multi_embeddings.append(self.get_embedder(layer).forward(encodings, X[layer],, )
+            multi_embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
         if return_multi_emb:
             return multi_embeddings
@@ -253,35 +253,35 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
         X = {key: X[key].squeeze(0) if X[key].dim() > 2 else X[key] for key in X}
         batch_size = X[self.node_types[0]].size(0)
 
-        encodings = {}
-        for node_type in self.node_types:
-            # nonzero_index = X[node_type].sum(1) > 0
-            # print("nonzero_index", nonzero_index)
-            # inputs = X[node_type][nonzero_index, :]
-            encodings[node_type] = self.get_encoder(node_type).forward(X[node_type],,
-                                   # print(f"{node_type}, {encodings[node_type].shape}")
-
-                                   sample_idx_by_type = {}
-            index = 0
-        for i, node_type in enumerate(self.node_types):
-            sample_idx_by_type[node_type] = index
-            index += encodings[node_type].size(0)
-
-        embeddings = self._embedder.forward(x=encodings,
-                                            sample_idx_by_type=sample_idx_by_type,
-                                            edge_index={layer: X[layer] for layer in self.layers})
-        # print("embeddings", embeddings.shape)
-
-        merge_embeddings = []
-        for i, node_type in enumerate(self.node_types):
-            merge_embeddings.append(
-                embeddings[sample_idx_by_type[node_type]: sample_idx_by_type[node_type] + batch_size])
-
-        merge_embeddings = torch.cat(merge_embeddings, dim=1)
+        # encodings = {}
+        # for node_type in self.node_types:
+        #     # nonzero_index = X[node_type].sum(1) > 0
+        #     # print("nonzero_index", nonzero_index)
+        #     # inputs = X[node_type][nonzero_index, :]
+        #     encodings[node_type] = self.get_encoder(node_type).forward(X[node_type])
+        #                            # print(f"{node_type}, {encodings[node_type].shape}")
+        #
+        #                            # sample_idx_by_type = {}
+        #     # index = 0
+        # for i, node_type in enumerate(self.node_types):
+        #     sample_idx_by_type[node_type] = index
+        #     index += encodings[node_type].size(0)
+        #
+        # embeddings = self._embedder.forward(x=encodings,
+        #                                     sample_idx_by_type=sample_idx_by_type,
+        #                                     edge_index={layer: X[layer] for layer in self.layers})
+        # # print("embeddings", embeddings.shape)
+        #
+        # merge_embeddings = []
+        # for i, node_type in enumerate(self.node_types):
+        #     merge_embeddings.append(
+        #         embeddings[sample_idx_by_type[node_type]: sample_idx_by_type[node_type] + batch_size])
+        #
+        # merge_embeddings = torch.cat(merge_embeddings, dim=1)
         # print("merge_embeddings", merge_embeddings.shape)
 
-        y_pred = self._classifier(merge_embeddings)
-        return y_pred
+        # y_pred = self._classifier(merge_embeddings)
+        # return y_pred
 
     def get_embeddings(self, X, batch_size=100, return_multi_emb=False):
         """
