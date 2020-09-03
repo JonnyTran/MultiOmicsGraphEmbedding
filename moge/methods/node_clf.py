@@ -166,8 +166,8 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion.forward(y_hat, y)
-        if batch_nb == 0:
-            self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
+        # if batch_nb == 0:
+        #     self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
@@ -197,20 +197,17 @@ class LATTENodeClassifier(NodeClfMetrics):
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=int(0.4 * multiprocessing.cpu_count()),
-                                             t_order=self.hparams.t_order)
+                                             num_workers=int(0.4 * multiprocessing.cpu_count()))
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())),
-                                             t_order=self.hparams.t_order)
+                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
                                             batch_size=self.hparams.batch_size,
-                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())),
-                                            t_order=self.hparams.t_order)
+                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),

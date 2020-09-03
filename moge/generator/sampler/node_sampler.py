@@ -11,8 +11,9 @@ from moge.generator.sampler.datasets import HeteroNetDataset
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
-                 resample_train=None, add_reverse_metapaths=True):
+                 resample_train=None, add_reverse_metapaths=True, inductive=False):
         self.neighbor_sizes = neighbor_sizes
+        self.inductive = inductive
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
                                                     resample_train, add_reverse_metapaths)
 
@@ -136,11 +137,11 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None, t_order=1):
-        assert mode is not None, "Must pass arg mode at get_collate_fn()"
+    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
+        assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
 
         def collate_wrapper(iloc):
-            return self.sample(iloc, mode=mode, t_order=t_order)
+            return self.sample(iloc, mode=mode)
 
         if "neighbor_sampler" in collate_fn:
             return collate_wrapper
@@ -170,7 +171,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def sample(self, iloc, mode, t_order=1, filter=False):
+    def sample(self, iloc, mode, filter=None):
         """
 
         :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
@@ -187,12 +188,16 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         if "train" in mode:
+            filter = True if self.inductive else False
             allowed_nodes = self.training_idx
         elif "train_valid" in mode:
+            filter = True if self.inductive else False
             allowed_nodes = torch.cat([self.training_idx, self.validation_idx], dim=0)
         elif "valid" in mode:
+            filter = False
             allowed_nodes = self.validation_idx
         elif "test" in mode:
+            filter = False
             allowed_nodes = self.testing_idx
         else:
             raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
