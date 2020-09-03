@@ -20,7 +20,7 @@ def train(hparams):
     EMBEDDING_DIM = 128
     NUM_GPUS = hparams.num_gpus
 
-    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams.train_ratio)
+    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams.train_ratio, hparams=hparams)
 
     METRICS = ["precision", "recall", "f1", "accuracy", "top_k" if dataset.multilabel else "ogbn-mag", ]
 

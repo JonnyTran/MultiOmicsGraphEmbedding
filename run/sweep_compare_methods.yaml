@@ -7,7 +7,7 @@ parameters:
   dataset:
     values: [ "ACM", "DBLP", "IMDB" ]
   method:
-    values: [ "LATTE-1", "LATTE-1 proximity", "LATTE-2", "LATTE-2 proximity", "LATTE-3", "LATTE-3 proximity", "HAN", "GTN", "MetaPath2Vec" ]
+    values: [ "LATTE-1", "LATTE-1 proximity", "LATTE-2", "LATTE-2 proximity", "HAN", "GTN", "MetaPath2Vec" ]
   inductive:
     values: [ True, False ]
   train_ratio:
