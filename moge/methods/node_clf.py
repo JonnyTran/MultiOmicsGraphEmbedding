@@ -1,6 +1,6 @@
 import multiprocessing
 import itertools
-from abc import ABCMeta
+from abc import ABC
 import numpy as np
 import pytorch_lightning as pl
 import pandas as pd
@@ -25,8 +25,8 @@ from moge.module.utils import filter_samples, pad_tensors, tensor_sizes
 
 
 class NodeClfMetrics(pl.LightningModule):
-    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, hparams, dataset, metrics, **kwargs):
+        super().__init__(*kwargs)
 
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
@@ -245,9 +245,9 @@ class GTN(NodeClfMetrics, Gtn):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super(GTN, self).__init__(hparams, dataset, metrics, num_edge, num_channels, w_in,
-                                  w_out, num_class, num_nodes,
-                                  num_layers)
+        super(GTN, self).__init__(hparams, dataset, metrics, num_edge=num_edge, num_channels=num_channels, w_in=w_in,
+                                  w_out=w_out, num_class=num_class, num_nodes=num_nodes,
+                                  num_layers=num_layers)
 
         if not hasattr(dataset, "x"):
             if num_nodes > 10000:
