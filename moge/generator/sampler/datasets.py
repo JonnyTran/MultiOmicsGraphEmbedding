@@ -42,12 +42,14 @@ class Network:
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
         multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
+
+        metapaths = list(self.edge_index_dict.keys())
         metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
-                          self.metapaths]
+                          metapaths]
         self.node_degrees = pd.DataFrame(data=0, index=multi_index,
                                          columns=metapath_names)
 
-        for metapath, name in zip(self.metapaths, metapath_names):
+        for metapath, name in zip(metapaths, metapath_names):
             edge_index = self.edge_index_dict[metapath]
 
             head, tail = metapath[0], metapath[-1]
@@ -93,7 +95,7 @@ class Network:
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):
     def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
-                 resample_train: float = None, add_reverse_metapaths=True):
+                 resample_train: float = None, add_reverse_metapaths=True, inductive=True):
         """
         This class handles processing of the data & train/test spliting.
         :param dataset:
@@ -110,17 +112,18 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         self.use_reverse = add_reverse_metapaths
         self.node_types = node_types
         self.head_node_type = head_node_type
+        self.inductive = inductive
 
         # PyTorchGeometric Dataset
 
-        if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset.data, "edge_index_dict"):
+        if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):
             print("PygNodePropPredDataset Homogenous (use HeteroNeighborSampler class)")
             self.process_PygNodeDataset_homo(dataset)
-        elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset.data, "edge_index_dict"):
+        elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
             print("PygNodePropPredDataset Hetero (use HeteroNeighborSampler class)")
             self.process_PygNodeDataset_hetero(dataset)
 
-        elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset.data, "edge_reltype") and \
+        elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
                 not hasattr(dataset[0], "edge_index_dict"):
             print("PygLink_edge_reltype_dataset Hetero (use TripletSampler class)")
             self.process_edge_reltype_dataset(dataset)
@@ -366,8 +369,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size,
-                                                                                                        mode="training",
+                                                                                                        mode="train",
                                                                                                         **kwargs))
         return loader
 
@@ -375,7 +377,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size,
                                                                                                         mode="validation",
                                                                                                         **kwargs))
         return loader
@@ -384,31 +385,68 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size,
                                                                                                         mode="testing",
                                                                                                         **kwargs))
         return loader
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None, **kwargs):
-        if "HAN_batch" in collate_fn:
-            return self.collate_HAN_batch
-        elif "HAN" in collate_fn:
-            return self.collate_HAN
-        else:
-            raise Exception(f"Correct collate function {collate_fn} not found.")
+    def get_collate_fn(self, collate_fn: str, mode=None, **kwargs):
 
-    def collate_HAN(self, iloc):
+        def collate_wrapper(iloc):
+            if "HAN_batch" in collate_fn:
+                return self.collate_HAN_batch(iloc)
+            elif "HAN" in collate_fn:
+                return self.collate_HAN(iloc, mode=mode)
+            else:
+                raise Exception(f"Correct collate function {collate_fn} not found.")
+
+        return collate_wrapper
+
+    def filter_edge_index(self, input, allowed_nodes):
+        if isinstance(input, tuple):
+            edge_index = input[0]
+            values = edge_index[1]
+        else:
+            edge_index = input
+            values = None
+
+        mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
+        edge_index = edge_index[:, mask]
+
+        if values == None:
+            values = torch.ones(edge_index.size(1))
+        else:
+            values = values[mask]
+
+        return (edge_index, values)
+
+    def collate_HAN(self, iloc, mode=None):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
+        if "train" in mode:
+            filter = True if self.inductive else False
+            allowed_nodes = self.training_idx
+        elif "train_valid" in mode:
+            filter = True if self.inductive else False
+            allowed_nodes = torch.cat([self.training_idx, self.validation_idx], dim=0)
+        elif "valid" in mode:
+            filter = False
+            allowed_nodes = self.validation_idx
+        elif "test" in mode:
+            filter = False
+            allowed_nodes = self.testing_idx
+
         if isinstance(self.dataset, HANDataset):
-            X = {"adj": [remove_self_loops(edge_index, values) for edge_index, values in
-                         self.data["adj"][:len(self.metapaths)]],
+            X = {"adj": [
+                (edge_index, values) if not filter else self.filter_edge_index((edge_index, values), allowed_nodes) \
+                for edge_index, values in self.data["adj"][:len(self.metapaths)]],
                  "x": self.data["x"] if hasattr(self.data, "x") else None,
                  "idx": iloc}
         else:
             X = {
-                "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) for i in self.metapaths],
+                "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) \
+                            if not filter else self.filter_edge_index(self.edge_index_dict[i], allowed_nodes) \
+                        for i in self.metapaths],
                 "x": self.data["x"] if hasattr(self.data, "x") else None,
                 "idx": iloc}
 
