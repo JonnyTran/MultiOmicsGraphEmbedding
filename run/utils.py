@@ -23,7 +23,7 @@ def load_node_dataset(name, method, train_ratio=None, hparams=None, dir_path="~/
             print("features.pk not found")
 
     elif name == "ACM":
-        if method == "HAN" or method == "MetaPath2Vec":
+        if method == "HAN" or method == "MetaPath2Vec" or "LATTE" in method:
             dataset = HeteroNeighborSampler(ACM_HANDataset(), [25, 20], node_types=["P"],
                                             metapaths=["PAP", "PSP"], add_reverse_metapaths=True,
                                             head_node_type="P", resample_train=train_ratio, inductive=hparams.inductive)

@@ -305,6 +305,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+        self.alpha = alpha
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha
 

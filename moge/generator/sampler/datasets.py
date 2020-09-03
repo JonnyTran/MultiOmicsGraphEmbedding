@@ -370,7 +370,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         batch_size,
-                                                                                                        mode="train_valid",
+                                                                                                        mode="train",
                                                                                                         **kwargs))
         return loader
 
