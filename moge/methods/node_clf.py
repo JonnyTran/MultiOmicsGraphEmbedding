@@ -413,7 +413,7 @@ class GTN(Gtn, pl.LightningModule):
 class HAN(Han, pl.LightningModule):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
-        num_layers = len(dataset.edge_index_dict)
+        num_layers = hparams.num_layers
         num_class = dataset.n_classes
         self.collate_fn = hparams.collate_fn
         self.multilabel = dataset.multilabel
@@ -426,14 +426,13 @@ class HAN(Han, pl.LightningModule):
 
         w_out = hparams.embedding_dim
 
-        super(HAN, self).__init__(num_edge=num_edge, w_in=w_in, w_out=w_out,
-                                  num_class=num_class,
+        super(HAN, self).__init__(num_edge=num_edge, w_in=w_in, w_out=w_out, num_class=num_class,
                                   num_nodes=num_nodes, num_layers=num_layers)
 
         if not hasattr(dataset, "x"):
             if num_nodes > 10000:
-                self.embedding = {self.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
-                                                                          embedding_dim=hparams.embedding_dim).cpu()}
+                self.embedding = {dataset.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
+                                                                             embedding_dim=hparams.embedding_dim).cpu()}
             else:
                 self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
