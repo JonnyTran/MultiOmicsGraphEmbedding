@@ -168,7 +168,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def sample(self, iloc, mode, filter=None):
+    def sample(self, iloc, mode):
         """
 
         :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
@@ -187,9 +187,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if "train" in mode:
             filter = True if self.inductive else False
             allowed_nodes = self.training_idx
-        elif "train_valid" in mode:
-            filter = True if self.inductive else False
-            allowed_nodes = torch.cat([self.training_idx, self.validation_idx], dim=0)
         elif "valid" in mode:
             filter = False
             allowed_nodes = self.validation_idx

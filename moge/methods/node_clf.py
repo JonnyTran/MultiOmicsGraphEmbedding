@@ -1,6 +1,5 @@
 import multiprocessing
 import itertools
-from abc import ABC
 import numpy as np
 import pytorch_lightning as pl
 import pandas as pd
@@ -18,6 +17,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.generator.sampler.datasets import HeteroNetDataset
 from moge.module.metrics import Metrics
+from moge.module.trainer import _fix_dp_return_type
 from moge.module.latte import LATTE
 from moge.module.classifier import DenseClassification, MulticlassClassification
 from moge.module.losses import ClassificationLoss
@@ -230,7 +230,7 @@ class LATTENodeClassifier(NodeClfMetrics):
 class GTN(Gtn, pl.LightningModule):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
-        num_layers = len(dataset.edge_index_dict)
+        num_layers = hparams.num_layers
         num_class = dataset.n_classes
         self.multilabel = dataset.multilabel
         self.head_node_type = dataset.head_node_type
@@ -244,9 +244,7 @@ class GTN(Gtn, pl.LightningModule):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super(GTN, self).__init__(num_edge, num_channels, w_in,
-                                  w_out, num_class, num_nodes,
-                                  num_layers)
+        super(GTN, self).__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
 
         if not hasattr(dataset, "x"):
             if num_nodes > 10000:
@@ -393,8 +391,8 @@ class GTN(Gtn, pl.LightningModule):
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        loss = self.loss(y_hat, y)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.loss(y_hat, y)
         self.test_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"test_loss": loss}
@@ -415,7 +413,7 @@ class GTN(Gtn, pl.LightningModule):
 class HAN(Han, pl.LightningModule):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
-        num_layers = len(dataset.edge_index_dict)
+        num_layers = hparams.num_layers
         num_class = dataset.n_classes
         self.collate_fn = hparams.collate_fn
         self.multilabel = dataset.multilabel
@@ -428,20 +426,18 @@ class HAN(Han, pl.LightningModule):
 
         w_out = hparams.embedding_dim
 
-        super(HAN, self).__init__(num_edge=num_edge, w_in=w_in, w_out=w_out,
-                                  num_class=num_class,
+        super(HAN, self).__init__(num_edge=num_edge, w_in=w_in, w_out=w_out, num_class=num_class,
                                   num_nodes=num_nodes, num_layers=num_layers)
 
         if not hasattr(dataset, "x"):
             if num_nodes > 10000:
-                self.embedding = {self.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
-                                                                          embedding_dim=hparams.embedding_dim).cpu()}
+                self.embedding = {dataset.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
+                                                                             embedding_dim=hparams.embedding_dim).cpu()}
             else:
                 self.embedding = torch.nn.Embedding(num_embeddings=num_nodes, embedding_dim=hparams.embedding_dim)
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
-        hparams.n_params = self.get_n_params()
         hparams.n_params = self.get_n_params()
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)

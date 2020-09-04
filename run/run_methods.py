@@ -20,7 +20,7 @@ def train(hparams):
     EMBEDDING_DIM = 128
     NUM_GPUS = hparams.num_gpus
 
-    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams.train_ratio)
+    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams.train_ratio, hparams=hparams)
 
     METRICS = ["precision", "recall", "f1", "accuracy", "top_k" if dataset.multilabel else "ogbn-mag", ]
 
@@ -29,8 +29,8 @@ def train(hparams):
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
             "batch_size": 128 * NUM_GPUS,
+            "num_layers": 2,
             "collate_fn": "HAN_batch",
-            "val_collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
@@ -42,13 +42,13 @@ def train(hparams):
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
             "num_channels": len(dataset.metapaths),
+            "num_layers": 2,
             "batch_size": 128 * NUM_GPUS,
             "collate_fn": "HAN_batch",
-            "val_collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.0005 * NUM_GPUS,
+            "lr": 0.001 * NUM_GPUS,
         }
         model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "MetaPath2Vec":
@@ -84,10 +84,10 @@ def train(hparams):
             "t_order": t_order,
             "batch_size": 2 ** batch_order * max(num_gpus, 1),
             "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0.3,
+            "nb_cls_dropout": 0.4,
             "activation": "relu",
-            "attn_heads": 64,
-            "attn_activation": "LeakyReLU",
+            "attn_heads": 2,
+            "attn_activation": "sharpening",
             "attn_dropout": 0.2,
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "use_proximity": True if "proximity" in hparams.method else False,
@@ -99,7 +99,7 @@ def train(hparams):
             "weight_decay": 1e-2,
         }
 
-        metrics = ["precision", "recall", "f1",
+        metrics = ["precision", "recall", "micro_f1",
                    "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
 
         model = LATTENodeClassifier(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
@@ -130,6 +130,7 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--run', type=int, default=0)
+    parser.add_argument('--inductive', type=bool, default=True)
 
     parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
