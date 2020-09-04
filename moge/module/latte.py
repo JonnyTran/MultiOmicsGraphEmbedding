@@ -112,7 +112,7 @@ class LATTE(nn.Module):
         h_layers = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=X, x_r=None,
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=X, x_r=X,
                                                                         edge_index_dict=edge_index_dict,
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
@@ -182,11 +182,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.ModuleList(
-            [nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
+            [nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
         self.attn_r = nn.ModuleList(
-            [nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
-        self.attn_q = nn.ModuleList(
-            [nn.Sequential(nn.Tanh(), nn.Linear(2 * self.out_channels, 1, bias=False)) for metapath in self.metapaths])
+            [nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
+        # self.attn_q = nn.ModuleList(
+        #     [nn.Sequential(nn.Tanh(), nn.Linear(2 * self.out_channels, 1, bias=False)) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -247,7 +247,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         """
         # H_t = W_t * x
         l_dict = self.get_h_dict(x_l, global_node_idx, left_right="left")
-        r_dict = self.get_h_dict(x_l if self.first else x_r, global_node_idx, left_right="right")
+        r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
 
         # Compute relations attention coefficients
         # beta = self.get_beta_weights(l_dict)
@@ -315,8 +315,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return emb_relations
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        # alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
+        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
+        # alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
@@ -356,13 +356,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
         assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
 
-        e_ij = self.attn_q[self.metapaths.index(metapath)].forward(
-            torch.cat([alpha_l[metapath][edge_index[0]], alpha_r[metapath][edge_index[1]]], dim=1)).squeeze(-1)
+        # e_pred = self.attn_q[self.metapaths.index(metapath)].forward(
+        #     torch.cat([alpha_l[metapath][edge_index[0]], alpha_r[metapath][edge_index[1]]], dim=1)).squeeze(-1)
 
+        e_pred = self.attn_activation(alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]],
+                                      metapath_id=self.metapaths.index(metapath)).squeeze(-1)
         if logits:
-            return e_ij
+            return e_pred
         else:
-            return F.sigmoid(e_ij)
+            return F.sigmoid(e_pred)
 
     def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
         """
