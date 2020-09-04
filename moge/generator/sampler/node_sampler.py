@@ -137,7 +137,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
+    def get_collate_fn(self, collate_fn: str, mode=None):
         assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
 
         def collate_wrapper(iloc):
@@ -145,10 +145,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
         if "neighbor_sampler" in collate_fn:
             return collate_wrapper
-        if "HAN" in collate_fn:
-            return self.collate_HAN
         else:
-            raise Exception(f"Collate function {collate_fn} not found.")
+            return super().get_collate_fn(collate_fn, mode=mode)
 
     def get_local_nodes_dict(self, adjs, n_id):
         """

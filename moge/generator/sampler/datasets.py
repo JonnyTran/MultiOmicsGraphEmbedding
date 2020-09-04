@@ -369,7 +369,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size,
                                                                                                         mode="train",
                                                                                                         **kwargs))
         return loader
@@ -378,7 +377,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size,
                                                                                                         mode="validation",
                                                                                                         **kwargs))
         return loader
@@ -387,16 +385,15 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        batch_size,
                                                                                                         mode="testing",
                                                                                                         **kwargs))
         return loader
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None, **kwargs):
+    def get_collate_fn(self, collate_fn: str, mode=None, **kwargs):
 
         def collate_wrapper(iloc):
             if "HAN_batch" in collate_fn:
-                return self.collate_HAN_batch(iloc)
+                return self.collate_HAN_batch(iloc, mode=mode)
             elif "HAN" in collate_fn:
                 return self.collate_HAN(iloc, mode=mode)
             else:
@@ -404,10 +401,23 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         return collate_wrapper
 
-    def filter_edge_index(self, edge_index, allowed_nodes):
-        mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
+    def filter_edge_index(self, input, allowed_nodes):
+        if isinstance(input, tuple):
+            edge_index = input[0]
+            values = edge_index[1]
+        else:
+            edge_index = input
+            values = None
+
+        mask = np.isin(edge_index[0], allowed_nodes) | np.isin(edge_index[1], allowed_nodes)
         edge_index = edge_index[:, mask]
-        return edge_index
+
+        if values == None:
+            values = torch.ones(edge_index.size(1))
+        else:
+            values = values[mask]
+
+        return (edge_index, values)
 
     def collate_HAN(self, iloc, mode=None):
         if not isinstance(iloc, torch.Tensor):
@@ -416,38 +426,45 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if "train" in mode:
             filter = True if self.inductive else False
             allowed_nodes = self.training_idx
-        elif "train_valid" in mode:
-            filter = True if self.inductive else False
-            allowed_nodes = torch.cat([self.training_idx, self.validation_idx], dim=0)
         elif "valid" in mode:
             filter = False
             allowed_nodes = self.validation_idx
         elif "test" in mode:
             filter = False
             allowed_nodes = self.testing_idx
-        else:
-            filter = False
 
         if isinstance(self.dataset, HANDataset):
-            X = {"adj": [(edge_index if not filter else self.filter_edge_index(edge_index, allowed_nodes), values) \
-                         for edge_index, values in self.data["adj"][:len(self.metapaths)]],
-                 "x": self.data["x"] if hasattr(self.data, "x") else None,
-                 "idx": iloc}
+            X = {"adj": [
+                (edge_index, values) if not filter else self.filter_edge_index((edge_index, values), allowed_nodes) \
+                for edge_index, values in self.data["adj"][:len(self.metapaths)]],
+                "x": self.data["x"] if hasattr(self.data, "x") else None,
+                "idx": iloc}
         else:
             X = {
-                "adj": [(self.edge_index_dict[i] if not filter else self.filter_edge_index(self.edge_index_dict[i],
-                                                                                           allowed_nodes),
-                         torch.ones(self.edge_index_dict[i].size(1))) \
+                "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) \
+                            if not filter else self.filter_edge_index(self.edge_index_dict[i], allowed_nodes) \
                         for i in self.metapaths],
                 "x": self.data["x"] if hasattr(self.data, "x") else None,
                 "idx": iloc}
 
+        X["adj"] = [edge for edge in X["adj"] if edge[0].size(1) > 0]
+
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
 
-    def collate_HAN_batch(self, iloc):
+    def collate_HAN_batch(self, iloc, mode=None):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
+
+        if "train" in mode:
+            filter = True if self.inductive else False
+            allowed_nodes = self.training_idx
+        elif "valid" in mode:
+            filter = False
+            allowed_nodes = self.validation_idx
+        elif "test" in mode:
+            filter = False
+            allowed_nodes = self.testing_idx
 
         if isinstance(self.dataset, HANDataset):
             X = {"adj": [],
@@ -461,6 +478,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 edge_index = edge_index[:, mask]
                 edge_index = edge_index.apply_(local2batch.get)
                 values = values[mask]
+
+                if filter:
+                    edge_index, values = self.filter_edge_index((edge_index, values), allowed_nodes)
                 X["adj"].append(remove_self_loops(edge_index, values))
 
         else:
@@ -478,6 +498,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 print("edge_index", edge_index.shape)
                 edge_index = edge_index.apply_(local2batch.get)
                 values = torch.ones(edge_index.size(1))
+
+                if filter:
+                    edge_index, values = self.filter_edge_index((edge_index, values), allowed_nodes)
                 X["adj"].append(remove_self_loops(edge_index, values))
 
         y = self.y_dict[self.head_node_type][iloc]
