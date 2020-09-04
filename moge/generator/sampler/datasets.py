@@ -393,7 +393,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         def collate_wrapper(iloc):
             if "HAN_batch" in collate_fn:
-                return self.collate_HAN_batch(iloc)
+                return self.collate_HAN_batch(iloc, mode=mode)
             elif "HAN" in collate_fn:
                 return self.collate_HAN(iloc, mode=mode)
             else:
@@ -409,7 +409,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             edge_index = input
             values = None
 
-        mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
+        mask = np.isin(edge_index[0], allowed_nodes) | np.isin(edge_index[1], allowed_nodes)
         edge_index = edge_index[:, mask]
 
         if values == None:
@@ -426,9 +426,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if "train" in mode:
             filter = True if self.inductive else False
             allowed_nodes = self.training_idx
-        elif "train_valid" in mode:
-            filter = True if self.inductive else False
-            allowed_nodes = torch.cat([self.training_idx, self.validation_idx], dim=0)
         elif "valid" in mode:
             filter = False
             allowed_nodes = self.validation_idx
@@ -440,8 +437,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             X = {"adj": [
                 (edge_index, values) if not filter else self.filter_edge_index((edge_index, values), allowed_nodes) \
                 for edge_index, values in self.data["adj"][:len(self.metapaths)]],
-                 "x": self.data["x"] if hasattr(self.data, "x") else None,
-                 "idx": iloc}
+                "x": self.data["x"] if hasattr(self.data, "x") else None,
+                "idx": iloc}
         else:
             X = {
                 "adj": [(self.edge_index_dict[i], torch.ones(self.edge_index_dict[i].size(1))) \
@@ -450,12 +447,24 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 "x": self.data["x"] if hasattr(self.data, "x") else None,
                 "idx": iloc}
 
+        X["adj"] = [edge for edge in X["adj"] if edge[0].size(1) > 0]
+
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
 
-    def collate_HAN_batch(self, iloc):
+    def collate_HAN_batch(self, iloc, mode=None):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
+
+        if "train" in mode:
+            filter = True if self.inductive else False
+            allowed_nodes = self.training_idx
+        elif "valid" in mode:
+            filter = False
+            allowed_nodes = self.validation_idx
+        elif "test" in mode:
+            filter = False
+            allowed_nodes = self.testing_idx
 
         if isinstance(self.dataset, HANDataset):
             X = {"adj": [],
@@ -469,6 +478,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 edge_index = edge_index[:, mask]
                 edge_index = edge_index.apply_(local2batch.get)
                 values = values[mask]
+
+                if filter:
+                    edge_index, values = self.filter_edge_index((edge_index, values), allowed_nodes)
                 X["adj"].append(remove_self_loops(edge_index, values))
 
         else:
@@ -486,6 +498,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 print("edge_index", edge_index.shape)
                 edge_index = edge_index.apply_(local2batch.get)
                 values = torch.ones(edge_index.size(1))
+
+                if filter:
+                    edge_index, values = self.filter_edge_index((edge_index, values), allowed_nodes)
                 X["adj"].append(remove_self_loops(edge_index, values))
 
         y = self.y_dict[self.head_node_type][iloc]
