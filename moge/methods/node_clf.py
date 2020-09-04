@@ -237,7 +237,6 @@ class GTN(NodeClfMetrics, Gtn):
         self.multilabel = dataset.multilabel
         self.head_node_type = dataset.head_node_type
         self.collate_fn = hparams.collate_fn
-        self.val_collate_fn = hparams.val_collate_fn
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
         if dataset.in_features:
@@ -335,10 +334,10 @@ class GTN(NodeClfMetrics, Gtn):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -350,7 +349,6 @@ class HAN(NodeClfMetrics, Han):
         num_layers = len(dataset.edge_index_dict)
         num_class = dataset.n_classes
         self.collate_fn = hparams.collate_fn
-        self.val_collate_fn = hparams.val_collate_fn
         self.multilabel = dataset.multilabel
         num_nodes = dataset.num_nodes_dict[dataset.head_node_type]
 
@@ -430,10 +428,10 @@ class HAN(NodeClfMetrics, Han):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.val_collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
