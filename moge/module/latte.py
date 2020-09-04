@@ -179,11 +179,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         self.out_channels = embedding_dim // attn_heads
         self.attn_l = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
         self.attn_r = torch.nn.ModuleList(
-            [torch.nn.Linear(embedding_dim, self.out_channels, bias=True) for metapath in self.metapaths])
-        self.attn_q = torch.nn.ModuleList(
-            [nn.Sequential(nn.Tanh(), nn.Linear(2 * self.out_channels, 1, bias=False)) for metapath in self.metapaths])
+            [torch.nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
+        # self.attn_q = torch.nn.ModuleList(
+        #     [nn.Sequential(nn.Tanh(), nn.Linear(2 * self.out_channels, 1, bias=False)) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -219,7 +219,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.metapaths):
             glorot(self.attn_l[i].weight)
             glorot(self.attn_r[i].weight)
-            glorot(self.attn_q[i][-1].weight)
+            # glorot(self.attn_q[i][-1].weight)
 
         for node_type in self.linear:
             glorot(self.linear[node_type].weight)
@@ -301,8 +301,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return emb_relations
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        # alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
+        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
+        # alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         self.alpha = alpha

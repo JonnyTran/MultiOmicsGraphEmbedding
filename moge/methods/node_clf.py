@@ -230,7 +230,7 @@ class LATTENodeClassifier(NodeClfMetrics):
 class GTN(Gtn, pl.LightningModule):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
-        num_layers = len(dataset.edge_index_dict)
+        num_layers = hparams.num_layers
         num_class = dataset.n_classes
         self.multilabel = dataset.multilabel
         self.head_node_type = dataset.head_node_type
@@ -244,9 +244,7 @@ class GTN(Gtn, pl.LightningModule):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super(GTN, self).__init__(num_edge, num_channels, w_in,
-                                  w_out, num_class, num_nodes,
-                                  num_layers)
+        super(GTN, self).__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
 
         if not hasattr(dataset, "x"):
             if num_nodes > 10000:
@@ -393,8 +391,8 @@ class GTN(Gtn, pl.LightningModule):
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
         y_hat = self.forward(X["adj"], X["x"], X["idx"])
-        loss = self.loss(y_hat, y)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.loss(y_hat, y)
         self.test_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"test_loss": loss}
