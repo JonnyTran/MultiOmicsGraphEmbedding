@@ -161,8 +161,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if self.activation not in ["sigmoid", "tanh", "relu"]:
             print(f"Embedding activation arg `{self.activation}` did not match, so uses linear activation.")
 
-        self.conv = nn.ModuleDict(
-            {node_type: nn.Linear(in_features=embedding_dim, out_features=1) \
+        self.conv = torch.nn.ModuleDict(
+            {node_type: torch.nn.Linear(in_features=embedding_dim, out_features=self.num_head_relations(node_type)) \
              for node_type in self.node_types})  # W_phi.shape (D x F)
 
         if first:
@@ -198,7 +198,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             print(f"WARNING: alpha_activation `{attn_activation}` did not match, so used linear activation")
             self.alpha_activation = None
 
-        # If some node type are not attributed, assign embeddings for them
+        # If some node type are not attributed, instantiate embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         if first and len(non_attr_node_types) > 0:
             if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
@@ -250,37 +250,29 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
 
         # Compute relations attention coefficients
-        # beta = self.get_beta_weights(l_dict)
-        # # Save beta weights from testing samples
-        # if not self.training: self.save_relation_weights(beta, global_node_idx)
+        beta = self.get_beta_weights(l_dict)
+        # Save beta weights from testing samples
+        if not self.training: self.save_relation_weights(beta, global_node_idx)
 
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
-        betas = {}
         for node_type in global_node_idx:
             out[node_type] = self.agg_relation_neighbors(node_type=node_type, alpha_l=alpha_l, alpha_r=alpha_r,
                                                          l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
                                                          global_node_idx=global_node_idx)
             out[node_type][:, -1] = l_dict[node_type]
 
-            beta = self.conv[node_type].forward(out[node_type])
-            beta = torch.softmax(beta, dim=1)
-            betas[node_type] = beta
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta).squeeze(-1)
+            out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
             # out[node_type] = out[node_type].mean(dim=1)
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
 
-        if save_betas:
-            self.save_relation_weights(betas, global_node_idx)
-        else:
-            del betas
 
         proximity_loss, edge_pred_dict = None, None
         if self.use_proximity:
@@ -349,7 +341,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def get_beta_weights(self, l_dict):
         beta = {}
         for node_type in l_dict:
-            beta[node_type] = self.conv[node_type].forward(l_dict[node_type].unsqueeze(-1))
+            beta[node_type] = self.conv[node_type].forward(l_dict[node_type]).unsqueeze(-1)
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         return beta
 
