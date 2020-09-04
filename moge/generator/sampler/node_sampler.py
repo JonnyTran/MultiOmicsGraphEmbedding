@@ -11,11 +11,10 @@ from moge.generator.sampler.datasets import HeteroNetDataset
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
-                 resample_train=None, add_reverse_metapaths=True, inductive=True):
+                 resample_train=None, add_reverse_metapaths=True, inductive=False):
         self.neighbor_sizes = neighbor_sizes
-        self.inductive = inductive
         super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
-                                                    resample_train, add_reverse_metapaths)
+                                                    resample_train, add_reverse_metapaths, inductive)
 
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)
@@ -169,7 +168,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def sample(self, iloc, mode, filter=None):
+    def sample(self, iloc, mode):
         """
 
         :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
@@ -188,9 +187,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if "train" in mode:
             filter = True if self.inductive else False
             allowed_nodes = self.training_idx
-        elif "train_valid" in mode:
-            filter = True if self.inductive else False
-            allowed_nodes = torch.cat([self.training_idx, self.validation_idx], dim=0)
         elif "valid" in mode:
             filter = False
             allowed_nodes = self.validation_idx
