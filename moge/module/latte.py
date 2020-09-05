@@ -254,7 +254,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
 
         # Predict relations attention coefficients
-        beta = self.get_beta_weights(x_dict=X, h_dict=h_dict, h_prev=h_prev, global_node_idx=global_node_idx)
+        beta = self.get_beta_weights(x_dict=x_l, h_dict=l_dict, h_prev=l_dict, global_node_idx=global_node_idx)
         # Save beta weights from testing samples
         if not self.training: self.save_relation_weights(beta, global_node_idx)
 
