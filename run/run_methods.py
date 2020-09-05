@@ -112,7 +112,7 @@ def train(hparams):
     wandb_logger.log_hyperparams(model_hparams)
 
     trainer = Trainer(
-        gpus=NUM_GPUS,
+        gpus=NUM_GPUS, auto_select_gpus=True,
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001, strict=False)],
