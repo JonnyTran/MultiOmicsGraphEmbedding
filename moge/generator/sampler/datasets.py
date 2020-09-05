@@ -108,7 +108,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         """
         self.dataset = dataset
         self.directed = directed
-        self.train_ratio = resample_train
         self.use_reverse = add_reverse_metapaths
         self.node_types = node_types
         self.head_node_type = head_node_type
@@ -183,6 +182,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.resample_training_idx(resample_train)
         else:
             print("train_ratio", self.get_train_ratio())
+        self.train_ratio = self.get_train_ratio()
 
     def name(self):
         if not hasattr(self, "_name"):
@@ -326,12 +326,14 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
         self.y_dict = new_y_dict
 
-        # if self.inductive and False:
-        #     other_nodes = torch.arange(self.num_nodes_dict[self.head_node_type])
-        #     other_nodes = ~np.isin(other_nodes, self.training_idx) & ~np.isin(other_nodes, self.validation_idx) \
-        #                   & ~np.isin(other_nodes, self.testing_idx)
-        #     self.training_idx = torch.cat([self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
-        #                                   dim=0)
+        if self.inductive:
+            other_nodes = torch.arange(self.num_nodes_dict[self.head_node_type])
+            other_nodes = ~np.isin(other_nodes, self.training_idx) & ~np.isin(other_nodes,
+                                                                              self.validation_idx) & ~np.isin(
+                other_nodes, self.testing_idx)
+            self.training_subgraph_idx = torch.cat(
+                [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
+                dim=0)
 
         self.data = data
 

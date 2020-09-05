@@ -228,7 +228,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
 
-        # Zero tensor with ones at allowed_nodes (for semi-supervised)
         weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], allowed_nodes), dtype=torch.float)
 
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
@@ -238,7 +237,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         # assert y.size(0) == weights.size(0)
         return X, y, weights
 
-    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch: dict, filter_nodes: bool):
+    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch: dict,
+                                  filter_nodes: bool):
         """
         # Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and `global_node_index`
         :param adjs:
