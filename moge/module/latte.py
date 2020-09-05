@@ -162,7 +162,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
-                in_channels=embedding_dim,
+                in_channels=in_channels_dict[
+                    node_type] if first and node_type in in_channels_dict else embedding_dim,
                 out_channels=self.num_head_relations(node_type),
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (D x F)
@@ -336,15 +337,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def get_beta_weights(self, x_dict, h_dict, h_prev, global_node_idx):
         beta = {}
         for node_type in global_node_idx:
-            beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            # if self.first:
-            #     if node_type in x_dict:
-            #         beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-            #     else:
-            #         # node_type is not attributed, use h_dict contains self.embeddings in first layer
-            #         beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            # else:
-            #     beta[node_type] = self.conv[node_type].forward(h_prev[node_type].unsqueeze(-1))
+            # beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            if self.first:
+                if node_type in x_dict:
+                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+                else:
+                    # node_type is not attributed, use h_dict contains self.embeddings in first layer
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            else:
+                beta[node_type] = self.conv[node_type].forward(h_prev[node_type].unsqueeze(-1))
 
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         return beta
