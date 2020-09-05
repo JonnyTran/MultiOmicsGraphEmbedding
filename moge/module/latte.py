@@ -268,7 +268,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
-            # out[node_type] = out[node_type].mean(dim=1)
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])

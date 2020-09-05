@@ -612,8 +612,17 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
                                            hparams.sparse)
 
         hparams.name = self.name()
+        hparams.n_params = self.get_n_params()
         self.hparams = hparams
-        self.hparams.n_params = self.get_n_params()
+
+    def get_n_params(self):
+        size = 0
+        for name, param in dict(self.named_parameters()).items():
+            nn = 1
+            for s in list(param.size()):
+                nn = nn * s
+            size += nn
+        return size
 
     def name(self):
         if hasattr(self, "_name"):
@@ -656,10 +665,10 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
         logs = {"test_loss": avg_loss}
-        logs.update({"test_" + k: v for k, v in self.classification_results(training=False).items()})
+        logs.update({"test_" + k: v for k, v in self.classification_results(training=False, testing=True).items()})
         return {"progress_bar": logs, "log": logs}
 
-    def classification_results(self, training=True):
+    def classification_results(self, training=True, testing=False):
         if training:
             z = self.forward(self.head_node_type,
                              batch=self.dataset.training_idx)
@@ -687,8 +696,9 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             y_train = self.dataset.y_dict[self.head_node_type][self.dataset.training_idx]
 
             z = self.forward(self.head_node_type,
-                             batch=self.dataset.validation_idx)
-            y = self.dataset.y_dict[self.head_node_type][self.dataset.validation_idx]
+                             batch=self.dataset.validation_idx if not testing else self.dataset.testing_idx)
+            y = self.dataset.y_dict[self.head_node_type][
+                self.dataset.validation_idx if not testing else self.dataset.testing_idx]
 
             if y_train.dim() > 1 and y_train.size(1) > 1:
                 multilabel = True

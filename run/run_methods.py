@@ -19,6 +19,7 @@ from run.utils import load_node_dataset
 def train(hparams):
     EMBEDDING_DIM = 128
     NUM_GPUS = hparams.num_gpus
+    batch_order = 11
 
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams.train_ratio, hparams=hparams)
 
@@ -28,13 +29,13 @@ def train(hparams):
         USE_AMP = True
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "batch_size": 128 * NUM_GPUS,
+            "batch_size": 2 ** batch_order * NUM_GPUS,
             "num_layers": 2,
             "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.001 * NUM_GPUS,
+            "lr": 0.0005 * NUM_GPUS,
         }
         model = HAN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "GTN":
@@ -43,12 +44,12 @@ def train(hparams):
             "embedding_dim": EMBEDDING_DIM,
             "num_channels": len(dataset.metapaths),
             "num_layers": 2,
-            "batch_size": 128 * NUM_GPUS,
+            "batch_size": 2 ** batch_order * NUM_GPUS,
             "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.001 * NUM_GPUS,
+            "lr": 0.0005 * NUM_GPUS,
         }
         model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "MetaPath2Vec":
@@ -60,7 +61,7 @@ def train(hparams):
             "walks_per_node": 5,
             "num_negative_samples": 5,
             "sparse": True,
-            "batch_size": 128 * NUM_GPUS,
+            "batch_size": 400 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "n_classes": dataset.n_classes,
             "lr": 0.01 * NUM_GPUS,
@@ -69,7 +70,7 @@ def train(hparams):
     elif "LATTE" in hparams.method:
         USE_AMP = False
         num_gpus = 1
-        batch_order = 11
+
         if "-1" in hparams.method:
             t_order = 1
         elif "-2" in hparams.method:
