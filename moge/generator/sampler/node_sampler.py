@@ -186,7 +186,10 @@ class HeteroNeighborSampler(HeteroNetDataset):
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         if "train" in mode:
             filter = True if self.inductive else False
-            allowed_nodes = self.training_idx
+            if self.inductive and hasattr(self, "training_subgraph_idx"):
+                allowed_nodes = self.training_subgraph_idx
+            else:
+                allowed_nodes = self.training_idx
         elif "valid" in mode:
             filter = False
             allowed_nodes = self.validation_idx
