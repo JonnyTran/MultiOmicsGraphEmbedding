@@ -35,6 +35,7 @@ class NodeClfMetrics(pl.LightningModule):
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
         hparams.name = self.name()
+        hparams.inductive = dataset.inductive
         self.hparams = hparams
 
     def name(self):
