@@ -162,8 +162,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             print(f"Embedding activation arg `{self.activation}` did not match, so uses linear activation.")
 
         self.conv = torch.nn.ModuleDict(
-            {node_type: torch.nn.Linear(in_features=embedding_dim, out_features=self.num_head_relations(node_type)) \
-             for node_type in self.node_types})  # W_phi.shape (D x F)
+            {node_type: torch.nn.Conv1d(
+                in_channels=in_channels_dict[
+                    node_type] if first and node_type in in_channels_dict else embedding_dim,
+                out_channels=self.num_head_relations(node_type),
+                kernel_size=1) \
+                for node_type in self.node_types})  # W_phi.shape (D x F)
 
         if first:
             self.linear_l = nn.ModuleDict(
@@ -249,8 +253,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         l_dict = self.get_h_dict(x_l, global_node_idx, left_right="left")
         r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
 
-        # Compute relations attention coefficients
-        beta = self.get_beta_weights(l_dict)
+        # Predict relations attention coefficients
+        beta = self.get_beta_weights(x_dict=X, h_dict=h_dict, h_prev=h_prev, global_node_idx=global_node_idx)
         # Save beta weights from testing samples
         if not self.training: self.save_relation_weights(beta, global_node_idx)
 
@@ -337,10 +341,19 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             alpha_r[metapath] = self.attn_r[i].forward(r_dict[tail_type])
         return alpha_l, alpha_r
 
-    def get_beta_weights(self, l_dict):
+    def get_beta_weights(self, x_dict, h_dict, h_prev, global_node_idx):
         beta = {}
-        for node_type in l_dict:
-            beta[node_type] = self.conv[node_type].forward(l_dict[node_type]).unsqueeze(-1)
+        for node_type in global_node_idx:
+            # beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            if self.first:
+                if node_type in x_dict:
+                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
+                else:
+                    # node_type is not attributed, use h_dict contains self.embeddings in first layer
+                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            else:
+                beta[node_type] = self.conv[node_type].forward(h_prev[node_type].unsqueeze(-1))
+
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         return beta
 
