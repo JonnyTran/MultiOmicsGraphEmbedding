@@ -332,8 +332,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                               self.validation_idx) & ~np.isin(
                 other_nodes, self.testing_idx)
             self.training_subgraph_idx = torch.cat(
-                [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
-                dim=0)
+                [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)], dim=0)
 
         self.data = data
 
