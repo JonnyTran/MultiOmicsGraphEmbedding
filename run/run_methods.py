@@ -21,7 +21,7 @@ def train(hparams):
     NUM_GPUS = hparams.num_gpus
     batch_order = 11
 
-    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams.train_ratio, hparams=hparams)
+    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio)
 
     METRICS = ["precision", "recall", "f1", "accuracy", "top_k" if dataset.multilabel else "ogbn-mag", ]
 

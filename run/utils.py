@@ -10,7 +10,7 @@ from torch_geometric.datasets import AMiner
 from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler
 from moge.module.utils import preprocess_input
 
-def load_node_dataset(name, method, train_ratio=None, hparams=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
+def load_node_dataset(name, method, hparams, train_ratio=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
     if "ogbn" in name:
         ogbn = PygNodePropPredDataset(name=name, root=dir_path)
         dataset = HeteroNeighborSampler(ogbn, neighbor_sizes=hparams.neighbor_sizes, directed=True, resample_train=None,

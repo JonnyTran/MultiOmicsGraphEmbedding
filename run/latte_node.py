@@ -37,7 +37,7 @@ def train(hparams: Namespace):
     print("neighbor_sizes", neighbor_sizes)
     hparams.neighbor_sizes = neighbor_sizes
 
-    dataset = load_node_dataset(hparams.dataset, method="LATTE", train_ratio=None, hparams=hparams,
+    dataset = load_node_dataset(hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
                                 dir_path=hparams.dir_path)
 
     METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]

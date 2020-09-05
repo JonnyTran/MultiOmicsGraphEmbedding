@@ -651,7 +651,10 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).sum().item()
-        results = self.classification_results(training=True)
+        if self.current_epoch % 10 == 0:
+            results = self.classification_results(training=True)
+        else:
+            results = {}
 
         return {"progress_bar": results,
                 "log": {"loss": avg_loss, **results}}
@@ -659,7 +662,8 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
         logs = {"val_loss": avg_loss}
-        logs.update({"val_" + k: v for k, v in self.classification_results(training=False).items()})
+        if self.current_epoch % 5 == 0:
+            logs.update({"val_" + k: v for k, v in self.classification_results(training=False).items()})
         return {"progress_bar": logs, "log": logs}
 
     def test_epoch_end(self, outputs):
