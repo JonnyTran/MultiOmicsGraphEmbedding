@@ -188,7 +188,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             filter = True if self.inductive else False
             allowed_nodes = self.training_idx
         elif "valid" in mode:
-            filter = True if self.inductive else False
+            filter = False
             allowed_nodes = self.validation_idx
         elif "test" in mode:
             filter = False
@@ -228,6 +228,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
 
+        # Zero tensor with ones at allowed_nodes (for semi-supervised)
         weights = torch.tensor(np.isin(X["global_node_index"][self.head_node_type], allowed_nodes), dtype=torch.float)
 
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
