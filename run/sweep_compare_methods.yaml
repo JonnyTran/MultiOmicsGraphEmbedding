@@ -1,5 +1,5 @@
 program: run/run_methods.py
-method: grid
+method: random
 metric:
   name: val_f1
   goal: maximize
@@ -9,6 +9,6 @@ parameters:
   method:
     values: ["LATTE-1", "LATTE-1 proximity", "LATTE-2", "LATTE-2 proximity", "LATTE-3", "LATTE-3 proximity", "HAN", "GTN", "MetaPath2Vec"]
   train_ratio:
-    values: [0.05, 0.2, 0.4, 0.6, 0.8]
+    values: [ 0.0 ]
   run:
     values: [1,2,3,4,5,6,7,8,9,10]

@@ -268,8 +268,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                          l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
                                                          global_node_idx=global_node_idx)
             out[node_type][:, -1] = l_dict[node_type]
-
-
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
 
