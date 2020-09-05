@@ -264,6 +264,7 @@ class GTN(Gtn, pl.LightningModule):
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
         hparams.name = self.name()
+        hparams.inductive = dataset.inductive
         self.hparams = hparams
 
     def name(self):
@@ -447,6 +448,7 @@ class HAN(Han, pl.LightningModule):
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
         hparams.name = self.name()
+        hparams.inductive = dataset.inductive
         self.hparams = hparams
 
     def name(self):
@@ -614,6 +616,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
         hparams.name = self.name()
         hparams.n_params = self.get_n_params()
+        hparams.inductive = dataset.inductive
         self.hparams = hparams
 
     def get_n_params(self):
