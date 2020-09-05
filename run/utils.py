@@ -10,9 +10,9 @@ from torch_geometric.datasets import AMiner
 from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler
 from moge.module.utils import preprocess_input
 
-def load_node_dataset(name, method, hparams, train_ratio=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
-    if "ogbn" in name:
-        ogbn = PygNodePropPredDataset(name=name, root=dir_path)
+def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
+    if "ogbn" in dataset:
+        ogbn = PygNodePropPredDataset(name=dataset, root=dir_path)
         dataset = HeteroNeighborSampler(ogbn, neighbor_sizes=hparams.neighbor_sizes, directed=True, resample_train=None,
                                         add_reverse_metapaths=hparams.use_reverse, inductive=hparams.inductive)
         if os.path.exists(ogbn.processed_dir + "/features.pk"):
@@ -22,7 +22,7 @@ def load_node_dataset(name, method, hparams, train_ratio=None, dir_path="~/Bioin
         else:
             print("features.pk not found")
 
-    elif name == "ACM":
+    elif dataset == "ACM":
         if method == "HAN" or method == "MetaPath2Vec":
             dataset = HeteroNeighborSampler(ACM_HANDataset(), [25, 10], node_types=["P"],
                                             metapaths=["PAP", "PSP"] if "LATTE" in method else None,
@@ -34,7 +34,7 @@ def load_node_dataset(name, method, hparams, train_ratio=None, dir_path="~/Bioin
                                             add_reverse_metapaths=False,
                                             head_node_type="P", resample_train=train_ratio, inductive=hparams.inductive)
 
-    elif name == "DBLP":
+    elif dataset == "DBLP":
         if method == "HAN" or "LATTE" in method:
             dataset = HeteroNeighborSampler(DBLP_HANDataset(), [25, 10], node_types=["A"],
                                             metapaths=["ACA", "APA", "ATA"] if "LATTE" in method else None,
@@ -48,7 +48,7 @@ def load_node_dataset(name, method, hparams, train_ratio=None, dir_path="~/Bioin
                                             add_reverse_metapaths=False,
                                             resample_train=train_ratio, inductive=hparams.inductive)
 
-    elif name == "IMDB":
+    elif dataset == "IMDB":
         if method == "HAN" or method == "MetaPath2Vec":
             dataset = HeteroNeighborSampler(IMDB_HANDataset(), [25, 10], node_types=["M"],
                                             metapaths=["MAM", "MDM", "MWM"] if "LATTE" in method else None,
@@ -60,16 +60,16 @@ def load_node_dataset(name, method, hparams, train_ratio=None, dir_path="~/Bioin
                                             metapaths=["MDM", "MD_M", "MAM", "MA_M"] if "LATTE" in method else None,
                                             add_reverse_metapaths=False,
                                             head_node_type="M", inductive=hparams.inductive)
-    elif name == "AMiner":
+    elif dataset == "AMiner":
         dataset = HeteroNeighborSampler(AMiner("datasets/aminer"), [25, 10], node_types=None,
                                         metapaths=[('paper', 'written by', 'author'),
                                                    ('venue', 'published', 'paper')], head_node_type="author",
                                         resample_train=train_ratio, inductive=hparams.inductive)
-    elif name == "BlogCatalog":
+    elif dataset == "BlogCatalog":
         dataset = HeteroNeighborSampler("datasets/blogcatalog6k.mat", [25, 10], node_types=["user", "tag"],
                                         head_node_type="user", resample_train=train_ratio, inductive=hparams.inductive)
     else:
-        raise Exception(f"dataset {name} not found")
+        raise Exception(f"dataset {dataset} not found")
     return dataset
 
 
