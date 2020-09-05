@@ -211,10 +211,6 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(),
-                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=self.hparams.weight_decay)
-        scheduler = ReduceLROnPlateau(optimizer)
         # param_optimizer = list(self.named_parameters())
         # no_decay = ['bias', 'layer_norm']
         # optimizer_grouped_parameters = [
@@ -224,6 +220,12 @@ class LATTENodeClassifier(NodeClfMetrics):
         # ]
         #
         # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
+
+        optimizer = torch.optim.Adam(self.parameters(),
+                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
+                                     weight_decay=self.hparams.weight_decay)
+        scheduler = ReduceLROnPlateau(optimizer)
+
         return [optimizer], [scheduler]
 
 

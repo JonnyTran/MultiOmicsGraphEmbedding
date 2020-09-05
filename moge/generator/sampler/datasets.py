@@ -326,19 +326,13 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
         self.y_dict = new_y_dict
 
-        if self.inductive:
-            other_nodes = torch.arange(self.num_nodes_dict[self.head_node_type])
-            other_nodes = ~np.isin(other_nodes, self.training_idx) & ~np.isin(other_nodes,
-                                                                              self.validation_idx) & ~np.isin(
-                other_nodes, self.testing_idx)
-            self.training_idx = torch.cat([self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
-                                          dim=0)
+        # if self.inductive and False:
+        #     other_nodes = torch.arange(self.num_nodes_dict[self.head_node_type])
+        #     other_nodes = ~np.isin(other_nodes, self.training_idx) & ~np.isin(other_nodes, self.validation_idx) \
+        #                   & ~np.isin(other_nodes, self.testing_idx)
+        #     self.training_idx = torch.cat([self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
+        #                                   dim=0)
 
-        # if train_ratio is None:
-        #     train_ratio = self.get_train_ratio()
-        #
-        # self.training_idx, self.validation_idx, self.testing_idx = \
-        #     self.split_train_val_test(train_ratio=train_ratio, sample_indices=self.y_index_dict[self.head_node_type])
         self.data = data
 
     def process_stellargraph(self, dataset, metapath, node_types, train_ratio):

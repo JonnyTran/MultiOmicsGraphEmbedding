@@ -188,7 +188,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
             filter = True if self.inductive else False
             allowed_nodes = self.training_idx
         elif "valid" in mode:
-            filter = False
+            filter = True if self.inductive else False
             allowed_nodes = self.validation_idx
         elif "test" in mode:
             filter = False
@@ -237,8 +237,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         # assert y.size(0) == weights.size(0)
         return X, y, weights
 
-    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch: dict,
-                                  filter_nodes: bool):
+    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch: dict, filter_nodes: bool):
         """
         # Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and `global_node_index`
         :param adjs:

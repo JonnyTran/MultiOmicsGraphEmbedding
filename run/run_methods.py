@@ -96,7 +96,7 @@ def train(hparams):
             "use_class_weights": False,
             "lr": 0.001 * num_gpus,
             "momentum": 0.9,
-            "weight_decay": 1e-2,
+            "weight_decay": 1e-5,
         }
 
         metrics = ["precision", "recall", "micro_f1",
