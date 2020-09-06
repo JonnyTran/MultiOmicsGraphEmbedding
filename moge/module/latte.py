@@ -302,16 +302,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 x=(r_dict[tail], l_dict[head]),
                 alpha=(alpha_r[metapath], alpha_l[metapath]),
                 size=(num_node_tail, num_node_head),
-                metapath_idx=self.metapaths.index(metapath),
-                values=values)
+                metapath_idx=self.metapaths.index(metapath))
             emb_relations[:, i] = out
 
         return emb_relations
 
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx, values):
+    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         # alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
-        alpha = (values * alpha.squeeze(-1)).unsqueeze(-1)
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
