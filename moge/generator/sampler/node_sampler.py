@@ -22,8 +22,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
         num_nodes_dict = OrderedDict([(node_type, self.num_nodes_dict[node_type]) for node_type in self.node_types])
 
-        out = group_hetero_graph(self.edge_index_dict, num_nodes_dict)
-        self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = out
+        self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = \
+            group_hetero_graph(self.edge_index_dict, num_nodes_dict)
 
         self.int2node_type = {type_int: node_type for node_type, type_int in self.key2int.items() if
                               node_type in self.node_types}
