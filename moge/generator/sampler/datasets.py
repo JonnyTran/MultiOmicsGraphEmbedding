@@ -474,7 +474,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler sampler method
+        X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
 
         X = {}
         X["adj"] = [(X_batch["edge_index_dict"][metapath], torch.ones(X_batch["edge_index_dict"][metapath].size(1))) \
