@@ -123,6 +123,7 @@ def train(hparams):
     )
 
     trainer.fit(model)
+    trainer.fit(model, train_dataloader=model.val_dataloader(), val_dataloaders=model.test_dataloader())
     trainer.test(model)
 
 
