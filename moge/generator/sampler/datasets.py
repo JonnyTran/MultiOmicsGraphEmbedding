@@ -332,7 +332,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                               self.validation_idx) & ~np.isin(
                 other_nodes, self.testing_idx)
             self.training_subgraph_idx = torch.cat(
-                [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)], dim=0)
+                [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
+                dim=0)
 
         self.data = data
 
@@ -415,7 +416,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             edge_index = input
             values = None
 
-        mask = np.isin(edge_index[0], allowed_nodes) | np.isin(edge_index[1], allowed_nodes)
+        mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
         edge_index = edge_index[:, mask]
 
         if values == None:
@@ -431,10 +432,16 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         if "train" in mode:
             filter = True if self.inductive else False
-            allowed_nodes = self.training_idx
+            if self.inductive and hasattr(self, "training_subgraph_idx"):
+                allowed_nodes = self.training_subgraph_idx
+            else:
+                allowed_nodes = self.training_idx
         elif "valid" in mode:
-            filter = False
-            allowed_nodes = self.validation_idx
+            filter = True if self.inductive else False
+            if self.inductive and hasattr(self, "training_subgraph_idx"):
+                allowed_nodes = torch.cat([self.validation_idx, self.training_subgraph_idx])
+            else:
+                allowed_nodes = self.validation_idx
         elif "test" in mode:
             filter = False
             allowed_nodes = self.testing_idx
@@ -465,11 +472,10 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 
-        X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler
+        X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
 
         X = {}
-        X["adj"] = [(X_batch["edge_index_dict"][metapath],
-                     torch.ones(X_batch["edge_index_dict"][metapath].size(1))) \
+        X["adj"] = [(X_batch["edge_index_dict"][metapath], torch.ones(X_batch["edge_index_dict"][metapath].size(1))) \
                     for metapath in self.metapaths if metapath in X_batch["edge_index_dict"]]
         X["x"] = self.data["x"][X_batch["global_node_index"][self.head_node_type]]
         X["idx"] = X_batch["global_node_index"][self.head_node_type]
