@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 from cogdl.models.nn.pyg_gtn import GTN as Gtn
 from cogdl.models.nn.pyg_han import HAN as Han
-from cogdl.models.emb.hin2vec import Hin2vec
+from cogdl.models.emb.hin2vec import Hin2vec, RWgraph, Hin2vec_layer, tqdm
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import precision_recall_fscore_support
@@ -802,7 +802,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class HIN2Vec(Hin2vec, pl.LightningModule):
+class HIN2Vec(Hin2vec):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size
@@ -834,7 +834,61 @@ class HIN2Vec(Hin2vec, pl.LightningModule):
             dataset.add_reverse_edge_index(dataset.edge_index_dict)
 
         super().__init__(embedding_dim, walk_length, walks_per_node, hparams.batch_size, hop, num_negative_samples,
-                         1000, hparams.lr, cpu=False)
+                         1000, hparams.lr, cpu=True)
+
+    def train(self, G, node_type, relation):
+        self.num_node = G.number_of_nodes()
+        rw = RWgraph(G, node_type)
+        walks = rw._simulate_walks(self.walk_length, self.walk_num)
+        # pairs, relation = rw.data_preparation(walks, self.hop, self.negative)
+
+        self.num_relation = relation
+        model = Hin2vec_layer(self.num_node, self.num_relation, self.hidden_dim, self.cpu)
+        self.model = model.to(self.device)
+
+        num_batch = int(len(pairs) / self.batch_size)
+        print_num_batch = 100
+        print("number of batch", num_batch)
+
+        opt = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        epoch_iter = tqdm(range(self.epoches))
+        for epoch in epoch_iter:
+            loss_n, pred, label = [], [], []
+            for i in range(num_batch):
+                batch_pairs = torch.from_numpy(pairs[i * self.batch_size:(i + 1) * self.batch_size])
+                batch_pairs = batch_pairs.to(self.device)
+                batch_pairs = batch_pairs.T
+                x, y, r, l = batch_pairs[0], batch_pairs[1], batch_pairs[2], batch_pairs[3]
+                opt.zero_grad()
+                logits, loss = self.model.forward(x, y, r, l)
+
+                loss_n.append(loss.item())
+                label.append(l)
+                pred.extend(logits)
+                if i % print_num_batch == 0 and i != 0:
+                    label = torch.cat(label).to(self.device)
+                    pred = torch.stack(pred, dim=0)
+                    pred = pred.max(1)[1]
+                    acc = pred.eq(label).sum().item() / len(label)
+                    epoch_iter.set_description(
+                        f"Epoch: {i:03d}, Loss: {sum(loss_n) / print_num_batch:.5f}, Acc: {acc:.5f}"
+                    )
+                    loss_n, pred, label = [], [], []
+
+                loss.backward()
+                opt.step()
+
+        embedding = self.model.get_emb()
+        return embedding.cpu().detach().numpy()
+
+    def get_n_params(self):
+        size = 0
+        for name, param in dict(self.named_parameters()).items():
+            nn = 1
+            for s in list(param.size()):
+                nn = nn * s
+            size += nn
+        return size
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
