@@ -121,9 +121,8 @@ def train(hparams):
         amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32
     )
-    trainer.fit(model)
-    trainer.max_epochs = trainer.current_epoch + 5
-    trainer.fit(model, train_dataloader=model.val_dataloader(), val_dataloaders=model.test_dataloader())
+    # trainer.fit(model)
+    trainer.fit(model, train_dataloader=model.valtrain_dataloader(), val_dataloaders=model.test_dataloader())
     trainer.test(model)
 
 

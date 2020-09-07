@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 from cogdl.models.nn.pyg_gtn import GTN as Gtn
 from cogdl.models.nn.pyg_han import HAN as Han
+from cogdl.models.emb.hin2vec import Hin2vec
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import precision_recall_fscore_support
@@ -786,6 +787,10 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
     def val_dataloader(self):
         return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
