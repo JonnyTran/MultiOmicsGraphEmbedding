@@ -253,7 +253,7 @@ class GTN(Gtn, pl.LightningModule):
         num_channels = hparams.num_channels
         super(GTN, self).__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
 
-        if not hasattr(dataset, "x"):
+        if not hasattr(dataset, "x") and not hasattr(dataset, "x_dict"):
             if num_nodes > 10000:
                 self.embedding = {self.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
                                                                           embedding_dim=hparams.embedding_dim).cpu()}
@@ -441,7 +441,7 @@ class HAN(Han, pl.LightningModule):
         super(HAN, self).__init__(num_edge=num_edge, w_in=w_in, w_out=w_out, num_class=num_class,
                                   num_nodes=num_nodes, num_layers=num_layers)
 
-        if not hasattr(dataset, "x"):
+        if not hasattr(dataset, "x") and not hasattr(dataset, "x_dict"):
             if num_nodes > 10000:
                 self.embedding = {dataset.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
                                                                              embedding_dim=hparams.embedding_dim).cpu()}
