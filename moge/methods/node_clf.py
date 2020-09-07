@@ -789,7 +789,61 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+        return self.dataset.valtrain_dataloader(collate_fn=self.sample,
+                                                batch_size=self.hparams.batch_size)
+
+    def test_dataloader(self):
+        return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+
+    def configure_optimizers(self):
+        if self.sparse:
+            return torch.optim.SparseAdam(self.parameters(), lr=self.hparams.lr)
+        else:
+            return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+
+
+class HIN2Vec(Hin2vec, pl.LightningModule):
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
+        self.train_ratio = hparams.train_ratio
+        self.batch_size = hparams.batch_size
+        self.sparse = hparams.sparse
+
+        embedding_dim = hparams.embedding_dim
+        walk_length = hparams.walk_length
+        hop = hparams.context_size
+        walks_per_node = hparams.walks_per_node
+        num_negative_samples = hparams.num_negative_samples
+
+        # Dataset
+        self.dataset = dataset
+        num_nodes_dict = None
+        metapaths = self.dataset.get_metapaths()
+        self.head_node_type = self.dataset.head_node_type
+        edge_index_dict = dataset.edge_index_dict
+        first_node_type = metapaths[0][0]
+
+        for metapath in reversed(metapaths):
+            if metapath[-1] == first_node_type:
+                last_metapath = metapath
+                break
+        metapaths.pop(metapaths.index(last_metapath))
+        metapaths.append(last_metapath)
+        print("metapaths", metapaths)
+
+        if dataset.use_reverse:
+            dataset.add_reverse_edge_index(dataset.edge_index_dict)
+
+        super().__init__(embedding_dim, walk_length, walks_per_node, hparams.batch_size, hop, num_negative_samples,
+                         1000, hparams.lr, cpu=False)
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.sample,
                                                 batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):

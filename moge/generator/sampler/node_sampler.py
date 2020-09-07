@@ -202,7 +202,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
 
-        assert np.isin(iloc, allowed_nodes).all()
 
         if filter:
             node_mask = np.isin(sampled_local_nodes[self.head_node_type], allowed_nodes)
