@@ -205,6 +205,11 @@ class LATTENodeClassifier(NodeClfMetrics):
                                              batch_size=self.hparams.batch_size,
                                              num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size,
+                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
                                             batch_size=self.hparams.batch_size,
@@ -403,10 +408,15 @@ class GTN(Gtn, pl.LightningModule):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size,
+                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -566,7 +576,11 @@ class HAN(Han, pl.LightningModule):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
@@ -721,6 +735,51 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
                           precision_recall_fscore_support(y_test, y_pred, average="micro")))
         result["acc" if not multilabel else "accuracy"] = result["precision"]
         return result
+
+    def pos_sample(self, batch):
+        # device = self.embedding.weight.device
+
+        batch = batch.repeat(self.walks_per_node)
+
+        rws = [batch]
+        for i in range(self.walk_length):
+            keys = self.metapath[i % len(self.metapath)]
+            adj = self.adj_dict[keys]
+            batch = adj.sample(num_neighbors=1, subset=batch).squeeze()
+            rws.append(batch)
+
+        rw = torch.stack(rws, dim=-1)
+        rw.add_(self.offset.view(1, -1))
+
+        walks = []
+        num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
+        for j in range(num_walks_per_rw):
+            walks.append(rw[:, j:j + self.context_size])
+        return torch.cat(walks, dim=0)
+
+    def neg_sample(self, batch):
+        batch = batch.repeat(self.walks_per_node * self.num_negative_samples)
+
+        rws = [batch]
+        for i in range(self.walk_length):
+            keys = self.metapath[i % len(self.metapath)]
+            batch = torch.randint(0, self.num_nodes_dict[keys[-1]],
+                                  (batch.size(0),), dtype=torch.long)
+            rws.append(batch)
+
+        rw = torch.stack(rws, dim=-1)
+        rw.add_(self.offset.view(1, -1))
+
+        walks = []
+        num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
+        for j in range(num_walks_per_rw):
+            walks.append(rw[:, j:j + self.context_size])
+        return torch.cat(walks, dim=0)
+
+    def sample(self, batch):
+        if not isinstance(batch, torch.Tensor):
+            batch = torch.tensor(batch)
+        return self.pos_sample(batch), self.neg_sample(batch)
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
