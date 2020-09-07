@@ -193,7 +193,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         elif "valid" in mode:
             filter = True if self.inductive else False
             if self.inductive and hasattr(self, "training_subgraph_idx"):
-                allowed_nodes = torch.cat([self.validation_idx, self.training_subgraph_idx]).unique()
+                allowed_nodes = torch.cat([self.validation_idx, self.training_subgraph_idx])
             else:
                 allowed_nodes = self.validation_idx
         elif "test" in mode:

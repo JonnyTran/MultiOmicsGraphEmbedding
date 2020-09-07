@@ -328,9 +328,10 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         if self.inductive:
             other_nodes = torch.arange(self.num_nodes_dict[self.head_node_type])
-            other_nodes = ~np.isin(other_nodes, self.training_idx) & ~np.isin(other_nodes,
-                                                                              self.validation_idx) & ~np.isin(
-                other_nodes, self.testing_idx)
+            idx = ~np.isin(other_nodes, self.training_idx) & \
+                  ~np.isin(other_nodes, self.validation_idx) & \
+                  ~np.isin(other_nodes, self.testing_idx)
+            other_nodes = other_nodes[idx]
             self.training_subgraph_idx = torch.cat(
                 [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
                 dim=0).unique()
