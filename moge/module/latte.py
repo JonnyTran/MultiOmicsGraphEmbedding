@@ -284,6 +284,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
+            if tail not in self.node_types:
+                tail = self.node_types[0]
+            if head not in self.node_types:
+                head = self.node_types[0]
             num_node_head, num_node_tail = len(global_node_idx[head]), len(global_node_idx[tail])
 
             edge_index, _ = LATTE.get_edge_index_values(edge_index_dict[metapath])
@@ -326,6 +330,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
                 continue
             head_type, tail_type = metapath[0], metapath[-1]
+
+            if tail_type not in self.node_types:
+                tail_type = self.node_types[0]
+            if head_type not in self.node_types:
+                head_type = self.node_types[0]
             if self.first:
                 alpha_l[metapath] = self.attn_l[i].forward(h_dict[head_type])
             else:

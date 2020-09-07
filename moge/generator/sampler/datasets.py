@@ -333,7 +333,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 other_nodes, self.testing_idx)
             self.training_subgraph_idx = torch.cat(
                 [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
-                dim=0)
+                dim=0).unique()
 
         self.data = data
 
