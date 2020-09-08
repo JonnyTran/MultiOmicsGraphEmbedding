@@ -109,7 +109,7 @@ class LATTE(nn.Module):
         # device = global_node_idx[list(global_node_idx.keys())[0]].device
         proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
 
-        h_layers = {node_type: [] for node_type in global_node_idx}
+        # h_layers = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
                 h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=X, x_r=X,
@@ -119,21 +119,21 @@ class LATTE(nn.Module):
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=X,
+                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=h_dict,
                                                            edge_index_dict=next_edge_index_dict,
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
 
-            for node_type in global_node_idx:
-                h_layers[node_type].append(h_dict[node_type])
+            # for node_type in global_node_idx:
+            #     h_layers[node_type].append(h_dict[node_type])
 
             if self.use_proximity:
                 proximity_loss += t_loss
 
-        concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                      if len(h_list) > 0}
+        # concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+        #               if len(h_list) > 0}
 
-        return concat_out, proximity_loss, edge_pred_dict
+        return h_dict, proximity_loss, edge_pred_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -181,8 +181,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (F x F)
             self.linear_r = nn.ModuleDict(
-                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
-                 for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m}
+                {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (F x F)
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.ModuleList(

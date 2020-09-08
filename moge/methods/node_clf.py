@@ -118,7 +118,7 @@ class LATTENodeClassifier(NodeClfMetrics):
                            attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                            attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
-        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
@@ -206,6 +206,11 @@ class LATTENodeClassifier(NodeClfMetrics):
                                              batch_size=self.hparams.batch_size,
                                              num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size,
+                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
                                             batch_size=self.hparams.batch_size,
@@ -247,7 +252,7 @@ class GTN(Gtn, pl.LightningModule):
         num_channels = hparams.num_channels
         super(GTN, self).__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
 
-        if not hasattr(dataset, "x"):
+        if not hasattr(dataset, "x") and not hasattr(dataset, "x_dict"):
             if num_nodes > 10000:
                 self.embedding = {self.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
                                                                           embedding_dim=hparams.embedding_dim).cpu()}
@@ -403,10 +408,15 @@ class GTN(Gtn, pl.LightningModule):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size,
+                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -431,7 +441,7 @@ class HAN(Han, pl.LightningModule):
         super(HAN, self).__init__(num_edge=num_edge, w_in=w_in, w_out=w_out, num_class=num_class,
                                   num_nodes=num_nodes, num_layers=num_layers)
 
-        if not hasattr(dataset, "x"):
+        if not hasattr(dataset, "x") and not hasattr(dataset, "x_dict"):
             if num_nodes > 10000:
                 self.embedding = {dataset.head_node_type: torch.nn.Embedding(num_embeddings=num_nodes,
                                                                              embedding_dim=hparams.embedding_dim).cpu()}
@@ -567,7 +577,11 @@ class HAN(Han, pl.LightningModule):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size * 2)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
@@ -724,11 +738,168 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         result["acc" if not multilabel else "accuracy"] = result["precision"]
         return result
 
+    def pos_sample(self, batch):
+        # device = self.embedding.weight.device
+
+        batch = batch.repeat(self.walks_per_node)
+
+        rws = [batch]
+        for i in range(self.walk_length):
+            keys = self.metapath[i % len(self.metapath)]
+            adj = self.adj_dict[keys]
+            batch = adj.sample(num_neighbors=1, subset=batch).squeeze()
+            rws.append(batch)
+
+        rw = torch.stack(rws, dim=-1)
+        rw.add_(self.offset.view(1, -1))
+
+        walks = []
+        num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
+        for j in range(num_walks_per_rw):
+            walks.append(rw[:, j:j + self.context_size])
+        return torch.cat(walks, dim=0)
+
+    def neg_sample(self, batch):
+        batch = batch.repeat(self.walks_per_node * self.num_negative_samples)
+
+        rws = [batch]
+        for i in range(self.walk_length):
+            keys = self.metapath[i % len(self.metapath)]
+            batch = torch.randint(0, self.num_nodes_dict[keys[-1]],
+                                  (batch.size(0),), dtype=torch.long)
+            rws.append(batch)
+
+        rw = torch.stack(rws, dim=-1)
+        rw.add_(self.offset.view(1, -1))
+
+        walks = []
+        num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
+        for j in range(num_walks_per_rw):
+            walks.append(rw[:, j:j + self.context_size])
+        return torch.cat(walks, dim=0)
+
+    def sample(self, batch):
+        if not isinstance(batch, torch.Tensor):
+            batch = torch.tensor(batch)
+        return self.pos_sample(batch), self.neg_sample(batch)
+
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
         return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.sample,
+                                                batch_size=self.hparams.batch_size)
+
+    def test_dataloader(self):
+        return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+
+    def configure_optimizers(self):
+        if self.sparse:
+            return torch.optim.SparseAdam(self.parameters(), lr=self.hparams.lr)
+        else:
+            return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+
+
+class HIN2Vec(Hin2vec):
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
+        self.train_ratio = hparams.train_ratio
+        self.batch_size = hparams.batch_size
+        self.sparse = hparams.sparse
+
+        embedding_dim = hparams.embedding_dim
+        walk_length = hparams.walk_length
+        hop = hparams.context_size
+        walks_per_node = hparams.walks_per_node
+        num_negative_samples = hparams.num_negative_samples
+
+        # Dataset
+        self.dataset = dataset
+        num_nodes_dict = None
+        metapaths = self.dataset.get_metapaths()
+        self.head_node_type = self.dataset.head_node_type
+        edge_index_dict = dataset.edge_index_dict
+        first_node_type = metapaths[0][0]
+
+        for metapath in reversed(metapaths):
+            if metapath[-1] == first_node_type:
+                last_metapath = metapath
+                break
+        metapaths.pop(metapaths.index(last_metapath))
+        metapaths.append(last_metapath)
+        print("metapaths", metapaths)
+
+        if dataset.use_reverse:
+            dataset.add_reverse_edge_index(dataset.edge_index_dict)
+
+        super().__init__(embedding_dim, walk_length, walks_per_node, hparams.batch_size, hop, num_negative_samples,
+                         1000, hparams.lr, cpu=True)
+
+    def train(self, G, node_type):
+        self.num_node = G.number_of_nodes()
+        rw = RWgraph(G, node_type)
+        walks = rw._simulate_walks(self.walk_length, self.walk_num)
+        pairs, relation = rw.data_preparation(walks, self.hop, self.negative)
+
+        self.num_relation = len(relation)
+        model = Hin2vec_layer(self.num_node, self.num_relation, self.hidden_dim, self.cpu)
+        self.model = model.to(self.device)
+
+        num_batch = int(len(pairs) / self.batch_size)
+        print_num_batch = 100
+        print("number of batch", num_batch)
+
+        opt = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        epoch_iter = tqdm(range(self.epoches))
+        for epoch in epoch_iter:
+            loss_n, pred, label = [], [], []
+            for i in range(num_batch):
+                batch_pairs = torch.from_numpy(pairs[i * self.batch_size:(i + 1) * self.batch_size])
+                batch_pairs = batch_pairs.to(self.device)
+                batch_pairs = batch_pairs.T
+                x, y, r, l = batch_pairs[0], batch_pairs[1], batch_pairs[2], batch_pairs[3]
+                opt.zero_grad()
+                logits, loss = self.model.forward(x, y, r, l)
+
+                loss_n.append(loss.item())
+                label.append(l)
+                pred.extend(logits)
+                if i % print_num_batch == 0 and i != 0:
+                    label = torch.cat(label).to(self.device)
+                    pred = torch.stack(pred, dim=0)
+                    pred = pred.max(1)[1]
+                    acc = pred.eq(label).sum().item() / len(label)
+                    epoch_iter.set_description(
+                        f"Epoch: {i:03d}, Loss: {sum(loss_n) / print_num_batch:.5f}, Acc: {acc:.5f}"
+                    )
+                    loss_n, pred, label = [], [], []
+
+                loss.backward()
+                opt.step()
+
+        embedding = self.model.get_emb()
+        return embedding.cpu().detach().numpy()
+
+    def get_n_params(self):
+        size = 0
+        for name, param in dict(self.named_parameters()).items():
+            nn = 1
+            for s in list(param.size()):
+                nn = nn * s
+            size += nn
+        return size
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.sample,
+                                                batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)

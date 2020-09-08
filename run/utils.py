@@ -35,7 +35,7 @@ def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bi
                                             head_node_type="P", resample_train=train_ratio, inductive=hparams.inductive)
 
     elif dataset == "DBLP":
-        if method == "HAN" or "LATTE" in method:
+        if method == "HAN":
             dataset = HeteroNeighborSampler(DBLP_HANDataset(), [25, 10], node_types=["A"],
                                             metapaths=["ACA", "APA", "ATA"] if "LATTE" in method else None,
                                             head_node_type="A",

@@ -328,18 +328,14 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         if self.inductive:
             other_nodes = torch.arange(self.num_nodes_dict[self.head_node_type])
-            other_nodes = ~np.isin(other_nodes, self.training_idx) & ~np.isin(other_nodes,
-                                                                              self.validation_idx) & ~np.isin(
-                other_nodes, self.testing_idx)
+            idx = ~np.isin(other_nodes, self.training_idx) & \
+                  ~np.isin(other_nodes, self.validation_idx) & \
+                  ~np.isin(other_nodes, self.testing_idx)
+            other_nodes = other_nodes[idx]
             self.training_subgraph_idx = torch.cat(
                 [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
-                dim=0)
+                dim=0).unique()
 
-        # if train_ratio is None:
-        #     train_ratio = self.get_train_ratio()
-        #
-        # self.training_idx, self.validation_idx, self.testing_idx = \
-        #     self.split_train_val_test(train_ratio=train_ratio, sample_indices=self.y_index_dict[self.head_node_type])
         self.data = data
 
     def process_stellargraph(self, dataset, metapath, node_types, train_ratio):
@@ -382,6 +378,14 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         mode="train",
+                                                                                                        **kwargs))
+        return loader
+
+    def valtrain_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+        loader = data.DataLoader(torch.cat([self.training_idx, self.validation_idx]), batch_size=batch_size,
+                                 shuffle=True, num_workers=num_workers,
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        mode="validation",
                                                                                                         **kwargs))
         return loader
 
