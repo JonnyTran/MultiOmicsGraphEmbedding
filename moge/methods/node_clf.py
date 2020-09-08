@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 from cogdl.models.nn.pyg_gtn import GTN as Gtn
 from cogdl.models.nn.pyg_han import HAN as Han
+from cogdl.models.emb.hin2vec import Hin2vec, Hin2vec_layer, RWgraph, tqdm
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import precision_recall_fscore_support
@@ -118,7 +119,7 @@ class LATTENodeClassifier(NodeClfMetrics):
                            attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                            attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
                            neg_sampling_ratio=hparams.neg_sampling_ratio)
-        # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
