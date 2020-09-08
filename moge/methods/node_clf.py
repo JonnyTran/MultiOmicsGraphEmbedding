@@ -836,13 +836,13 @@ class HIN2Vec(Hin2vec):
         super().__init__(embedding_dim, walk_length, walks_per_node, hparams.batch_size, hop, num_negative_samples,
                          1000, hparams.lr, cpu=True)
 
-    def train(self, G, node_type, relation):
+    def train(self, G, node_type):
         self.num_node = G.number_of_nodes()
         rw = RWgraph(G, node_type)
         walks = rw._simulate_walks(self.walk_length, self.walk_num)
-        # pairs, relation = rw.data_preparation(walks, self.hop, self.negative)
+        pairs, relation = rw.data_preparation(walks, self.hop, self.negative)
 
-        self.num_relation = relation
+        self.num_relation = len(relation)
         model = Hin2vec_layer(self.num_node, self.num_relation, self.hidden_dim, self.cpu)
         self.model = model.to(self.device)
 
