@@ -133,7 +133,7 @@ class LATTE(nn.Module):
         concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
                       if len(h_list) > 0}
 
-        return concat_out, proximity_loss, edge_pred_dict
+        return h_dict, proximity_loss, edge_pred_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
