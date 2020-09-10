@@ -447,8 +447,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def save_relation_weights(self, beta, global_node_idx):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
-        if len(beta) < len(self.node_types): return
-
         self._betas = {}
         self._beta_avg = {}
         self._beta_std = {}
@@ -458,8 +456,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                       columns=self.get_head_relations(node_type, True) + [node_type, ],
                                                       index=global_node_idx[node_type].cpu().numpy())
 
-                _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
-                _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
+                _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=4)
+                _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
                 self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
                                              enumerate(self.get_head_relations(node_type, True) + [node_type])}
                 self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
@@ -479,8 +477,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                   columns=self.get_head_relations(node_type, True) + [node_type, ],
                                                   index=node_idx.cpu().numpy())
 
-            _beta_avg = np.around(betas.mean(dim=0).cpu().numpy(), decimals=3)
-            _beta_std = np.around(betas.std(dim=0).cpu().numpy(), decimals=2)
+            _beta_avg = np.around(betas.mean(dim=0).cpu().numpy(), decimals=4)
+            _beta_std = np.around(betas.std(dim=0).cpu().numpy(), decimals=3)
             self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
                                          enumerate(self.get_head_relations(node_type, True) + [node_type])}
             self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
