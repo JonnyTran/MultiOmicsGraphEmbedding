@@ -35,16 +35,20 @@ def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bi
                                             head_node_type="P", resample_train=train_ratio, inductive=hparams.inductive)
 
     elif dataset == "DBLP":
-        if method == "HAN" or "LATTE" in method:
-            dataset = HeteroNeighborSampler(DBLP_HANDataset(), [25, 20], node_types=["A"],
-                                            metapaths=["ACA", "APA", "ATA"] if "LATTE" in method else None,
-                                            head_node_type="A",
+        if method == "HAN":
+            dataset = HeteroNeighborSampler(DBLP_HANDataset(), [25, 20],
+                                            node_types=["A"], head_node_type="A",
+                                            add_reverse_metapaths=True,
+                                            resample_train=train_ratio, inductive=hparams.inductive)
+        elif "LATTE" in method:
+            dataset = HeteroNeighborSampler(DBLP_HANDataset(), [25, 20],
+                                            node_types=["A", "P", "C", "T"], head_node_type="A",
+                                            metapaths=["AC", "AP", "AT"],
                                             add_reverse_metapaths=True,
                                             resample_train=train_ratio, inductive=hparams.inductive)
         else:
-            dataset = HeteroNeighborSampler(DBLP_GTNDataset(), [25, 20], node_types=["A"],
+            dataset = HeteroNeighborSampler(DBLP_GTNDataset(), [25, 20], node_types=["A"], head_node_type="A",
                                             metapaths=["APA", "AP_A", "ACA", "AC_A"] if "LATTE" in method else None,
-                                            head_node_type="A",
                                             add_reverse_metapaths=False,
                                             resample_train=train_ratio, inductive=hparams.inductive)
 

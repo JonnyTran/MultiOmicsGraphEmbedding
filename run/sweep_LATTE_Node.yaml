@@ -1,7 +1,7 @@
 program: run/latte_node.py
 method: bayes
 metric:
-  name: val_f1
+  name: test_acc
   goal: maximize
 early_terminate:
   type: hyperband
@@ -9,26 +9,28 @@ early_terminate:
   s: 2
 parameters:
   embedding_dim:
-    values: [64, 128, 256]
+    values: [ 64, 128, 256 ]
   t_order:
-    values: [1, 2, 3]
-  n_neighbors_1:
-    values: [5, 15, 25, 30]
+    values: [ 1, 2, 3 ]
+  n_neighbors:
+    values: [ 16, 25, 30, 40 ]
   activation:
-    values: ["sigmoid", "tanh", "relu", "none"]
+    values: [ "sigmoid", "tanh", "relu", "none" ]
   attn_dropout:
-    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
   attn_activation:
-    values: ["sharpening", "PReLU", "LeakyReLU", "none"]
+    values: [ "sharpening", "PReLU", "LeakyReLU", "none" ]
   nb_cls_dense_size:
-    values: [0, 512, 1024]
+    values: [ 0 ]
   nb_cls_dropout:
-    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 ]
   loss_type:
-    values: ["SOFTMAX_CROSS_ENTROPY"]
+    values: [ "SOFTMAX_CROSS_ENTROPY" ]
   use_class_weights:
-    values: [True, False]
-  use_reverse:
-    values: [True, False]
+    values: [ True, False ]
+  use_proximity:
+    values: [ True, False ]
+  neg_sampling_ratio:
+    values: [ 2.0, 4.0, 5.0 ]
   lr:
-    values: [0.005, 0.001, 0.01]
+    values: [ 0.001 ]
