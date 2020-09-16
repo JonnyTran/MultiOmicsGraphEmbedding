@@ -1,9 +1,9 @@
 This code is provided to reproduce experiments in the paper "Layer-stacked Attention for Heterogeneous Network Embedding".
-Running this code requires installation of Python 3.X packages listed in `requirements.txt`. Install them with:
+Running this code requires installation of Python 3.X packages listed in `requirements.txt`. Install them by running:
 >>> pip install -r requirements.txt
 
 It also requires installation of the COGDL Toolkit from the following GitHub repository: https://github.com/THUDM/cogdl
-To install it, go to a parent directory and run
+To install it, go to a parent directory and run:
 >>> git clone https://github.com/THUDM/cogdl
 >>> cd cogdl
 >>> pip install -e .
