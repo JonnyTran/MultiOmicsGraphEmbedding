@@ -8,13 +8,9 @@ import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.inits import glorot
 from torch_geometric.utils import softmax
-import torch_sparse
 from torch_sparse.tensor import SparseTensor
-from torch_sparse.matmul import matmul
 import pytorch_lightning as pl
 
-from moge.module.sampling import negative_sample, negative_sample_head_tail
-from .utils import preprocess_input
 
 class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
@@ -274,7 +270,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
 
-
         proximity_loss, edge_pred_dict = None, None
         if self.use_proximity:
             proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
@@ -508,6 +503,7 @@ def tag_negative(metapath):
     else:
         return "neg"
 
+
 def untag_negative(metapath):
     if isinstance(metapath, tuple) and metapath[-1] == "neg":
         return metapath[:-1]
@@ -552,3 +548,25 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
         row, col, values = row[idx], col[idx], values[idx]
 
     return torch.stack([row, col], dim=0), values
+
+
+def negative_sample(edge_index, M: int, N: int, n_sample_per_edge: int):
+    num_neg_samples = edge_index.size(1) * n_sample_per_edge
+    num_neg_samples = int(min(num_neg_samples, M * N - edge_index.size(1)))
+    rng = range(M * N)
+    idx = (edge_index[0] * N + edge_index[1]).to('cpu')  # idx = N * i + j
+
+    perm = torch.tensor(random.sample(rng, num_neg_samples))
+    mask = torch.from_numpy(np.isin(perm, idx)).to(torch.bool)
+    rest = mask.nonzero().view(-1)
+    while rest.numel() > 0:  # pragma: no cover
+        tmp = torch.tensor(random.sample(rng, rest.size(0)))
+        mask = torch.from_numpy(np.isin(tmp, idx)).to(torch.bool)
+        perm[rest] = tmp
+        rest = rest[mask.nonzero().view(-1)]
+
+    row = perm // N
+    col = perm % N
+    neg_edge_index = torch.stack([row, col], dim=0).long()
+
+    return neg_edge_index.to(edge_index.device)
