@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from pytorch_lightning.loggers import WandbLogger
 
-from methods import MetaPath2Vec, HAN, GTN, LATTENodeClassifier
+from models import MetaPath2Vec, HAN, GTN, LATTENodeClassifier
 from data import load_node_dataset
 
 
@@ -93,7 +93,7 @@ def train(hparams):
             "attn_dropout": 0.2,
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "use_proximity": True if "proximity" in hparams.method else False,
-            "neg_sampling_ratio": 2.0,
+            "neg_sampling_ratio": 5.0,
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
             "lr": 0.001 * num_gpus,
@@ -114,27 +114,28 @@ def train(hparams):
     wandb_logger.log_hyperparams(model_hparams)
 
     trainer = Trainer(
-        gpus=NUM_GPUS, auto_select_gpus=True,
+        gpus=NUM_GPUS,
         distributed_backend='dp' if NUM_GPUS > 1 else None,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001, strict=False)],
         logger=wandb_logger,
         weights_summary='top',
         amp_level='O1' if USE_AMP and NUM_GPUS > 0 else None,
-        precision=None if NUM_GPUS == 0 else 16 if USE_AMP else 32
+        precision=16 if USE_AMP else 32
     )
-    # trainer.fit(model)
-    trainer.fit(model, train_dataloader=model.valtrain_dataloader(), val_dataloaders=model.test_dataloader())
+    trainer.fit(model)
     trainer.test(model)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
     parser.add_argument('--embedding_dim', type=int, default=128)
-    parser.add_argument('--inductive', type=bool, default=True)
 
-    parser.add_argument('--dataset', type=str, default="ACM")
-    parser.add_argument('--method', type=str, default="LATTE-1")
+    parser.add_argument('--dataset', type=str, default="ACM", help="[ACM, DBLP, IMDB]")
+    parser.add_argument('--method', type=str, default="LATTE-1",
+                        help="[MetaPath2Vec, HAN, GTN, LATTE-1, LATTE-2, LATTE-2 proximity]")
+    parser.add_argument('--inductive', type=bool, default=True, help="True for inductive, False for transductive")
+
     parser.add_argument('--train_ratio', type=float, default=None,
                         help="Default None. Only used to resample dataset and resizing the training set.")
 
