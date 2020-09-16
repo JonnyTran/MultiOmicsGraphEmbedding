@@ -9,9 +9,6 @@ from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 
-from .utils import filter_samples
-
-
 def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
     if weights is None:
         return Y_hat, Y

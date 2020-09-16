@@ -3,9 +3,6 @@ import multiprocessing
 import itertools
 
 import pandas as pd
-from cogdl.models.nn.pyg_gtn import GTN as Gtn
-from cogdl.models.nn.pyg_han import HAN as Han
-from cogdl.models.emb.hin2vec import Hin2vec, RWgraph, Hin2vec_layer, tqdm
 from sklearn.linear_model import LogisticRegression
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import precision_recall_fscore_support
@@ -19,10 +16,14 @@ import pytorch_lightning as pl
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch_geometric.nn.inits import glorot, zeros
 
-from .data import HeteroNetDataset
-from .utils import Metrics
-from .conv import LATTE
-from .utils import filter_samples
+from cogdl.models.nn.pyg_gtn import GTN as Gtn
+from cogdl.models.nn.pyg_han import HAN as Han
+from cogdl.models.emb.hin2vec import Hin2vec, RWgraph, Hin2vec_layer, tqdm
+
+from data import HeteroNetDataset
+from utils import Metrics
+from conv import LATTE
+from utils import filter_samples
 
 
 class NodeClfMetrics(pl.LightningModule):

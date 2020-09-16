@@ -11,10 +11,10 @@ from pytorch_lightning.trainer import Trainer
 
 from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.methods.node_clf import MetaPath2Vec, HAN, GTN, LATTENodeClassifier
 from pytorch_lightning.loggers import WandbLogger
 
-from run.utils import load_node_dataset
+from methods import MetaPath2Vec, HAN, GTN, LATTENodeClassifier
+from data import load_node_dataset
 
 
 def train(hparams):
@@ -30,13 +30,13 @@ def train(hparams):
         USE_AMP = True
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "batch_size": 2 ** batch_order * NUM_GPUS,
+            "batch_size": 2 ** batch_order,
             "num_layers": 2,
             "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.0005 * NUM_GPUS,
+            "lr": 0.0005,
         }
         model = HAN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "GTN":
@@ -45,12 +45,12 @@ def train(hparams):
             "embedding_dim": EMBEDDING_DIM,
             "num_channels": len(dataset.metapaths),
             "num_layers": 2,
-            "batch_size": 2 ** batch_order * NUM_GPUS,
+            "batch_size": 2 ** batch_order,
             "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.0005 * NUM_GPUS,
+            "lr": 0.0005,
         }
         model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "MetaPath2Vec":
@@ -62,10 +62,10 @@ def train(hparams):
             "walks_per_node": 5,
             "num_negative_samples": 5,
             "sparse": True,
-            "batch_size": 400 * NUM_GPUS,
+            "batch_size": 400,
             "train_ratio": dataset.train_ratio,
             "n_classes": dataset.n_classes,
-            "lr": 0.01 * NUM_GPUS,
+            "lr": 0.01,
         }
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif "LATTE" in hparams.method:
@@ -120,13 +120,12 @@ def train(hparams):
         callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001, strict=False)],
         logger=wandb_logger,
         weights_summary='top',
-        amp_level='O1' if USE_AMP else None,
-        precision=16 if USE_AMP else 32
+        amp_level='O1' if USE_AMP and NUM_GPUS > 0 else None,
+        precision=None if NUM_GPUS == 0 else 16 if USE_AMP else 32
     )
     # trainer.fit(model)
     trainer.fit(model, train_dataloader=model.valtrain_dataloader(), val_dataloaders=model.test_dataloader())
     trainer.test(model)
-
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -135,11 +134,11 @@ if __name__ == "__main__":
     parser.add_argument('--inductive', type=bool, default=True)
 
     parser.add_argument('--dataset', type=str, default="ACM")
-    parser.add_argument('--method', type=str, default="MetaPath2Vec")
+    parser.add_argument('--method', type=str, default="LATTE-1")
     parser.add_argument('--train_ratio', type=float, default=None,
                         help="Default None. Only used to resample dataset and resizing the training set.")
 
-    parser.add_argument('--num_gpus', type=int, default=1, help="Number of GPUS")
+    parser.add_argument('--num_gpus', type=int, default=0, help="Number of GPUS")
 
     parser.add_argument('--run', type=int, default=0)
     # add all the available options to the trainer

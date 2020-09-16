@@ -10,13 +10,13 @@ To install it, go to a parent directory and run
 >>> cd cogdl
 >>> pip install -e .
 
-To perform either transductive or inductive experiment runs for X method on Y dataset, go to the `LATTE` repository and
+To perform either transductive or inductive experiment runs for a method on a dataset, go to the `LATTE` repository and
 run the command:
 
->>> python run.py --method X --dataset Y --inductive [True False]
+>>> python run.py --method [MetaPath2Vec, HAN, GTN, LATTE-1, LATTE-2, LATTE-2 proximity] --dataset [ACM, DBLP, IMDB] --inductive [True False] --num_gpus [0 1]
 
 The models' hyperparameters have been kept as described in the paper. If you'd like to inspect LATTE's algorithm & code,
-inspect the `conv.py` file and the `LATTENodeClassifier` class in the `methods.py` file.
+open the `conv.py` file and the `LATTENodeClassifier` class in the `methods.py` file.
 
 Happy Reviewing!
 --Author
