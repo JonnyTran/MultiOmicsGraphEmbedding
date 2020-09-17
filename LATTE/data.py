@@ -18,42 +18,46 @@ import torch_sparse
 from conv import is_negative
 
 
-def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="datasets/"):
+def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
     if dataset == "ACM":
         if method == "HAN" or method == "MetaPath2Vec":
-            dataset = HeteroNeighborSampler(ACM_HANDataset(), [25, 10], node_types=["P"],
+            dataset = HeteroNeighborSampler(ACM_HANDataset(), [25, 20], node_types=["P"],
                                             metapaths=["PAP", "PSP"] if "LATTE" in method else None,
                                             add_reverse_metapaths=True,
                                             head_node_type="P", resample_train=train_ratio, inductive=hparams.inductive)
         else:
-            dataset = HeteroNeighborSampler(ACM_GTNDataset(), [25, 10], node_types=["P"],
+            dataset = HeteroNeighborSampler(ACM_GTNDataset(), [25, 20], node_types=["P"],
                                             metapaths=["PAP", "PA_P", "PSP", "PS_P"] if "LATTE" in method else None,
                                             add_reverse_metapaths=False,
                                             head_node_type="P", resample_train=train_ratio, inductive=hparams.inductive)
 
     elif dataset == "DBLP":
         if method == "HAN":
-            dataset = HeteroNeighborSampler(DBLP_HANDataset(), [25, 10], node_types=["A"],
-                                            metapaths=["ACA", "APA", "ATA"] if "LATTE" in method else None,
-                                            head_node_type="A",
+            dataset = HeteroNeighborSampler(DBLP_HANDataset(), [25, 20],
+                                            node_types=["A"], head_node_type="A", metapaths=None,
+                                            add_reverse_metapaths=True,
+                                            resample_train=train_ratio, inductive=hparams.inductive)
+        elif "LATTE" in method:
+            dataset = HeteroNeighborSampler(DBLP_HANDataset(), [25, 20],
+                                            node_types=["A", "P", "C", "T"], head_node_type="A",
+                                            metapaths=["AC", "AP", "AT"],
                                             add_reverse_metapaths=True,
                                             resample_train=train_ratio, inductive=hparams.inductive)
         else:
-            dataset = HeteroNeighborSampler(DBLP_GTNDataset(), [25, 10], node_types=["A"],
+            dataset = HeteroNeighborSampler(DBLP_GTNDataset(), [25, 20], node_types=["A"], head_node_type="A",
                                             metapaths=["APA", "AP_A", "ACA", "AC_A"] if "LATTE" in method else None,
-                                            head_node_type="A",
                                             add_reverse_metapaths=False,
                                             resample_train=train_ratio, inductive=hparams.inductive)
 
     elif dataset == "IMDB":
         if method == "HAN" or method == "MetaPath2Vec":
-            dataset = HeteroNeighborSampler(IMDB_HANDataset(), [25, 10], node_types=["M"],
+            dataset = HeteroNeighborSampler(IMDB_HANDataset(), [25, 20], node_types=["M"],
                                             metapaths=["MAM", "MDM", "MWM"] if "LATTE" in method else None,
                                             add_reverse_metapaths=True,
                                             head_node_type="M",
                                             resample_train=train_ratio, inductive=hparams.inductive)
         else:
-            dataset = HeteroNeighborSampler(IMDB_GTNDataset(), neighbor_sizes=[25, 10], node_types=["M"],
+            dataset = HeteroNeighborSampler(IMDB_GTNDataset(), neighbor_sizes=[25, 20], node_types=["M"],
                                             metapaths=["MDM", "MD_M", "MAM", "MA_M"] if "LATTE" in method else None,
                                             add_reverse_metapaths=False,
                                             head_node_type="M", inductive=hparams.inductive)
