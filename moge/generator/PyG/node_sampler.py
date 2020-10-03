@@ -6,8 +6,7 @@ import torch
 from torch_geometric.data import NeighborSampler
 from torch_geometric.utils.hetero import group_hetero_graph
 from ogb.nodeproppred import PygNodePropPredDataset
-from moge.generator.sampler.datasets import HeteroNetDataset
-
+from .network import HeteroNetDataset
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
