@@ -1,7 +1,8 @@
-from moge.generator.PyG.network import HeteroNetDataset
+from moge.generator.PyG.node_sampler import HeteroNeighborSampler
 import dgl
 
-class DGLHeteroDataset(HeteroNetDataset):
+
+class DGLHeteroDataset(HeteroNeighborSampler):
 
     def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train: float = None, add_reverse_metapaths=True, inductive=True):
