@@ -1,10 +1,8 @@
-import numpy as np
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
 from moge.generator.sampler.datasets import HeteroNetDataset
-from .triplet_sampler import TripletSampler
-from ...module.latte import is_negative, tag_negative
+from moge.module.PyG.latte import tag_negative
 
 
 class EdgeSampler(HeteroNetDataset):

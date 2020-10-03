@@ -17,8 +17,8 @@ from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
 from moge.model.metrics import precision_d, recall_d, precision, recall
-from moge.generator.data_generator import DataGenerator
-from moge.generator.sampled_generator import SampledDataGenerator
+from moge.generator.networkx.data_generator import DataGenerator
+from moge.generator.networkx.sampled_generator import SampledDataGenerator
 from moge.model.static_graph_embedding import ImportedGraphEmbedding
 from moge.network.heterogeneous import HeterogeneousNetwork
 

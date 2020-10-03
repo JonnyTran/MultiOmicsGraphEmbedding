@@ -1,13 +1,13 @@
-import numpy as np
 import pandas as pd
 import torch
 from transformers import AlbertConfig
 
 from moge.module.classifier import DenseClassification, HierarchicalAWX
-from moge.module.embedder import GAT
-from moge.module.encoder import ConvLSTM, AlbertEncoder
+from moge.module.networkx.embedder import GAT
+from moge.module.networkx.encoder import ConvLSTM, AlbertEncoder
 from moge.module.losses import ClassificationLoss, get_hierar_relations
 from moge.module.utils import filter_samples
+
 
 class EncoderEmbedderClassifier(torch.nn.Module):
     def __init__(self) -> None:

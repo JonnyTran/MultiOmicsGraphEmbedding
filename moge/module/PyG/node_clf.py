@@ -1,6 +1,5 @@
 import multiprocessing
 import itertools
-import numpy as np
 import pytorch_lightning as pl
 import pandas as pd
 import torch
@@ -12,17 +11,15 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.metrics import precision_recall_fscore_support
 from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-from torch_geometric.utils import remove_self_loops, add_self_loops
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.generator.sampler.datasets import HeteroNetDataset
 from moge.module.metrics import Metrics
-from moge.module.trainer import _fix_dp_return_type
-from moge.module.latte import LATTE
-from moge.module.classifier import DenseClassification, MulticlassClassification
+from moge.module.PyG.latte import LATTE
+from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
-from moge.module.utils import filter_samples, pad_tensors, tensor_sizes
+from moge.module.utils import filter_samples
 
 
 class NodeClfMetrics(pl.LightningModule):

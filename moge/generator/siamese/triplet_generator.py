@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 import tensorflow as tf
 
-from moge.generator.sampled_generator import SampledDataGenerator
+from moge.generator.networkx.sampled_generator import SampledDataGenerator
 from moge.generator.siamese.pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
     UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
 from moge.network.heterogeneous import HeterogeneousNetwork, EPSILON

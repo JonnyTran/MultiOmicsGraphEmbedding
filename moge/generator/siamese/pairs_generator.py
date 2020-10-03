@@ -4,7 +4,7 @@ import networkx as nx
 import numpy as np
 from scipy.sparse import triu
 
-from moge.generator.data_generator import DataGenerator
+from moge.generator.networkx.data_generator import DataGenerator
 from moge.generator.utils import EdgelistSampler
 
 IS_DIRECTED = 1

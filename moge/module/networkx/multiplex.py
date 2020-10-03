@@ -5,10 +5,10 @@ import torch
 from transformers import AlbertConfig
 
 from moge.module.classifier import DenseClassification, HierarchicalAWX
-from moge.module.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention, \
+from moge.module.networkx.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention, \
     ExpandedMultiplexGAT
-from moge.module.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
-from moge.module.encoder import ConvLSTM, AlbertEncoder, NodeIDEmbedding
+from moge.module.networkx.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
+from moge.module.networkx.encoder import ConvLSTM, AlbertEncoder, NodeIDEmbedding
 from moge.module.losses import ClassificationLoss, get_hierar_relations
 from moge.module.utils import filter_samples
 
@@ -114,14 +114,14 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         if X[self.node_types[0]].dim() > 2:
             X[self.node_types[0]] = X[self.node_types[0]].squeeze(0)
 
-        encodings = self.get_encoder(self.node_types[0]).forward(X[self.node_types[0]],,
+        encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"])
 
-                    embeddings = []
-        for layer in self.layers:
+        embeddings = []
+        for layer, _ in self.hparams.embedder.items():
             if X[layer].dim() > 2:
                 X[layer] = X[layer].squeeze(0)
                 X[layer], _ = remove_self_loops(X[layer], None)
-        embeddings.append(self.get_embedder(layer).forward(encodings, X[layer],, )
+            embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
         if hasattr(self, "_multiplex_embedder"):
             embeddings = self._multiplex_embedder.forward(embeddings)
@@ -136,9 +136,8 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
 
         return self.criterion.forward(
             Y_hat, Y,
-            use_hierar=self.hparams.use_hierar,
-            multiclass=False if "SOFTMAX" in self.hparams.loss_type else True,
-            linear_weight=self._classifier.fc_classifier.linear_l.att_weight if self.hparams.use_hierar else None,
+            use_hierar=self.hparams.use_hierar, multiclass=True,
+            classifier_weight=self._classifier.fc_classifier.linear.att_weight if self.hparams.use_hierar else None,
         )
 
     def get_embeddings(self, X, batch_size=100, return_multi_emb=False):
@@ -158,7 +157,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
             if X[layer].dim() > 2:
                 X[layer] = X[layer].squeeze(0)
                 X[layer], _ = remove_self_loops(X[layer], None)
-            multi_embeddings.append(self.get_embedder(layer).forward(encodings, X[layer],, )
+            multi_embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
 
         if return_multi_emb:
             return multi_embeddings
@@ -258,11 +257,11 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             # nonzero_index = X[node_type].sum(1) > 0
             # print("nonzero_index", nonzero_index)
             # inputs = X[node_type][nonzero_index, :]
-            encodings[node_type] = self.get_encoder(node_type).forward(X[node_type],,
-                                   # print(f"{node_type}, {encodings[node_type].shape}")
+            encodings[node_type] = self.get_encoder(node_type).forward(X[node_type])
+            # print(f"{node_type}, {encodings[node_type].shape}")
 
-                                   sample_idx_by_type = {}
-            index = 0
+        sample_idx_by_type = {}
+        index = 0
         for i, node_type in enumerate(self.node_types):
             sample_idx_by_type[node_type] = index
             index += encodings[node_type].size(0)

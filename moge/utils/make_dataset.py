@@ -1,6 +1,6 @@
 import random
 
-from moge.generator.subgraph_generator import SubgraphGenerator
+from moge.generator.networkx.subgraph_generator import SubgraphGenerator
 
 
 def make_dataset(network, directed=False,

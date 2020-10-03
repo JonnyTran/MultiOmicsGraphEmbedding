@@ -4,7 +4,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .node_clf import NodeClfMetrics
 from moge.generator.sampler.datasets import HeteroNetDataset
-from ..module.latte import LATTE, untag_negative, is_negative
+from moge.module.PyG.latte import LATTE, untag_negative, is_negative
 
 
 class LinkPredMetrics(NodeClfMetrics):

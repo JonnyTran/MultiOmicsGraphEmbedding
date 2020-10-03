@@ -14,7 +14,7 @@ from torch_sparse.matmul import matmul
 import pytorch_lightning as pl
 
 from moge.module.sampling import negative_sample, negative_sample_head_tail
-from .utils import preprocess_input
+from moge.module.utils import preprocess_input
 
 class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,

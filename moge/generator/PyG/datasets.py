@@ -12,11 +12,10 @@ from ogb.nodeproppred import PygNodePropPredDataset
 
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
-from torch_geometric.utils import remove_self_loops
 
 import torch_sparse
 
-from ...module.latte import is_negative
+from moge.module.PyG.latte import is_negative
 
 
 class Network:
