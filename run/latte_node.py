@@ -21,8 +21,8 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator import HeteroNeighborSampler, TripletSampler
-from moge.methods.node_clf import LATTENodeClassifier
-from moge.methods.link_pred import LATTELinkPredictor
+from moge.module.PyG.node_clf import LATTENodeClassifier
+from moge.module.PyG.link_pred import LATTELinkPredictor
 from run.utils import load_node_dataset
 
 
