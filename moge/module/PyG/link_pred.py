@@ -1,10 +1,11 @@
 import multiprocessing
+
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from .node_clf import NodeClfMetrics
-from moge.generator.sampler.datasets import HeteroNetDataset
+from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE, untag_negative, is_negative
+from ..trainer import NodeClfMetrics
 
 
 class LinkPredMetrics(NodeClfMetrics):

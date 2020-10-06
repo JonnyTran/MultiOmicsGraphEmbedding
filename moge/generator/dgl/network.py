@@ -1,5 +1,6 @@
-from moge.generator.PyG.node_sampler import HeteroNeighborSampler
 import dgl
+
+from moge.generator.PyG.node_sampler import HeteroNeighborSampler
 
 
 class DGLHeteroDataset(HeteroNeighborSampler):
@@ -16,3 +17,9 @@ class DGLHeteroDataset(HeteroNeighborSampler):
 
         for ntype, labels in self.y_dict.items():
             self.G.nodes[ntype].data["y"] = labels
+
+    def get_collate_fn(self, collate_fn: str, mode=None):
+        return super().get_collate_fn(collate_fn, mode)
+
+    def sample(self, iloc, mode):
+        return super().sample(iloc, mode)
