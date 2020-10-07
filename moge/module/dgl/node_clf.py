@@ -2,7 +2,7 @@ import multiprocessing
 
 import torch
 
-from moge.generator import DGLHeteroDataset
+from moge.generator import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.dgl.latte import LATTE
 from moge.module.losses import ClassificationLoss
@@ -11,7 +11,7 @@ from ..trainer import NodeClfMetrics
 
 
 class LATTENodeClassifier(NodeClfMetrics):
-    def __init__(self, hparams, dataset: DGLHeteroDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
+    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset

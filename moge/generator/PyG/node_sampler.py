@@ -1,12 +1,14 @@
 from collections import OrderedDict
-import pandas as pd
-import numpy as np
-import torch
 
+import numpy as np
+import pandas as pd
+import torch
+from ogb.nodeproppred import PygNodePropPredDataset
 from torch_geometric.data import NeighborSampler
 from torch_geometric.utils.hetero import group_hetero_graph
-from ogb.nodeproppred import PygNodePropPredDataset
-from .network import HeteroNetDataset
+
+from .. import HeteroNetDataset
+
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,

@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 import torch
 
-from ..PyG.network import HeteroNetDataset
+from .. import HeteroNetDataset
 
 
 class NetworkXSampler(HeteroNetDataset):

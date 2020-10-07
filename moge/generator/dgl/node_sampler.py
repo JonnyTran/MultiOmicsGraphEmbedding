@@ -1,9 +1,9 @@
 from ogb.nodeproppred import DglNodePropPredDataset
 
-from moge.generator.PyG.node_sampler import HeteroNeighborSampler
+from moge.generator.network import HeteroNetDataset
 
 
-class DGLHeteroDataset(HeteroNeighborSampler):
+class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset, neighbor_sizes, node_types=None, metapaths=None,
                  head_node_type=None, directed=True, resample_train=None, add_reverse_metapaths=True, inductive=False):
         super().__init__(dataset, neighbor_sizes, node_types, metapaths, head_node_type, directed, resample_train,
@@ -15,6 +15,8 @@ class DGLHeteroDataset(HeteroNeighborSampler):
 
         if self.node_types is None:
             self.node_types = graph.ntypes
+
+        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
 
         self.y_dict = labels
 
