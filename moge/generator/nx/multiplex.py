@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from moge.network.multiplex import MultiplexAttributedNetwork
 from moge.generator.sequences import MultiSequenceTokenizer
+from moge.network.multiplex import MultiplexAttributedNetwork
 from .subgraph_generator import SubgraphGenerator
 
 
