@@ -2,13 +2,13 @@ import copy
 
 import pandas as pd
 import torch
-from transformers import AlbertConfig
-
-from moge.module.classifier import DenseClassification, HierarchicalAWX
 from moge.module.networkx.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention, \
     ExpandedMultiplexGAT
 from moge.module.networkx.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
 from moge.module.networkx.encoder import ConvLSTM, AlbertEncoder, NodeIDEmbedding
+from transformers import AlbertConfig
+
+from moge.module.classifier import DenseClassification, HierarchicalAWX
 from moge.module.losses import ClassificationLoss, get_hierar_relations
 from moge.module.utils import filter_samples
 
