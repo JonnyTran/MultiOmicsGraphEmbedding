@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import dgl
 from ogb.nodeproppred import DglNodePropPredDataset
@@ -24,7 +25,7 @@ class DGLNodeSampler(HeteroNetDataset):
         self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
         self.y_dict = labels
 
-        for ntype, labels in self.y_dict:
+        for ntype, labels in self.y_dict.items():
             graph.nodes[ntype].data["labels"] = labels
 
         if self.head_node_type is None:
@@ -49,16 +50,38 @@ class DGLNodeSampler(HeteroNetDataset):
         return super().sample(iloc, mode)
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+        if self.inductive:
+            nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
+            nodes[self.head_node_type] = self.training_idx
+            graph = self.G.subgraph(nodes)
+        else:
+            graph = self.G
+
         dataloader = dgl.dataloading.NodeDataLoader(
-            self.G, nids={self.head_node_type: self.training_idx},
+            graph, nids={self.head_node_type: self.training_idx},
             block_sampler=self.neighbor_sampler,
-            batch_size=100,
-            shuffle=True,
-            num_workers=2)
-        return
+            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        return dataloader
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
-        return
+        if self.inductive:
+            nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
+            nodes[self.head_node_type] = np.union1d(self.training_idx, self.validation_idx)
+            graph = self.G.subgraph(nodes)
+        else:
+            graph = self.G
+
+        dataloader = dgl.dataloading.NodeDataLoader(
+            graph, nids={self.head_node_type: self.validation_idx},
+            block_sampler=self.neighbor_sampler,
+            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        return dataloader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
-        return
+        graph = self.G
+
+        dataloader = dgl.dataloading.NodeDataLoader(
+            graph, nids={self.head_node_type: self.testing_idx},
+            block_sampler=self.neighbor_sampler,
+            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        return dataloader
