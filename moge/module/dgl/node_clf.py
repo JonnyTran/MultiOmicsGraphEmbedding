@@ -1,13 +1,18 @@
 import multiprocessing
 
 import torch
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+import dgl
+import dgl.nn.pytorch as dglnn
 
 from moge.generator import DGLNodeSampler
 from moge.module.classifier import DenseClassification
-from moge.module.dgl.latte import LATTE
 from moge.module.losses import ClassificationLoss
 from moge.module.utils import filter_samples
 from ..trainer import NodeClfMetrics
+
+from moge.module.PyG.latte import LATTE
 
 
 class LATTENodeClassifier(NodeClfMetrics):
@@ -39,20 +44,26 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             multilabel=dataset.multilabel)
         self.hparams.n_params = self.get_n_params()
 
-    def forward(self, input: dict, **kwargs):
-        embeddings, proximity_loss, _ = self.latte.forward(X=input["x_dict"], edge_index_dict=input["edge_index_dict"],
-                                                           global_node_idx=input["global_node_index"], **kwargs)
+    def forward(self, blocks, batch_inputs: dict, **kwargs):
+        print("blocks", blocks)
+        print("batch_inputs", batch_inputs.shape)
+
+        embeddings, proximity_loss, _ = self.latte.forward(X=batch_inputs["x_dict"],
+                                                           edge_index_dict=batch_inputs["edge_index_dict"],
+                                                           global_node_idx=batch_inputs["global_node_index"],
+                                                           **kwargs)
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        y_hat, proximity_loss = self.forward(X)
+        batch_inputs = blocks[0].srcdata['feat']
+        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
+        y_hat, proximity_loss = self.forward(blocks, batch_inputs)
+        loss = self.criterion.forward(y_hat, batch_labels)
 
-        loss = self.criterion.forward(y_hat, y)
-
-        self.train_metrics.update_metrics(y_hat, y, weights=None)
+        self.train_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
         logs = None
         if self.hparams.use_proximity:
@@ -66,13 +77,16 @@ class LATTENodeClassifier(NodeClfMetrics):
 
     def validation_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        y_hat, proximity_loss = self.forward(X)
+        batch_inputs = blocks[0].srcdata['feat']
+        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
-        val_loss = self.criterion.forward(y_hat, y)
+        y_hat, proximity_loss = self.forward(blocks, batch_inputs)
+
+        val_loss = self.criterion.forward(y_hat, batch_labels)
         # if batch_nb == 0:
         #     self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
-        self.valid_metrics.update_metrics(y_hat, y, weights=None)
+        self.valid_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
         if self.hparams.use_proximity:
             val_loss = val_loss + proximity_loss
@@ -80,17 +94,18 @@ class LATTENodeClassifier(NodeClfMetrics):
         return {"val_loss": val_loss}
 
     def test_step(self, batch, batch_nb):
-        X, y, weights = batch
-        y_hat, proximity_loss = self.forward(X, save_betas=True)
-        if isinstance(y, dict) and len(y) > 1:
-            y = y[self.head_node_type]
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        test_loss = self.criterion(y_hat, y)
+        input_nodes, seeds, blocks = batch
+        batch_inputs = blocks[0].srcdata['feat']
+        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
+
+        y_hat, proximity_loss = self.forward(blocks, batch_inputs, save_betas=True)
+
+        test_loss = self.criterion.forward(y_hat, batch_labels)
 
         if batch_nb == 0:
-            self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
+            self.print_pred_class_counts(y_hat, batch_labels, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_hat, y, weights=None)
+        self.test_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
         if self.hparams.use_proximity:
             test_loss = test_loss + proximity_loss
@@ -98,22 +113,22 @@ class LATTENodeClassifier(NodeClfMetrics):
         return {"test_loss": test_loss}
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
+        return self.dataset.train_dataloader(collate_fn=None,
                                              batch_size=self.hparams.batch_size,
                                              num_workers=int(0.4 * multiprocessing.cpu_count()))
 
     def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
+        return self.dataset.valid_dataloader(collate_fn=None,
                                              batch_size=self.hparams.batch_size,
                                              num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+        return self.dataset.valtrain_dataloader(collate_fn=None,
                                                 batch_size=self.hparams.batch_size,
                                                 num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
+        return self.dataset.test_dataloader(collate_fn=None,
                                             batch_size=self.hparams.batch_size,
                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 

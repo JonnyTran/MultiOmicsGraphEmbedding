@@ -1,17 +1,17 @@
 import copy
 import numpy as np
 import pandas as pd
+
 import torch
 from torch import nn as nn
 
 import torch.nn.functional as F
-from torch_geometric.nn import MessagePassing
-from torch_geometric.nn.inits import glorot
-from torch_geometric.utils import softmax
-import torch_sparse
-from torch_sparse.tensor import SparseTensor
-from torch_sparse.matmul import matmul
+
 import pytorch_lightning as pl
+
+import dgl
+import dgl.nn.pytorch as dglnn
+from dgl.nn.pytorch import edge_softmax, GATConv
 
 from moge.module.sampling import negative_sample, negative_sample_head_tail
 from moge.module.utils import preprocess_input

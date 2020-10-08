@@ -44,10 +44,10 @@ class DGLNodeSampler(HeteroNetDataset):
         self.G = graph
 
     def get_collate_fn(self, collate_fn: str, mode=None):
-        return super().get_collate_fn(collate_fn, mode)
+        raise NotImplementedError()
 
     def sample(self, iloc, mode):
-        return super().sample(iloc, mode)
+        raise NotImplementedError()
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         if self.inductive:
