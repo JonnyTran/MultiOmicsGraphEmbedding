@@ -1,15 +1,20 @@
+import torch
+import dgl
 from ogb.nodeproppred import DglNodePropPredDataset
-
 from moge.generator.network import HeteroNetDataset
 
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset, neighbor_sizes, node_types=None, metapaths=None,
-                 head_node_type=None, directed=True, resample_train=None, add_reverse_metapaths=True, inductive=False):
-        super().__init__(dataset, neighbor_sizes, node_types, metapaths, head_node_type, directed, resample_train,
+                 head_node_type=None, directed=True,
+                 resample_train: float = None, add_reverse_metapaths=True, inductive=True):
+        self.neighbor_sizes = neighbor_sizes
+        super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
                          add_reverse_metapaths, inductive)
 
-    def process_DglNodeDataset_hetero(self, dataset):
+        self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False)
+
+    def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]
         self._name = dataset.name
 
@@ -17,8 +22,10 @@ class DGLNodeSampler(HeteroNetDataset):
             self.node_types = graph.ntypes
 
         self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
-
         self.y_dict = labels
+
+        for ntype, labels in self.y_dict:
+            graph.nodes[ntype].data["labels"] = labels
 
         if self.head_node_type is None:
             if self.y_dict is not None:
@@ -40,3 +47,18 @@ class DGLNodeSampler(HeteroNetDataset):
 
     def sample(self, iloc, mode):
         return super().sample(iloc, mode)
+
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+        dataloader = dgl.dataloading.NodeDataLoader(
+            self.G, nids={self.head_node_type: self.training_idx},
+            block_sampler=self.neighbor_sampler,
+            batch_size=100,
+            shuffle=True,
+            num_workers=2)
+        return
+
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+        return
+
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+        return

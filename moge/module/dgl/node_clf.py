@@ -46,13 +46,10 @@ class LATTENodeClassifier(NodeClfMetrics):
         return y_hat, proximity_loss
 
     def training_step(self, batch, batch_nb):
-        X, y, weights = batch
+        input_nodes, seeds, blocks = batch
         y_hat, proximity_loss = self.forward(X)
 
-        if isinstance(y, dict) and len(y) > 1:
-            y = y[self.head_node_type]
 
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.criterion.forward(y_hat, y)
 
         self.train_metrics.update_metrics(y_hat, y, weights=None)
@@ -68,13 +65,9 @@ class LATTENodeClassifier(NodeClfMetrics):
         return outputs
 
     def validation_step(self, batch, batch_nb):
-        X, y, weights = batch
+        input_nodes, seeds, blocks = batch
         y_hat, proximity_loss = self.forward(X)
 
-        if isinstance(y, dict) and len(y) > 1:
-            y = y[self.head_node_type]
-
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion.forward(y_hat, y)
         # if batch_nb == 0:
         #     self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
