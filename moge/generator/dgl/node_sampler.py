@@ -1,8 +1,12 @@
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+
 import dgl
+
 from ogb.nodeproppred import DglNodePropPredDataset
 from moge.generator.network import HeteroNetDataset
+from ...module.utils import tensor_sizes
 
 
 class DGLNodeSampler(HeteroNetDataset):
@@ -24,6 +28,8 @@ class DGLNodeSampler(HeteroNetDataset):
 
         self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
         self.y_dict = labels
+
+        self.x_dict = graph.ndata["feat"]
 
         for ntype, labels in self.y_dict.items():
             graph.nodes[ntype].data["labels"] = labels
@@ -53,35 +59,53 @@ class DGLNodeSampler(HeteroNetDataset):
         if self.inductive:
             nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
             nodes[self.head_node_type] = self.training_idx
-            graph = self.G.subgraph(nodes)
+
+            graph = dgl.node_subgraph(self.G, nodes)
         else:
             graph = self.G
 
-        dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.training_idx},
-            block_sampler=self.neighbor_sampler,
-            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        collator = dgl.dataloading.NodeCollator(graph, {self.head_node_type: self.training_idx}, self.neighbor_sampler)
+        dataloader = DataLoader(
+            collator.dataset, collate_fn=collator.collate,
+            batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+
+        # dataloader = dgl.dataloading.NodeDataLoader(
+        #     graph, nids={self.head_node_type: self.training_idx},
+        #     block_sampler=self.neighbor_sampler,
+        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         if self.inductive:
             nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
-            nodes[self.head_node_type] = np.union1d(self.training_idx, self.validation_idx)
-            graph = self.G.subgraph(nodes)
+            nodes[self.head_node_type] = torch.tensor(np.union1d(self.training_idx, self.validation_idx))
+            graph = dgl.node_subgraph(self.G, nodes)
         else:
             graph = self.G
 
-        dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.validation_idx},
-            block_sampler=self.neighbor_sampler,
-            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        collator = dgl.dataloading.NodeCollator(graph, {self.head_node_type: self.validation_idx},
+                                                self.neighbor_sampler)
+        dataloader = DataLoader(
+            collator.dataset, collate_fn=collator.collate,
+            batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+
+        # dataloader = dgl.dataloading.NodeDataLoader(
+        #     graph, nids={self.head_node_type: self.validation_idx},
+        #     block_sampler=self.neighbor_sampler,
+        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         graph = self.G
 
-        dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.testing_idx},
-            block_sampler=self.neighbor_sampler,
-            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        collator = dgl.dataloading.NodeCollator(graph, {self.head_node_type: self.testing_idx},
+                                                self.neighbor_sampler)
+        dataloader = DataLoader(
+            collator.dataset, collate_fn=collator.collate,
+            batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+
+        # dataloader = dgl.dataloading.NodeDataLoader(
+        #     graph, nids={self.head_node_type: self.testing_idx},
+        #     block_sampler=self.neighbor_sampler,
+        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
