@@ -63,9 +63,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.semantic_attention = SemanticAttention(in_size=hparams.embedding_dim * hparams.attn_heads)
 
         self.classifier = DenseClassification(hparams)
-        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
-        #                                            num_class=hparams.n_classes,
-        #                                            loss_type=hparams.loss_type)
+
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
@@ -79,15 +77,13 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         semantic_embeddings = []
 
-        for i, meta_path in enumerate(self.meta_paths):
-            new_g = self._cached_coalesced_graph[meta_path]
+        for i, metapath in enumerate(self.dataset.metapaths):
+            new_g = self._cached_coalesced_graph[metapath]
             semantic_embeddings.append(self.gat_layers[i](new_g, batch_inputs).flatten(1))
         semantic_embeddings = torch.stack(semantic_embeddings, dim=1)  # (N, M, D * K)
 
         embeddings = self.semantic_attention.forward(semantic_embeddings)
-        # embeddings, proximity_loss, _ = self.latte.forward(X=batch_inputs,
-        #                                                    edge_index_dict=batch_inputs["edge_index_dict"],
-        #                                                    **kwargs)
+
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat
 
@@ -102,9 +98,6 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.train_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
         logs = None
-        # if self.hparams.use_proximity:
-        #     loss = loss + proximity_loss
-        #     logs = {"proximity_loss": proximity_loss}
 
         outputs = {'loss': loss}
         if logs is not None:
@@ -119,13 +112,8 @@ class LATTENodeClassifier(NodeClfMetrics):
         y_hat = self.forward(blocks, batch_inputs)
 
         val_loss = self.criterion.forward(y_hat, batch_labels)
-        # if batch_nb == 0:
-        #     self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
         self.valid_metrics.update_metrics(y_hat, batch_labels, weights=None)
-
-        # if self.hparams.use_proximity:
-        #     val_loss = val_loss + proximity_loss
 
         return {"val_loss": val_loss}
 
@@ -142,9 +130,6 @@ class LATTENodeClassifier(NodeClfMetrics):
             self.print_pred_class_counts(y_hat, batch_labels, multilabel=self.dataset.multilabel)
 
         self.test_metrics.update_metrics(y_hat, batch_labels, weights=None)
-
-        # if self.hparams.use_proximity:
-        #     test_loss = test_loss + proximity_loss
 
         return {"test_loss": test_loss}
 
