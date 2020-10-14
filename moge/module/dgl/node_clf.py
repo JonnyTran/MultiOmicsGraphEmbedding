@@ -6,6 +6,8 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 import dgl
+import dgl.function as fn
+from dgl.heterograph import DGLHeteroGraph, DGLBlock
 import dgl.nn.pytorch as dglnn
 
 from moge.generator import DGLNodeSampler
@@ -36,6 +38,111 @@ class SemanticAttention(nn.Module):
         return (beta * z).sum(1)  # (N, D * K)
 
 
+class HeteroRGCNLayer(nn.Module):
+    def __init__(self, in_size, out_size, etypes):
+        super(HeteroRGCNLayer, self).__init__()
+        # W_r for each relation
+        self.weight = nn.ModuleDict({
+            name: nn.Linear(in_size, out_size) for name in etypes
+        })
+
+    def forward(self, G, feat_dict):
+        # The input is a dictionary of node features for each type
+        funcs = {}
+        for srctype, etype, dsttype in G.canonical_etypes:
+            # Compute W_r * h
+            Wh = self.weight[etype](feat_dict[srctype])
+            # Save it in graph for message passing
+            G.nodes[srctype].data['Wh_%s' % etype] = Wh
+            # Specify per-relation message passing functions: (message_func, reduce_func).
+            # Note that the results are saved to the same destination feature 'h', which
+            # hints the type wise reducer for aggregation.
+            funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
+        # Trigger message passing of multiple types.
+        # The first argument is the message passing functions for each relation.
+        # The second one is the type wise reducer, could be "sum", "max",
+        # "min", "mean", "stack"
+        G.multi_update_all(funcs, 'sum')
+        # return the updated node feature dictionary
+        return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
+
+
+class HeteroRGCN(nn.Module):
+    def __init__(self, G, in_size, hidden_size, out_size):
+        super(HeteroRGCN, self).__init__()
+        # create layers
+        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes)
+        self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes)
+
+    def forward(self, G, out_key):
+        input_dict = {ntype: G.nodes[ntype].data['inp'] for ntype in G.ntypes}
+        h_dict = self.layer1(G, input_dict)
+        h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
+        h_dict = self.layer2(G, h_dict)
+        # get paper logits
+        return h_dict[out_key]
+
+
+class HeteroGraphConv(nn.Module):
+    def __init__(self, mods, aggregate='sum'):
+        super(HeteroGraphConv, self).__init__()
+        self.mods = nn.ModuleDict(mods)
+        if isinstance(aggregate, str):
+            self.agg_fn = get_aggregate_fn(aggregate)
+        else:
+            self.agg_fn = aggregate
+
+    def forward(self, g: DGLHeteroGraph, inputs, mod_args=None, mod_kwargs=None):
+        if mod_args is None:
+            mod_args = {}
+        if mod_kwargs is None:
+            mod_kwargs = {}
+        outputs = {nty: [] for nty in g.dsttypes}
+
+        if g.is_block:
+            src_inputs = inputs
+            dst_inputs = {k: v[:g.number_of_dst_nodes(k)] for k, v in inputs.items()}
+        else:
+            src_inputs = dst_inputs = inputs
+
+        for stype, etype, dtype in g.canonical_etypes:
+            rel_graph = g[stype, etype, dtype]
+            if rel_graph.number_of_edges() == 0:
+                continue
+            if stype not in src_inputs or dtype not in dst_inputs:
+                continue
+            dstdata = self.mods[etype](
+                rel_graph,
+                (src_inputs[stype], dst_inputs[dtype]),
+                *mod_args.get(etype, ()),
+                **mod_kwargs.get(etype, {}))
+            outputs[dtype].append(dstdata)
+
+    def forward(self, G, inputs):
+        # The input is a dictionary of node features for each type
+        funcs = {}
+        for srctype, etype, dsttype in G.canonical_etypes:
+            # Compute W_r * h
+            Wh = self.weight[etype].forward(inputs[srctype])
+
+            # Save it in graph for message passing
+            G.nodes[srctype].data['Wh_%s' % etype] = Wh
+
+            # Specify per-relation message passing functions: (message_func, reduce_func).
+            # Note that the results are saved to the same destination feature 'h', which
+            # hints the type wise reducer for aggregation.
+            funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
+
+        # Trigger message passing of multiple types.
+        # The first argument is the message passing functions for each relation.
+        # The second one is the type wise reducer, could be "sum", "max",
+        # "min", "mean", "stack"
+        G.multi_update_all(funcs, 'sum')
+
+        # return the updated node feature dictionary
+        return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
+
+
 class LATTENodeClassifier(NodeClfMetrics):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
@@ -54,13 +161,15 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
         # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        self.gat_layers = nn.ModuleList()
-        for i in range(len(dataset.metapaths)):
-            self.gat_layers.append(dglnn.GATConv(in_feats=dataset.node_attr_shape[dataset.head_node_type],
-                                                 out_feats=hparams.embedding_dim, num_heads=hparams.attn_heads,
-                                                 feat_drop=hparams.attn_dropout, attn_drop=hparams.attn_dropout,
-                                                 activation=F.elu, allow_zero_in_degree=True))
-        self.semantic_attention = SemanticAttention(in_size=hparams.embedding_dim * hparams.attn_heads)
+        embed_dict = {ntype: nn.Parameter(
+            torch.Tensor(self.dataset.G.number_of_nodes(ntype), self.dataset.node_attr_shape[self.head_node_type]))
+                      for ntype in self.dataset.G.ntypes}
+        for key, embed in embed_dict.items():
+            nn.init.xavier_uniform_(embed)
+        self.embed = nn.ParameterDict(embed_dict)
+        # create layers
+        self.layer1 = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
+                                 hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
 
         self.classifier = DenseClassification(hparams)
 
@@ -75,14 +184,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         print("blocks", blocks[0].device, blocks)
         print("batch_inputs", tensor_sizes(batch_inputs))
 
-        semantic_embeddings = []
-
-        for i, metapath in enumerate(self.dataset.metapaths):
-            new_g = self._cached_coalesced_graph[metapath]
-            semantic_embeddings.append(self.gat_layers[i](new_g, batch_inputs).flatten(1))
-        semantic_embeddings = torch.stack(semantic_embeddings, dim=1)  # (N, M, D * K)
-
-        embeddings = self.semantic_attention.forward(semantic_embeddings)
+        embeddings = self.layer1.forward(blocks)
 
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat
