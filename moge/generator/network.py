@@ -244,7 +244,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         edge_index_dict.update(reverse_edge_index_dict)
 
     @staticmethod
-    def get_reverse_metapath_name(metapath, edge_index_dict):
+    def get_reverse_metapath_name(metapath, edge_index_dict=None):
         if isinstance(metapath, tuple):
             reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
         elif isinstance(metapath, str):

@@ -17,6 +17,25 @@ class DGLNodeSampler(HeteroNetDataset):
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
                          add_reverse_metapaths, inductive)
 
+        if add_reverse_metapaths:
+            relations = {}
+
+            for etype in self.G.etypes:
+                rel = self.G.edge_type_subgraph([etype, ])
+                relations[self.G.to_canonical_etype(etype)] = rel.all_edges()
+
+                rel_reverse_name = self.get_reverse_metapath_name(self.G.to_canonical_etype(etype), None)
+                rel_reverse = dgl.heterograph({rel_reverse_name: rel.reverse().all_edges()})
+                relations[rel_reverse_name] = rel_reverse.all_edges()
+
+            new_g = dgl.heterograph(relations)
+
+            for ntype in self.G.ntypes:
+                for k, v in self.G.nodes[ntype].data.items():
+                    new_g.nodes[ntype].data[k] = v
+
+            self.G = new_g
+
         self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False)
 
     def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
