@@ -47,28 +47,36 @@ class HeteroRGCNLayer(nn.Module):
         })
 
     def forward(self, G: DGLBlock, feat_dict):
-        # The input is a dictionary of node features for each type
-        funcs = {}
-        for srctype, etype, dsttype in G.canonical_etypes:
-            # Compute W_r * h
-            Wh = self.weight[etype].forward(feat_dict[srctype])
+        with G.local_scope():
+            # The input is a dictionary of node features for each type
+            funcs = {}
+            for srctype, etype, dsttype in G.canonical_etypes:
+                print((srctype, etype, dsttype))
+                # Compute W_r * h
+                Wh = self.weight[etype].forward(feat_dict[srctype])
 
-            # Save it in graph for message passing
-            G.nodes[srctype].data['Wh_%s' % etype] = Wh
+                # Save it in graph for message passing
+                G.nodes[srctype].data[f'Wh_{etype}'] = Wh
 
-            # Specify per-relation message passing functions: (message_func, reduce_func).
-            # Note that the results are saved to the same destination feature 'h', which
-            # hints the type wise reducer for aggregation.
-            funcs[etype] = (fn.copy_src('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
+                # Specify per-relation message passing functions: (message_func, reduce_func).
+                # Note that the results are saved to the same destination feature 'h', which
+                # hints the type wise reducer for aggregation.
+                def message_func(edges):
+                    return {'m': edges.src[f'Wh_{etype}']}
 
-        # Trigger message passing of multiple types.
-        # The first argument is the message passing functions for each relation.
-        # The second one is the type wise reducer, could be "sum", "max", "min", "mean", "stack"
-        G.multi_update_all(funcs, 'sum')
+                def reduce_func(nodes):
+                    return {'h': torch.mean(nodes.mailbox['m'], dim=1)}
 
-        # return the updated node feature dictionary
-        print({ntype: G.nodes[ntype].data.keys() for ntype in G.ntypes})
-        return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
+                funcs[etype] = (message_func, reduce_func)
+
+            # Trigger message passing of multiple types.
+            # The first argument is the message passing functions for each relation.
+            # The second one is the type wise reducer, could be "sum", "max", "min", "mean", "stack"
+            print({ntype: G.nodes[ntype].data.keys() for ntype in G.ntypes})
+            G.multi_update_all(funcs, "sum")
+
+            # return the updated node feature dictionary
+            return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
 
 
 class HeteroRGCN(nn.Module):
@@ -120,29 +128,6 @@ class HeteroGraphConv(nn.Module):
                 *mod_args.get(etype, ()),
                 **mod_kwargs.get(etype, {}))
             outputs[dtype].append(dstdata)
-
-    def forward(self, G, inputs):
-        # The input is a dictionary of node features for each type
-        funcs = {}
-        for srctype, etype, dsttype in G.canonical_etypes:
-            # Compute W_r * h
-            Wh = self.weight[etype].forward(inputs[srctype])
-
-            # Save it in graph for message passing
-            G.nodes[srctype].data['Wh_%s' % etype] = Wh
-
-            # Specify per-relation message passing functions: (message_func, reduce_func).
-            # Note that the results are saved to the same destination feature 'h', which
-            # hints the type wise reducer for aggregation.
-            funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
-
-        # Trigger message passing of multiple types.
-        # The first argument is the message passing functions for each relation.
-        # The second one is the type wise reducer, could be "sum", "max", "min", "mean", "stack"
-        G.multi_update_all(funcs, 'sum')
-
-        # return the updated node feature dictionary
-        return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
 
 
 class LATTENodeClassifier(NodeClfMetrics):
