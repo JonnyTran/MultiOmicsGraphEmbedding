@@ -51,7 +51,7 @@ class HeteroRGCNLayer(nn.Module):
         funcs = {}
         for srctype, etype, dsttype in G.canonical_etypes:
             # Compute W_r * h
-            Wh = self.weight[etype](feat_dict[srctype])
+            Wh = self.weight[etype].forward(feat_dict[srctype])
 
             # Save it in graph for message passing
             G.nodes[srctype].data['Wh_%s' % etype] = Wh
@@ -59,7 +59,7 @@ class HeteroRGCNLayer(nn.Module):
             # Specify per-relation message passing functions: (message_func, reduce_func).
             # Note that the results are saved to the same destination feature 'h', which
             # hints the type wise reducer for aggregation.
-            funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
+            funcs[etype] = (fn.copy_src('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
 
         # Trigger message passing of multiple types.
         # The first argument is the message passing functions for each relation.
@@ -67,6 +67,7 @@ class HeteroRGCNLayer(nn.Module):
         G.multi_update_all(funcs, 'sum')
 
         # return the updated node feature dictionary
+        print({ntype: G.nodes[ntype].data.keys() for ntype in G.ntypes})
         return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
 
 
@@ -137,8 +138,7 @@ class HeteroGraphConv(nn.Module):
 
         # Trigger message passing of multiple types.
         # The first argument is the message passing functions for each relation.
-        # The second one is the type wise reducer, could be "sum", "max",
-        # "min", "mean", "stack"
+        # The second one is the type wise reducer, could be "sum", "max", "min", "mean", "stack"
         G.multi_update_all(funcs, 'sum')
 
         # return the updated node feature dictionary
