@@ -1,4 +1,5 @@
 import multiprocessing
+import copy
 
 import torch
 from torch import nn
@@ -9,6 +10,7 @@ import dgl
 import dgl.function as fn
 from dgl.heterograph import DGLHeteroGraph, DGLBlock
 import dgl.nn.pytorch as dglnn
+from dgl.udf import EdgeBatch, NodeBatch
 
 from moge.generator import DGLNodeSampler
 from moge.module.classifier import DenseClassification
@@ -18,7 +20,7 @@ from ..trainer import NodeClfMetrics
 
 from moge.module.dgl.latte import LATTE
 from ...module.utils import tensor_sizes
-
+from .hgt import HGT, HGTLayer
 
 class SemanticAttention(nn.Module):
     def __init__(self, in_size, hidden_size=128):
@@ -47,36 +49,29 @@ class HeteroRGCNLayer(nn.Module):
         })
 
     def forward(self, G: DGLBlock, feat_dict):
-        with G.local_scope():
-            # The input is a dictionary of node features for each type
-            funcs = {}
-            for srctype, etype, dsttype in G.canonical_etypes:
-                print((srctype, etype, dsttype))
-                # Compute W_r * h
-                Wh = self.weight[etype].forward(feat_dict[srctype])
+        # The input is a dictionary of node features for each type
+        funcs = {}
+        for srctype, etype, dsttype in G.canonical_etypes:
+            # Save it in graph for message passing
+            # G.srcdata['Wh_%s' % etype] = {srctype: self.weight[etype].forward(feat_dict[srctype])}
+            G.dstdata['Wh_%s' % etype] = {dsttype: self.weight[etype].forward(feat_dict[dsttype])}
 
-                # Save it in graph for message passing
-                G.nodes[srctype].data[f'Wh_{etype}'] = Wh
+            # Specify per-relation message passing functions: (message_func, reduce_func).
+            # Note that the results are saved to the same destination feature 'h', which
+            # hints the type wise reducer for aggregation.
+            def message_func(edges: EdgeBatch):
+                return {'m': edges.src[f'Wh_{copy.deepcopy(etype)}']}
 
-                # Specify per-relation message passing functions: (message_func, reduce_func).
-                # Note that the results are saved to the same destination feature 'h', which
-                # hints the type wise reducer for aggregation.
-                def message_func(edges):
-                    return {'m': edges.src[f'Wh_{etype}']}
+            def reduce_func(nodes: NodeBatch):
+                return {'h': torch.mean(nodes.mailbox['m'], dim=1)}
 
-                def reduce_func(nodes):
-                    return {'h': torch.mean(nodes.mailbox['m'], dim=1)}
+            funcs[etype] = (message_func, reduce_func)
+            # funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
 
-                funcs[etype] = (message_func, reduce_func)
+        G.multi_update_all(funcs, "sum")
 
-            # Trigger message passing of multiple types.
-            # The first argument is the message passing functions for each relation.
-            # The second one is the type wise reducer, could be "sum", "max", "min", "mean", "stack"
-            print({ntype: G.nodes[ntype].data.keys() for ntype in G.ntypes})
-            G.multi_update_all(funcs, "sum")
-
-            # return the updated node feature dictionary
-            return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
+        # return the updated node feature dictionary
+        return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
 
 
 class HeteroRGCN(nn.Module):
@@ -87,10 +82,14 @@ class HeteroRGCN(nn.Module):
         self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes)
 
     def forward(self, blocks, feat_dict):
+        print("input", tensor_sizes(feat_dict))
         h_dict = self.layer1(blocks[0], feat_dict)
+
+        print("interm", tensor_sizes(h_dict))
         h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
         h_dict = self.layer2(blocks[-1], h_dict)
 
+        print("output", tensor_sizes(h_dict))
         return h_dict
 
 
@@ -148,8 +147,8 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
         # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
-                                   hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
+        # self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
+        #                            hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
 
         self.classifier = DenseClassification(hparams)
 
