@@ -54,7 +54,7 @@ class HeteroRGCNLayer(nn.Module):
         for srctype, etype, dsttype in G.canonical_etypes:
             # Save it in graph for message passing
             # G.srcdata['Wh_%s' % etype] = {srctype: self.weight[etype].forward(feat_dict[srctype])}
-            G.dstdata['Wh_%s' % etype] = {dsttype: self.weight[etype].forward(feat_dict[dsttype])}
+            G.srcdata['Wh_%s' % etype] = {srctype: self.weight[etype].forward(feat_dict[srctype])}
 
             # Specify per-relation message passing functions: (message_func, reduce_func).
             # Note that the results are saved to the same destination feature 'h', which
@@ -83,11 +83,12 @@ class HeteroRGCN(nn.Module):
 
     def forward(self, blocks, feat_dict):
         print("input", tensor_sizes(feat_dict))
-        h_dict = self.layer1(blocks[0], feat_dict)
 
-        print("interm", tensor_sizes(h_dict))
+        h_dict = self.layer1.forward(blocks[0], feat_dict)
         h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
-        h_dict = self.layer2(blocks[-1], h_dict)
+        print("interm", tensor_sizes(h_dict))
+
+        h_dict = self.layer2.forward(blocks[-1], h_dict)
 
         print("output", tensor_sizes(h_dict))
         return h_dict
