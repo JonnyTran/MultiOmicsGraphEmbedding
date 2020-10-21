@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
+from dgl.heterograph import DGLHeteroGraph, DGLBlock
 
 
 class HGTLayer(nn.Module):
@@ -121,23 +122,26 @@ class HGT(nn.Module):
         super(HGT, self).__init__()
         self.node_dict = node_dict
         self.edge_dict = edge_dict
-        self.gcs = nn.ModuleList()
         self.n_inp = n_inp
         self.n_hid = n_hid
         self.n_out = n_out
         self.n_layers = n_layers
-        self.adapt_ws = nn.ModuleList()
-        for t in range(len(node_dict)):
-            self.adapt_ws.append(nn.Linear(n_inp, n_hid))
-        for _ in range(n_layers):
-            self.gcs.append(HGTLayer(n_hid, n_hid, node_dict, edge_dict, n_heads, use_norm=use_norm))
 
-    def forward(self, G):
+        self.linear_inp = nn.ModuleList()
+        for t in range(len(node_dict)):
+            self.linear_inp.append(nn.Linear(n_inp, n_hid))
+
+        self.layers = nn.ModuleList()
+        for _ in range(n_layers):
+            self.layers.append(HGTLayer(n_hid, n_hid, node_dict, edge_dict, n_heads, use_norm=use_norm))
+
+    def forward(self, G: DGLBlock):
         h = {}
         for ntype in G.ntypes:
             n_id = self.node_dict[ntype]
-            h[ntype] = F.gelu(self.adapt_ws[n_id].forward(G.nodes[ntype].data['feat']))
+            h[ntype] = F.gelu(self.linear_inp[n_id].forward(G.nodes[ntype].data['feat']))
+
         for i in range(self.n_layers):
-            h = self.gcs[i].forward(G, h)
+            h = self.layers[i].forward(G, h)
 
         return h
