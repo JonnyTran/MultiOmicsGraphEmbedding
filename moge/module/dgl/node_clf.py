@@ -60,6 +60,7 @@ class HeteroRGCNLayer(nn.Module):
             # Note that the results are saved to the same destination feature 'h', which
             # hints the type wise reducer for aggregation.
             def message_func(edges: EdgeBatch):
+                print(etype, edges.src.keys())
                 return {'m': edges.src[f'Wh_{copy.deepcopy(etype)}']}
 
             def reduce_func(nodes: NodeBatch):

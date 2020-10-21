@@ -25,8 +25,8 @@ class DGLNodeSampler(HeteroNetDataset):
                 relations[self.G.to_canonical_etype(etype)] = rel_g.all_edges()
 
                 rel_reverse_name = self.get_reverse_metapath_name(self.G.to_canonical_etype(etype), None)
-                rel_reverse = dgl.heterograph({rel_reverse_name: rel_g.reverse().all_edges()})
-                relations[rel_reverse_name] = rel_reverse.all_edges()
+                # rel_reverse = dgl.heterograph({rel_reverse_name: rel_g.reverse().all_edges()})
+                relations[rel_reverse_name] = rel_g.reverse().all_edges()  # rel_reverse.all_edges()
 
             new_g = dgl.heterograph(relations)
 
