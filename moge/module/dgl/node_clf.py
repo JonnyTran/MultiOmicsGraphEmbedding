@@ -147,8 +147,8 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
         # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        # self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
-        #                            hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
+        self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
+                                   hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
 
         self.classifier = DenseClassification(hparams)
 
