@@ -59,33 +59,37 @@ class HGTLayer(nn.Module):
         nn.init.xavier_uniform_(self.relation_msg)
 
     def edge_attention(self, edges: EdgeBatch):
-        print("edges", edges.canonical_etype)
+        print(edges.canonical_etype)
         print("src", edges.src.keys(), "dst", edges.dst.keys())
         print("edges", len(edges))
 
-        if len(edges) == 0 or "q" not in edges.dst:
+        if len(edges) == 0:
             return {}
 
-        # etype = edges.data['_ID'][0]
-        et_id = self.edge_dict[edges._etype[1]]
+        srctype, etype, dsttype = edges.canonical_etype
+        etype_id = self.edge_dict[edges.canonical_etype[1]]
+
+        edges.dst['q'] = self.q_linears[self.node_dict[dsttype]](edges.dst["feat"]).view(-1, self.n_heads, self.d_k)
 
         '''
             Step 1: Heterogeneous Mutual Attention
         '''
-        relation_att = self.relation_att[et_id]
-        relation_pri = self.relation_pri[et_id]
+        relation_att = self.relation_att[etype_id]
+        relation_pri = self.relation_pri[etype_id]
         key = torch.bmm(edges.src['k'].transpose(1, 0), relation_att).transpose(1, 0)
-        att = (edges.src['q'] * key).sum(dim=-1) * relation_pri / self.sqrt_dk
+        att = (edges.dst['q'] * key).sum(dim=-1) * relation_pri / self.sqrt_dk
 
         '''
             Step 2: Heterogeneous Message Passing
         '''
-        relation_msg = self.relation_msg[et_id]
+        relation_msg = self.relation_msg[etype_id]
         val = torch.bmm(edges.src['v'].transpose(1, 0), relation_msg).transpose(1, 0)
         print("att", att.shape, "val", val.shape)
         return {'a': att, 'v': val}
 
     def message_func(self, edges):
+        # if "v" not in edges.data or "a" not in edges.data:
+        #     return {}
         return {'v': edges.data['v'], 'a': edges.data['a']}
 
     def reduce_func(self, nodes):
@@ -111,8 +115,6 @@ class HGTLayer(nn.Module):
                 G.nodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.nodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.nodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
-                print("G.nodes[srctype].data", G.nodes[srctype].data.keys())
-                print("G.nodes[dsttype].data", G.nodes[dsttype].data.keys())
 
                 G.apply_edges(func=self.edge_attention, etype=(srctype, etype, dsttype))
 

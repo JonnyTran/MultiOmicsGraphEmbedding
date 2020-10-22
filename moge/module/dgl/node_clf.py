@@ -154,7 +154,8 @@ class LATTENodeClassifier(NodeClfMetrics):
                             edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
                             n_inp=self.dataset.node_attr_shape[self.head_node_type],
                             n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-                            n_layers=2, n_heads=4)
+                            n_layers=len(self.dataset.neighbor_sizes),
+                            n_heads=hparams.attn_heads)
 
         self.classifier = DenseClassification(hparams)
 

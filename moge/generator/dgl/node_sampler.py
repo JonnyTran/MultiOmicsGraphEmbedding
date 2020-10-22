@@ -93,7 +93,7 @@ class DGLNodeSampler(HeteroNetDataset):
         #     batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.training_idx},
+            self.G, nids={self.head_node_type: self.training_idx},
             block_sampler=self.neighbor_sampler,
             batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
@@ -114,7 +114,7 @@ class DGLNodeSampler(HeteroNetDataset):
         #     batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.validation_idx},
+            self.G, nids={self.head_node_type: self.validation_idx},
             block_sampler=self.neighbor_sampler,
             batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
@@ -129,7 +129,7 @@ class DGLNodeSampler(HeteroNetDataset):
         #     batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.testing_idx},
+            self.G, nids={self.head_node_type: self.testing_idx},
             block_sampler=self.neighbor_sampler,
             batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
