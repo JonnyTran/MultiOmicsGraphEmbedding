@@ -59,7 +59,6 @@ class HeteroRGCNLayer(nn.Module):
             # Note that the results are saved to the same destination feature 'h', which
             # hints the type wise reducer for aggregation.
             def message_func(edges: EdgeBatch):
-                print(etype, dsttype, edges.dst.keys())
                 return {'m': edges.dst[f'Wh_{etype}']}
 
             def reduce_func(nodes: NodeBatch):
@@ -148,14 +147,14 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
         # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        # self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
-        #                            hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
-        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                            n_inp=self.dataset.node_attr_shape[self.head_node_type],
-                            n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-                            n_layers=len(self.dataset.neighbor_sizes),
-                            n_heads=hparams.attn_heads)
+        self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
+                                   hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
+        # self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+        #                     edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
+        #                     n_inp=self.dataset.node_attr_shape[self.head_node_type],
+        #                     n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
+        #                     n_layers=len(self.dataset.neighbor_sizes),
+        #                     n_heads=hparams.attn_heads)
 
         self.classifier = DenseClassification(hparams)
 
