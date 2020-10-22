@@ -67,7 +67,7 @@ class HGTLayer(nn.Module):
             return {}
 
         srctype, etype, dsttype = edges.canonical_etype
-        etype_id = self.edge_dict[etype]
+        etype_id = self.edge_dict[edges.canonical_etype]
 
         # edges.dst['q'] = self.q_linears[self.node_dict[dsttype]](edges.dst["feat"]).view(-1, self.n_heads, self.d_k)
         '''
@@ -103,7 +103,6 @@ class HGTLayer(nn.Module):
 
     def forward(self, G: DGLBlock, h):
         with G.local_scope():
-            print(G)
             node_dict, edge_dict = self.node_dict, self.edge_dict
             for srctype, etype, dsttype in G.canonical_etypes:
                 print(srctype, etype, dsttype)
