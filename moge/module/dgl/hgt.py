@@ -100,6 +100,7 @@ class HGTLayer(nn.Module):
                 G.nodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
 
                 G.apply_edges(func=self.edge_attention, etype=etype)
+
             G.multi_update_all({etype: (self.message_func, self.reduce_func) \
                                 for etype in edge_dict}, cross_reducer='mean')
             new_h = {}
@@ -139,12 +140,11 @@ class HGT(nn.Module):
 
     def forward(self, blocks, feat_dict):
         h = {}
-        print("input", tensor_sizes(feat_dict))
         for ntype in feat_dict:
             n_id = self.node_dict[ntype]
             h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat_dict[ntype]))
 
-        print("input", tensor_sizes(h))
+        print("intermediate", tensor_sizes(h))
 
         for i in range(self.n_layers):
             h = self.layers[i].forward(blocks[i], h)
