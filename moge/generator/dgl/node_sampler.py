@@ -68,6 +68,9 @@ class DGLNodeSampler(HeteroNetDataset):
 
         self.G = graph
 
+    def get_metapaths(self):
+        return self.G.canonical_etypes
+
     def get_collate_fn(self, collate_fn: str, mode=None):
         raise NotImplementedError()
 

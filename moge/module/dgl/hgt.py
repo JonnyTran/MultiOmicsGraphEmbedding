@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import dgl.function as fn
 from dgl.heterograph import DGLHeteroGraph, DGLBlock
 
+from ...module.utils import tensor_sizes
+
 
 class HGTLayer(nn.Module):
     def __init__(self,
@@ -85,7 +87,7 @@ class HGTLayer(nn.Module):
         h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['v'], dim=1)
         return {'t': h.view(-1, self.out_dim)}
 
-    def forward(self, G, h):
+    def forward(self, G: DGLBlock, h):
         with G.local_scope():
             node_dict, edge_dict = self.node_dict, self.edge_dict
             for srctype, etype, dsttype in G.canonical_etypes:
@@ -135,13 +137,16 @@ class HGT(nn.Module):
         for _ in range(n_layers):
             self.layers.append(HGTLayer(n_hid, n_hid, node_dict, edge_dict, n_heads, use_norm=use_norm))
 
-    def forward(self, G: DGLBlock):
+    def forward(self, blocks, feat_dict):
         h = {}
-        for ntype in G.ntypes:
+        print("input", tensor_sizes(feat_dict))
+        for ntype in feat_dict:
             n_id = self.node_dict[ntype]
-            h[ntype] = F.gelu(self.linear_inp[n_id].forward(G.nodes[ntype].data['feat']))
+            h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat_dict[ntype]))
+
+        print("input", tensor_sizes(h))
 
         for i in range(self.n_layers):
-            h = self.layers[i].forward(G, h)
+            h = self.layers[i].forward(blocks[i], h)
 
         return h

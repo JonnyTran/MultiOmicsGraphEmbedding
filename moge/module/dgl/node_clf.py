@@ -53,15 +53,14 @@ class HeteroRGCNLayer(nn.Module):
         funcs = {}
         for srctype, etype, dsttype in G.canonical_etypes:
             # Save it in graph for message passing
-            # G.srcdata['Wh_%s' % etype] = {srctype: self.weight[etype].forward(feat_dict[srctype])}
-            G.srcdata['Wh_%s' % etype] = {srctype: self.weight[etype].forward(feat_dict[srctype])}
+            G.nodes[dsttype].data['Wh_%s' % etype] = self.weight[etype].forward(feat_dict[dsttype])
 
             # Specify per-relation message passing functions: (message_func, reduce_func).
             # Note that the results are saved to the same destination feature 'h', which
             # hints the type wise reducer for aggregation.
             def message_func(edges: EdgeBatch):
-                print(etype, edges.dst.keys())
-                return {'m': edges.dst[f'Wh_{copy.deepcopy(etype)}']}
+                print(etype, dsttype, edges.dst.keys())
+                return {'m': edges.dst[f'Wh_{etype}']}
 
             def reduce_func(nodes: NodeBatch):
                 return {'h': torch.mean(nodes.mailbox['m'], dim=1)}
@@ -70,7 +69,7 @@ class HeteroRGCNLayer(nn.Module):
             # funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
 
         G.multi_update_all(funcs, "sum")
-
+        print("got here")
         # return the updated node feature dictionary
         return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
 
@@ -149,8 +148,13 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
         # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
-                                   hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
+        # self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
+        #                            hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
+        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+                            edge_dict={ntype: i for i, ntype in enumerate(dataset.get_metapaths())},
+                            n_inp=self.dataset.node_attr_shape[self.head_node_type],
+                            n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
+                            n_layers=2, n_heads=4)
 
         self.classifier = DenseClassification(hparams)
 
