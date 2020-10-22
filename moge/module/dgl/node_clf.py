@@ -151,7 +151,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         # self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
         #                            hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                            edge_dict={ntype: i for i, ntype in enumerate(dataset.get_metapaths())},
+                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
                             n_inp=self.dataset.node_attr_shape[self.head_node_type],
                             n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
                             n_layers=2, n_heads=4)

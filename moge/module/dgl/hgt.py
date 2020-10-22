@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
+from dgl.udf import EdgeBatch, NodeBatch
+
 from dgl.heterograph import DGLHeteroGraph, DGLBlock
 
 from ...module.utils import tensor_sizes
@@ -56,22 +58,31 @@ class HGTLayer(nn.Module):
         nn.init.xavier_uniform_(self.relation_att)
         nn.init.xavier_uniform_(self.relation_msg)
 
-    def edge_attention(self, edges):
-        etype = edges.data['id'][0]
+    def edge_attention(self, edges: EdgeBatch):
+        print("edges", edges.canonical_etype)
+        print("src", edges.src.keys(), "dst", edges.dst.keys())
+        print("edges", len(edges))
+
+        if len(edges) == 0 or "q" not in edges.dst:
+            return {}
+
+        # etype = edges.data['_ID'][0]
+        et_id = self.edge_dict[edges._etype[1]]
 
         '''
             Step 1: Heterogeneous Mutual Attention
         '''
-        relation_att = self.relation_att[etype]
-        relation_pri = self.relation_pri[etype]
+        relation_att = self.relation_att[et_id]
+        relation_pri = self.relation_pri[et_id]
         key = torch.bmm(edges.src['k'].transpose(1, 0), relation_att).transpose(1, 0)
-        att = (edges.dst['q'] * key).sum(dim=-1) * relation_pri / self.sqrt_dk
+        att = (edges.src['q'] * key).sum(dim=-1) * relation_pri / self.sqrt_dk
 
         '''
             Step 2: Heterogeneous Message Passing
         '''
-        relation_msg = self.relation_msg[etype]
+        relation_msg = self.relation_msg[et_id]
         val = torch.bmm(edges.src['v'].transpose(1, 0), relation_msg).transpose(1, 0)
+        print("att", att.shape, "val", val.shape)
         return {'a': att, 'v': val}
 
     def message_func(self, edges):
@@ -89,8 +100,10 @@ class HGTLayer(nn.Module):
 
     def forward(self, G: DGLBlock, h):
         with G.local_scope():
+            print(G)
             node_dict, edge_dict = self.node_dict, self.edge_dict
             for srctype, etype, dsttype in G.canonical_etypes:
+                print(srctype, etype, dsttype)
                 k_linear = self.k_linears[node_dict[srctype]]
                 v_linear = self.v_linears[node_dict[srctype]]
                 q_linear = self.q_linears[node_dict[dsttype]]
@@ -98,8 +111,10 @@ class HGTLayer(nn.Module):
                 G.nodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.nodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.nodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
+                print("G.nodes[srctype].data", G.nodes[srctype].data.keys())
+                print("G.nodes[dsttype].data", G.nodes[dsttype].data.keys())
 
-                G.apply_edges(func=self.edge_attention, etype=etype)
+                G.apply_edges(func=self.edge_attention, etype=(srctype, etype, dsttype))
 
             G.multi_update_all({etype: (self.message_func, self.reduce_func) \
                                 for etype in edge_dict}, cross_reducer='mean')
@@ -109,12 +124,12 @@ class HGTLayer(nn.Module):
                     Step 3: Target-specific Aggregation
                     x = norm( W[node_type] * gelu( Agg(x) ) + x )
                 '''
-                n_id = node_dict[ntype]
-                alpha = torch.sigmoid(self.skip[n_id])
-                trans_out = self.dropout(self.a_linears[n_id](G.nodes[ntype].data['t']))
+                nty_id = node_dict[ntype]
+                alpha = torch.sigmoid(self.skip[nty_id])
+                trans_out = self.dropout(self.a_linears[nty_id].forward(G.nodes[ntype].data['t']))
                 trans_out = trans_out * alpha + h[ntype] * (1 - alpha)
                 if self.use_norm:
-                    new_h[ntype] = self.norms[n_id](trans_out)
+                    new_h[ntype] = self.norms[nty_id](trans_out)
                 else:
                     new_h[ntype] = trans_out
             return new_h
@@ -144,9 +159,8 @@ class HGT(nn.Module):
             n_id = self.node_dict[ntype]
             h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat_dict[ntype]))
 
-        print("intermediate", tensor_sizes(h))
-
         for i in range(self.n_layers):
+            print(i, tensor_sizes(h))
             h = self.layers[i].forward(blocks[i], h)
 
         return h
