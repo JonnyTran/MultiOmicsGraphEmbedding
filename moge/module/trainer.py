@@ -196,7 +196,8 @@ class NodeClfMetrics(pl.LightningModule):
 
         logs.update({"loss": avg_loss})
         self.train_metrics.reset_metrics()
-        return {"log": logs}
+        self.log_dict(logs)
+        return None
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
@@ -206,8 +207,8 @@ class NodeClfMetrics(pl.LightningModule):
 
         logs.update({"val_loss": avg_loss})
         self.valid_metrics.reset_metrics()
-        return {"progress_bar": logs,
-                "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
@@ -218,8 +219,8 @@ class NodeClfMetrics(pl.LightningModule):
             logs = {}
         logs.update({"test_loss": avg_loss})
 
-        return {"progress_bar": logs,
-                "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
         if multilabel:
