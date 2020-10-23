@@ -137,12 +137,12 @@ class LATTENodeClassifier(NodeClfMetrics):
                                                hidden_feat=hparams.embedding_dim, out_feat=hparams.embedding_dim,
                                                rel_names=self.dataset.G.etypes)
 
-        # self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-        #                     edge_dict={metapath: i for i, metapath in enumerate(dataset.get_metapaths())},
-        #                     n_inp=self.dataset.node_attr_shape[self.head_node_type],
-        #                     n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-        #                     n_layers=len(self.dataset.neighbor_sizes),
-        #                     n_heads=hparams.attn_heads)
+        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+                            edge_dict={metapath: i for i, metapath in enumerate(dataset.get_metapaths())},
+                            n_inp=self.dataset.node_attr_shape[self.head_node_type],
+                            n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
+                            n_layers=len(self.dataset.neighbor_sizes),
+                            n_heads=hparams.attn_heads)
 
         self.classifier = DenseClassification(hparams)
 
@@ -182,7 +182,6 @@ class LATTENodeClassifier(NodeClfMetrics):
         batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
         y_hat = self.forward(blocks, batch_inputs)
-        # batch_labels = batch_labels.squeeze(-1)
 
         val_loss = self.criterion.forward(y_hat, batch_labels)
 

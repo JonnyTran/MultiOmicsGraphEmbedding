@@ -70,7 +70,6 @@ class HGTLayer(nn.Module):
         srctype, etype, dsttype = edges.canonical_etype
         etype_id = self.edge_dict[edges.canonical_etype]
 
-        # edges.dst['q'] = self.q_linears[self.node_dict[dsttype]](edges.dst["inp"]).view(-1, self.n_heads, self.d_k)
         '''
             Step 1: Heterogeneous Mutual Attention
         '''
@@ -111,10 +110,9 @@ class HGTLayer(nn.Module):
                 v_linear = self.v_linears[node_dict[srctype]]
                 q_linear = self.q_linears[node_dict[dsttype]]
 
-                G.nodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-                G.nodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-                # G.nodes[dsttype].data['inp'] = h[dsttype]
-                G.nodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
+                G.srcnodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
+                G.srcnodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
+                G.dstnodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
 
                 G.apply_edges(func=self.edge_attention, etype=etype)
 
