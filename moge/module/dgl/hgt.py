@@ -59,6 +59,7 @@ class HGTLayer(nn.Module):
         nn.init.xavier_uniform_(self.relation_msg)
 
     def edge_attention(self, edges: EdgeBatch):
+        edges.batch_size()
         print(edges.canonical_etype)
         print("src", edges.src.keys(), "dst", edges.dst.keys())
         print("edges", len(edges))
@@ -69,7 +70,7 @@ class HGTLayer(nn.Module):
         srctype, etype, dsttype = edges.canonical_etype
         etype_id = self.edge_dict[edges.canonical_etype]
 
-        # edges.dst['q'] = self.q_linears[self.node_dict[dsttype]](edges.dst["feat"]).view(-1, self.n_heads, self.d_k)
+        # edges.dst['q'] = self.q_linears[self.node_dict[dsttype]](edges.dst["inp"]).view(-1, self.n_heads, self.d_k)
         '''
             Step 1: Heterogeneous Mutual Attention
         '''
@@ -112,9 +113,10 @@ class HGTLayer(nn.Module):
 
                 G.nodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.nodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
+                # G.nodes[dsttype].data['inp'] = h[dsttype]
                 G.nodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
 
-                G.apply_edges(func=self.edge_attention, etype=(srctype, etype, dsttype))
+                G.apply_edges(func=self.edge_attention, etype=etype)
 
             G.multi_update_all({etype: (self.message_func, self.reduce_func) \
                                 for etype in edge_dict}, cross_reducer='mean')

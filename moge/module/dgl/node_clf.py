@@ -94,40 +94,22 @@ class HeteroRGCN(nn.Module):
         return h_dict
 
 
-class HeteroGraphConv(nn.Module):
-    def __init__(self, mods, aggregate='sum'):
-        super(HeteroGraphConv, self).__init__()
-        self.mods = nn.ModuleDict(mods)
-        if isinstance(aggregate, str):
-            self.agg_fn = get_aggregate_fn(aggregate)
-        else:
-            self.agg_fn = aggregate
+class StochasticTwoLayerRGCN(nn.Module):
+    def __init__(self, in_feat, hidden_feat, out_feat, rel_names):
+        super().__init__()
+        self.conv1 = dglnn.HeteroGraphConv({
+            rel: dglnn.GraphConv(in_feat, hidden_feat, norm='right')
+            for rel in rel_names
+        })
+        self.conv2 = dglnn.HeteroGraphConv({
+            rel: dglnn.GraphConv(hidden_feat, out_feat, norm='right')
+            for rel in rel_names
+        })
 
-    def forward(self, g: DGLHeteroGraph, inputs, mod_args=None, mod_kwargs=None):
-        if mod_args is None:
-            mod_args = {}
-        if mod_kwargs is None:
-            mod_kwargs = {}
-        outputs = {nty: [] for nty in g.dsttypes}
-
-        if g.is_block:
-            src_inputs = inputs
-            dst_inputs = {k: v[:g.number_of_dst_nodes(k)] for k, v in inputs.items()}
-        else:
-            src_inputs = dst_inputs = inputs
-
-        for stype, etype, dtype in g.canonical_etypes:
-            rel_graph = g[stype, etype, dtype]
-            if rel_graph.number_of_edges() == 0:
-                continue
-            if stype not in src_inputs or dtype not in dst_inputs:
-                continue
-            dstdata = self.mods[etype](
-                rel_graph,
-                (src_inputs[stype], dst_inputs[dtype]),
-                *mod_args.get(etype, ()),
-                **mod_kwargs.get(etype, {}))
-            outputs[dtype].append(dstdata)
+    def forward(self, blocks, x):
+        x = self.conv1(blocks[0], x)
+        x = self.conv2(blocks[1], x)
+        return x
 
 
 class LATTENodeClassifier(NodeClfMetrics):
@@ -151,12 +133,16 @@ class LATTENodeClassifier(NodeClfMetrics):
         # self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
         #                            hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
 
-        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                            edge_dict={metapath: i for i, metapath in enumerate(dataset.get_metapaths())},
-                            n_inp=self.dataset.node_attr_shape[self.head_node_type],
-                            n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-                            n_layers=len(self.dataset.neighbor_sizes),
-                            n_heads=hparams.attn_heads)
+        self.embedder = StochasticTwoLayerRGCN(in_feat=self.dataset.node_attr_shape[self.head_node_type],
+                                               hidden_feat=hparams.embedding_dim, out_feat=hparams.embedding_dim,
+                                               rel_names=self.dataset.G.etypes)
+
+        # self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+        #                     edge_dict={metapath: i for i, metapath in enumerate(dataset.get_metapaths())},
+        #                     n_inp=self.dataset.node_attr_shape[self.head_node_type],
+        #                     n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
+        #                     n_layers=len(self.dataset.neighbor_sizes),
+        #                     n_heads=hparams.attn_heads)
 
         self.classifier = DenseClassification(hparams)
 
@@ -196,6 +182,8 @@ class LATTENodeClassifier(NodeClfMetrics):
         batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
         y_hat = self.forward(blocks, batch_inputs)
+
+        batch_labels = batch_labels.squeeze(-1)
 
         val_loss = self.criterion.forward(y_hat, batch_labels)
 
