@@ -182,8 +182,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
         y_hat = self.forward(blocks, batch_inputs)
-
-        batch_labels = batch_labels.squeeze(-1)
+        # batch_labels = batch_labels.squeeze(-1)
 
         val_loss = self.criterion.forward(y_hat, batch_labels)
 
