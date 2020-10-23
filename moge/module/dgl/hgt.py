@@ -112,13 +112,13 @@ class HGTLayer(nn.Module):
                 q_linear = self.q_linears[node_dict[dsttype]]
 
                 print("h", tensor_sizes(h))
-                print("G.srcnodes", len(G.srcnodes[srctype]))
-                print("G.dstnodes", len(G.dstnodes[dsttype]))
+                print("G.srcnodes", G.srcnodes[srctype].data["_ID"].shape[0])
+                print("G.dstnodes", G.dstnodes[dsttype].data["_ID"].shape[0])
                 G.srcnodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.srcnodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
 
-                if len(G.srcnodes[dsttype]) > 0:
-                    G.srcnodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
+                if G.dstnodes[dsttype].data["_ID"].shape[0] > 0:
+                    G.dstnodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
 
                 G.apply_edges(func=self.edge_attention, etype=etype)
 
