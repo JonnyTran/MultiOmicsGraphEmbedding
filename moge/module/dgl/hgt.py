@@ -68,7 +68,7 @@ class HGTLayer(nn.Module):
             return {}
 
         srctype, etype, dsttype = edges.canonical_etype
-        etype_id = self.edge_dict[edges.canonical_etype]
+        etype_id = self.edge_dict[etype]
 
         '''
             Step 1: Heterogeneous Mutual Attention
@@ -103,6 +103,7 @@ class HGTLayer(nn.Module):
 
     def forward(self, G: DGLBlock, h):
         with G.local_scope():
+            print(G)
             node_dict, edge_dict = self.node_dict, self.edge_dict
             for srctype, etype, dsttype in G.canonical_etypes:
                 print(srctype, etype, dsttype)
@@ -110,9 +111,14 @@ class HGTLayer(nn.Module):
                 v_linear = self.v_linears[node_dict[srctype]]
                 q_linear = self.q_linears[node_dict[dsttype]]
 
+                print("h", tensor_sizes(h))
+                print("G.srcnodes", len(G.srcnodes[srctype]))
+                print("G.dstnodes", len(G.dstnodes[dsttype]))
                 G.srcnodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.srcnodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-                G.dstnodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
+
+                if len(G.srcnodes[dsttype]) > 0:
+                    G.srcnodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
 
                 G.apply_edges(func=self.edge_attention, etype=etype)
 

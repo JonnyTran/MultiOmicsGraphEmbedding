@@ -138,7 +138,7 @@ class LATTENodeClassifier(NodeClfMetrics):
                                                rel_names=self.dataset.G.etypes)
 
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                            edge_dict={metapath: i for i, metapath in enumerate(dataset.get_metapaths())},
+                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
                             n_inp=self.dataset.node_attr_shape[self.head_node_type],
                             n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
                             n_layers=len(self.dataset.neighbor_sizes),
