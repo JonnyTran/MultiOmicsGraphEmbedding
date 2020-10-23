@@ -50,34 +50,72 @@ class HeteroRGCNLayer(nn.Module):
 
     def forward(self, G: DGLBlock, feat_dict):
         # The input is a dictionary of node features for each type
-        funcs = {}
-        for srctype, etype, dsttype in G.canonical_etypes:
-            # Save it in graph for message passing
-            G.srcnodes[srctype].data['Wh_%s' % etype] = self.weight[etype].forward(feat_dict[srctype])
+        print(G)
+        with G.local_scope():
+            funcs = {}
 
-            # Specify per-relation message passing functions: (message_func, reduce_func).
-            # Note that the results are saved to the same destination feature 'h', which
-            # hints the type wise reducer for aggregation.
-            def message_func(edges: EdgeBatch):
-                return {'m': edges.src[f'Wh_{etype}']}
+            for srctype, etype, dsttype in G.canonical_etypes:
+                # Save it in graph for message passing
+                # G.srcnodes[srctype].data['Wh_%s' % etype] = self.weight[etype].forward(G.srcnodes[srctype].data["feat"])
+                G.dstnodes[dsttype].data['Wh_%s' % etype] = self.weight[etype].forward(G.dstnodes[dsttype].data["feat"])
 
-            def reduce_func(nodes: NodeBatch):
-                return {'h': torch.mean(nodes.mailbox['m'], dim=1)}
+                # Specify per-relation message passing functions: (message_func, reduce_func).
+                # Note that the results are saved to the same destination feature 'h', which
+                # hints the type wise reducer for aggregation.
+                def message_func(edges: EdgeBatch):
+                    print(edges.canonical_etype[0], edges.src.keys(), edges.canonical_etype[-1], edges.dst.keys())
+                    if len(edges) == 0:
+                        return {}
+                    return {'m': edges.dst[f'Wh_{etype}']}
 
-            funcs[etype] = (message_func, reduce_func)
-            # funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
+                def reduce_func(nodes: NodeBatch):
+                    return {'h': torch.mean(nodes.mailbox['m'], dim=1)}
 
-        G.multi_update_all(funcs, "sum")
-        # return the updated node feature dictionary
-        return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
+                funcs[etype] = (message_func, reduce_func)
+                # funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
+
+            G.multi_update_all(funcs, "sum")
+            # return the updated node feature dictionary
+            return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
+
+
+class CustomHeteroGraphConv(nn.Module):
+    def __init__(self, g, in_feats, out_feats):
+        super().__init__()
+        self.Ws = nn.ModuleDict()
+        for etype in g.canonical_etypes:
+            utype, _, vtype = etype
+            self.Ws[etype] = nn.Linear(in_feats[utype], out_feats[vtype])
+        for ntype in g.ntypes:
+            self.Vs[ntype] = nn.Linear(in_feats[ntype], out_feats[ntype])
+
+    def forward(self, g, h):
+        with g.local_scope():
+            for ntype in g.ntypes:
+                h_src, h_dst = h[ntype]
+                g.dstnodes[ntype].data['h_dst'] = self.Vs[ntype](h[ntype])
+                g.srcnodes[ntype].data['h_src'] = h[ntype]
+            for etype in g.canonical_etypes:
+                utype, _, vtype = etype
+                g.update_all(
+                    fn.copy_u('h_src', 'm'), fn.mean('m', 'h_neigh'),
+                    etype=etype)
+                g.dstnodes[vtype].data['h_dst'] = \
+                    g.dstnodes[vtype].data['h_dst'] + \
+                    self.Ws[etype](g.dstnodes[vtype].data['h_neigh'])
+            return {ntype: g.dstnodes[ntype].data['h_dst']
+                    for ntype in g.ntypes}
 
 
 class HeteroRGCN(nn.Module):
     def __init__(self, G, in_size, hidden_size, out_size):
         super(HeteroRGCN, self).__init__()
         # create layers
-        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes)
-        self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes)
+        # self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes)
+        # self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes)
+
+        self.layer1 = CustomHeteroGraphConv(G, in_size, hidden_size)
+        self.layer2 = CustomHeteroGraphConv(G, hidden_size, out_size)
 
     def forward(self, blocks, feat_dict):
         print("input", tensor_sizes(feat_dict))

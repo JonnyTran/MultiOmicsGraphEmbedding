@@ -116,7 +116,6 @@ class HGTLayer(nn.Module):
                 print("G.dstnodes", G.dstnodes[dsttype].data["_ID"].shape[0])
                 G.srcnodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.srcnodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-
                 if G.dstnodes[dsttype].data["_ID"].shape[0] > 0:
                     G.dstnodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
 
