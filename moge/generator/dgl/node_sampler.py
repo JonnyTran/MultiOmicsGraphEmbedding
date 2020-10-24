@@ -37,7 +37,7 @@ class DGLNodeSampler(HeteroNetDataset):
             self.G = new_g
 
         self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False,
-                                                                          return_eids=True)
+                                                                          return_eids=False)
 
     def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]
@@ -123,7 +123,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         graph = self.G
-        #
+
         collator = dgl.dataloading.NodeCollator(graph, {self.head_node_type: self.testing_idx},
                                                 self.neighbor_sampler)
         dataloader = DataLoader(

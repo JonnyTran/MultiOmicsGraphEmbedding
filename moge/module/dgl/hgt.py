@@ -59,14 +59,6 @@ class HGTLayer(nn.Module):
         nn.init.xavier_uniform_(self.relation_msg)
 
     def edge_attention(self, edges: EdgeBatch):
-        edges.batch_size()
-        print(edges.canonical_etype)
-        print("src", edges.src.keys(), "dst", edges.dst.keys())
-        print("edges", len(edges))
-
-        if len(edges) == 0:
-            return {}
-
         srctype, etype, dsttype = edges.canonical_etype
         etype_id = self.edge_dict[etype]
 
@@ -83,20 +75,20 @@ class HGTLayer(nn.Module):
         '''
         relation_msg = self.relation_msg[etype_id]
         val = torch.bmm(edges.src['v'].transpose(1, 0), relation_msg).transpose(1, 0)
-        print("att", att.shape, "val", val.shape)
+        # print("att", att.shape, "val", val.shape)
         return {'a': att, 'v': val}
 
-    def message_func(self, edges):
-        # if "v" not in edges.data or "a" not in edges.data:
-        #     return {}
+    def message_func(self, edges: EdgeBatch):
+        print("edges msg", edges.canonical_etype)
         return {'v': edges.data['v'], 'a': edges.data['a']}
 
-    def reduce_func(self, nodes):
+    def reduce_func(self, nodes: NodeBatch):
         '''
             Softmax based on target node's id (edge_index_i).
             NOTE: Using DGL's API, there is a minor difference with this softmax with the original one.
                   This implementation will do softmax only on edges belong to the same relation type, instead of for all of the edges.
         '''
+        print(nodes.ntype, nodes.mailbox.keys())
         att = F.softmax(nodes.mailbox['a'], dim=1)
         h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['v'], dim=1)
         return {'t': h.view(-1, self.out_dim)}
@@ -104,34 +96,31 @@ class HGTLayer(nn.Module):
     def forward(self, G: DGLBlock, h):
         with G.local_scope():
             print(G)
-            node_dict, edge_dict = self.node_dict, self.edge_dict
             for srctype, etype, dsttype in G.canonical_etypes:
                 print(srctype, etype, dsttype)
-                k_linear = self.k_linears[node_dict[srctype]]
-                v_linear = self.v_linears[node_dict[srctype]]
-                q_linear = self.q_linears[node_dict[dsttype]]
+                k_linear = self.k_linears[self.node_dict[srctype]]
+                v_linear = self.v_linears[self.node_dict[srctype]]
+                q_linear = self.q_linears[self.node_dict[dsttype]]
 
-                print("h", tensor_sizes(h))
-                print("G.srcnodes", G.srcnodes[srctype].data["_ID"].shape[0])
-                print("G.dstnodes", G.dstnodes[dsttype].data["_ID"].shape[0])
                 G.srcnodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
                 G.srcnodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-                if G.dstnodes[dsttype].data["_ID"].shape[0] > 0:
-                    G.dstnodes[dsttype].data['q'] = q_linear(h[dsttype]).view(-1, self.n_heads, self.d_k)
+                G.dstnodes[dsttype].data['q'] = q_linear(G.dstnodes[dsttype].data['h']).view(-1, self.n_heads, self.d_k)
 
                 G.apply_edges(func=self.edge_attention, etype=etype)
 
             G.multi_update_all({etype: (self.message_func, self.reduce_func) \
-                                for etype in edge_dict}, cross_reducer='mean')
+                                for etype in self.edge_dict}, cross_reducer='mean')
+            print("got here")
+
             new_h = {}
             for ntype in G.ntypes:
                 '''
                     Step 3: Target-specific Aggregation
                     x = norm( W[node_type] * gelu( Agg(x) ) + x )
                 '''
-                nty_id = node_dict[ntype]
+                nty_id = self.node_dict[ntype]
                 alpha = torch.sigmoid(self.skip[nty_id])
-                trans_out = self.dropout(self.a_linears[nty_id].forward(G.nodes[ntype].data['t']))
+                trans_out = self.dropout(self.a_linears[nty_id].forward(G.dstnodes[ntype].data['t']))
                 trans_out = trans_out * alpha + h[ntype] * (1 - alpha)
                 if self.use_norm:
                     new_h[ntype] = self.norms[nty_id](trans_out)
@@ -163,9 +152,11 @@ class HGT(nn.Module):
         for ntype in feat_dict:
             n_id = self.node_dict[ntype]
             h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat_dict[ntype]))
+            blocks[0].srcnodes[ntype].data["h"] = h[ntype]
+            blocks[0].dstnodes[ntype].data["h"] = F.gelu(
+                self.linear_inp[n_id].forward(blocks[0].dstnodes[ntype].data["feat"]))
 
         for i in range(self.n_layers):
-            print(i, tensor_sizes(h))
             h = self.layers[i].forward(blocks[i], h)
 
         return h
