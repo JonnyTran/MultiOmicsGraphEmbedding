@@ -79,34 +79,6 @@ class HeteroRGCNLayer(nn.Module):
             return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
 
 
-class CustomHeteroGraphConv(nn.Module):
-    def __init__(self, g, in_feats, out_feats):
-        super().__init__()
-        self.Ws = nn.ModuleDict()
-        for etype in g.canonical_etypes:
-            utype, _, vtype = etype
-            self.Ws[etype] = nn.Linear(in_feats[utype], out_feats[vtype])
-        for ntype in g.ntypes:
-            self.Vs[ntype] = nn.Linear(in_feats[ntype], out_feats[ntype])
-
-    def forward(self, g, h):
-        with g.local_scope():
-            for ntype in g.ntypes:
-                h_src, h_dst = h[ntype]
-                g.dstnodes[ntype].data['h_dst'] = self.Vs[ntype](h[ntype])
-                g.srcnodes[ntype].data['h_src'] = h[ntype]
-            for etype in g.canonical_etypes:
-                utype, _, vtype = etype
-                g.update_all(
-                    fn.copy_u('h_src', 'm'), fn.mean('m', 'h_neigh'),
-                    etype=etype)
-                g.dstnodes[vtype].data['h_dst'] = \
-                    g.dstnodes[vtype].data['h_dst'] + \
-                    self.Ws[etype](g.dstnodes[vtype].data['h_neigh'])
-            return {ntype: g.dstnodes[ntype].data['h_dst']
-                    for ntype in g.ntypes}
-
-
 class HeteroRGCN(nn.Module):
     def __init__(self, G, in_size, hidden_size, out_size):
         super(HeteroRGCN, self).__init__()
@@ -166,19 +138,19 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
         # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
-                                   hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
+        # self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
+        #                            hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
 
         # self.embedder = StochasticTwoLayerRGCN(in_feat=self.dataset.node_attr_shape[self.head_node_type],
         #                                        hidden_feat=hparams.embedding_dim, out_feat=hparams.embedding_dim,
         #                                        rel_names=self.dataset.G.etypes)
 
-        # self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-        #                     edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-        #                     n_inp=self.dataset.node_attr_shape[self.head_node_type],
-        #                     n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-        #                     n_layers=len(self.dataset.neighbor_sizes),
-        #                     n_heads=hparams.attn_heads)
+        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
+                            n_inp=self.dataset.node_attr_shape[self.head_node_type],
+                            n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
+                            n_layers=len(self.dataset.neighbor_sizes),
+                            n_heads=hparams.attn_heads)
 
         self.classifier = DenseClassification(hparams)
 
