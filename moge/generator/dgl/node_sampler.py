@@ -16,8 +16,9 @@ class DGLNodeSampler(HeteroNetDataset):
         self.neighbor_sizes = neighbor_sizes
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
                          add_reverse_metapaths, inductive)
+        assert isinstance(self.G, (dgl.DGLGraph, dgl.DGLHeteroGraph))
 
-        if add_reverse_metapaths:
+        if directed and add_reverse_metapaths:
             relations = {}
 
             for etype in self.G.etypes:
@@ -35,9 +36,12 @@ class DGLNodeSampler(HeteroNetDataset):
                     new_g.nodes[ntype].data[k] = v
 
             self.G = new_g
+        elif directed is False:
+            self.G = dgl.to_bidirected(self.G, copy_ndata=True)
 
         self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False,
                                                                           return_eids=False)
+        # self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
 
     def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]

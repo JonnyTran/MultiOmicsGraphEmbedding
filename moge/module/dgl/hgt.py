@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl.function as fn
 from dgl.udf import EdgeBatch, NodeBatch
+from dgl.utils import expand_as_pair
 
 from dgl.heterograph import DGLHeteroGraph, DGLBlock
 
@@ -79,7 +80,7 @@ class HGTLayer(nn.Module):
         return {'a': att, 'v': val}
 
     def message_func(self, edges: EdgeBatch):
-        print("edges msg", edges.canonical_etype)
+        # print("edges msg", edges.canonical_etype, edges.data['v'].device, edges.data['a'].device)
         return {'v': edges.data['v'], 'a': edges.data['a']}
 
     def reduce_func(self, nodes: NodeBatch):
@@ -88,29 +89,44 @@ class HGTLayer(nn.Module):
             NOTE: Using DGL's API, there is a minor difference with this softmax with the original one.
                   This implementation will do softmax only on edges belong to the same relation type, instead of for all of the edges.
         '''
-        print(nodes.ntype, nodes.mailbox.keys())
+        # print(nodes.ntype, nodes.data.keys(), nodes.mailbox)
         att = F.softmax(nodes.mailbox['a'], dim=1)
         h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['v'], dim=1)
         return {'t': h.view(-1, self.out_dim)}
 
-    def forward(self, G: DGLBlock, h):
+    def apply_node_func(self, nodes: NodeBatch):
+        nty_id = self.node_dict[nodes.ntype]
+        alpha = torch.sigmoid(self.skip[nty_id])
+
+        trans_out = self.dropout(self.a_linears[nty_id].forward(nodes.data['t']))
+        trans_out = trans_out * alpha + nodes.data["t"] * (1 - alpha)
+
+        if self.use_norm:
+            trans_out = self.norms[nty_id](trans_out)
+
+        return trans_out
+
+    def forward(self, G: DGLBlock, feat):
+        feat_src, feat_dst = expand_as_pair(input_=feat, g=G)
+        # print(G)
         with G.local_scope():
-            print(G)
+            funcs = {}
             for srctype, etype, dsttype in G.canonical_etypes:
-                print(srctype, etype, dsttype)
                 k_linear = self.k_linears[self.node_dict[srctype]]
                 v_linear = self.v_linears[self.node_dict[srctype]]
                 q_linear = self.q_linears[self.node_dict[dsttype]]
 
-                G.srcnodes[srctype].data['k'] = k_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-                G.srcnodes[srctype].data['v'] = v_linear(h[srctype]).view(-1, self.n_heads, self.d_k)
-                G.dstnodes[dsttype].data['q'] = q_linear(G.dstnodes[dsttype].data['h']).view(-1, self.n_heads, self.d_k)
+                G.srcnodes[srctype].data['k'] = k_linear(feat_src[srctype]).view(-1, self.n_heads, self.d_k)
+                G.srcnodes[srctype].data['v'] = v_linear(feat_src[srctype]).view(-1, self.n_heads, self.d_k)
+                G.dstnodes[dsttype].data['q'] = q_linear(feat_dst[dsttype]).view(-1, self.n_heads, self.d_k)
 
                 G.apply_edges(func=self.edge_attention, etype=etype)
 
-            G.multi_update_all({etype: (self.message_func, self.reduce_func) \
-                                for etype in self.edge_dict}, cross_reducer='mean')
-            print("got here")
+                if G.batch_num_edges(etype=etype).item() > 0:
+                    funcs[etype] = (self.message_func, self.reduce_func)
+
+            # print("funcs", funcs.keys())
+            G.multi_update_all(funcs, cross_reducer='mean')
 
             new_h = {}
             for ntype in G.ntypes:
@@ -120,8 +136,13 @@ class HGTLayer(nn.Module):
                 '''
                 nty_id = self.node_dict[ntype]
                 alpha = torch.sigmoid(self.skip[nty_id])
-                trans_out = self.dropout(self.a_linears[nty_id].forward(G.dstnodes[ntype].data['t']))
-                trans_out = trans_out * alpha + h[ntype] * (1 - alpha)
+                # print(ntype, G.srcnodes[ntype].data.keys(), G.dstnodes[ntype].data.keys())
+
+                if "t" in G.dstnodes[ntype].data:
+                    trans_out = self.dropout(self.a_linears[nty_id].forward(G.dstnodes[ntype].data['t']))
+                else:
+                    trans_out = self.dropout(feat_dst[ntype])
+                trans_out = trans_out * alpha + feat_dst[ntype] * (1 - alpha)
                 if self.use_norm:
                     new_h[ntype] = self.norms[nty_id](trans_out)
                 else:
@@ -152,9 +173,6 @@ class HGT(nn.Module):
         for ntype in feat_dict:
             n_id = self.node_dict[ntype]
             h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat_dict[ntype]))
-            blocks[0].srcnodes[ntype].data["h"] = h[ntype]
-            blocks[0].dstnodes[ntype].data["h"] = F.gelu(
-                self.linear_inp[n_id].forward(blocks[0].dstnodes[ntype].data["feat"]))
 
         for i in range(self.n_layers):
             h = self.layers[i].forward(blocks[i], h)
