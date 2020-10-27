@@ -95,9 +95,8 @@ class DGLNodeSampler(HeteroNetDataset):
             graph = self.G
 
         collator = dgl.dataloading.NodeCollator(graph, {self.head_node_type: self.training_idx}, self.neighbor_sampler)
-        dataloader = DataLoader(
-            collator.dataset, collate_fn=collator.collate,
-            batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         # dataloader = dgl.dataloading.NodeDataLoader(
         #     graph, nids={self.head_node_type: self.training_idx},
@@ -116,9 +115,8 @@ class DGLNodeSampler(HeteroNetDataset):
 
         collator = dgl.dataloading.NodeCollator(graph, {self.head_node_type: self.validation_idx},
                                                 self.neighbor_sampler)
-        dataloader = DataLoader(
-            collator.dataset, collate_fn=collator.collate,
-            batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
         #
         # dataloader = dgl.dataloading.NodeDataLoader(
         #     graph, nids={self.head_node_type: self.validation_idx},
@@ -131,9 +129,8 @@ class DGLNodeSampler(HeteroNetDataset):
 
         collator = dgl.dataloading.NodeCollator(graph, {self.head_node_type: self.testing_idx},
                                                 self.neighbor_sampler)
-        dataloader = DataLoader(
-            collator.dataset, collate_fn=collator.collate,
-            batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         # dataloader = dgl.dataloading.NodeDataLoader(
         #     graph, nids={self.head_node_type: self.testing_idx},
