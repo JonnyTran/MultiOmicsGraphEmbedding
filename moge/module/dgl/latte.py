@@ -12,6 +12,9 @@ import pytorch_lightning as pl
 import dgl
 import dgl.nn.pytorch as dglnn
 from dgl.nn.pytorch import edge_softmax, GATConv
+from dgl.utils import expand_as_pair
+from dgl.udf import EdgeBatch, NodeBatch
+from dgl.heterograph import DGLHeteroGraph, DGLBlock
 
 from moge.module.sampling import negative_sample, negative_sample_head_tail
 from moge.module.utils import preprocess_input
@@ -98,7 +101,7 @@ class LATTE(nn.Module):
 
         return output_dict
 
-    def forward(self, X: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
+    def forward(self, blocks, feat, save_betas=False):
         """
         This
         :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
@@ -143,7 +146,7 @@ class LATTE(nn.Module):
         return self.layers[t].get_relation_weights()
 
 
-class LATTEConv(pl.LightningModule):
+class LATTEConv(nn.Module):
     def __init__(self, embedding_dim: int, in_channels_dict: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  use_proximity=False, neg_sampling_ratio=1.0, first=True, embeddings=None) -> None:
@@ -171,19 +174,13 @@ class LATTEConv(pl.LightningModule):
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
         if first:
-            self.linear_l = nn.ModuleDict(
-                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
-                 for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
-            self.linear_r = nn.ModuleDict(
+            self.linear = nn.ModuleDict(
                 {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
         else:
-            self.linear_l = nn.ModuleDict(
+            self.linear = nn.ModuleDict(
                 {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (F x F)
-            self.linear_r = nn.ModuleDict(
-                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
-                 for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m}
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.ModuleList(
@@ -206,42 +203,24 @@ class LATTEConv(pl.LightningModule):
         # If some node type are not attributed, instantiate embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         if first and len(non_attr_node_types) > 0:
-            if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
-                print("INFO: Embedding.device = 'cpu'")
-                self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
-                                                           embedding_dim=embedding_dim,
-                                                           sparse=True).cpu() for node_type in non_attr_node_types}
-            else:
-                self.embeddings = nn.ModuleDict(
-                    {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
-                                             embedding_dim=embedding_dim,
-                                             sparse=False) for node_type in non_attr_node_types})
-        elif embeddings is not None:
-            self.embeddings = embeddings
-        else:
-            self.embeddings = None
+            print(f"embeddings needed for {non_attr_node_types.keys()}")
 
-        self.reset_parameters()
 
     def reset_parameters(self):
         for i, metapath in enumerate(self.metapaths):
-            glorot(self.attn_l[i].weight)
-            glorot(self.attn_r[i].weight)
-
-        # glorot(self.attn_q[-1].weight)
+            nn.init.xavier_uniform_(self.attn_l[i].weight)
+            nn.init.xavier_uniform_(self.attn_r[i].weight)
 
         for node_type in self.linear_l:
-            glorot(self.linear_l[node_type].weight)
-        for node_type in self.linear_r:
-            glorot(self.linear_r[node_type].weight)
+            nn.init.xavier_uniform_(self.linear[node_type].weight)
         for node_type in self.conv:
-            glorot(self.conv[node_type].weight)
+            nn.init.xavier_uniform_(self.conv[node_type].weight)
 
         if self.embeddings is not None and len(self.embeddings.keys()) > 0:
             for node_type in self.embeddings:
                 self.embeddings[node_type].reset_parameters()
 
-    def forward(self, x_l, edge_index_dict, global_node_idx, x_r=None, save_betas=False):
+    def forward(self, G: DGLBlock, feat_dict, save_betas=False):
         """
 
         :param x_l: a dict of node attributes indexed node_type
@@ -251,8 +230,9 @@ class LATTEConv(pl.LightningModule):
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        l_dict = self.get_h_dict(x_l, global_node_idx, left_right="left")
-        r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
+        l_dict = {ntype: self.linear[ntype].forward(feat_dict[ntype]) for ntype in feat_dict}
+
+        feat_src, feat_dst = expand_as_pair(input_=l_dict, g=G)
 
         # Predict relations attention coefficients
         beta = self.get_beta_weights(x_dict=x_l, h_dict=l_dict, h_prev=l_dict, global_node_idx=global_node_idx)
@@ -262,18 +242,32 @@ class LATTEConv(pl.LightningModule):
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
 
+        with G.local_scope():
+            funcs = {}
+            for srctype, etype, dsttype in G.canonical_etypes:
+                G.srcnodes[srctype].data['alpha_l'] = self.attn_l[i].forward(feat_src[srctype])
+                G.dstnodes[dsttype].data['alpha_r'] = self.attn_l[i].forward(feat_dst[dsttype])
+
+                G.apply_edges(func=self.edge_attention, etype=etype)
+
+                if G.batch_num_edges(etype=etype).item() > 0:
+                    funcs[etype] = (self.message_func, self.reduce_func)
+
+            # print("funcs", funcs.keys())
+            G.multi_update_all(funcs, cross_reducer='mean')
+
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
-        for node_type in global_node_idx:
-            out[node_type] = self.agg_relation_neighbors(node_type=node_type, alpha_l=alpha_l, alpha_r=alpha_r,
-                                                         l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
-                                                         global_node_idx=global_node_idx)
-            out[node_type][:, -1] = l_dict[node_type]
+        for ntype in G.ntypes:
+            out[ntype] = self.agg_relation_neighbors(node_type=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
+                                                     l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
+                                                     global_node_idx=global_node_idx)
+            out[ntype][:, -1] = l_dict[ntype]
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
+            out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
 
             # Apply \sigma activation to all embeddings
-            out[node_type] = self.embedding_activation(out[node_type])
+            out[ntype] = self.embedding_activation(out[ntype])
 
         proximity_loss, edge_pred_dict = None, None
         if self.use_proximity:
@@ -307,6 +301,24 @@ class LATTEConv(pl.LightningModule):
 
         return emb_relations
 
+    def edge_attention(self, edges: EdgeBatch):
+        pass
+
+    def message_func(self, edges: EdgeBatch):
+        # print("edges msg", edges.canonical_etype, edges.data['v'].device, edges.data['a'].device)
+        return {'v': edges.data['v'], 'a': edges.data['a']}
+
+    def reduce_func(self, nodes: NodeBatch):
+        '''
+            Softmax based on target node's id (edge_index_i).
+            NOTE: Using DGL's API, there is a minor difference with this softmax with the original one.
+                  This implementation will do softmax only on edges belong to the same relation type, instead of for all of the edges.
+        '''
+        # print(nodes.ntype, nodes.data.keys(), nodes.mailbox)
+        att = F.softmax(nodes.mailbox['a'], dim=1)
+        h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['v'], dim=1)
+        return {'t': h.view(-1, self.out_dim)}
+
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         # alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
@@ -315,14 +327,11 @@ class LATTEConv(pl.LightningModule):
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha
 
-    def get_h_dict(self, input, global_node_idx, left_right="left"):
+    def get_h_dict(self, input, global_node_idx):
         h_dict = {}
         for node_type in global_node_idx:
             if node_type in input:
-                if left_right == "left":
-                    h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
-                elif left_right == "right":
-                    h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
+                h_dict[node_type] = self.linear[node_type].forward(input[node_type])
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
                     .to(self.conv[node_type].weight.device)

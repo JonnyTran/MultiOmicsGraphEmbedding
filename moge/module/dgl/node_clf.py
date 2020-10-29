@@ -40,77 +40,15 @@ class SemanticAttention(nn.Module):
         return (beta * z).sum(1)  # (N, D * K)
 
 
-class HeteroRGCNLayer(nn.Module):
-    def __init__(self, in_size, out_size, etypes):
-        super(HeteroRGCNLayer, self).__init__()
-        # W_r for each relation
-        self.weight = nn.ModuleDict({
-            name: nn.Linear(in_size, out_size) for name in etypes
-        })
-
-    def forward(self, G: DGLBlock, feat_dict):
-        # The input is a dictionary of node features for each type
-        print(G)
-        with G.local_scope():
-            funcs = {}
-
-            for srctype, etype, dsttype in G.canonical_etypes:
-                # Save it in graph for message passing
-                # G.srcnodes[srctype].data['Wh_%s' % etype] = self.weight[etype].forward(G.srcnodes[srctype].data["feat"])
-                G.dstnodes[dsttype].data['Wh_%s' % etype] = self.weight[etype].forward(G.dstnodes[dsttype].data["feat"])
-
-                # Specify per-relation message passing functions: (message_func, reduce_func).
-                # Note that the results are saved to the same destination feature 'h', which
-                # hints the type wise reducer for aggregation.
-                def message_func(edges: EdgeBatch):
-                    print(edges.canonical_etype[0], edges.src.keys(), edges.canonical_etype[-1], edges.dst.keys())
-                    if len(edges) == 0:
-                        return {}
-                    return {'m': edges.dst[f'Wh_{etype}']}
-
-                def reduce_func(nodes: NodeBatch):
-                    return {'h': torch.mean(nodes.mailbox['m'], dim=1)}
-
-                funcs[etype] = (message_func, reduce_func)
-                # funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
-
-            G.multi_update_all(funcs, "sum")
-            # return the updated node feature dictionary
-            return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
-
-
-class HeteroRGCN(nn.Module):
-    def __init__(self, G, in_size, hidden_size, out_size):
-        super(HeteroRGCN, self).__init__()
-        # create layers
-        # self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes)
-        # self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes)
-
-        self.layer1 = CustomHeteroGraphConv(G, in_size, hidden_size)
-        self.layer2 = CustomHeteroGraphConv(G, hidden_size, out_size)
-
-    def forward(self, blocks, feat_dict):
-        print("input", tensor_sizes(feat_dict))
-
-        h_dict = self.layer1.forward(blocks[0], feat_dict)
-        h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
-        print("interm", tensor_sizes(h_dict))
-
-        h_dict = self.layer2.forward(blocks[-1], h_dict)
-
-        print("output", tensor_sizes(h_dict))
-        return h_dict
-
-
 class StochasticTwoLayerRGCN(nn.Module):
     def __init__(self, in_feat, hidden_feat, out_feat, rel_names):
         super().__init__()
         self.conv1 = dglnn.HeteroGraphConv({
-            rel: dglnn.GraphConv(in_feat, hidden_feat, norm='right')
+            rel: dglnn.GATConv(in_feat, hidden_feat, num_heads=4)
             for rel in rel_names
         })
         self.conv2 = dglnn.HeteroGraphConv({
-            rel: dglnn.GraphConv(hidden_feat, out_feat, norm='right')
+            rel: dglnn.GATConv(hidden_feat, out_feat, num_heads=4)
             for rel in rel_names
         })
 

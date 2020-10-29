@@ -40,9 +40,9 @@ class DGLNodeSampler(HeteroNetDataset):
         # elif directed is False:
         #     self.G = dgl.to_bidirected(self.G, copy_ndata=True)
 
-        self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False,
-                                                                          return_eids=False)
-        # self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
+        # self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False,
+        #                                                                   return_eids=False)
+        self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
 
     def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]
