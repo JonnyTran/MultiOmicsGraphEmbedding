@@ -10,9 +10,10 @@ from ...module.utils import tensor_sizes
 
 
 class DGLNodeSampler(HeteroNetDataset):
-    def __init__(self, dataset: DglNodePropPredDataset, neighbor_sizes, node_types=None, metapaths=None,
-                 head_node_type=None, directed=True,
-                 resample_train: float = None, add_reverse_metapaths=True, inductive=True):
+    def __init__(self, dataset: DglNodePropPredDataset, neighbor_sizes, full_neighbor=False, node_types=None,
+                 metapaths=None,
+                 head_node_type=None, directed=True, resample_train: float = None, add_reverse_metapaths=True,
+                 inductive=True):
         self.neighbor_sizes = neighbor_sizes
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
                          add_reverse_metapaths, inductive)
@@ -40,9 +41,11 @@ class DGLNodeSampler(HeteroNetDataset):
         # elif directed is False:
         #     self.G = dgl.to_bidirected(self.G, copy_ndata=True)
 
-        # self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False,
-        #                                                                   return_eids=False)
-        self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
+        if not full_neighbor:
+            self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False,
+                                                                              return_eids=False)
+        else:
+            self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
 
     def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]

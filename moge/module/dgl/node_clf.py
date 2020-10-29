@@ -20,7 +20,7 @@ from ..trainer import NodeClfMetrics
 
 from moge.module.dgl.latte import LATTE
 from ...module.utils import tensor_sizes
-from .hgt import HGT, HGTLayer
+from .hgt import HGT, HGTLayer, HGTNodeClassifier
 
 class SemanticAttention(nn.Module):
     def __init__(self, in_size, hidden_size=128):
@@ -68,27 +68,13 @@ class LATTENodeClassifier(NodeClfMetrics):
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        # self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
-        #                    in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-        #                    metapaths=dataset.get_metapaths(), activation=hparams.activation,
-        #                    attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-        #                    attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
-        #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
-        # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-
-        # self.embedder = HeteroRGCN(self.dataset.G, in_size=self.dataset.node_attr_shape[self.head_node_type],
-        #                            hidden_size=hparams.embedding_dim, out_size=hparams.embedding_dim)
-
-        # self.embedder = StochasticTwoLayerRGCN(in_feat=self.dataset.node_attr_shape[self.head_node_type],
-        #                                        hidden_feat=hparams.embedding_dim, out_feat=hparams.embedding_dim,
-        #                                        rel_names=self.dataset.G.etypes)
-
-        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                            n_inp=self.dataset.node_attr_shape[self.head_node_type],
-                            n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-                            n_layers=len(self.dataset.neighbor_sizes),
-                            n_heads=hparams.attn_heads)
+        self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+                           in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
+                           metapaths=dataset.get_metapaths(), activation=hparams.activation,
+                           attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
+                           attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
+                           neg_sampling_ratio=hparams.neg_sampling_ratio)
+        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
         self.classifier = DenseClassification(hparams)
 

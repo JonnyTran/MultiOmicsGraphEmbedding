@@ -113,22 +113,14 @@ class LATTE(nn.Module):
         # device = global_node_idx[list(global_node_idx.keys())[0]].device
         proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
 
-        h_layers = {node_type: [] for node_type in global_node_idx}
+        h_layers = {node_type: [] for node_type in self.node_types}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=X, x_r=X,
-                                                                        edge_index_dict=edge_index_dict,
-                                                                        global_node_idx=global_node_idx,
-                                                                        save_betas=save_betas)
-                next_edge_index_dict = edge_index_dict
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(blocks[t], inputs=feat, save_betas=save_betas)
             else:
-                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=X,
-                                                           edge_index_dict=next_edge_index_dict,
-                                                           global_node_idx=global_node_idx,
-                                                           save_betas=save_betas)
+                h_dict, t_loss, _ = self.layers[t].forward(blocks[t], inputs=h_dict, save_betas=save_betas)
 
-            for node_type in global_node_idx:
+            for node_type in feat:
                 h_layers[node_type].append(h_dict[node_type])
 
             if self.use_proximity:
@@ -137,7 +129,7 @@ class LATTE(nn.Module):
         concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
                       if len(h_list) > 0}
 
-        return concat_out, proximity_loss, edge_pred_dict
+        return concat_out, proximity_loss
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -154,6 +146,7 @@ class LATTEConv(nn.Module):
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
+        self.metapath_id = {etype: i for i, (srctype, etype, dsttype) in enumerate(self.metapaths)}
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = embedding_dim
         self.use_proximity = use_proximity
@@ -220,7 +213,7 @@ class LATTEConv(nn.Module):
             for node_type in self.embeddings:
                 self.embeddings[node_type].reset_parameters()
 
-    def forward(self, G: DGLBlock, feat_dict, save_betas=False):
+    def forward(self, G: DGLBlock, input, save_betas=False):
         """
 
         :param x_l: a dict of node attributes indexed node_type
@@ -230,9 +223,8 @@ class LATTEConv(nn.Module):
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        l_dict = {ntype: self.linear[ntype].forward(feat_dict[ntype]) for ntype in feat_dict}
-
-        feat_src, feat_dst = expand_as_pair(input_=l_dict, g=G)
+        features = {ntype: self.linear[ntype].forward(input[ntype]) for ntype in input}
+        feat_src, feat_dst = expand_as_pair(input_=features, g=G)
 
         # Predict relations attention coefficients
         beta = self.get_beta_weights(x_dict=x_l, h_dict=l_dict, h_prev=l_dict, global_node_idx=global_node_idx)
@@ -245,8 +237,8 @@ class LATTEConv(nn.Module):
         with G.local_scope():
             funcs = {}
             for srctype, etype, dsttype in G.canonical_etypes:
-                G.srcnodes[srctype].data['alpha_l'] = self.attn_l[i].forward(feat_src[srctype])
-                G.dstnodes[dsttype].data['alpha_r'] = self.attn_l[i].forward(feat_dst[dsttype])
+                G.srcnodes[srctype].data['alpha'] = self.attn_l[self.metapath_id[etype]].forward(feat_src[srctype])
+                G.dstnodes[dsttype].data['alpha'] = self.attn_l[self.metapath_id[etype]].forward(feat_dst[dsttype])
 
                 G.apply_edges(func=self.edge_attention, etype=etype)
 
@@ -302,7 +294,9 @@ class LATTEConv(nn.Module):
         return emb_relations
 
     def edge_attention(self, edges: EdgeBatch):
-        pass
+        srctype, etype, dsttype = edges.canonical_etype
+        att = self.attn_l[self.metapath_id[etype]].forward(edges.src["h"]) + \
+              self.attn_r[self.metapath_id[etype]].forward(edges.dst["h"])
 
     def message_func(self, edges: EdgeBatch):
         # print("edges msg", edges.canonical_etype, edges.data['v'].device, edges.data['a'].device)
