@@ -15,7 +15,7 @@ DIRECTED = True
 EPSILON = 1e-16
 
 
-class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
+class MultiDigraphNetwork(AttributedNetwork, TrainTestSplit):
     def __init__(self, multiomics: MultiOmics, modalities=None, annotations=True):
         """
         This class manages a networkx multiplex graph consisting of heterogeneous gene nodes, node attributes, and heterogeneous edge types.
@@ -35,8 +35,8 @@ class HeterogeneousNetwork(AttributedNetwork, TrainTestSplit):
         networks = {DIRECTED: self.G,
                     UNDIRECTED: self.G_u}
 
-        super(HeterogeneousNetwork, self).__init__(networks=networks, multiomics=multiomics,
-                                                   annotations=annotations, )
+        super(MultiDigraphNetwork, self).__init__(networks=networks, multiomics=multiomics,
+                                                  annotations=annotations, )
 
     def process_network(self):
         self.nodes = {}

@@ -4,7 +4,7 @@ from keras.optimizers import Adam
 from moge.generator.siamese.triplet_generator import OnlineTripletGenerator
 from moge.model.siamese.siamese_graph_embedding import *
 from moge.model.siamese.siamese_triplet_online_embedding import SiameseOnlineTripletGraphEmbedding
-from moge.network.heterogeneous import HeterogeneousNetwork
+from moge.network.multi_digraph import MultiDigraphNetwork
 
 
 class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
@@ -98,7 +98,7 @@ class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=False, histogram_freq=0,
+    def learn_embedding(self, network: MultiDigraphNetwork, network_val=None, tensorboard=False, histogram_freq=0,
                         multi_gpu=False, subsample=True, n_steps=500, validation_steps=None, edge_f=None,
                         is_weighted=False, no_python=False, rebuild_model=False, seed=0):
         self.generator_train = OnlineTripletGenerator(network=network, batch_size=self.batch_size, replace=True,

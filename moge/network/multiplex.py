@@ -12,7 +12,7 @@ from openomics import MultiOmics
 
 
 class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics: MultiOmics, modalities: list, layers: {(str, str): nx.Graph},
+    def __init__(self, multiomics: MultiOmics, modalities: list, layers: {(str, str, str): nx.Graph},
                  annotations=True, ) -> None:
         """
 
@@ -21,13 +21,13 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         :param layers:
         :param annotations:
         """
+        self.multiomics = multiomics
         self.modalities = modalities
-        self.modalities = layers
         self.layers_adj = {}
 
         networks = {}
-        for source_target, graph_class in layers.items():
-            networks[source_target] = graph_class()
+        for src_etype_dst, GraphClass in layers.items():
+            networks[src_etype_dst] = GraphClass()
 
         super(MultiplexAttributedNetwork, self).__init__(networks=networks, multiomics=multiomics,
                                                          annotations=annotations)

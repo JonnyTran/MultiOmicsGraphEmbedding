@@ -113,7 +113,7 @@ class LATTE(nn.Module):
         # device = global_node_idx[list(global_node_idx.keys())[0]].device
         proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
 
-        h_layers = {node_type: [] for node_type in self.node_types}
+        h_layers = {node_type: [] for node_type in self.node_typz}
         for t in range(self.t_order):
             if t == 0:
                 h_dict, t_loss, edge_pred_dict = self.layers[t].forward(blocks[t], inputs=feat, save_betas=save_betas)
@@ -222,6 +222,7 @@ class LATTEConv(nn.Module):
         :param x_r: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
         :return: output_emb, loss
         """
+        G.adj()
         # H_t = W_t * x
         features = {ntype: self.linear[ntype].forward(input[ntype]) for ntype in input}
         feat_src, feat_dst = expand_as_pair(input_=features, g=G)

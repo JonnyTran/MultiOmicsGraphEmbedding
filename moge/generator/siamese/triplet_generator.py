@@ -5,7 +5,7 @@ import tensorflow as tf
 from moge.generator.networkx.sampled_generator import SampledDataGenerator
 from moge.generator.siamese.pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
     UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
-from moge.network.heterogeneous import HeterogeneousNetwork, EPSILON
+from moge.network.multi_digraph import MultiDigraphNetwork, EPSILON
 
 
 def sparse_matrix_to_sparse_tensor(X):
@@ -15,7 +15,7 @@ def sparse_matrix_to_sparse_tensor(X):
 
 
 class SampledTripletDataGenerator(SampledDataGenerator):
-    def __init__(self, network: HeterogeneousNetwork, variables=None, targets=None, weighted=False, batch_size=1,
+    def __init__(self, network: MultiDigraphNetwork, variables=None, targets=None, weighted=False, batch_size=1,
                  replace=True, seed=0, verbose=True, **kwargs):
         super(SampledTripletDataGenerator, self).__init__(network=network, sampling=compression_func,
                                                           n_steps=n_steps, directed=directed_proba, weighted=weighted,
@@ -94,7 +94,7 @@ class SampledTripletDataGenerator(SampledDataGenerator):
 
 
 class OnlineTripletGenerator(SampledDataGenerator):
-    def __init__(self, network: HeterogeneousNetwork, variables=None, targets=None, weighted=False, batch_size=1,
+    def __init__(self, network: MultiDigraphNetwork, variables=None, targets=None, weighted=False, batch_size=1,
                  replace=True, seed=0, verbose=True, **kwargs):
         super(OnlineTripletGenerator, self).__init__(network=network, weighted=weighted, batch_size=batch_size,
                                                      replace=replace, seed=seed, verbose=verbose, maxlen=maxlen,
@@ -194,7 +194,7 @@ class OnlineTripletGenerator(SampledDataGenerator):
 
 
 class OnlineSoftmaxGenerator(OnlineTripletGenerator):
-    def __init__(self, network: HeterogeneousNetwork, variables=None, targets=None, weighted=False, batch_size=1,
+    def __init__(self, network: MultiDigraphNetwork, variables=None, targets=None, weighted=False, batch_size=1,
                  replace=True, seed=0, verbose=True, **kwargs):
         super(OnlineSoftmaxGenerator, self).__init__(network, weighted=weighted, batch_size=batch_size, replace=replace,
                                                      seed=seed, verbose=verbose, maxlen=maxlen, padding=padding,

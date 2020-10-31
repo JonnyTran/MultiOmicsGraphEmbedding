@@ -1,9 +1,9 @@
-from moge.network.heterogeneous import HeterogeneousNetwork
+from moge.network.multi_digraph import MultiDigraphNetwork
 from moge.network.semantic_similarity import *
 
 
 @DeprecationWarning
-class ExpressionNetwork(HeterogeneousNetwork):
+class ExpressionNetwork(MultiDigraphNetwork):
 
     def add_sampled_undirected_negative_edges_from_correlation(self, modalities=[], correlation_threshold=0.2,
                                                                histological_subtypes=[],

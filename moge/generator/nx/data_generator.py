@@ -9,7 +9,7 @@ from tensorflow import keras
 
 from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
 # import moge
-from moge.network.heterogeneous import HeterogeneousNetwork
+from moge.network.multi_digraph import MultiDigraphNetwork
 from moge.network.multiplex import MultiplexAttributedNetwork
 
 
@@ -61,7 +61,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
         if not hasattr(self, "node_list") or self.node_list is None:
             self.node_list = self.network.node_list
 
-        if isinstance(self.network, HeterogeneousNetwork):  # Heterogeneous network
+        if isinstance(self.network, MultiDigraphNetwork):  # Heterogeneous network
             # Ensure every node must have an associated sequence
             valid_nodes = self.annotations[self.annotations[SEQUENCE_COL].notnull()].index.tolist()
             self.node_list = [node for node in self.node_list if node in valid_nodes]

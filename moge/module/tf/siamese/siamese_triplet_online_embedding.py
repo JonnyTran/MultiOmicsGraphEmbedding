@@ -5,7 +5,7 @@ from keras.optimizers import Adadelta
 from moge.generator.siamese.triplet_generator import OnlineTripletGenerator
 from moge.model.siamese.siamese_graph_embedding import *
 from moge.model.siamese.siamese_triplet_embedding import SiameseTripletGraphEmbedding
-from moge.network.heterogeneous import HeterogeneousNetwork
+from moge.network.multi_digraph import MultiDigraphNetwork
 
 
 class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
@@ -182,7 +182,7 @@ class SiameseOnlineTripletGraphEmbedding(SiameseTripletGraphEmbedding):
                                      )
             print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, tensorboard=True, histogram_freq=0,
+    def learn_embedding(self, network: MultiDigraphNetwork, network_val=None, tensorboard=True, histogram_freq=0,
                         embeddings=False, early_stopping=False,
                         multi_gpu=False, subsample=True, n_steps=500, validation_steps=None,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0,

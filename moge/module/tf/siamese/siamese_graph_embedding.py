@@ -20,7 +20,7 @@ from moge.model.metrics import precision_d, recall_d, precision, recall
 from moge.generator.networkx.data_generator import DataGenerator
 from moge.generator.networkx.sampled_generator import SampledDataGenerator
 from moge.model.static_graph_embedding import ImportedGraphEmbedding
-from moge.network.heterogeneous import HeterogeneousNetwork
+from moge.network.multi_digraph import MultiDigraphNetwork
 
 
 def contrastive_loss(y_true, y_pred, margin=1.0):
@@ -279,7 +279,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=True,
+    def learn_embedding(self, network: MultiDigraphNetwork, network_val=None, multi_gpu=True,
                         n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0, embeddings=False,
                         early_stopping=0,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):

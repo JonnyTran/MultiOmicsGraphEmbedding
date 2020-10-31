@@ -11,7 +11,7 @@ from sklearn.neighbors import radius_neighbors_graph
 
 from moge.generator import SampledTripletDataGenerator
 from moge.model.siamese.siamese_graph_embedding import SiameseGraphEmbedding, sigmoid, softmax
-from moge.network.heterogeneous import HeterogeneousNetwork
+from moge.network.multi_digraph import MultiDigraphNetwork
 
 
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
@@ -90,7 +90,7 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                  )
         print("Network total weights:", self.siamese_net.count_params()) if self.verbose else None
 
-    def learn_embedding(self, network: HeterogeneousNetwork, network_val=None, multi_gpu=False,
+    def learn_embedding(self, network: MultiDigraphNetwork, network_val=None, multi_gpu=False,
                         subsample=True, n_steps=500, validation_steps=None, tensorboard=True, histogram_freq=0,
                         early_stopping=False,
                         edge_f=None, is_weighted=False, no_python=False, rebuild_model=False, seed=0, **kwargs):
