@@ -7,12 +7,12 @@ import pandas as pd
 import tensorflow as tf
 
 from moge.generator.sequences import MultiSequenceTokenizer
-from moge.network.multiplex import MultiplexAttributedNetwork
+from moge.network.hetero import HeteroNetwork
 from .subgraph_generator import SubgraphGenerator
 
 
 class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
-    def __init__(self, network: MultiplexAttributedNetwork, variables: list = [], targets: list = None,
+    def __init__(self, network: HeteroNetwork, variables: list = [], targets: list = None,
                  batch_size=500, traversal='neighborhood', traversal_depth=2, sampling="log", n_steps=100,
                  maxlen=1400, padding='post', truncating='post', agg_mode=False, tokenizer=None,
                  replace=True, seed=0, verbose=True, **kwargs):
@@ -141,7 +141,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
     def __getdata__(self, sampled_nodes, variable_length=False, training=True):
         # Features
         X = {}
-        for modality in self.network.modalities:
+        for modality in self.network.node_types:
             X["_".join([modality, "seqs"])] = self.get_sequence_encodings(sampled_nodes, modality=modality,
                                                                           variable_length=variable_length or self.variable_length,
                                                                           minlen=40)

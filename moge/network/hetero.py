@@ -11,49 +11,48 @@ from openomics.utils.df import concat_uniques
 from openomics import MultiOmics
 
 
-class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics: MultiOmics, modalities: list, layers: {(str, str, str): nx.Graph},
+class HeteroNetwork(AttributedNetwork, TrainTestSplit):
+    def __init__(self, multiomics: MultiOmics, node_types: list, layers: {(str, str, str): nx.Graph},
                  annotations=True, ) -> None:
         """
-
-        :param multiomics:
-        :param modalities:
-        :param layers:
-        :param annotations:
+        :param multiomics: MultiOmics object containing annotations
+        :param node_types: Node types
+        :param layers: A dict of edge types tuple and networkx.Graph/Digraph containing heterogeneous edges
+        :param annotations: Whether to process annotation data, default True
         """
         self.multiomics = multiomics
-        self.modalities = modalities
+        self.node_types = node_types
         self.layers_adj = {}
 
         networks = {}
         for src_etype_dst, GraphClass in layers.items():
             networks[src_etype_dst] = GraphClass()
 
-        super(MultiplexAttributedNetwork, self).__init__(networks=networks, multiomics=multiomics,
-                                                         annotations=annotations)
+        super(HeteroNetwork, self).__init__(networks=networks, multiomics=multiomics,
+                                            annotations=annotations)
 
     def process_network(self):
         self.nodes = {}
         self.node_to_modality = {}
 
         for source_target, network in self.networks.items():
-            for node_type in self.modalities:
+            for node_type in self.node_types:
                 network.add_nodes_from(self.multiomics[node_type].get_genes_list(), modality=node_type)
 
-        for node_type in self.modalities:
+        for node_type in self.node_types:
             self.nodes[node_type] = self.multiomics[node_type].get_genes_list()
 
             for gene in self.multiomics[node_type].get_genes_list():
                 self.node_to_modality[gene] = self.node_to_modality.setdefault(gene, []) + [node_type, ]
-
             print(node_type, " nodes:", len(self.nodes[node_type]), self.multiomics[node_type].gene_index)
+
         print("Total nodes:", len(self.get_node_list()))
         self.nodes = pd.Series(self.nodes)
         self.node_to_modality = pd.Series(self.node_to_modality)
 
     def process_annotations(self):
         self.annotations = {}
-        for modality in self.modalities:
+        for modality in self.node_types:
             annotation = self.multiomics[modality].get_annotations()
             self.annotations[modality] = annotation
 
@@ -66,7 +65,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         if not hasattr(self, "all_annotations"):
             annotations_list = []
 
-            for modality in self.modalities:
+            for modality in self.node_types:
                 annotation = self.multiomics[modality].get_annotations()
                 annotation["omic"] = modality
                 annotations_list.append(annotation)
@@ -82,7 +81,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
 
     def add_edges(self, edgelist, layer: (str, str, str), database, **kwargs):
         source = layer[0]
-        target = layer[1]
+        target = layer[-1]
         self.networks[layer].add_edges_from(edgelist, source=source, target=target, database=database, **kwargs)
         print(len(edgelist), "edges added to self.networks[{}]".format(layer))
 
@@ -106,7 +105,7 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
             for layer in edge_types:
                 adj[layer] = self.get_layer_adjacency_matrix(layer, node_list)
         else:
-            raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.modalities))
+            raise Exception("edge_types '{}' must be one of {}".format(edge_types, self.node_types))
 
         return adj
 
@@ -157,22 +156,6 @@ class MultiplexAttributedNetwork(AttributedNetwork, TrainTestSplit):
         self.testing = Namespace()
         self.training.node_list = self.train_test_splits[0][0]
         self.testing.node_list = self.train_test_splits[0][1]
-
-        # self.set_training_annotations(train_nodes)
-        # self.set_testing_annotations(test_nodes)
-        #
-        # self.training.networks = {}
-        # self.testing.networks = {}
-        # for layer, network in self.networks.items():
-        #     network_train, network_test = split_network_by_nodes(network, train_nodes=train_nodes,
-        #                                                          test_nodes=test_nodes, verbose=False)
-        #     self.training.networks[layer] = network_train
-        #     self.testing.networks[layer] = network_test
-        #
-        #     print("Layer {} train_network".format(str(layer)), self.training.networks[layer].number_of_nodes(),
-        #           self.training.networks[layer].number_of_edges()) if verbose else None
-        #     print("Layer {} test_network".format(str(layer)), self.testing.networks[layer].number_of_nodes(),
-        #           self.testing.networks[layer].number_of_edges()) if verbose else None
 
     def get_aggregated_network(self):
         G = nx.compose_all(list(self.networks.values()))

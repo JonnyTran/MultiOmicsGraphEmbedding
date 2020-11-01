@@ -10,7 +10,7 @@ from tensorflow import keras
 from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
 # import moge
 from moge.network.multi_digraph import MultiDigraphNetwork
-from moge.network.multiplex import MultiplexAttributedNetwork
+from moge.network.hetero import HeteroNetwork
 
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
@@ -72,12 +72,12 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
             print("node_list", len(self.node_list),
                   {"directed": self.network.G.number_of_nodes(), "undirected": self.network.G_u.number_of_nodes()})
 
-        elif isinstance(self.network, MultiplexAttributedNetwork):  # Multiplex network
+        elif isinstance(self.network, HeteroNetwork):  # Multiplex network
             # Check that each node must have sequence data in all layers
             null_nodes = [network.annotations[modality].loc[network.nodes[modality], SEQUENCE_COL][
                               network.annotations[modality].loc[
                                   network.nodes[modality], SEQUENCE_COL].isnull()].index.tolist() for modality in
-                          network.modalities]
+                          network.node_types]
             null_nodes = [node for nodes in null_nodes for node in nodes]
 
             self.node_list = [node for node in self.node_list if node not in null_nodes]
