@@ -62,6 +62,7 @@ class StochasticTwoLayerRGCN(nn.Module):
 class GAT(nn.Module):
     def __init__(self, in_dim, hid_dim, out_dim, n_layers, ntypes, etypes):
         super().__init__()
+        self.n_layers = n_layers
 
         self.linear_inp = nn.ModuleDict()
         for ntype in ntypes:
@@ -85,6 +86,8 @@ class GAT(nn.Module):
 class GATLayer(nn.Module):
     def __init__(self, in_dim, out_dim, ntypes, etypes):
         super(GATLayer, self).__init__()
+        self.ntypes = ntypes
+        self.etypes = etypes
 
         self.W = nn.ModuleDict({
             ntype: nn.Linear(in_dim, out_dim, bias=False) for ntype in ntypes
@@ -99,8 +102,11 @@ class GATLayer(nn.Module):
     def reset_parameters(self):
         """Reinitialize learnable parameters."""
         gain = nn.init.calculate_gain('relu')
-        nn.init.xavier_normal_(self.W.weight, gain=gain)
-        nn.init.xavier_normal_(self.attn.weight, gain=gain)
+        for ntype in self.W.keys():
+            nn.init.xavier_normal_(self.W[ntype].weight, gain=gain)
+
+        for etype in self.attn.keys():
+            nn.init.xavier_normal_(self.attn[etype].weight, gain=gain)
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
@@ -120,14 +126,20 @@ class GATLayer(nn.Module):
         return {'h': h}
 
     def forward(self, g: DGLBlock, input: dict):
+        print(g)
         feat = {ntype: self.W[ntype].forward(input[ntype]) for ntype in input}
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
+        print("feat_src", tensor_sizes(feat_src))
+        print("feat_dst", tensor_sizes(feat_dst))
 
         with g.local_scope():
-            g.srcdata['z'] = feat_src
-            g.dstdata['z'] = feat_dst
+            for ntype in self.ntypes:
+                g.srcdata[ntype].data['z'] = feat_src[ntype]
+                g.dstdata[ntype].data['z'] = feat_dst[ntype]
 
-            g.apply_edges(self.edge_attention)
+            for etype in self.etypes:
+                g.apply_edges(self.edge_attention, etype=etype)
+
             g.update_all(self.message_func, self.reduce_func)
 
             return g.ndata['h']
@@ -151,8 +163,10 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
         # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        self.embedder = GAT(in_dim=self.dataset.node_attr_shape[self.head_node_type], hid_dim=hparams.embedding_dim,
-                            out_dim=hparams.embedding_dim, n_layers=len(self.dataset.neighbor_sizes),
+        self.embedder = GAT(in_dim=self.dataset.node_attr_shape[self.head_node_type],
+                            hid_dim=hparams.embedding_dim,
+                            out_dim=hparams.embedding_dim,
+                            n_layers=len(self.dataset.neighbor_sizes),
                             ntypes=dataset.node_types,
                             etypes=[metapath[1] for metapath in dataset.get_metapaths()])
 
