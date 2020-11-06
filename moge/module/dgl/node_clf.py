@@ -79,6 +79,7 @@ class GAT(nn.Module):
 
         for i in range(self.n_layers):
             h = self.layers[i].forward(blocks[i], h)
+            # print(f"layer {i}", tensor_sizes(h))
 
         return h
 
@@ -97,6 +98,8 @@ class GATLayer(nn.Module):
             etype: nn.Linear(2 * out_dim, 1, bias=False) for etype in etypes
         })
 
+        self.dropout = nn.Dropout(p=0.4)
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -110,6 +113,9 @@ class GATLayer(nn.Module):
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
+        # print(edges.canonical_etype)
+        # print(f"edges.src", edges.src.keys())
+        # print(f"edges.dst", edges.dst.keys())
         z2 = torch.cat([edges.src['z'], edges.dst['z']], dim=1)
 
         a = self.attn[etype].forward(z2)
@@ -119,31 +125,39 @@ class GATLayer(nn.Module):
         return {'z': edges.src['z'], 'e': edges.data['e']}
 
     def reduce_func(self, nodes: NodeBatch):
-        # equation (3)
         alpha = F.softmax(nodes.mailbox['e'], dim=1)
-        # equation (4)
+
         h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
         return {'h': h}
 
-    def forward(self, g: DGLBlock, input: dict):
-        print(g)
-        feat = {ntype: self.W[ntype].forward(input[ntype]) for ntype in input}
-        feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
-        print("feat_src", tensor_sizes(feat_src))
-        print("feat_dst", tensor_sizes(feat_dst))
+    def forward(self, g: DGLBlock, input_dict: dict):
+        feat_dict = {ntype: self.W[ntype](ndata) for ntype, ndata in input_dict.items()}
+
+        feat_src, feat_dst = expand_as_pair(input_=feat_dict, g=g)
+        # print("feat_src", tensor_sizes(feat_src))
+        # print("feat_dst", tensor_sizes(feat_dst))
 
         with g.local_scope():
-            for ntype in self.ntypes:
-                g.srcdata[ntype].data['z'] = feat_src[ntype]
-                g.dstdata[ntype].data['z'] = feat_dst[ntype]
+            # print(g)
+            for ntype in feat_dict:
+                # print("ntype", "srcdata", g.srcnodes[ntype].data.keys(), "dstdata", g.srcnodes[ntype].data.keys())
+                g.srcnodes[ntype].data['z'] = feat_src[ntype]
+                g.dstnodes[ntype].data['z'] = feat_dst[ntype]
 
+            funcs = {}
             for etype in self.etypes:
-                g.apply_edges(self.edge_attention, etype=etype)
+                if g.batch_num_edges(etype=etype).item() > 0:
+                    g.apply_edges(self.edge_attention, etype=etype)
+                    funcs[etype] = (self.message_func, self.reduce_func)
 
-            g.update_all(self.message_func, self.reduce_func)
+            g.multi_update_all(funcs, cross_reducer="mean")
 
-            return g.ndata['h']
+            new_h = {}
+            for ntype in g.ntypes:
+                if "h" in g.dstnodes[ntype].data:
+                    new_h[ntype] = self.dropout(g.dstnodes[ntype].data['h'])
 
+            return new_h
 
 class LATTENodeClassifier(NodeClfMetrics):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
