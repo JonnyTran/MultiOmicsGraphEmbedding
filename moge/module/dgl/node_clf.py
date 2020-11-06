@@ -113,9 +113,6 @@ class GATLayer(nn.Module):
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
-        # print(edges.canonical_etype)
-        # print(f"edges.src", edges.src.keys())
-        # print(f"edges.dst", edges.dst.keys())
         z2 = torch.cat([edges.src['z'], edges.dst['z']], dim=1)
 
         a = self.attn[etype].forward(z2)
@@ -126,16 +123,12 @@ class GATLayer(nn.Module):
 
     def reduce_func(self, nodes: NodeBatch):
         alpha = F.softmax(nodes.mailbox['e'], dim=1)
-
         h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
         return {'h': h}
 
     def forward(self, g: DGLBlock, input_dict: dict):
         feat_dict = {ntype: self.W[ntype](ndata) for ntype, ndata in input_dict.items()}
-
         feat_src, feat_dst = expand_as_pair(input_=feat_dict, g=g)
-        # print("feat_src", tensor_sizes(feat_src))
-        # print("feat_dst", tensor_sizes(feat_dst))
 
         with g.local_scope():
             # print(g)
