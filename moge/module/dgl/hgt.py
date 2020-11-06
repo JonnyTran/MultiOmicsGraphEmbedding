@@ -111,13 +111,12 @@ class HGTLayer(nn.Module):
         if self.use_norm:
             trans_out = self.norms[nty_id](trans_out)
 
-        return trans_out
+        return {"h": trans_out}
 
     def forward(self, G: DGLBlock, feat):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=G)
         # print(G)
         with G.local_scope():
-
             for srctype in set(srctype for srctype, etype, dsttype in G.canonical_etypes):
                 k_linear = self.k_linears[self.node_dict[srctype]]
                 v_linear = self.v_linears[self.node_dict[srctype]]
