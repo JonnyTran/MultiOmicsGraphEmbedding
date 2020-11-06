@@ -11,6 +11,7 @@ import dgl.function as fn
 from dgl.heterograph import DGLHeteroGraph, DGLBlock
 import dgl.nn.pytorch as dglnn
 from dgl.udf import EdgeBatch, NodeBatch
+from dgl.utils import expand_as_pair
 
 from moge.generator import DGLNodeSampler
 from moge.module.classifier import DenseClassification
@@ -21,7 +22,6 @@ from ..trainer import NodeClfMetrics
 from moge.module.dgl.latte import LATTE
 from ...module.utils import tensor_sizes
 from .hgt import HGT, HGTLayer, HGTNodeClassifier
-
 
 class SemanticAttention(nn.Module):
     def __init__(self, in_size, hidden_size=128):
@@ -59,49 +59,78 @@ class StochasticTwoLayerRGCN(nn.Module):
         return x
 
 
+class GAT(nn.Module):
+    def __init__(self, in_dim, hid_dim, out_dim, n_layers, ntypes, etypes):
+        super().__init__()
+
+        self.linear_inp = nn.ModuleDict()
+        for ntype in ntypes:
+            self.linear_inp[ntype] = nn.Linear(in_dim, hid_dim)
+
+        self.layers = nn.ModuleList()
+        for _ in range(n_layers):
+            self.layers.append(GATLayer(hid_dim, out_dim, ntypes, etypes))
+
+    def forward(self, blocks, feat_dict):
+        h = {}
+        for ntype in feat_dict:
+            h[ntype] = F.gelu(self.linear_inp[ntype].forward(feat_dict[ntype]))
+
+        for i in range(self.n_layers):
+            h = self.layers[i].forward(blocks[i], h)
+
+        return h
+
+
 class GATLayer(nn.Module):
-    def __init__(self, in_dim, out_dim):
+    def __init__(self, in_dim, out_dim, ntypes, etypes):
         super(GATLayer, self).__init__()
-        # equation (1)
-        self.fc = nn.Linear(in_dim, out_dim, bias=False)
-        # equation (2)
-        self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
+
+        self.W = nn.ModuleDict({
+            ntype: nn.Linear(in_dim, out_dim, bias=False) for ntype in ntypes
+        })
+
+        self.attn = nn.ModuleDict({
+            etype: nn.Linear(2 * out_dim, 1, bias=False) for etype in etypes
+        })
+
         self.reset_parameters()
 
     def reset_parameters(self):
         """Reinitialize learnable parameters."""
         gain = nn.init.calculate_gain('relu')
-        nn.init.xavier_normal_(self.fc.weight, gain=gain)
-        nn.init.xavier_normal_(self.attn_fc.weight, gain=gain)
+        nn.init.xavier_normal_(self.W.weight, gain=gain)
+        nn.init.xavier_normal_(self.attn.weight, gain=gain)
 
-    def edge_attention(self, edges):
-        # edge UDF for equation (2)
+    def edge_attention(self, edges: EdgeBatch):
+        srctype, etype, dsttype = edges.canonical_etype
         z2 = torch.cat([edges.src['z'], edges.dst['z']], dim=1)
-        a = self.attn_fc(z2)
+
+        a = self.attn[etype].forward(z2)
         return {'e': F.leaky_relu(a)}
 
-    def message_func(self, edges):
-        # message UDF for equation (3) & (4)
+    def message_func(self, edges: EdgeBatch):
         return {'z': edges.src['z'], 'e': edges.data['e']}
 
-    def reduce_func(self, nodes):
-        # reduce UDF for equation (3) & (4)
+    def reduce_func(self, nodes: NodeBatch):
         # equation (3)
         alpha = F.softmax(nodes.mailbox['e'], dim=1)
         # equation (4)
         h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
         return {'h': h}
 
-    def forward(self, g, h):
-        # equation (1)
-        z = self.fc(h)
-        g.ndata['z'] = z
-        # equation (2)
-        g.apply_edges(self.edge_attention)
-        # equation (3) & (4)
-        g.update_all(self.message_func, self.reduce_func)
+    def forward(self, g: DGLBlock, input: dict):
+        feat = {ntype: self.W[ntype].forward(input[ntype]) for ntype in input}
+        feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
 
-        return g.ndata.pop('h')
+        with g.local_scope():
+            g.srcdata['z'] = feat_src
+            g.dstdata['z'] = feat_dst
+
+            g.apply_edges(self.edge_attention)
+            g.update_all(self.message_func, self.reduce_func)
+
+            return g.ndata['h']
 
 
 class LATTENodeClassifier(NodeClfMetrics):
@@ -122,8 +151,10 @@ class LATTENodeClassifier(NodeClfMetrics):
         #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
         # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        self.embedder = GATLayer(in_dim=self.dataset.node_attr_shape[self.head_node_type],
-                                 out_dim=hparams.embedding_dim)
+        self.embedder = GAT(in_dim=self.dataset.node_attr_shape[self.head_node_type], hid_dim=hparams.embedding_dim,
+                            out_dim=hparams.embedding_dim, n_layers=len(self.dataset.neighbor_sizes),
+                            ntypes=dataset.node_types,
+                            etypes=[metapath[1] for metapath in dataset.get_metapaths()])
 
         self.classifier = DenseClassification(hparams)
 
