@@ -59,6 +59,51 @@ class StochasticTwoLayerRGCN(nn.Module):
         return x
 
 
+class GATLayer(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super(GATLayer, self).__init__()
+        # equation (1)
+        self.fc = nn.Linear(in_dim, out_dim, bias=False)
+        # equation (2)
+        self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        """Reinitialize learnable parameters."""
+        gain = nn.init.calculate_gain('relu')
+        nn.init.xavier_normal_(self.fc.weight, gain=gain)
+        nn.init.xavier_normal_(self.attn_fc.weight, gain=gain)
+
+    def edge_attention(self, edges):
+        # edge UDF for equation (2)
+        z2 = torch.cat([edges.src['z'], edges.dst['z']], dim=1)
+        a = self.attn_fc(z2)
+        return {'e': F.leaky_relu(a)}
+
+    def message_func(self, edges):
+        # message UDF for equation (3) & (4)
+        return {'z': edges.src['z'], 'e': edges.data['e']}
+
+    def reduce_func(self, nodes):
+        # reduce UDF for equation (3) & (4)
+        # equation (3)
+        alpha = F.softmax(nodes.mailbox['e'], dim=1)
+        # equation (4)
+        h = torch.sum(alpha * nodes.mailbox['z'], dim=1)
+        return {'h': h}
+
+    def forward(self, g, h):
+        # equation (1)
+        z = self.fc(h)
+        g.ndata['z'] = z
+        # equation (2)
+        g.apply_edges(self.edge_attention)
+        # equation (3) & (4)
+        g.update_all(self.message_func, self.reduce_func)
+
+        return g.ndata.pop('h')
+
+
 class LATTENodeClassifier(NodeClfMetrics):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
@@ -68,14 +113,17 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.y_types = list(dataset.y_dict.keys())
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
+        #
+        # self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+        #                    in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
+        #                    metapaths=dataset.get_metapaths(), activation=hparams.activation,
+        #                    attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
+        #                    attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
+        #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
+        # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
-                           in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-                           metapaths=dataset.get_metapaths(), activation=hparams.activation,
-                           attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-                           attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
-                           neg_sampling_ratio=hparams.neg_sampling_ratio)
-        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        self.embedder = GATLayer(in_dim=self.dataset.node_attr_shape[self.head_node_type],
+                                 out_dim=hparams.embedding_dim)
 
         self.classifier = DenseClassification(hparams)
 
