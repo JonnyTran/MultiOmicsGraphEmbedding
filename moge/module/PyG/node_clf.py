@@ -153,7 +153,7 @@ class LATTENodeClassifier(NodeClfMetrics):
                                      weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
-        return [optimizer], [scheduler]
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
 class GTN(Gtn, pl.LightningModule):

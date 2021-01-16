@@ -119,7 +119,7 @@ class LATTE(nn.Module):
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=X,
+                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=h_dict,
                                                            edge_index_dict=next_edge_index_dict,
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
