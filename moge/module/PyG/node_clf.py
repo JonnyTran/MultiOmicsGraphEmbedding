@@ -16,6 +16,7 @@ from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
+from moge.module.PyG.hgt import HGTConv
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.metrics import Metrics
@@ -154,6 +155,22 @@ class LATTENodeClassifier(NodeClfMetrics):
         scheduler = ReduceLROnPlateau(optimizer)
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
+
+
+class HGT(HGTConv, pl.LightningModule):
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
+        super(HGT, self).__init__(
+            in_hid=dataset.in_features,
+            out_hid=hparams.embedding_dim,
+            num_types=len(dataset.node_types),
+            num_relations=len(dataset.edge_index_dict),
+            n_heads=hparams.attn_heads,
+            dropout=hparams.attn_dropout,
+            use_norm=True,
+            use_RTE=False)
+
+    def forward(self, node_inp, node_type, edge_index, edge_type, edge_time):
+        return self.base_conv(node_inp, node_type, edge_index, edge_type, edge_time)
 
 
 class GTN(Gtn, pl.LightningModule):
