@@ -111,4 +111,4 @@ class LATTELinkPredictor(LinkPredMetrics):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
-        return [optimizer], [scheduler]
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
