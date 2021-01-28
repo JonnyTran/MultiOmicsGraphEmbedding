@@ -76,7 +76,7 @@ class Network:
     def get_embeddings_types_labels(self, embeddings, global_node_index):
         embeddings_all = pd.concat(embeddings, axis=0)
 
-        types_all = embeddings_all.index.to_series().str.slice(0, 1)
+        node_type = embeddings_all.index.to_series().str.slice(0, 1)
         if hasattr(self, "y_dict") and len(self.y_dict) > 0:
             labels = pd.Series(
                 self.y_dict[self.head_node_type][global_node_index[self.head_node_type]].squeeze(-1).numpy(),
@@ -85,7 +85,7 @@ class Network:
         else:
             labels = None
 
-        return embeddings_all, types_all, labels
+        return embeddings_all, node_type, labels
 
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):
