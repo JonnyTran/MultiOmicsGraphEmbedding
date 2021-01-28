@@ -1,4 +1,4 @@
-import os
+import os, logging
 import dill
 from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
@@ -84,12 +84,13 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
         if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
                 and not hasattr(ogbl[0], "edge_reltype"):
             dataset = EdgeSampler(ogbl, directed=True, add_reverse_metapaths=hparams.use_reverse)
-            print(dataset.node_types, dataset.metapaths)
         else:
             dataset = TripletSampler(ogbl, directed=True,
                                      head_node_type=None,
                                      add_reverse_metapaths=hparams.use_reverse)
-            print(dataset.node_types, dataset.metapaths)
+
+        logging.info(f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
+
     else:
         raise Exception(f"dataset {name} not found")
 

@@ -121,7 +121,7 @@ class LATTE(nn.Module):
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
                                                                edge_sampling=self.edge_sampling)
-                print('h_dict', tensor_sizes(h_dict))
+                # print('h_dict', tensor_sizes(h_dict))
                 h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=h_dict,
                                                            edge_index_dict=next_edge_index_dict,
                                                            global_node_idx=global_node_idx,

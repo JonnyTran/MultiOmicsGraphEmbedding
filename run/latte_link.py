@@ -26,7 +26,7 @@ def train(hparams):
     USE_AMP = False  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 50
 
-    dataset = load_link_dataset(hparams.dataset, hparams=hparams)
+    dataset = load_link_dataset(hparams.dataset, hparams=hparams, path="datasets")
     hparams.n_classes = dataset.n_classes
 
     model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=[hparams.dataset])
@@ -37,7 +37,7 @@ def train(hparams):
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
         auto_lr_find=False,
         max_epochs=MAX_EPOCHS,
-        early_stop_callback=EarlyStopping(monitor='val_loss', patience=10, min_delta=0.01, strict=False),
+        callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.01, strict=False)],
         logger=wandb_logger,
         # regularizers=regularizers,
         weights_summary='top',
