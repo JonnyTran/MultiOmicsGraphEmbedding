@@ -185,7 +185,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  for node_type in self.node_types})  # W.shape (F x F)
             self.linear_r = nn.ModuleDict(
                 {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
-                 for node_type in self.node_types})  # W.shape (F x D_m}
+                 for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.ModuleList(
@@ -253,8 +253,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        l_dict = self.get_h_dict(x_l, global_node_idx, on="left")
-        r_dict = self.get_h_dict(x_r, global_node_idx, on="right")
+        l_dict = self.get_h_dict(x_l, global_node_idx, left_right="left")
+        r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
 
         # Predict relations attention coefficients
         beta = self.get_beta_weights(x_dict=x_l, h_dict=l_dict, h_prev=l_dict, global_node_idx=global_node_idx)
@@ -318,13 +318,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha
 
-    def get_h_dict(self, input, global_node_idx, on="left"):
+    def get_h_dict(self, input, global_node_idx, left_right="left"):
         h_dict = {}
         for node_type in global_node_idx:
             if node_type in input:
-                if on == "left":
+                if left_right == "left":
                     h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
-                elif on == "right":
+                elif left_right == "right":
                     h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
             else:
                 h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
