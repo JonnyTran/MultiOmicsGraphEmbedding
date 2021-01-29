@@ -1,3 +1,4 @@
+import logging
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -60,11 +61,18 @@ def graph_viz(g: nx.Graph,
         express_mode = True
 
     if express_mode:
+        logging.info("express_mode")
+
+        node_symbol = match_labels(node_symbol, nodelist=nodelist)
+        node_color = match_labels(node_color, nodelist=nodelist)
+
         fig = px.scatter(x=node_x, y=node_y,
                          hover_name=nodelist,
                          symbol=node_symbol if node_symbol is not None else None,
                          color=node_color if node_color is not None else None, **kwargs)
     else:
+        logging.info("Not express_mode")
+
         fig = go.Figure()
         fig.add_scatter3d(x=node_x, y=node_y,
                           mode='markers',
@@ -138,6 +146,11 @@ def graph_viz3d(g: nx.Graph,
         express_mode = True
 
     if express_mode:
+        logging.info("express_mode")
+
+        node_symbol = match_labels(node_symbol, nodelist=nodelist)
+        node_color = match_labels(node_color, nodelist=nodelist)
+
         fig = px.scatter_3d(x=node_x, y=node_y, z=node_z, size_max=5,
                             hover_name=nodelist,
                             symbol=node_symbol if node_symbol is not None else None,
@@ -269,4 +282,13 @@ def process_labels(labels: pd.Series, delim="|"):
             labels.fillna("None", inplace=True)
         if labels.dtype == "object" and labels.str.contains(delim).any():
             labels = labels.str.split(delim, expand=True)[0].astype(str)
+    return labels
+
+
+def match_labels(labels, nodelist, null_val=-1):
+    # If nodelist is passed. select labels for nodes in nodelist, fill null_values if necessary
+    if nodelist is not None:
+        labels = nodelist.map(lambda x: labels.get(x, null_val))
+        assert labels.shape == nodelist.shape
+
     return labels
