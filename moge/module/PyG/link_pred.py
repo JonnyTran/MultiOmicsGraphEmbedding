@@ -1,4 +1,5 @@
 import multiprocessing
+from abc import ABCMeta, abstractmethod
 
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -8,9 +9,37 @@ from moge.module.PyG.latte import LATTE, untag_negative, is_negative
 from ..trainer import NodeClfMetrics
 
 
-class LinkPredMetrics(NodeClfMetrics):
+class LinkPredMetrics(NodeClfMetrics, metaclass=ABCMeta):
     def __init__(self, hparams, dataset, metrics):
         super(LinkPredMetrics, self).__init__(hparams, dataset, metrics)
+
+    def get_e_pos_neg(self, edge_pred_dict: dict, training: bool = True):
+        """
+        Align e_pos and e_neg to shape (num_edge, ) and (num_edge, num_nodes_neg). Ignores reverse edges
+
+        :param edge_pred_dict:
+        :return:
+        """
+        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
+                           if not is_negative(metapath) and metapath in self.dataset.metapaths], dim=0)
+        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if
+                           is_negative(metapath) and untag_negative(metapath) in self.dataset.metapaths], dim=0)
+
+        if training:
+            num_nodes_neg = int(self.hparams.neg_sampling_ratio)
+        else:
+            num_nodes_neg = int(e_neg.numel() // e_pos.numel())
+
+        if e_neg.size(0) % num_nodes_neg:
+            e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % num_nodes_neg]
+        e_neg = e_neg.view(-1, num_nodes_neg)
+
+        # ensure same num_edge in dim 0
+        min_idx = min(e_pos.size(0), e_neg.size(0))
+        e_pos = e_pos[:min_idx]
+        e_neg = e_neg[:min_idx]
+
+        return e_pos, e_neg
 
 
 class LATTELinkPredictor(LinkPredMetrics):
@@ -37,32 +66,7 @@ class LATTELinkPredictor(LinkPredMetrics):
                                                                         **kwargs)
         return embeddings, proximity_loss, edge_pred_dict
 
-    def get_e_pos_neg(self, edge_pred_dict, training=True):
-        """
-        Align e_pos and e_neg to shape (num_edge, ) and (num_edge, num_nodes_neg). Ignores reverse edges
-        :param edge_pred_dict:
-        :return:
-        """
-        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
-                           if not is_negative(metapath) and metapath in self.dataset.metapaths], dim=0)
-        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if
-                           is_negative(metapath) and untag_negative(metapath) in self.dataset.metapaths], dim=0)
 
-        if training:
-            num_nodes_neg = int(self.hparams.neg_sampling_ratio)
-        else:
-            num_nodes_neg = int(e_neg.numel() // e_pos.numel())
-
-        if e_neg.size(0) % num_nodes_neg:
-            e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % num_nodes_neg]
-        e_neg = e_neg.view(-1, num_nodes_neg)
-
-        # ensure same num_edge in dim 0
-        min_idx = min(e_pos.size(0), e_neg.size(0))
-        e_pos = e_pos[:min_idx]
-        e_neg = e_neg[:min_idx]
-
-        return e_pos, e_neg
 
     def training_step(self, batch, batch_nb):
         X, _, _ = batch
