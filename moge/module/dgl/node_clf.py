@@ -17,7 +17,7 @@ from moge.generator import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.utils import filter_samples
-from ..trainer import NodeClfMetrics
+from ..PyG.base import NodeClfMetrics
 
 from moge.module.dgl.latte import LATTE
 from ...module.utils import tensor_sizes

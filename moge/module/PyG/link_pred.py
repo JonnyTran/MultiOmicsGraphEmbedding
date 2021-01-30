@@ -6,7 +6,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE, untag_negative, is_negative
-from ..trainer import NodeClfMetrics
+from .base import NodeClfMetrics
 
 
 class LinkPredMetrics(NodeClfMetrics, metaclass=ABCMeta):

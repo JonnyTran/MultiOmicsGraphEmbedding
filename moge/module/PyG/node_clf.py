@@ -20,7 +20,7 @@ from moge.module.PyG.hgt import HGTConv
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.metrics import Metrics
-from moge.module.trainer import NodeClfMetrics
+from moge.module.PyG.base import NodeClfMetrics
 from moge.module.utils import filter_samples
 
 

@@ -16,7 +16,7 @@ from moge.generator import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from ...module.utils import tensor_sizes
-from ..trainer import NodeClfMetrics
+from ..PyG.base import NodeClfMetrics
 
 
 class HGTLayer(nn.Module):
