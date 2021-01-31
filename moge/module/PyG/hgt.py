@@ -14,9 +14,9 @@ import math
 
 
 class HGTModel(nn.Module):
-    def __init__(self, in_dim, n_hid, num_types, num_relations, n_heads, n_layers, dropout=0.2, conv_name='hgt',
-                 prev_norm=False, last_norm=False, use_RTE=False):
-        super(HGTModel, self).__init__()
+    def __init__(self, in_dim, n_hid, num_types, num_relations, n_heads, n_layers, dropout=0.2,
+                 prev_norm=True, last_norm=True, use_RTE=False, **kwargs):
+        super(HGTModel, self).__init__(**kwargs)
         self.num_types = num_types
         self.in_dim = in_dim
         self.n_hid = n_hid
@@ -178,6 +178,27 @@ class HGTConv(MessagePassing):
         return '{}(in_dim={}, out_dim={}, num_types={}, num_types={})'.format(
             self.__class__.__name__, self.in_dim, self.out_dim,
             self.num_types, self.num_relations)
+
+
+class RelTemporalEncoding(nn.Module):
+    '''
+        Implement the Temporal Encoding (Sinusoid) function.
+    '''
+
+    def __init__(self, n_hid, max_len=240, dropout=0.2):
+        super(RelTemporalEncoding, self).__init__()
+        position = torch.arange(0., max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, n_hid, 2) *
+                             -(math.log(10000.0) / n_hid))
+        emb = nn.Embedding(max_len, n_hid)
+        emb.weight.data[:, 0::2] = torch.sin(position * div_term) / math.sqrt(n_hid)
+        emb.weight.data[:, 1::2] = torch.cos(position * div_term) / math.sqrt(n_hid)
+        emb.requires_grad = False
+        self.emb = emb
+        self.lin = nn.Linear(n_hid, n_hid)
+
+    def forward(self, x, t):
+        return x + self.lin(self.emb(t))
 
 
 class Graph():

@@ -158,7 +158,7 @@ class LATTENodeClassifier(NodeClfMetrics):
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
-class HGT(HGTModel, pl.LightningModule):
+class HGT(HGTModel, NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         super(HGT, self).__init__(
             in_dim=dataset.in_features,
@@ -168,9 +168,9 @@ class HGT(HGTModel, pl.LightningModule):
             num_relations=len(dataset.edge_index_dict),
             n_heads=hparams.attn_heads,
             dropout=hparams.attn_dropout,
-            prev_norm=True,
-            last_norm=True,
-            use_RTE=False)
+            prev_norm=hparams.prev_norm,
+            last_norm=hparams.last_norm,
+            use_RTE=False, hparams=hparams, dataset=dataset, metrics=metrics)
 
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
@@ -182,17 +182,12 @@ class HGT(HGTModel, pl.LightningModule):
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
 
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
-        hparams.name = self.name()
-        hparams.inductive = dataset.inductive
-        self.hparams = hparams
-
         self.collate_fn = hparams.collate_fn
+
+        hparams.inductive = dataset.inductive
+        hparams.n_params = self.get_n_params()
+        self.hparams = hparams
+        self.dataset = dataset
 
     def name(self):
         if hasattr(self, "_name"):
@@ -201,7 +196,7 @@ class HGT(HGTModel, pl.LightningModule):
             return self.__class__.__name__
 
     def forward(self, X):
-        return super().forward(node_feature=X["node_feature"],
+        return super().forward(node_feature=X["node_inp"],
                                node_type=X["node_type"],
                                edge_time=X["edge_time"],
                                edge_index=X["edge_index"],
@@ -216,19 +211,17 @@ class HGT(HGTModel, pl.LightningModule):
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.train_metrics.update_metrics(y_hat, y, weights=None)
-        loss = self.loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
         return {'loss': loss}
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-
         embeddings = self.forward(X)
-
         nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
         y_hat = self.classifier.forward(embeddings[nids])
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"val_loss": loss}
@@ -241,42 +234,10 @@ class HGT(HGTModel, pl.LightningModule):
         y_hat = self.classifier.forward(embeddings[nids])
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.loss(y_hat, y)
+        loss = self.criterion(y_hat, y)
         self.test_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"test_loss": loss}
-
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.train_metrics.compute_metrics()
-        # logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
-
-        logs.update({"loss": avg_loss})
-        self.train_metrics.reset_metrics()
-        return {"log": logs}
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.valid_metrics.compute_metrics()
-        # logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
-        # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
-
-        logs.update({"val_loss": avg_loss})
-        self.valid_metrics.reset_metrics()
-        return {"progress_bar": logs,
-                "log": logs}
-
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
-        if hasattr(self, "test_metrics"):
-            logs = self.test_metrics.compute_metrics()
-            self.test_metrics.reset_metrics()
-        else:
-            logs = {}
-        logs.update({"test_loss": avg_loss})
-
-        return {"progress_bar": logs,
-                "log": logs}
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
@@ -290,7 +251,7 @@ class HGT(HGTModel, pl.LightningModule):
                                                 num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
@@ -302,9 +263,12 @@ class HGT(HGTModel, pl.LightningModule):
 
         optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06)
         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, pct_start=0.05, anneal_strategy='linear',
-                                                        final_div_factor=10, max_lr=5e-4, )
+                                                        final_div_factor=10, max_lr=5e-4,
+                                                        epochs=self.hparams.n_epoch,
+                                                        steps_per_epoch=int(np.ceil(self.dataset.training_idx.shape[
+                                                                                        0] / self.hparams.batch_size)))
 
-        return {"optimizer": optimizer, "scheduler": scheduler}
+        return {"optimizer": optimizer, "scheduler": scheduler, "monitor": "val_loss"}
 
 
 class GTN(Gtn, pl.LightningModule):
@@ -335,14 +299,16 @@ class GTN(Gtn, pl.LightningModule):
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
-        hparams.n_params = self.get_n_params()
+
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
+
         hparams.name = self.name()
+        hparams.n_params = self.get_n_params()
         hparams.inductive = dataset.inductive
         self.hparams = hparams
 

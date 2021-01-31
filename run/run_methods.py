@@ -11,7 +11,7 @@ from pytorch_lightning.trainer import Trainer
 
 from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.module.PyG.node_clf import MetaPath2Vec, HAN, GTN, LATTENodeClassifier
+from moge.module.PyG.node_clf import MetaPath2Vec, HAN, GTN, HGT, LATTENodeClassifier
 from pytorch_lightning.loggers import WandbLogger
 
 from run.utils import load_node_dataset
@@ -19,6 +19,7 @@ from run.utils import load_node_dataset
 def train(hparams):
     EMBEDDING_DIM = 128
     NUM_GPUS = hparams.num_gpus
+    MAX_EPOCHS = 250
     batch_order = 11
 
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio)
@@ -52,6 +53,7 @@ def train(hparams):
             "lr": 0.0005 * NUM_GPUS,
         }
         model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
+
     elif hparams.method == "MetaPath2Vec":
         USE_AMP = True
         model_hparams = {
@@ -67,6 +69,28 @@ def train(hparams):
             "lr": 0.01 * NUM_GPUS,
         }
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
+
+    elif hparams.method == "HGT":
+        hparams = {
+            "embedding_dim": EMBEDDING_DIM,
+            "num_channels": len(dataset.metapaths),
+            "n_layers": 4,
+            "attn_heads": 8,
+            "attn_dropout": 0.2,
+            "prev_norm": True,
+            "last_norm": True,
+            "nb_cls_dense_size": 0, "nb_cls_dropout": 0.0,
+            "use_class_weights": False,
+            "batch_size": 2 ** batch_order,
+            "n_epoch": MAX_EPOCHS,
+            "train_ratio": dataset.train_ratio,
+            "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "n_classes": dataset.n_classes,
+            "collate_fn": "collate_HGT_batch",
+            "lr": 0.001,
+        }
+        model = HGT(Namespace(**hparams), dataset, metrics=METRICS)
+
     elif "LATTE" in hparams.method:
         USE_AMP = False
         num_gpus = 1
@@ -105,7 +129,6 @@ def train(hparams):
 
         model = LATTENodeClassifier(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
 
-    MAX_EPOCHS = 250
     wandb_logger = WandbLogger(name=model.name(),
                                tags=[dataset.name()],
                                project="multiplex-comparison")
