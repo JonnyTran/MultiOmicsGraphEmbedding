@@ -27,7 +27,7 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
     return clustering_metrics(y_true, y_pred, metrics)
 
 
-def clustering_metrics(y_true, y_pred, metrics):
+def clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi"]):
     results = {}
     for metric in metrics:
         if metric == "homogeneity":

@@ -3,24 +3,31 @@ import itertools, logging
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning import LightningModule
 
 from moge.module.metrics import Metrics
 from moge.evaluation.clustering import clustering_metrics
-from moge.module.utils import tensor_sizes
+from moge.module.utils import tensor_sizes, preprocess_input
 
-class NodeClfMetrics(pl.LightningModule):
-    def __init__(self, hparams, dataset, metrics, *args):
-        super().__init__(*args)
 
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
-        hparams.name = self.name()
-        hparams.inductive = dataset.inductive
-        self.hparams = hparams
+class ClusteringMetrics(LightningModule):
+    def save_embedding(self, module, inputs, output):
+        if self.training:
+            return
+
+        if module.__name__ in ["embedder"]:
+            logging.info(
+                f"save_embedding @ {module.__name__}")
+            self._embeddings = output
+
+    def save_pred(self, module, inputs, output):
+        if self.training:
+            return
+
+        if module.__name__ in ["classifier"]:
+            logging.info(
+                f"save_pred @ {module.__name__}, output {tensor_sizes(output)}")
+            self._y_pred = output
 
     def register_hooks(self):
         # Register a hook for embedding layer and classifier layer
@@ -39,23 +46,38 @@ class NodeClfMetrics(pl.LightningModule):
             print(layer.name())
             layer.register_forward_pre_hook(save_node_ids)
 
-    def save_embedding(self, module, inputs, output):
-        if self.training:
-            return
+    def trainvalidtest_dataloader(self):
+        return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
 
-        if module.__name__ in ["embedder"]:
-            logging.info(
-                f"save_embedding @ {module.__name__}")
-            self._embeddings = output
+    def clustering_metrics(self):
+        loader = self.trainvalidtest_dataloader()
+        X_all, y_all, _ = next(iter(loader))
 
-    def save_pred(self, module, inputs, output):
-        if self.training:
-            return
+        self.forward(preprocess_input(X_all, device=self.device))
 
-        if module.__name__ in ["classifier"]:
-            logging.info(
-                f"save_pred @ {module.__name__}, output {tensor_sizes(output)}")
-            self._y_pred = output
+        if not isinstance(self._embeddings, dict):
+            self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
+
+        logging.info(f"Embeddings {tensor_sizes(self._embeddings)}, node_ids {tensor_sizes(self._node_ids)}")
+        embeddings_all, types_all, labels = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
+
+        y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()))
+        return clustering_metrics(labels, y_pred, metrics=["homogeneity", "completeness", "nmi"])
+
+
+class NodeClfMetrics(ClusteringMetrics):
+    def __init__(self, hparams, dataset, metrics, *args):
+        super().__init__(*args)
+
+        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                    multilabel=dataset.multilabel, metrics=metrics)
+        hparams.name = self.name()
+        hparams.inductive = dataset.inductive
+        self.hparams = hparams
 
     def name(self):
         if hasattr(self, "_name"):
@@ -108,17 +130,6 @@ class NodeClfMetrics(pl.LightningModule):
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def clustering_metrics(self, dataset):
-        X_all, y_all, _ = dataset.sample(torch.hstack([dataset.training_idx,
-                                                       dataset.validation_idx,
-                                                       dataset.testing_idx]), mode="testing")
-
-        X_emb, _, _ = self.forward_emb(X_all["x_dict"], X_all["edge_index_dict"], X_all["global_node_index"])
-
-        embeddings_all, types_all, labels = dataset.get_embeddings_labels(X_emb, X["global_node_index"])
-
-        {k: v.shape for k, v in X_emb.items()}, embeddings_all.shape, y_pred.shape
 
     def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
         if multilabel:

@@ -1,3 +1,4 @@
+import logging
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -69,7 +70,7 @@ class Network:
         # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
         emb_df_list = []
         for ntype in self.node_types:
-            nid = global_node_index[ntype].numpy().astype(str)
+            nid = global_node_index[ntype].cpu().numpy().astype(str)
             n_type_id = np.core.defchararray.add(ntype[0], nid)
 
             if isinstance(h_dict[ntype], torch.Tensor):
@@ -97,6 +98,7 @@ class Network:
 
     def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False):
         kmeans = KMeans(n_clusters, n_jobs=n_jobs)
+        logging.info(f"Kmeans with k={n_clusters}")
         y_pred = kmeans.fit_predict(self.embeddings)
         if save_kmeans:
             self.kmeans = kmeans
@@ -409,6 +411,15 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
     def valtrain_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         loader = data.DataLoader(torch.cat([self.training_idx, self.validation_idx]), batch_size=batch_size,
+                                 shuffle=True, num_workers=num_workers,
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        mode="validation",
+                                                                                                        **kwargs))
+        return loader
+
+    def trainvalidtest_dataloader(self, collate_fn=None, batch_size=None, num_workers=12, **kwargs):
+        all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
+        loader = data.DataLoader(all_idx, batch_size=all_idx.shape[0],
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         mode="validation",
