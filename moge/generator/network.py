@@ -176,6 +176,11 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if not hasattr(self, "x_dict") or len(self.x_dict) == 0:
             self.x_dict = {}
 
+        if hasattr(self, "node_attr_shape"):
+            node_feat_sizes = np.unique(list(self.node_attr_shape.values()))
+            if len(node_feat_sizes) == 1:
+                self.in_features = node_feat_sizes[0]
+
         if resample_train is not None and resample_train > 0:
             self.resample_training_idx(resample_train)
         else:
@@ -495,9 +500,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
 
         X = {}
-        X["node_inp"] = torch.vstack([self.data["x"][X_batch["global_node_index"][ntype]] \
-                                      for ntype in self.node_types])
-        X["node_type"] = torch.hstack([nid * torch.ones((X_batch["global_node_index"][ntype].shape[0],), dtype=int) \
+        X["node_inp"] = torch.vstack([X_batch["x_dict"][ntype] for ntype in self.node_types])
+        X["node_type"] = torch.hstack([nid * torch.ones((X_batch["x_dict"][ntype].shape[0],), dtype=int) \
                                        for nid, ntype in enumerate(self.node_types)])
         assert X["node_inp"].shape[0] == X["node_type"].shape[0]
 
