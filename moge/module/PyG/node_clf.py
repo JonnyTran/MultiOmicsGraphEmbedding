@@ -55,10 +55,13 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             multilabel=dataset.multilabel)
         self.hparams.n_params = self.get_n_params()
 
-    def forward(self, input: dict, **kwargs):
-        embeddings, proximity_loss, _ = self.embedder.forward(X=input["x_dict"],
-                                                              edge_index_dict=input["edge_index_dict"],
-                                                              global_node_idx=input["global_node_index"], **kwargs)
+    def forward(self, inputs: dict, **kwargs):
+        if not self.training:
+            self._node_ids = inputs["global_node_index"]
+
+        embeddings, proximity_loss, _ = self.embedder.forward(X=inputs["x_dict"],
+                                                              edge_index_dict=inputs["edge_index_dict"],
+                                                              global_node_idx=inputs["global_node_index"], **kwargs)
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 
@@ -175,6 +178,9 @@ class HGT(HGTModel, NodeClfMetrics):
             return self.__class__.__name__
 
     def forward(self, X):
+        if not self.training:
+            self._node_ids = X["global_node_index"]
+
         return super().forward(node_feature=X["node_inp"],
                                node_type=X["node_type"],
                                edge_time=X["edge_time"],
@@ -267,7 +273,12 @@ class GTN(Gtn, NodeClfMetrics):
         self.head_node_type = self.dataset.head_node_type
         self.hparams.n_params = self.get_n_params()
 
-    def forward(self, A, X, x_idx):
+    def forward(self, inputs):
+        A, X, x_idx = inputs["adj"], inputs["x"], inputs["idx"]
+
+        if not self.training:
+            self._node_ids = inputs["global_node_index"]
+
         if X is None:
             if isinstance(self.embedding, dict):
                 X = self.embedding[self.head_node_type].weight[x_idx].to(self.layers[0].device)
@@ -311,7 +322,7 @@ class GTN(Gtn, NodeClfMetrics):
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.train_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
@@ -320,7 +331,7 @@ class GTN(Gtn, NodeClfMetrics):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
 
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
@@ -329,7 +340,7 @@ class GTN(Gtn, NodeClfMetrics):
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
         self.test_metrics.update_metrics(y_hat, y, weights=None)
@@ -370,9 +381,11 @@ class HAN(Han, NodeClfMetrics):
         self.head_node_type = self.dataset.head_node_type
         self.hparams.n_params = self.get_n_params()
 
+    def forward(self, inputs):
+        A, X, x_idx = inputs["adj"], inputs["x"], inputs["idx"]
 
-    def forward(self, A, X, x_idx):
-        self._node_ids =
+        if not self.training:
+            self._node_ids = inputs["global_node_index"]
 
         if X is None:
             if isinstance(self.embedding, dict):
@@ -400,7 +413,7 @@ class HAN(Han, NodeClfMetrics):
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.train_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
@@ -408,7 +421,7 @@ class HAN(Han, NodeClfMetrics):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
@@ -417,7 +430,7 @@ class HAN(Han, NodeClfMetrics):
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.test_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)

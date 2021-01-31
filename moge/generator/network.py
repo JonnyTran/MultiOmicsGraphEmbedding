@@ -502,6 +502,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         X["adj"] = [edge for edge in X["adj"] if edge[0].size(1) > 0]
 
+        X["global_node_index"] = torch.arange(X["x"].shape[0])
+
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
 
