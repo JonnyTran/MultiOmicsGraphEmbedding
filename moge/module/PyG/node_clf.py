@@ -325,7 +325,8 @@ class GTN(Gtn, pl.LightningModule):
 
         logs.update({"loss": avg_loss})
         self.train_metrics.reset_metrics()
-        return {"log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
@@ -335,8 +336,8 @@ class GTN(Gtn, pl.LightningModule):
 
         logs.update({"val_loss": avg_loss})
         self.valid_metrics.reset_metrics()
-        return {"progress_bar": logs,
-                "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
@@ -347,8 +348,8 @@ class GTN(Gtn, pl.LightningModule):
             logs = {}
         logs.update({"test_loss": avg_loss})
 
-        return {"progress_bar": logs,
-                "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
         if multilabel:
@@ -514,7 +515,8 @@ class HAN(Han, pl.LightningModule):
 
         logs.update({"loss": avg_loss})
         self.train_metrics.reset_metrics()
-        return {"log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
@@ -524,8 +526,8 @@ class HAN(Han, pl.LightningModule):
 
         logs.update({"val_loss": avg_loss})
         self.valid_metrics.reset_metrics()
-        return {"progress_bar": logs,
-                "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
@@ -536,8 +538,8 @@ class HAN(Han, pl.LightningModule):
             logs = {}
         logs.update({"test_loss": avg_loss})
 
-        return {"progress_bar": logs,
-                "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
         if multilabel:
@@ -714,21 +716,24 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         else:
             results = {}
 
-        return {"progress_bar": results,
-                "log": {"loss": avg_loss, **results}}
+        logs = {"val_loss": avg_loss, **results}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
         logs = {"val_loss": avg_loss}
         if self.current_epoch % 5 == 0:
             logs.update({"val_" + k: v for k, v in self.classification_results(training=False).items()})
-        return {"progress_bar": logs, "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
         logs = {"test_loss": avg_loss}
         logs.update({"test_" + k: v for k, v in self.classification_results(training=False, testing=True).items()})
-        return {"progress_bar": logs, "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def classification_results(self, training=True, testing=False):
         if training:

@@ -28,11 +28,6 @@ class Network:
 
         return self.G
 
-    def get_projection_pos(self, embeddings_all, UMAP: classmethod, n_components=2):
-        pos = UMAP(n_components=n_components).fit_transform(embeddings_all)
-        pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
-        return pos
-
     def get_node_degrees(self, directed=True):
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
@@ -60,32 +55,43 @@ class Network:
 
         return self.node_degrees
 
-    def get_embedding_dfs(self, embeddings_dict, global_node_index):
-        embeddings = []
-        for node_type in self.node_types:
-            nodes = global_node_index[node_type].numpy().astype(str)
-            nodes = np.core.defchararray.add(node_type[0], nodes)
-            if isinstance(embeddings_dict[node_type], torch.Tensor):
-                df = pd.DataFrame(embeddings_dict[node_type].detach().cpu().numpy(), index=nodes)
+    def get_projection_pos(self, embeddings_all, UMAP: classmethod, n_components=2):
+        pos = UMAP(n_components=n_components).fit_transform(embeddings_all)
+        pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
+        return pos
+
+    def get_embeddings_labels(self, h_dict: dict, global_node_index: dict, cache=True):
+        if hasattr(self, "embeddings") and hasattr(self, "ntypes") and hasattr(self, "labels") and cache:
+            return self.embeddings, self.ntypes, self.labels
+
+        # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
+        emb_df_list = []
+        for ntype in self.node_types:
+            nid = global_node_index[ntype].numpy().astype(str)
+            n_type_id = np.core.defchararray.add(ntype[0], nid)
+
+            if isinstance(h_dict[ntype], torch.Tensor):
+                df = pd.DataFrame(h_dict[ntype].detach().cpu().numpy(), index=n_type_id)
             else:
-                df = pd.DataFrame(embeddings_dict[node_type], index=nodes)
-            embeddings.append(df)
+                df = pd.DataFrame(h_dict[ntype], index=n_type_id)
+            emb_df_list.append(df)
 
-        return embeddings
+        embeddings = pd.concat(emb_df_list, axis=0)
+        ntypes = embeddings.index.to_series().str.slice(0, 1)
 
-    def get_embeddings_types_labels(self, embeddings, global_node_index):
-        embeddings_all = pd.concat(embeddings, axis=0)
-        node_type = embeddings_all.index.to_series().str.slice(0, 1)
-
+        # Build vector of labels for all node types
         if hasattr(self, "y_dict") and len(self.y_dict) > 0:
             labels = pd.Series(
                 self.y_dict[self.head_node_type][global_node_index[self.head_node_type]].squeeze(-1).numpy(),
-                index=embeddings[0].index,
+                index=emb_df_list[0].index,
                 dtype=str)
         else:
             labels = None
 
-        return embeddings_all, node_type, labels
+        # Save result for "cache"
+        self.embeddings, self.ntypes, self.labels = embeddings, ntypes, labels
+
+        return embeddings, ntypes, labels
 
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):

@@ -18,6 +18,7 @@ from run.utils import load_node_dataset
 
 def train(hparams):
     EMBEDDING_DIM = 128
+    USE_AMP = None
     NUM_GPUS = hparams.num_gpus
     MAX_EPOCHS = 250
     batch_order = 11
@@ -71,10 +72,11 @@ def train(hparams):
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
 
     elif hparams.method == "HGT":
+        USE_AMP = False
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
             "num_channels": len(dataset.metapaths),
-            "n_layers": 4,
+            "n_layers": 2,
             "attn_heads": 8,
             "attn_dropout": 0.2,
             "prev_norm": True,
@@ -87,7 +89,7 @@ def train(hparams):
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "collate_fn": "collate_HGT_batch",
-            "lr": 0.001,
+            "lr": 0.001,  # Not used
         }
         model = HGT(Namespace(**model_hparams), dataset, metrics=METRICS)
 
@@ -145,8 +147,8 @@ def train(hparams):
         precision=16 if USE_AMP else 32
     )
 
-    # trainer.fit(model)
-    trainer.fit(model, train_dataloader=model.valtrain_dataloader(), val_dataloaders=model.test_dataloader())
+    trainer.fit(model)
+    # trainer.fit(model, train_dataloader=model.valtrain_dataloader(), val_dataloaders=model.test_dataloader())
     trainer.test(model)
 
 
