@@ -20,7 +20,7 @@ def train(hparams):
     EMBEDDING_DIM = 128
     USE_AMP = None
     NUM_GPUS = hparams.num_gpus
-    MAX_EPOCHS = 250
+    MAX_EPOCHS = 1000
     batch_order = 11
 
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio)

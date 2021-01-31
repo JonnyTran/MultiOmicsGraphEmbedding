@@ -22,7 +22,7 @@ class NodeClfMetrics(pl.LightningModule):
         self.hparams = hparams
 
         # Register a hook for embedding layer
-        for name, layer in self.model.named_children():
+        for name, layer in self.named_children():
             layer.__name__ = name
             layer.register_forward_hook(self.save_embedding)
 
@@ -33,6 +33,7 @@ class NodeClfMetrics(pl.LightningModule):
         logging.info(f"save_embedding: {layer.__name__}, {input}, {output}")
         if layer.__name__ in ["HGTModel", "LATTE", "GTN", "HAN", "MetaPath2Vec"]:
             self.embeddings = output
+            self.input = input
 
     def name(self):
         if hasattr(self, "_name"):
