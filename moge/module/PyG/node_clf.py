@@ -35,12 +35,12 @@ class LATTENodeClassifier(NodeClfMetrics):
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
-                           in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-                           metapaths=dataset.get_metapaths(), activation=hparams.activation,
-                           attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-                           attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
-                           neg_sampling_ratio=hparams.neg_sampling_ratio)
+        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+                              in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
+                              metapaths=dataset.get_metapaths(), activation=hparams.activation,
+                              attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
+                              attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
+                              neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
         self.classifier = DenseClassification(hparams)
@@ -55,8 +55,9 @@ class LATTENodeClassifier(NodeClfMetrics):
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, input: dict, **kwargs):
-        embeddings, proximity_loss, _ = self.latte.forward(X=input["x_dict"], edge_index_dict=input["edge_index_dict"],
-                                                           global_node_idx=input["global_node_index"], **kwargs)
+        embeddings, proximity_loss, _ = self.embedder.forward(X=input["x_dict"],
+                                                              edge_index_dict=input["edge_index_dict"],
+                                                              global_node_idx=input["global_node_index"], **kwargs)
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 

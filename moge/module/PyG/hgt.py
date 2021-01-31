@@ -31,9 +31,9 @@ class HGTModel(nn.Module):
             self.layers.append(
                 HGTConv(n_hid, n_hid, num_types, num_relations, n_heads, dropout, use_norm=prev_norm,
                         use_RTE=use_RTE))
-        self.layers.append(
-            HGTConv(n_hid, n_hid, num_types, num_relations, n_heads, dropout, use_norm=last_norm,
-                    use_RTE=use_RTE))
+
+        self.embedder = HGTConv(n_hid, n_hid, num_types, num_relations, n_heads, dropout, use_norm=last_norm,
+                                use_RTE=use_RTE)
 
     def forward(self, node_feature, node_type, edge_time, edge_index, edge_type):
         encodings = torch.zeros(node_feature.size(0), self.n_hid).type_as(node_feature)
@@ -47,6 +47,8 @@ class HGTModel(nn.Module):
 
         for layer in self.layers:
             hidden = layer.forward(hidden, node_type, edge_index, edge_type, edge_time)
+
+        hidden = self.embedder.forward(hidden, node_type, edge_index, edge_type, edge_time)
 
         return hidden
 

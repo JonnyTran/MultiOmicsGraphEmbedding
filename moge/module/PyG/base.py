@@ -6,6 +6,7 @@ import torch
 
 from moge.module.metrics import Metrics
 from moge.evaluation.clustering import clustering_metrics
+from moge.module.utils import tensor_sizes
 
 class NodeClfMetrics(pl.LightningModule):
     def __init__(self, hparams, dataset, metrics, *args):
@@ -21,17 +22,19 @@ class NodeClfMetrics(pl.LightningModule):
         hparams.inductive = dataset.inductive
         self.hparams = hparams
 
+    def register_hooks(self):
         # Register a hook for embedding layer
         for name, layer in self.named_children():
             layer.__name__ = name
+            print(layer.__name__)
             layer.register_forward_hook(self.save_embedding)
 
     def save_embedding(self, layer, input, output):
         if self.training:
             return
 
-        logging.info(f"save_embedding: {layer.__name__}, {input}, {output}")
-        if layer.__name__ in ["HGTModel", "LATTE", "GTN", "HAN", "MetaPath2Vec"]:
+        logging.info(f"save_embedding: {layer.__name__}, input {tensor_sizes(input)}, output {tensor_sizes(output)}")
+        if layer.__name__ in ["embedder"]:
             self.embeddings = output
             self.input = input
 
