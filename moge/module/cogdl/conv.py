@@ -252,19 +252,23 @@ class HAN(BaseModel):
         self.num_class = num_class
         self.num_layers = num_layers
         layers = []
-        for i in range(num_layers):
+        for i in range(num_layers - 1):
             if i == 0:
                 layers.append(HANLayer(num_edge, w_in, w_out))
             else:
                 layers.append(HANLayer(num_edge, w_out, w_out))
 
         self.layers = nn.ModuleList(layers)
+        self.embedder = HANLayer(num_edge, w_out, w_out)
+
         self.cross_entropy_loss = nn.CrossEntropyLoss()
         self.classifier = nn.Linear(self.w_out, self.num_class)
 
     def forward(self, A, X, target_x, target):
         for i in range(self.num_layers):
             X = self.layers[i](X, A)
+
+        X = self.embedder(X, A)
 
         y = self.classifier(X[target_x])
         loss = self.cross_entropy_loss(y, target)
