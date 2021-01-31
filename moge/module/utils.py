@@ -50,6 +50,9 @@ def preprocess_input(input, device, dtype=None, half=False):
 
 
 def process_tensor(input, device=None, dtype=None, half=False):
+    if input is None:
+        return input
+
     if not isinstance(input, torch.Tensor):
         input = torch.tensor(input)
 

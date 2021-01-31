@@ -149,6 +149,9 @@ def train(hparams):
 
     trainer.fit(model)
     # trainer.fit(model, train_dataloader=model.valtrain_dataloader(), val_dataloaders=model.test_dataloader())
+
+    model.register_hooks()
+
     trainer.test(model)
 
     wandb_logger.log_metrics(model.clustering_metrics())
