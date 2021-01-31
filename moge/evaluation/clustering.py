@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score, \
     adjusted_mutual_info_score
 
-
+@DeprecationWarning
 def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters=None,
                         metrics=["homogeneity", "completeness", "nmi"], max_clusters=None, delim="\||;"):
     if annotations.loc[nodelist, node_label].dtypes == np.object \
@@ -24,6 +24,10 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
     except AttributeError as e:
         return e
 
+    return clustering_metrics(y_true, y_pred, metrics)
+
+
+def clustering_metrics(y_true, y_pred, metrics):
     results = {}
     for metric in metrics:
         if metric == "homogeneity":
@@ -34,7 +38,6 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
             results[metric] = normalized_mutual_info_score(y_true, y_pred, average_method="arithmetic")
         elif metric == "ami":
             results[metric] = adjusted_mutual_info_score(y_true, y_pred)
-
     return results
 
 

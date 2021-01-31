@@ -11,6 +11,8 @@ from scipy.io import loadmat
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
 
+from sklearn.cluster import KMeans
+
 from moge.module.PyG.latte import is_negative
 
 
@@ -92,6 +94,15 @@ class Network:
         self.embeddings, self.ntypes, self.labels = embeddings, ntypes, labels
 
         return embeddings, ntypes, labels
+
+    def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False):
+        kmeans = KMeans(n_clusters, n_jobs=n_jobs)
+        y_pred = kmeans.fit_predict(self.embeddings)
+        if save_kmeans:
+            self.kmeans = kmeans
+
+        y_pred = pd.Series(y_pred, index=self.embeddings.index, dtype=str)
+        return y_pred
 
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):

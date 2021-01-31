@@ -1,11 +1,11 @@
-import itertools
+import itertools, logging
 
 import pandas as pd
 import pytorch_lightning as pl
 import torch
 
 from moge.module.metrics import Metrics
-
+from moge.evaluation.clustering import clustering_metrics
 
 class NodeClfMetrics(pl.LightningModule):
     def __init__(self, hparams, dataset, metrics, *args):
@@ -20,6 +20,19 @@ class NodeClfMetrics(pl.LightningModule):
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
         self.hparams = hparams
+
+        # Register a hook for embedding layer
+        for name, layer in self.model.named_children():
+            layer.__name__ = name
+            layer.register_forward_hook(self.save_embedding)
+
+    def save_embedding(self, layer, input, output):
+        if self.training:
+            return
+
+        logging.info(f"save_embedding: {layer.__name__}, {input}, {output}")
+        if layer.__name__ in ["HGTModel", "LATTE", "GTN", "HAN", "MetaPath2Vec"]:
+            self.embeddings = output
 
     def name(self):
         if hasattr(self, "_name"):
@@ -59,6 +72,17 @@ class NodeClfMetrics(pl.LightningModule):
 
         self.log_dict(logs, prog_bar=logs)
         return None
+
+    def clustering_metrics(self, dataset):
+        X_all, y_all, _ = dataset.sample(torch.hstack([dataset.training_idx,
+                                                       dataset.validation_idx,
+                                                       dataset.testing_idx]), mode="testing")
+
+        X_emb, _, _ = self.forward_emb(X_all["x_dict"], X_all["edge_index_dict"], X_all["global_node_index"])
+
+        embeddings_all, types_all, labels = dataset.get_embeddings_labels(X_emb, X["global_node_index"])
+
+        {k: v.shape for k, v in X_emb.items()}, embeddings_all.shape, y_pred.shape
 
     def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
         if multilabel:
