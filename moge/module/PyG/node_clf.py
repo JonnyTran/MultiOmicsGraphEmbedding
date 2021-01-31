@@ -160,8 +160,8 @@ class LATTENodeClassifier(NodeClfMetrics):
 class HGT(HGTConv, pl.LightningModule):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         super(HGT, self).__init__(
-            in_hid=dataset.in_features,
-            out_hid=hparams.embedding_dim,
+            in_dim=dataset.in_features,
+            out_dim=hparams.embedding_dim,
             num_types=len(dataset.node_types),
             num_relations=len(dataset.edge_index_dict),
             n_heads=hparams.attn_heads,
@@ -169,8 +169,86 @@ class HGT(HGTConv, pl.LightningModule):
             use_norm=True,
             use_RTE=False)
 
+        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                    multilabel=dataset.multilabel, metrics=metrics)
+        hparams.name = self.name()
+        hparams.inductive = dataset.inductive
+        self.hparams = hparams
+
+        self.collate_fn = hparams.collate_fn
+
+    def name(self):
+        if hasattr(self, "_name"):
+            return self._name
+        else:
+            return self.__class__.__name__
+
     def forward(self, node_inp, node_type, edge_index, edge_type, edge_time):
-        return self.base_conv(node_inp, node_type, edge_index, edge_type, edge_time)
+        return self.forward(meta_xs, node_type, edge_index, edge_type, edge_time)
+
+    def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
+        logs = self.train_metrics.compute_metrics()
+        # logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
+
+        logs.update({"loss": avg_loss})
+        self.train_metrics.reset_metrics()
+        return {"log": logs}
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
+        logs = self.valid_metrics.compute_metrics()
+        # logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
+        # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
+
+        logs.update({"val_loss": avg_loss})
+        self.valid_metrics.reset_metrics()
+        return {"progress_bar": logs,
+                "log": logs}
+
+    def test_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
+        if hasattr(self, "test_metrics"):
+            logs = self.test_metrics.compute_metrics()
+            self.test_metrics.reset_metrics()
+        else:
+            logs = {}
+        logs.update({"test_loss": avg_loss})
+
+        return {"progress_bar": logs,
+                "log": logs}
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size,
+                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+
+    def test_dataloader(self):
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def configure_optimizers(self):
+        param_optimizer = list(self.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, pct_start=0.05, anneal_strategy='linear',
+                                                        final_div_factor=10, max_lr=5e-4, )
+
+        return {"optimizer": optimizer. "scheduler": scheduler}
 
 
 class GTN(Gtn, pl.LightningModule):
