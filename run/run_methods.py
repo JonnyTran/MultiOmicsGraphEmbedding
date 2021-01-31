@@ -71,7 +71,7 @@ def train(hparams):
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
 
     elif hparams.method == "HGT":
-        hparams = {
+        model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
             "num_channels": len(dataset.metapaths),
             "n_layers": 4,
@@ -89,7 +89,7 @@ def train(hparams):
             "collate_fn": "collate_HGT_batch",
             "lr": 0.001,
         }
-        model = HGT(Namespace(**hparams), dataset, metrics=METRICS)
+        model = HGT(Namespace(**model_hparams), dataset, metrics=METRICS)
 
     elif "LATTE" in hparams.method:
         USE_AMP = False
