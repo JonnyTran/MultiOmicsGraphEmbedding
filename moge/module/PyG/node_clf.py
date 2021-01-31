@@ -6,14 +6,15 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 from cogdl.models.emb.hin2vec import Hin2vec, Hin2vec_layer, RWgraph, tqdm
-from cogdl.models.nn.pyg_gtn import GTN as Gtn
-from cogdl.models.nn.pyg_han import HAN as Han
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+
+from moge.module.cogdl.conv import GTN as Gtn
+from moge.module.cogdl.conv import HAN as Han
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
@@ -120,26 +121,6 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         return {"test_loss": test_loss}
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=int(0.4 * multiprocessing.cpu_count()))
-
-    def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size,
-                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
-    def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size,
-                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
         no_decay = ['bias', 'alpha_activation']
@@ -184,11 +165,8 @@ class HGT(HGTModel, NodeClfMetrics):
                                             multilabel=dataset.multilabel)
 
         self.collate_fn = hparams.collate_fn
-
-        hparams.inductive = dataset.inductive
-        hparams.n_params = self.get_n_params()
-        self.hparams = hparams
         self.dataset = dataset
+        self.hparams.n_params = self.get_n_params()
 
     def name(self):
         if hasattr(self, "_name"):
@@ -240,20 +218,6 @@ class HGT(HGTModel, NodeClfMetrics):
 
         return {"test_loss": loss}
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size,
-                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
-    def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
         no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
@@ -272,7 +236,7 @@ class HGT(HGTModel, NodeClfMetrics):
         return {"optimizer": optimizer, "scheduler": scheduler, "monitor": "val_loss"}
 
 
-class GTN(Gtn, pl.LightningModule):
+class GTN(Gtn, NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = hparams.num_layers
@@ -289,7 +253,8 @@ class GTN(Gtn, pl.LightningModule):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super(GTN, self).__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
+        super(GTN, self).__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers,
+                                  hparams=hparams, dataset=dataset, metrics=metrics)
 
         if not hasattr(dataset, "x") and not hasattr(dataset, "x_dict"):
             if num_nodes > 10000:
@@ -300,82 +265,7 @@ class GTN(Gtn, pl.LightningModule):
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
-
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
-
-        hparams.name = self.name()
-        hparams.n_params = self.get_n_params()
-        hparams.inductive = dataset.inductive
-        self.hparams = hparams
-
-    def name(self):
-        if hasattr(self, "_name"):
-            return self._name
-        else:
-            return self.__class__.__name__
-
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.train_metrics.compute_metrics()
-        # logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
-
-        logs.update({"loss": avg_loss})
-        self.train_metrics.reset_metrics()
-        self.log_dict(logs, prog_bar=logs)
-        return None
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.valid_metrics.compute_metrics()
-        # logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
-        # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
-
-        logs.update({"val_loss": avg_loss})
-        self.valid_metrics.reset_metrics()
-        self.log_dict(logs, prog_bar=logs)
-        return None
-
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
-        if hasattr(self, "test_metrics"):
-            logs = self.test_metrics.compute_metrics()
-            self.test_metrics.reset_metrics()
-        else:
-            logs = {}
-        logs.update({"test_loss": avg_loss})
-
-        self.log_dict(logs, prog_bar=logs)
-        return None
-
-    def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
-        if multilabel:
-            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-        else:
-            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-
-    def get_n_params(self):
-        size = 0
-        for name, param in dict(self.named_parameters()).items():
-            nn = 1
-            for s in list(param.size()):
-                nn = nn * s
-            size += nn
-        return size
+        self.hparams.n_params = self.get_n_params()
 
     def forward(self, A, X, x_idx):
         if X is None:
@@ -401,13 +291,13 @@ class GTN(Gtn, pl.LightningModule):
                 edge_index, edge_weight = H[i][0], H[i][1]
                 X_ = torch.cat((X_, F.relu(self.gcn(X, edge_index=edge_index.detach(), edge_weight=edge_weight))),
                                dim=1)
-        X_ = self.linear1(X_)
+        X_ = self.embedder(X_)
         X_ = F.relu(X_)
         # X_ = F.dropout(X_, p=0.5)
         if x_idx is not None and X_.size(0) > x_idx.size(0):
-            y = self.linear2(X_[x_idx])
+            y = self.classifier(X_[x_idx])
         else:
-            y = self.linear2(X_)
+            y = self.classifier(X_)
 
         return y
 
@@ -446,25 +336,11 @@ class GTN(Gtn, pl.LightningModule):
 
         return {"test_loss": loss}
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size,
-                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
-    def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class HAN(Han, pl.LightningModule):
+class HAN(Han, NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = hparams.num_layers
@@ -480,8 +356,8 @@ class HAN(Han, pl.LightningModule):
 
         w_out = hparams.embedding_dim
 
-        super(HAN, self).__init__(num_edge=num_edge, w_in=w_in, w_out=w_out, num_class=num_class,
-                                  num_nodes=num_nodes, num_layers=num_layers)
+        super(HAN, self).__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers,
+                                  hparams=hparams, dataset=dataset, metrics=metrics)
 
         if not hasattr(dataset, "x") and not hasattr(dataset, "x_dict"):
             if num_nodes > 10000:
@@ -492,82 +368,8 @@ class HAN(Han, pl.LightningModule):
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
+        self.hparams.n_params = self.get_n_params()
 
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
-
-        hparams.name = self.name()
-        hparams.n_params = self.get_n_params()
-        hparams.inductive = dataset.inductive
-        self.hparams = hparams
-
-    def name(self):
-        if hasattr(self, "_name"):
-            return self._name
-        else:
-            return self.__class__.__name__
-
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.train_metrics.compute_metrics()
-        # logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
-
-        logs.update({"loss": avg_loss})
-        self.train_metrics.reset_metrics()
-        self.log_dict(logs, prog_bar=logs)
-        return None
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.valid_metrics.compute_metrics()
-        # logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
-        # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
-
-        logs.update({"val_loss": avg_loss})
-        self.valid_metrics.reset_metrics()
-        self.log_dict(logs, prog_bar=logs)
-        return None
-
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
-        if hasattr(self, "test_metrics"):
-            logs = self.test_metrics.compute_metrics()
-            self.test_metrics.reset_metrics()
-        else:
-            logs = {}
-        logs.update({"test_loss": avg_loss})
-
-        self.log_dict(logs, prog_bar=logs)
-        return None
-
-    def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
-        if multilabel:
-            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-        else:
-            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-
-    def get_n_params(self):
-        size = 0
-        for name, param in dict(self.named_parameters()).items():
-            nn = 1
-            for s in list(param.size()):
-                nn = nn * s
-            size += nn
-        return size
 
     def forward(self, A, X, x_idx):
         if X is None:
@@ -617,19 +419,6 @@ class HAN(Han, pl.LightningModule):
         loss = self.loss(y_hat, y)
 
         return {"test_loss": loss}
-
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size)
-
-    def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -826,23 +615,11 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             walks.append(rw[:, j:j + self.context_size])
         return torch.cat(walks, dim=0)
 
-    def sample(self, batch):
+    def collate_fn(self, batch):
         if not isinstance(batch, torch.Tensor):
             batch = torch.tensor(batch)
         return self.pos_sample(batch), self.neg_sample(batch)
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
-
-    def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.sample,
-                                                batch_size=self.hparams.batch_size)
-
-    def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         if self.sparse:

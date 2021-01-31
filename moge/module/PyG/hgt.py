@@ -46,9 +46,9 @@ class HGTModel(nn.Module):
         del encodings
 
         for layer in self.layers:
-            hidden = layer.forward(hidden, node_type, edge_index, edge_type, edge_time)
+            hidden = layer(hidden, node_type, edge_index, edge_type, edge_time)
 
-        hidden = self.embedder.forward(hidden, node_type, edge_index, edge_type, edge_time)
+        hidden = self.embedder(hidden, node_type, edge_index, edge_type, edge_time)
 
         return hidden
 

@@ -26,17 +26,28 @@ class NodeClfMetrics(pl.LightningModule):
         # Register a hook for embedding layer
         for name, layer in self.named_children():
             layer.__name__ = name
-            print(layer.__name__)
+            print(name)
             layer.register_forward_hook(self.save_embedding)
+            layer.register_forward_hook(self.save_pred)
 
-    def save_embedding(self, layer, input, output):
+    def save_embedding(self, module, inputs, output):
         if self.training:
             return
 
-        logging.info(f"save_embedding: {layer.__name__}, input {tensor_sizes(input)}, output {tensor_sizes(output)}")
-        if layer.__name__ in ["embedder"]:
-            self.embeddings = output
-            self.input = input
+        if module.__name__ in ["embedder"]:
+            logging.info(
+                f"Saved to _embeddings and _inputs @ {module.__name__}, input {tensor_sizes(inputs)}, output {tensor_sizes(output)}")
+            self._embeddings = output
+            self._inputs = inputs
+
+    def save_pred(self, module, inputs, output):
+        if self.training:
+            return
+
+        if module.__name__ in ["classifier"]:
+            logging.info(
+                f"Saved to _y_pred @ {module.__name__}, input {tensor_sizes(inputs)}, output {tensor_sizes(output)}")
+            self._y_pred = output
 
     def name(self):
         if hasattr(self, "_name"):
@@ -76,6 +87,19 @@ class NodeClfMetrics(pl.LightningModule):
 
         self.log_dict(logs, prog_bar=logs)
         return None
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size)
+
+    def test_dataloader(self):
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def clustering_metrics(self, dataset):
         X_all, y_all, _ = dataset.sample(torch.hstack([dataset.training_idx,
