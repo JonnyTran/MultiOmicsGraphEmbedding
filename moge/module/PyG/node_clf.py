@@ -491,14 +491,16 @@ class HAN(Han, pl.LightningModule):
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
-        hparams.n_params = self.get_n_params()
+
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
+
         hparams.name = self.name()
+        hparams.n_params = self.get_n_params()
         hparams.inductive = dataset.inductive
         self.hparams = hparams
 

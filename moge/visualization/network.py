@@ -292,3 +292,12 @@ def match_labels(labels, nodelist, null_val=-1):
         assert labels.shape == nodelist.shape
 
     return labels
+
+
+def match_labels(labels, nodelist, null_val=-1):
+    # If nodelist is passed. select labels for nodes in nodelist, fill null_values if necessary
+    if nodelist is not None:
+        labels = nodelist.map(lambda x: labels.get(x, null_val))
+        assert labels.shape == nodelist.shape
+
+    return labels
