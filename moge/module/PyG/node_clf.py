@@ -1,5 +1,6 @@
 import itertools
 import multiprocessing
+import numpy as np
 
 import pandas as pd
 import pytorch_lightning as pl
@@ -16,7 +17,7 @@ from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
-from moge.module.PyG.hgt import HGTConv
+from moge.module.PyG.hgt import HGTModel, Graph, sample_subgraph
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.metrics import Metrics
@@ -157,16 +158,18 @@ class LATTENodeClassifier(NodeClfMetrics):
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
-class HGT(HGTConv, pl.LightningModule):
+class HGT(HGTModel, pl.LightningModule):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         super(HGT, self).__init__(
             in_dim=dataset.in_features,
-            out_dim=hparams.embedding_dim,
+            n_hid=hparams.embedding_dim,
+            n_layers=hparams.n_layers,
             num_types=len(dataset.node_types),
             num_relations=len(dataset.edge_index_dict),
             n_heads=hparams.attn_heads,
             dropout=hparams.attn_dropout,
-            use_norm=True,
+            prev_norm=True,
+            last_norm=True,
             use_RTE=False)
 
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
@@ -179,7 +182,7 @@ class HGT(HGTConv, pl.LightningModule):
         hparams.inductive = dataset.inductive
         self.hparams = hparams
 
-        self.collate_fn = hparams.collate_fn
+        # self.collate_fn = hparams.collate_fn
 
     def name(self):
         if hasattr(self, "_name"):
@@ -187,8 +190,28 @@ class HGT(HGTConv, pl.LightningModule):
         else:
             return self.__class__.__name__
 
-    def forward(self, node_inp, node_type, edge_index, edge_type, edge_time):
-        return self.forward(meta_xs, node_type, edge_index, edge_type, edge_time)
+    def forward(self, node_feature, node_type, edge_time, edge_index, edge_type):
+
+        return super().forward(node_feature, node_type, edge_time, edge_index, edge_type)
+
+    def sample(self, samp_nodes):
+        np.random.seed(self.seed)
+
+        ylabel = torch.LongTensor(graph.y[samp_nodes])
+        feature, times, edge_list, indxs, _ = sample_subgraph(graph, \
+                                                              inp={'paper': np.concatenate(
+                                                                  [samp_nodes, graph.years[samp_nodes]]).reshape(2,
+                                                                                                                 -1).transpose()}, \
+                                                              sampled_depth=args.sample_depth,
+                                                              sampled_number=args.sample_width, \
+                                                              feature_extractor=feature_MAG)
+        node_feature, node_type, edge_time, edge_index, edge_type, node_dict, edge_dict = \
+            to_torch(feature, times, edge_list, graph)
+        train_mask = graph.train_mask[indxs['paper']]
+        valid_mask = graph.valid_mask[indxs['paper']]
+        test_mask = graph.test_mask[indxs['paper']]
+        ylabel = graph.y[indxs['paper']]
+        return node_feature, node_type, edge_time, edge_index, edge_type, (train_mask, valid_mask, test_mask), ylabel
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
@@ -223,18 +246,18 @@ class HGT(HGTConv, pl.LightningModule):
                 "log": logs}
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+        return self.dataset.valtrain_dataloader(collate_fn=self.sample,
                                                 batch_size=self.hparams.batch_size,
                                                 num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
