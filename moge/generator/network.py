@@ -410,6 +410,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 return self.collate_HAN_batch(iloc, mode=mode)
             elif "HAN" in collate_fn:
                 return self.collate_HAN(iloc, mode=mode)
+            elif "collate_HGT_batch" in collate_fn:
+                return self.collate_HGT_batch(iloc, mode=mode)
             else:
                 raise Exception(f"Correct collate function {collate_fn} not found.")
 
@@ -486,6 +488,27 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                     for metapath in self.metapaths if metapath in X_batch["edge_index_dict"]]
         X["x"] = self.data["x"][X_batch["global_node_index"][self.head_node_type]]
         X["idx"] = X_batch["global_node_index"][self.head_node_type]
+
+        return X, y, weights
+
+    def collate_HGT_batch(self, iloc, mode=None):
+        X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
+
+        X = {}
+        X["node_inp"] = torch.vstack([self.data["x"][X_batch["global_node_index"][ntype]] \
+                                      for ntype in self.node_types])
+        X["node_type"] = torch.hstack([nid * torch.ones((X_batch["global_node_index"][ntype].shape[0],), dtype=int) \
+                                       for nid, ntype in enumerate(self.node_types)])
+        assert X["node_inp"].shape[0] == X["node_type"].shape[0]
+
+        X["edge_index"] = torch.hstack([X_batch["edge_index_dict"][metapath] \
+                                        for metapath in self.metapaths if metapath in X_batch["edge_index_dict"]])
+        X["edge_type"] = torch.hstack([eid * torch.ones(X_batch["edge_index_dict"][metapath].shape[1], dtype=int) \
+                                       for eid, metapath in enumerate(self.metapaths) if
+                                       metapath in X_batch["edge_index_dict"]])
+        assert X["edge_index"].shape[1] == X["edge_type"].shape[0]
+
+        X["edge_time"] = None
 
         return X, y, weights
 

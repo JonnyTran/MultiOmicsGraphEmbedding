@@ -17,7 +17,7 @@ from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
-from moge.module.PyG.hgt import HGTModel, Graph, sample_subgraph
+from moge.module.PyG.hgt import HGTModel, Graph, sample_subgraph, feature_MAG, to_torch
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.metrics import Metrics
@@ -172,6 +172,16 @@ class HGT(HGTModel, pl.LightningModule):
             last_norm=True,
             use_RTE=False)
 
+        self.classifier = DenseClassification(hparams)
+        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
+        #                                            num_class=hparams.n_classes,
+        #                                            loss_type=hparams.loss_type)
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
+                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
+                                                                                 hparams.use_class_weights else None,
+                                            loss_type=hparams.loss_type,
+                                            multilabel=dataset.multilabel)
+
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
@@ -182,7 +192,7 @@ class HGT(HGTModel, pl.LightningModule):
         hparams.inductive = dataset.inductive
         self.hparams = hparams
 
-        # self.collate_fn = hparams.collate_fn
+        self.collate_fn = hparams.collate_fn
 
     def name(self):
         if hasattr(self, "_name"):
@@ -190,28 +200,51 @@ class HGT(HGTModel, pl.LightningModule):
         else:
             return self.__class__.__name__
 
-    def forward(self, node_feature, node_type, edge_time, edge_index, edge_type):
+    def forward(self, X):
+        return super().forward(node_feature=X["node_feature"],
+                               node_type=X["node_type"],
+                               edge_time=X["edge_time"],
+                               edge_index=X["edge_index"],
+                               edge_type=X["edge_type"])
 
-        return super().forward(node_feature, node_type, edge_time, edge_index, edge_type)
+    def training_step(self, batch, batch_nb):
+        X, y, weights = batch
+        embeddings = self.forward(X)
 
-    def sample(self, samp_nodes):
-        np.random.seed(self.seed)
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        y_hat = self.classifier.forward(embeddings[nids])
 
-        ylabel = torch.LongTensor(graph.y[samp_nodes])
-        feature, times, edge_list, indxs, _ = sample_subgraph(graph, \
-                                                              inp={'paper': np.concatenate(
-                                                                  [samp_nodes, graph.years[samp_nodes]]).reshape(2,
-                                                                                                                 -1).transpose()}, \
-                                                              sampled_depth=args.sample_depth,
-                                                              sampled_number=args.sample_width, \
-                                                              feature_extractor=feature_MAG)
-        node_feature, node_type, edge_time, edge_index, edge_type, node_dict, edge_dict = \
-            to_torch(feature, times, edge_list, graph)
-        train_mask = graph.train_mask[indxs['paper']]
-        valid_mask = graph.valid_mask[indxs['paper']]
-        test_mask = graph.test_mask[indxs['paper']]
-        ylabel = graph.y[indxs['paper']]
-        return node_feature, node_type, edge_time, edge_index, edge_type, (train_mask, valid_mask, test_mask), ylabel
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        self.train_metrics.update_metrics(y_hat, y, weights=None)
+        loss = self.loss(y_hat, y)
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_nb):
+        X, y, weights = batch
+
+        embeddings = self.forward(X)
+
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        y_hat = self.classifier.forward(embeddings[nids])
+
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.loss(y_hat, y)
+        self.valid_metrics.update_metrics(y_hat, y, weights=None)
+
+        return {"val_loss": loss}
+
+    def test_step(self, batch, batch_nb):
+        X, y, weights = batch
+        embeddings = self.forward(X)
+
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        y_hat = self.classifier.forward(embeddings[nids])
+
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.loss(y_hat, y)
+        self.test_metrics.update_metrics(y_hat, y, weights=None)
+
+        return {"test_loss": loss}
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
@@ -246,13 +279,13 @@ class HGT(HGTModel, pl.LightningModule):
                 "log": logs}
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.sample,
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
                                                 batch_size=self.hparams.batch_size,
                                                 num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
 
@@ -271,7 +304,7 @@ class HGT(HGTModel, pl.LightningModule):
         scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, pct_start=0.05, anneal_strategy='linear',
                                                         final_div_factor=10, max_lr=5e-4, )
 
-        return {"optimizer": optimizer. "scheduler": scheduler}
+        return {"optimizer": optimizer, "scheduler": scheduler}
 
 
 class GTN(Gtn, pl.LightningModule):

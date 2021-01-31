@@ -34,7 +34,7 @@ def tensor_sizes(input):
     elif isinstance(input, list):
         return [tensor_sizes(v) for v in input]
     else:
-        return input.shape
+        return input.shape if input is not None and input.nelement() != 0 else None
 
 
 def preprocess_input(input, device, dtype=None, half=False):
