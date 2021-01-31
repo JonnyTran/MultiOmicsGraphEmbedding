@@ -517,6 +517,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         X["x"] = self.data["x"][X_batch["global_node_index"][self.head_node_type]]
         X["idx"] = X_batch["global_node_index"][self.head_node_type]
 
+        X["global_node_index"] = X_batch["global_node_index"]  # Debugging purposes
+
         return X, y, weights
 
     def collate_HGT_batch(self, iloc, mode=None):
@@ -526,15 +528,16 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         X["node_inp"] = torch.vstack([X_batch["x_dict"][ntype] for ntype in self.node_types])
         X["node_type"] = torch.hstack([nid * torch.ones((X_batch["x_dict"][ntype].shape[0],), dtype=int) \
                                        for nid, ntype in enumerate(self.node_types)])
-        assert X["node_inp"].shape[0] == X["node_type"].shape[0]
+        # assert X["node_inp"].shape[0] == X["node_type"].shape[0]
 
         X["edge_index"] = torch.hstack([X_batch["edge_index_dict"][metapath] \
                                         for metapath in self.metapaths if metapath in X_batch["edge_index_dict"]])
         X["edge_type"] = torch.hstack([eid * torch.ones(X_batch["edge_index_dict"][metapath].shape[1], dtype=int) \
                                        for eid, metapath in enumerate(self.metapaths) if
                                        metapath in X_batch["edge_index_dict"]])
-        assert X["edge_index"].shape[1] == X["edge_type"].shape[0]
+        # assert X["edge_index"].shape[1] == X["edge_type"].shape[0]
 
+        X["global_node_index"] = X_batch["global_node_index"]  # Debugging purposes
         X["edge_time"] = None
 
         return X, y, weights

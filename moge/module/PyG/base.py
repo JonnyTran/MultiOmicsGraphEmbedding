@@ -23,12 +23,21 @@ class NodeClfMetrics(pl.LightningModule):
         self.hparams = hparams
 
     def register_hooks(self):
-        # Register a hook for embedding layer
+        # Register a hook for embedding layer and classifier layer
         for name, layer in self.named_children():
             layer.__name__ = name
             print(name)
             layer.register_forward_hook(self.save_embedding)
             layer.register_forward_hook(self.save_pred)
+
+        def save_node_ids(module, inputs):
+            # if module.training: return
+            logging.info(f"save_node_ids @ {module.__name__} {tensor_sizes(inputs)}")
+
+        # Register a hook to get node_ids input
+        for layer in itertools.islice(self.modules(), 1):
+            print(layer.name())
+            layer.register_forward_pre_hook(save_node_ids)
 
     def save_embedding(self, module, inputs, output):
         if self.training:
@@ -36,9 +45,8 @@ class NodeClfMetrics(pl.LightningModule):
 
         if module.__name__ in ["embedder"]:
             logging.info(
-                f"Saved to _embeddings and _inputs @ {module.__name__}, input {tensor_sizes(inputs)}, output {tensor_sizes(output)}")
+                f"save_embedding @ {module.__name__}")
             self._embeddings = output
-            self._inputs = inputs
 
     def save_pred(self, module, inputs, output):
         if self.training:
@@ -46,7 +54,7 @@ class NodeClfMetrics(pl.LightningModule):
 
         if module.__name__ in ["classifier"]:
             logging.info(
-                f"Saved to _y_pred @ {module.__name__}, input {tensor_sizes(inputs)}, output {tensor_sizes(output)}")
+                f"save_pred @ {module.__name__}, output {tensor_sizes(output)}")
             self._y_pred = output
 
     def name(self):

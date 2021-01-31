@@ -265,7 +265,7 @@ class HAN(BaseModel):
         self.classifier = nn.Linear(self.w_out, self.num_class)
 
     def forward(self, A, X, target_x, target):
-        for i in range(self.num_layers):
+        for i in range(len(self.layers)):
             X = self.layers[i](X, A)
 
         X = self.embedder(X, A)

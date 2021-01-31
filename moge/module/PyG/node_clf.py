@@ -372,19 +372,23 @@ class HAN(Han, NodeClfMetrics):
 
 
     def forward(self, A, X, x_idx):
+        self._node_ids =
+
         if X is None:
             if isinstance(self.embedding, dict):
                 X = self.embedding[self.head_node_type].weight[x_idx].to(self.layers[0].device)
             else:
                 X = self.embedding.weight[x_idx]
 
-        for i in range(self.num_layers):
+        for i in range(len(self.layers)):
             X = self.layers[i].forward(X, A, )
 
+        X = self.embedder(X, A)
+
         if x_idx is not None and X.size(0) > x_idx.size(0):
-            y = self.linear(X[x_idx])
+            y = self.classifier(X[x_idx])
         else:
-            y = self.linear(X)
+            y = self.classifier(X)
         return y
 
     def loss(self, y_hat, y):
