@@ -176,11 +176,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if not hasattr(self, "x_dict") or len(self.x_dict) == 0:
             self.x_dict = {}
 
-        if hasattr(self, "node_attr_shape"):
-            node_feat_sizes = np.unique(list(self.node_attr_shape.values()))
-            if len(node_feat_sizes) == 1:
-                self.in_features = node_feat_sizes[0]
-
         if resample_train is not None and resample_train > 0:
             self.resample_training_idx(resample_train)
         else:
@@ -200,6 +195,17 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         else:
             node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
         return node_attr_shape
+
+    @property
+    def in_features(self):
+        node_feat_sizes = np.unique(list(self.node_attr_shape.values()))
+        if len(node_feat_sizes) == 1:
+            in_features = node_feat_sizes[0]
+        else:
+            raise Exception(
+                f"Must use self.node_attr_shape as node types have different feature sizes. {node_feat_sizes}")
+
+        return in_features
 
     def split_train_val_test(self, train_ratio, sample_indices=None):
         if sample_indices is not None:
