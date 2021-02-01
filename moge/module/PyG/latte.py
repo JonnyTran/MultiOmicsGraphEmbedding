@@ -40,7 +40,48 @@ class LATTE(nn.Module):
                           first=True if t == 0 else False,
                           embeddings=layers[0].embeddings if t > 0 else None))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
+
         self.layers = nn.ModuleList(layers)
+
+    def forward(self, node_inps: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
+        """
+        This
+        :param node_inps: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
+        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
+        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
+        :param save_betas: whether to save _beta values for batch
+        :return embedding_output, proximity_loss, edge_pred_dict:
+        """
+        # device = global_node_idx[list(global_node_idx.keys())[0]].device
+        proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
+
+        h_layers = {node_type: [] for node_type in global_node_idx}
+        for t in range(self.t_order):
+            if t == 0:
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=node_inps, x_r=node_inps,
+                                                                        edge_index_dict=edge_index_dict,
+                                                                        global_node_idx=global_node_idx,
+                                                                        save_betas=save_betas)
+                next_edge_index_dict = edge_index_dict
+            else:
+                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
+                                                               edge_sampling=self.edge_sampling)
+                # logging.info('h_dict', tensor_sizes(h_dict))
+                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=h_dict,
+                                                           edge_index_dict=next_edge_index_dict,
+                                                           global_node_idx=global_node_idx,
+                                                           save_betas=save_betas)
+
+            for node_type in global_node_idx:
+                h_layers[node_type].append(h_dict[node_type])
+
+            if self.use_proximity:
+                proximity_loss += t_loss
+
+        concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                      if len(h_list) > 0}
+
+        return concat_out, proximity_loss, edge_pred_dict
 
     @staticmethod
     def join_metapaths(metapath_A, metapath_B):
@@ -97,46 +138,6 @@ class LATTE(nn.Module):
                     continue
 
         return output_dict
-
-    def forward(self, X: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
-        """
-        This
-        :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
-        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
-        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
-        :param save_betas: whether to save _beta values for batch
-        :return embedding_output, proximity_loss, edge_pred_dict:
-        """
-        # device = global_node_idx[list(global_node_idx.keys())[0]].device
-        proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
-
-        h_layers = {node_type: [] for node_type in global_node_idx}
-        for t in range(self.t_order):
-            if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=X, x_r=X,
-                                                                        edge_index_dict=edge_index_dict,
-                                                                        global_node_idx=global_node_idx,
-                                                                        save_betas=save_betas)
-                next_edge_index_dict = edge_index_dict
-            else:
-                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
-                                                               edge_sampling=self.edge_sampling)
-                # logging.info('h_dict', tensor_sizes(h_dict))
-                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=h_dict,
-                                                           edge_index_dict=next_edge_index_dict,
-                                                           global_node_idx=global_node_idx,
-                                                           save_betas=save_betas)
-
-            for node_type in global_node_idx:
-                h_layers[node_type].append(h_dict[node_type])
-
-            if self.use_proximity:
-                proximity_loss += t_loss
-
-        concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                      if len(h_list) > 0}
-
-        return concat_out, proximity_loss, edge_pred_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))

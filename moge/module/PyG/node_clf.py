@@ -59,9 +59,10 @@ class LATTENodeClassifier(NodeClfMetrics):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        embeddings, proximity_loss, _ = self.embedder.forward(X=inputs["x_dict"],
-                                                              edge_index_dict=inputs["edge_index_dict"],
-                                                              global_node_idx=inputs["global_node_index"], **kwargs)
+        embeddings, proximity_loss, _ = self.embedder(node_inps=inputs["x_dict"],
+                                                      edge_index_dict=inputs["edge_index_dict"],
+                                                      global_node_idx=inputs["global_node_index"], **kwargs)
+
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 

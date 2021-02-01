@@ -11,40 +11,48 @@ from moge.module.utils import tensor_sizes, preprocess_input
 
 
 class ClusteringMetrics(LightningModule):
-    def save_embedding(self, module, inputs, output):
-        if self.training:
-            return
-
-        if module.__name__ in ["embedder"]:
-            logging.info(
-                f"save_embedding @ {module.__name__}")
-            self._embeddings = output
-
-    def save_pred(self, module, inputs, output):
-        if self.training:
-            return
-
-        if module.__name__ in ["classifier"]:
-            logging.info(
-                f"save_pred @ {module.__name__}, output {tensor_sizes(output)}")
-            self._y_pred = output
-
     def register_hooks(self):
-        # Register a hook for embedding layer and classifier layer
+        # Register hooks for embedding layer and classifier layer
         for name, layer in self.named_children():
             layer.__name__ = name
             print(name)
             layer.register_forward_hook(self.save_embedding)
             layer.register_forward_hook(self.save_pred)
 
-        def save_node_ids(module, inputs):
-            # if module.training: return
-            logging.info(f"save_node_ids @ {module.__name__} {tensor_sizes(inputs)}")
+        # def save_node_ids(module, inputs):
+        #     # if module.training: return
+        #     logging.info(f"save_node_ids @ {module.__name__} {tensor_sizes(inputs)}")
+        #
+        # # Register a hook to get node_ids input
+        # for layer in itertools.islice(self.modules(), 1):
+        #     print(layer.name())
+        #     layer.register_forward_pre_hook(save_node_ids)
 
-        # Register a hook to get node_ids input
-        for layer in itertools.islice(self.modules(), 1):
-            print(layer.name())
-            layer.register_forward_pre_hook(save_node_ids)
+    def save_embedding(self, module, _, outputs):
+        if self.training:
+            return
+        logging.info(module.__name__)
+
+        if module.__name__ == "embedder":
+            logging.info(f"save_embedding @ {module.__name__}")
+
+            if isinstance(outputs, (list, tuple)):
+                self._embeddings = outputs[0]
+            else:
+                self._embeddings = outputs
+
+    def save_pred(self, module, _, outputs):
+        if self.training:
+            return
+
+        if module.__name__ in ["classifier"]:
+            logging.info(
+                f"save_pred @ {module.__name__}, output {tensor_sizes(outputs)}")
+
+            if isinstance(outputs, (list, tuple)):
+                self._y_pred = outputs[0]
+            else:
+                self._y_pred = outputs
 
     def trainvalidtest_dataloader(self):
         return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
