@@ -89,7 +89,7 @@ def train(hparams):
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
             "collate_fn": "collate_HGT_batch",
-            "lr": 0.001,  # Not used
+            "lr": 0.001,  # Not used here, defaults to 1e-3
         }
         model = HGT(Namespace(**model_hparams), dataset, metrics=METRICS)
 
