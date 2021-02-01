@@ -56,17 +56,19 @@ class ClusteringMetrics(LightningModule):
     def trainvalidtest_dataloader(self):
         return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
 
-    def clustering_metrics(self, compare_node_types=False):
+    def clustering_metrics(self, compare_node_types=True):
         loader = self.trainvalidtest_dataloader()
         X_all, y_all, _ = next(iter(loader))
+        print("got here0")
 
-        self.forward(preprocess_input(X_all, device=self.device))
+        self.cpu().forward(preprocess_input(X_all, device="cpu"))
 
+        print("got here1")
         if not isinstance(self._embeddings, dict):
             self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
 
         embeddings_all, types_all, y_true = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
-
+        print("got here2")
         y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()))
 
         logging.info(
@@ -79,11 +81,11 @@ class ClusteringMetrics(LightningModule):
                                           types_all.index.map(lambda x: y_pred.get(x, "")),
                                           # Match y_pred to type_all's index
                                           metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
-
+        print("got here3")
         if y_pred.shape[0] != y_true.shape[0]:
             y_pred = y_pred.loc[y_true.index]
         res.update(clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi"]))
-
+        print("got here4")
         return res
 
 
