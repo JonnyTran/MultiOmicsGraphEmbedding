@@ -56,7 +56,7 @@ class ClusteringMetrics(LightningModule):
     def trainvalidtest_dataloader(self):
         return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
 
-    def clustering_metrics(self):
+    def clustering_metrics(self, compare_node_types=False):
         loader = self.trainvalidtest_dataloader()
         X_all, y_all, _ = next(iter(loader))
 
@@ -65,11 +65,24 @@ class ClusteringMetrics(LightningModule):
         if not isinstance(self._embeddings, dict):
             self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
 
-        logging.info(f"Embeddings {tensor_sizes(self._embeddings)}, node_ids {tensor_sizes(self._node_ids)}")
-        embeddings_all, types_all, labels = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
+        embeddings_all, types_all, y_true = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
 
         y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()))
-        return clustering_metrics(labels, y_pred, metrics=["homogeneity", "completeness", "nmi"])
+
+        logging.info(
+            f"Embeddings {tensor_sizes(self._embeddings)}, \n node_ids {tensor_sizes(self._node_ids)}, \n labels {y_true.shape}, \n y_pred {y_pred.shape}")
+
+        res = {}
+
+        if compare_node_types:
+            res.update(clustering_metrics(types_all, types_all.index.map(lambda x: y_pred.get(x, "")),
+                                          metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
+
+        if y_pred.shape[0] != y_true.shape[0]:
+            y_pred = y_pred.loc[y_true.index]
+        res.update(clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi"]))
+
+        return res
 
 
 class NodeClfMetrics(ClusteringMetrics):

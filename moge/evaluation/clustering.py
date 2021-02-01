@@ -30,13 +30,13 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
 def clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi"]):
     results = {}
     for metric in metrics:
-        if metric == "homogeneity":
+        if "homogeneity" in metric:
             results[metric] = homogeneity_score(y_true, y_pred)
-        elif metric == "completeness":
+        elif "completeness" in metric:
             results[metric] = completeness_score(y_true, y_pred)
-        elif metric == "nmi":
+        elif "nmi" in metric:
             results[metric] = normalized_mutual_info_score(y_true, y_pred, average_method="arithmetic")
-        elif metric == "ami":
+        elif "ami" in metric:
             results[metric] = adjusted_mutual_info_score(y_true, y_pred)
     return results
 
