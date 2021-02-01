@@ -74,8 +74,10 @@ class ClusteringMetrics(LightningModule):
 
         res = {}
 
-        if compare_node_types:
-            res.update(clustering_metrics(types_all, types_all.index.map(lambda x: y_pred.get(x, "")),
+        if compare_node_types and len(self.dataset.node_types) > 1:
+            res.update(clustering_metrics(types_all,
+                                          types_all.index.map(lambda x: y_pred.get(x, "")),
+                                          # Match y_pred to type_all's index
                                           metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
 
         if y_pred.shape[0] != y_true.shape[0]:
