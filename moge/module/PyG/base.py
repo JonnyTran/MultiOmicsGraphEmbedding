@@ -31,7 +31,6 @@ class ClusteringMetrics(LightningModule):
     def save_embedding(self, module, _, outputs):
         if self.training:
             return
-        logging.info(module.__name__)
 
         if module.__name__ == "embedder":
             logging.info(f"save_embedding @ {module.__name__}")
