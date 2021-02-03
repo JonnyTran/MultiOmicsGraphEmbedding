@@ -21,7 +21,7 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator import HeteroNeighborSampler, TripletSampler
-from moge.module.PyG.node_clf import LATTENodeClassifier
+from moge.module.PyG.node_clf import LATTENodeClf
 from moge.module.PyG.link_pred import LATTELinkPredictor
 from run.utils import load_node_dataset
 
@@ -43,7 +43,7 @@ def train(hparams: Namespace):
     METRICS = ["precision", "recall", "f1", "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
     hparams.loss_type = "BCE" if dataset.multilabel else hparams.loss_type
     hparams.n_classes = dataset.n_classes
-    model = LATTENodeClassifier(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
+    model = LATTENodeClf(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
 
     logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
 

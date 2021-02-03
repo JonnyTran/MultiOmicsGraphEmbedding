@@ -11,7 +11,7 @@ from pytorch_lightning.trainer import Trainer
 
 from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.module.PyG.node_clf import MetaPath2Vec, HAN, GTN, HGT, LATTENodeClassifier
+from moge.module.PyG.node_clf import MetaPath2Vec, HAN, GTN, HGT, LATTENodeClf
 from pytorch_lightning.loggers import WandbLogger
 
 from run.utils import load_node_dataset
@@ -129,7 +129,7 @@ def train(hparams):
         metrics = ["precision", "recall", "micro_f1",
                    "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
 
-        model = LATTENodeClassifier(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
+        model = LATTENodeClf(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
 
     wandb_logger = WandbLogger(name=model.name(),
                                tags=[dataset.name()],

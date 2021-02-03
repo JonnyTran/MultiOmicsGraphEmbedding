@@ -26,9 +26,9 @@ from moge.module.PyG.base import NodeClfMetrics
 from moge.module.utils import filter_samples
 
 
-class LATTENodeClassifier(NodeClfMetrics):
+class LATTENodeClf(NodeClfMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
-        super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
@@ -234,7 +234,8 @@ class HGT(HGTModel, NodeClfMetrics):
         ]
 
         optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06)
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, pct_start=0.05, anneal_strategy='linear',
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
+                                                        pct_start=0.05, anneal_strategy='linear',
                                                         final_div_factor=10, max_lr=5e-4,
                                                         epochs=self.hparams.n_epoch,
                                                         steps_per_epoch=int(np.ceil(self.dataset.training_idx.shape[

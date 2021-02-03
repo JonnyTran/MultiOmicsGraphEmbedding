@@ -90,8 +90,8 @@ class ClusteringMetrics(LightningModule):
 
 
 class NodeClfMetrics(ClusteringMetrics):
-    def __init__(self, hparams, dataset, metrics, *args):
-        super().__init__(*args)
+    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                      multilabel=dataset.multilabel, metrics=metrics)

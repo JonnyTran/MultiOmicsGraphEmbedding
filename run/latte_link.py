@@ -16,7 +16,7 @@ from ogb.linkproppred import PygLinkPropPredDataset
 from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler
 from pytorch_lightning.loggers import WandbLogger
 
-from moge.module.PyG.node_clf import LATTENodeClassifier
+from moge.module.PyG.node_clf import LATTENodeClf
 from moge.module.PyG.link_pred import LATTELinkPredictor
 from run.utils import load_link_dataset
 
