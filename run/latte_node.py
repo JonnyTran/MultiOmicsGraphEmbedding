@@ -22,7 +22,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.generator import HeteroNeighborSampler, TripletSampler
 from moge.module.PyG.node_clf import LATTENodeClf
-from moge.module.PyG.link_pred import LATTELinkPredictor
+from moge.module.PyG.link_pred import LATTELinkPred
 from run.utils import load_node_dataset
 
 

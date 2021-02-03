@@ -17,7 +17,7 @@ from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.module.PyG.node_clf import LATTENodeClf
-from moge.module.PyG.link_pred import LATTELinkPredictor
+from moge.module.PyG.link_pred import LATTELinkPred
 from run.utils import load_link_dataset
 
 
@@ -29,7 +29,7 @@ def train(hparams):
     dataset = load_link_dataset(hparams.dataset, hparams=hparams, path="datasets")
     hparams.n_classes = dataset.n_classes
 
-    model = LATTELinkPredictor(hparams, dataset, collate_fn="triples_batch", metrics=[hparams.dataset])
+    model = LATTELinkPred(hparams, dataset, collate_fn="triples_batch", metrics=[hparams.dataset])
     wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
 
     trainer = Trainer(

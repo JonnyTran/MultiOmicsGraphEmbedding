@@ -1,3 +1,4 @@
+import logging
 import gseapy as gp
 import numpy as np
 import pandas as pd
@@ -18,7 +19,7 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
 
     if n_clusters is None:
         n_clusters = min(len(y_true.unique()), max_clusters) if max_clusters else len(y_true.unique())
-        print("Clustering", len(nodelist), "nodes with n_clusters:", n_clusters)
+        logging.info("Clustering", len(nodelist), "nodes with n_clusters:", n_clusters)
     try:
         y_pred = embedding.predict_cluster(n_clusters, node_list=nodelist)
     except AttributeError as e:
@@ -27,7 +28,7 @@ def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters
     return clustering_metrics(y_true, y_pred, metrics)
 
 
-def clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi"]):
+def clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi", "ami"]):
     results = {}
     for metric in metrics:
         if "homogeneity" in metric:

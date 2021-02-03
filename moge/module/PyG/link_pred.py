@@ -15,7 +15,7 @@ class LinkPredMetrics(NodeClfMetrics, metaclass=ABCMeta):
 
     def get_e_pos_neg(self, edge_pred_dict: dict, training: bool = True):
         """
-        Align e_pos and e_neg to shape (num_edge, ) and (num_edge, num_nodes_neg). Ignores reverse edges
+        Align e_pos and e_neg to shape (num_edge, ) and (num_edge, num_nodes_neg). Ignores reverse metapaths.
 
         :param edge_pred_dict:
         :return:
@@ -42,35 +42,35 @@ class LinkPredMetrics(NodeClfMetrics, metaclass=ABCMeta):
         return e_pos, e_neg
 
 
-class LATTELinkPredictor(LinkPredMetrics):
+class LATTELinkPred(LinkPredMetrics):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["obgl-biokg"],
                  collate_fn="neighbor_sampler") -> None:
-        super(LATTELinkPredictor, self).__init__(hparams, dataset, metrics)
+        super(LATTELinkPred, self).__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self._name = f"LATTE-{hparams.t_order}{' Link' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
-                           in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-                           metapaths=dataset.get_metapaths(), attn_heads=hparams.attn_heads,
-                           attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
-                           use_proximity=True, neg_sampling_ratio=hparams.neg_sampling_ratio)
+        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+                              in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
+                              metapaths=dataset.get_metapaths(), attn_heads=hparams.attn_heads,
+                              attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
+                              use_proximity=True, neg_sampling_ratio=hparams.neg_sampling_ratio)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
     def forward(self, input: dict, **kwargs):
-        embeddings, proximity_loss, edge_pred_dict = self.latte.forward(input["x_dict"],
-                                                                        edge_index_dict=input["edge_index_dict"],
-                                                                        global_node_idx=input["global_node_index"],
-                                                                        **kwargs)
+        embeddings, proximity_loss, edge_pred_dict = self.embedder(input["x_dict"],
+                                                                   edge_index_dict=input["edge_index_dict"],
+                                                                   global_node_idx=input["global_node_index"],
+                                                                   **kwargs)
         return embeddings, proximity_loss, edge_pred_dict
 
 
 
     def training_step(self, batch, batch_nb):
         X, _, _ = batch
-        # print("X", {k: v.shape for k, v in X.items()})
+
         _, loss, edge_pred_dict = self.forward(X)
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=True)
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
@@ -80,7 +80,7 @@ class LATTELinkPredictor(LinkPredMetrics):
 
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
-        # print("X", {k: v.shape for k, v in X["edge_index_dict"].items()})
+
         _, loss, edge_pred_dict = self.forward(X)
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict, training=False)
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
