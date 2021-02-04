@@ -77,7 +77,7 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
-        outputs = {'loss': loss}
+        outputs = {'loss': loss, **self.train_metrics.compute_metrics()}
         return outputs
 
     def validation_step(self, batch, batch_nb):

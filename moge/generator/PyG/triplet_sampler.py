@@ -293,10 +293,12 @@ class NegativeSampler(HeteroNeighborSampler):
             triples.update({k: v[e_idx] for k, v in self.triples.items() if is_negative(k)})
 
         relation_ids_all = triples["relation"].unique()
+
+        # Get all nodes from sampled triplets
         batch_nodes = TripletSampler.get_global_node_index(triples, relation_ids_all, metapaths=self.metapaths)
+        batch_nodes_local = torch.cat([self.local2global[ntype][nid] for ntype, nid in batch_nodes.items()], 0)
 
         # Get full subgraph from n_id's
-        batch_nodes_local = torch.cat([self.local2global[ntype][nid] for ntype, nid in batch_nodes.items()], 0)
         batch_size, n_id, adjs = self.neighbor_sampler.sample(batch_nodes_local)
         if not isinstance(adjs, list):
             adjs = [adjs]
@@ -306,6 +308,7 @@ class NegativeSampler(HeteroNeighborSampler):
         X = {"edge_index_dict": {},
              "global_node_index": sampled_local_nodes,
              "x_dict": {}}
+
         local2batch = {
             node_type: dict(zip(sampled_local_nodes[node_type].numpy(),
                                 range(len(sampled_local_nodes[node_type])))
