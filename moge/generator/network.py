@@ -91,7 +91,7 @@ class Network:
         else:
             labels = None
 
-        # Save result for "cache"
+        # Save results
         self.embeddings, self.ntypes, self.labels = embeddings, ntypes, labels
 
         return embeddings, ntypes, labels

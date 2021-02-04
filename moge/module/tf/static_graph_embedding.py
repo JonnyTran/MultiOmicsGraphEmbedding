@@ -394,8 +394,7 @@ class ImportedGraphEmbedding(BaseGraphEmbedding):
         embs = self.get_embeddings()
         kmeans = KMeans(n_clusters, n_jobs=n_jobs)
         y_pred = kmeans.fit_predict(embs)
-        if save_kmeans:
-            self.kmeans = kmeans
+        if save_kmeans: self.kmeans = kmeans
 
         if node_list is not None and set(node_list) <= set(self.node_list):
             idx = [self.node_list.index(node) for node in node_list]

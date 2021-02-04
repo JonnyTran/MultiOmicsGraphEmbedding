@@ -56,37 +56,34 @@ class ClusteringMetrics(LightningModule):
     def trainvalidtest_dataloader(self):
         return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
 
-    def clustering_metrics(self, compare_node_types=True):
+    def clustering_metrics(self, n_runs=10, compare_node_types=True):
         loader = self.trainvalidtest_dataloader()
         X_all, y_all, _ = next(iter(loader))
-        print("got here0")
-
         self.cpu().forward(preprocess_input(X_all, device="cpu"))
 
-        print("got here1")
         if not isinstance(self._embeddings, dict):
             self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
 
         embeddings_all, types_all, y_true = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
-        print("got here2")
-        y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()))
 
-        logging.info(
-            f"Embeddings {tensor_sizes(self._embeddings)}, \n node_ids {tensor_sizes(self._node_ids)}, \n labels {y_true.shape}, \n y_pred {y_pred.shape}")
+        # Record metrics for each run in a list of dict's
+        res = [{}, ] * n_runs
+        for i in range(n_runs):
+            y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()))
 
-        res = {}
+            if compare_node_types and len(self.dataset.node_types) > 1:
+                res[i].update(clustering_metrics(types_all,
+                                                 types_all.index.map(lambda x: y_pred.get(x, "")),
+                                                 # Match y_pred to type_all's index
+                                                 metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
 
-        if compare_node_types and len(self.dataset.node_types) > 1:
-            res.update(clustering_metrics(types_all,
-                                          types_all.index.map(lambda x: y_pred.get(x, "")),
-                                          # Match y_pred to type_all's index
-                                          metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
-        print("got here3")
-        if y_pred.shape[0] != y_true.shape[0]:
-            y_pred = y_pred.loc[y_true.index]
-        res.update(clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi"]))
-        print("got here4")
-        return res
+            if y_pred.shape[0] != y_true.shape[0]:
+                y_pred = y_pred.loc[y_true.index]
+            res[i].update(clustering_metrics(y_true, y_pred, metrics=["homogeneity", "completeness", "nmi"]))
+
+        res_df = pd.DataFrame(res)
+        metrics = res_df.mean(0).to_dict()
+        return metrics
 
 
 class NodeClfMetrics(ClusteringMetrics):
