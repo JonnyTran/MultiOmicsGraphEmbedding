@@ -169,16 +169,21 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def sample(self, iloc, mode):
+    def sample(self, n_idx, mode):
         """
 
-        :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
+        :param n_idx: A tensor of a batch of node indices in training_idx, validation_idx, or testing_idx
         :return:
         """
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
+        if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):
+            n_idx = torch.tensor(n_idx)
 
-        batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local2global[self.head_node_type][iloc])
+        if isinstance(n_idx, dict):
+            n_idx_to_sample = torch.cat([self.local2global[ntype][nid] for ntype, nid in n_idx.items()], 0)
+        else:
+            n_idx_to_sample = self.local2global[self.head_node_type][n_idx]
+
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(n_idx_to_sample)
         if not isinstance(adjs, list):
             adjs = [adjs]
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
