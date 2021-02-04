@@ -159,9 +159,6 @@ class HGT(HGTModel, NodeClfMetrics):
             use_RTE=False, hparams=hparams, dataset=dataset, metrics=metrics)
 
         self.classifier = DenseClassification(hparams)
-        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
-        #                                            num_class=hparams.n_classes,
-        #                                            loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,

@@ -67,7 +67,6 @@ class LATTELinkPred(LinkPredMetrics):
         return embeddings, proximity_loss, edge_pred_dict
 
 
-
     def training_step(self, batch, batch_nb):
         X, _, _ = batch
 
