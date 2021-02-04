@@ -11,7 +11,7 @@ from ..trainer import LinkPredTrainer
 
 
 class DistMulti(torch.nn.Module):
-    def __init__(self, embedding_dim, n_metapaths):
+    def __init__(self, embedding_dim, metapaths):
         super(DistMulti, self).__init__()
 
     def forward(self):

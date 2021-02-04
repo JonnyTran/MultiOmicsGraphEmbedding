@@ -143,7 +143,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         def collate_wrapper(iloc):
             return self.sample(iloc, mode=mode)
 
-        if "neighbor_sampler" in collate_fn:
+        if "neighbor_sampler" in collate_fn or collate_fn is None:
             return collate_wrapper
         else:
             return super().get_collate_fn(collate_fn, mode=mode)

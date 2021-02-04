@@ -14,6 +14,7 @@ class TripletSampler(HeteroNetDataset):
                                              add_reverse_metapaths)
         self.n_classes = None
         self.classes = None
+        assert hasattr(self, "validation_idx") and hasattr(self, "triples")
 
     def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
@@ -159,7 +160,7 @@ class TripletSampler(HeteroNetDataset):
             node_feats = None
 
         X = {"edge_index_dict": edge_index_dict,
-             "pred_edges": edge_index_dict,
+             "edge_pred_dict": edge_index_dict,
              "global_node_index": global_node_index,
              "x_dict": node_feats}
 
@@ -225,55 +226,13 @@ class NegativeSampler(HeteroNeighborSampler):
         super().__init__(dataset, neighbor_sizes, node_types, metapaths, head_node_type, directed, resample_train,
                          add_reverse_metapaths, inductive)
 
-    def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset):
-        data = dataset[0]
-        self._name = dataset.name
+    def get_collate_fn(self, collate_fn: str, mode=None):
+        assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
 
-        self.edge_index_dict = data.edge_index_dict  # edge_index_dict already excludes test and validation edges
+        def collate_wrapper(iloc):
+            return self.sample(iloc, mode=mode)
 
-        if hasattr(data, "num_nodes_dict"):
-            self.num_nodes_dict = data.num_nodes_dict
-        else:
-            self.num_nodes_dict = self.get_num_nodes_dict(data.edge_index_dict)
-
-        if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
-
-        if hasattr(data, "x") and data.x is not None:
-            self.x_dict = {self.head_node_type: data.x}
-        elif hasattr(data, "x_dict") and data.x_dict is not None:
-            self.x_dict = data.x_dict
-        else:
-            self.x_dict = {}
-
-        self.metapaths = list(data.edge_index_dict.keys())
-
-        split_idx = dataset.get_edge_split()
-        train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
-        self.triples = {}
-        for key in train_triples.keys():
-            if isinstance(train_triples[key], torch.Tensor):
-                self.triples[key] = torch.cat([valid_triples[key], test_triples[key], train_triples[key]], dim=0)
-            else:
-                self.triples[key] = np.array(valid_triples[key] + test_triples[key] + train_triples[key])
-
-        for key in valid_triples.keys():
-            if is_negative(key):  # either head_neg or tail_neg
-                self.triples[key] = torch.cat([valid_triples[key], test_triples[key]], dim=0)
-
-        # Build indices to sample
-        self.start_idx = {"valid": 0,
-                          "test": len(valid_triples["relation"]),
-                          "train": len(valid_triples["relation"]) + len(test_triples["relation"])}
-
-        self.validation_idx = torch.arange(self.start_idx["valid"],
-                                           self.start_idx["valid"] + len(valid_triples["relation"]))
-        self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["test"] + len(test_triples["relation"]))
-        self.training_idx = torch.arange(self.start_idx["train"],
-                                         self.start_idx["train"] + len(train_triples["relation"]))
-
-        assert self.validation_idx.max() < self.testing_idx.min()
-        assert self.testing_idx.max() < self.training_idx.min()
+        return collate_wrapper
 
     def sample(self, e_idx, mode):
         if not isinstance(e_idx, torch.Tensor):
@@ -286,15 +245,15 @@ class NegativeSampler(HeteroNeighborSampler):
         relation_ids_all = triples["relation"].unique()
 
         global_node_index = TripletSampler.get_global_node_index(triples, relation_ids_all, metapaths=self.metapaths)
-        pred_edges = TripletSampler.get_local_edge_index(triples=triples,
-                                                         global_node_index=global_node_index,
-                                                         relation_ids_all=relation_ids_all,
-                                                         metapaths=self.metapaths)
+        edge_pred_dict = TripletSampler.get_local_edge_index(triples=triples,
+                                                             global_node_index=global_node_index,
+                                                             relation_ids_all=relation_ids_all,
+                                                             metapaths=self.metapaths)
 
         batch_nodes = global_node_index
         # Get full subgraph from n_id's
         X, _, _ = super().sample(batch_nodes, mode)
 
-        X["pred_edges"] = pred_edges
+        X["edge_pred_dict"] = edge_pred_dict
 
         return X, None, None
