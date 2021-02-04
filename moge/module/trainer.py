@@ -11,20 +11,6 @@ from .utils import tensor_sizes, preprocess_input
 from ..evaluation.clustering import clustering_metrics
 
 
-def _fix_dp_return_type(result, device):
-    if isinstance(result, torch.Tensor):
-        return result.to(device)
-    if isinstance(result, dict):
-        return {k: _fix_dp_return_type(v, device) for k, v in result.items()}
-    # Must be a number then
-    return torch.Tensor([result]).to(device)
-
-
-def print_logs(logs):
-    print({key: f"{item.item():.3f}" if isinstance(item, torch.Tensor) \
-        else f"{item:.5f}" for key, item in logs.items()})
-
-
 class ClusteringEvaluator(LightningModule):
     def register_hooks(self):
         # Register hooks for embedding layer and classifier layer
