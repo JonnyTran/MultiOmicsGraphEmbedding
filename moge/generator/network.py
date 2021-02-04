@@ -96,8 +96,8 @@ class Network:
 
         return embeddings, ntypes, labels
 
-    def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False):
-        kmeans = KMeans(n_clusters, n_jobs=n_jobs)
+    def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False, seed=None):
+        kmeans = KMeans(n_clusters, n_jobs=n_jobs, random_state=seed)
         logging.info(f"Kmeans with k={n_clusters}")
         y_pred = kmeans.fit_predict(self.embeddings)
         if save_kmeans:

@@ -69,7 +69,7 @@ class ClusteringMetrics(LightningModule):
         # Record metrics for each run in a list of dict's
         res = [{}, ] * n_runs
         for i in range(n_runs):
-            y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()))
+            y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()), seed=i)
 
             if compare_node_types and len(self.dataset.node_types) > 1:
                 res[i].update(clustering_metrics(types_all,
