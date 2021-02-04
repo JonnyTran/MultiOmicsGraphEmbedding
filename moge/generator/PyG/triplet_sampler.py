@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
@@ -5,7 +6,7 @@ from ogb.linkproppred import PygLinkPropPredDataset
 from moge.module.PyG.latte import tag_negative, is_negative
 from moge.generator.network import HeteroNetDataset
 from moge.generator.PyG.node_sampler import HeteroNeighborSampler
-
+from moge.module.utils import tensor_sizes
 
 class TripletSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
@@ -167,14 +168,15 @@ class TripletSampler(HeteroNetDataset):
         return X, None, None
 
     @staticmethod
-    def get_local_edge_index(triples, global_node_index, relation_ids_all, metapaths):
+    def get_local_edge_index(triples, global_node_index, relation_ids_all, metapaths, local2batch=None):
         edge_index_dict = {}
 
-        local2batch = {
-            node_type: dict(zip(
-                global_node_index[node_type].numpy(),
-                range(len(global_node_index[node_type])))
-            ) for node_type in global_node_index}
+        if local2batch is None:
+            local2batch = {
+                node_type: dict(zip(
+                    global_node_index[node_type].numpy(),
+                    range(len(global_node_index[node_type])))
+                ) for node_type in global_node_index}
 
         # Get edge_index with batch id
         for relation_id in relation_ids_all:
@@ -226,6 +228,54 @@ class NegativeSampler(HeteroNeighborSampler):
         super().__init__(dataset, neighbor_sizes, node_types, metapaths, head_node_type, directed, resample_train,
                          add_reverse_metapaths, inductive)
 
+    def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset):
+        data = dataset[0]
+        self._name = dataset.name
+        self.edge_index_dict = data.edge_index_dict
+
+        if hasattr(data, "num_nodes_dict"):
+            self.num_nodes_dict = data.num_nodes_dict
+        else:
+            self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
+
+        if self.node_types is None:
+            self.node_types = list(data.num_nodes_dict.keys())
+
+        if hasattr(data, "x") and data.x is not None:
+            self.x_dict = {self.head_node_type: data.x}
+        elif hasattr(data, "x_dict") and data.x_dict is not None:
+            self.x_dict = data.x_dict
+        else:
+            self.x_dict = {}
+
+        self.metapaths = list(self.edge_index_dict.keys())
+
+        split_idx = dataset.get_edge_split()
+        train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
+        self.triples = {}
+        for key in train_triples.keys():
+            if isinstance(train_triples[key], torch.Tensor):
+                self.triples[key] = torch.cat([valid_triples[key], test_triples[key], train_triples[key]], dim=0)
+            else:
+                self.triples[key] = np.array(valid_triples[key] + test_triples[key] + train_triples[key])
+
+        for key in valid_triples.keys():
+            if is_negative(key):  # either head_neg or tail_neg
+                self.triples[key] = torch.cat([valid_triples[key], test_triples[key]], dim=0)
+
+        self.start_idx = {"valid": 0,
+                          "test": len(valid_triples["relation"]),
+                          "train": len(valid_triples["relation"]) + len(test_triples["relation"])}
+
+        self.validation_idx = torch.arange(self.start_idx["valid"],
+                                           self.start_idx["valid"] + len(valid_triples["relation"]))
+        self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["test"] + len(test_triples["relation"]))
+        self.training_idx = torch.arange(self.start_idx["train"],
+                                         self.start_idx["train"] + len(train_triples["relation"]))
+
+        assert self.validation_idx.max() < self.testing_idx.min()
+        assert self.testing_idx.max() < self.training_idx.min()
+
     def get_collate_fn(self, collate_fn: str, mode=None):
         assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
 
@@ -243,17 +293,39 @@ class NegativeSampler(HeteroNeighborSampler):
             triples.update({k: v[e_idx] for k, v in self.triples.items() if is_negative(k)})
 
         relation_ids_all = triples["relation"].unique()
+        batch_nodes = TripletSampler.get_global_node_index(triples, relation_ids_all, metapaths=self.metapaths)
 
-        global_node_index = TripletSampler.get_global_node_index(triples, relation_ids_all, metapaths=self.metapaths)
-        edge_pred_dict = TripletSampler.get_local_edge_index(triples=triples,
-                                                             global_node_index=global_node_index,
-                                                             relation_ids_all=relation_ids_all,
-                                                             metapaths=self.metapaths)
-
-        batch_nodes = global_node_index
         # Get full subgraph from n_id's
-        X, _, _ = super().sample(batch_nodes, mode)
+        batch_nodes_local = torch.cat([self.local2global[ntype][nid] for ntype, nid in batch_nodes.items()], 0)
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(batch_nodes_local)
+        if not isinstance(adjs, list):
+            adjs = [adjs]
 
-        X["edge_pred_dict"] = edge_pred_dict
+        # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
+        sampled_local_nodes = self.get_local_nodes_dict(adjs, n_id)
+        X = {"edge_index_dict": {},
+             "global_node_index": sampled_local_nodes,
+             "x_dict": {}}
+        local2batch = {
+            node_type: dict(zip(sampled_local_nodes[node_type].numpy(),
+                                range(len(sampled_local_nodes[node_type])))
+                            ) for node_type in sampled_local_nodes}
+
+        X["edge_index_dict"] = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
+                                                              sampled_local_nodes=sampled_local_nodes,
+                                                              local2batch=local2batch,
+                                                              filter_nodes=False)
+        logging.info(tensor_sizes(sampled_local_nodes))
+
+        # x_dict attributes
+        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
+            X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
+                           for node_type in self.x_dict}
+
+        X["edge_pred_dict"] = TripletSampler.get_local_edge_index(triples=triples,
+                                                                  global_node_index=sampled_local_nodes,
+                                                                  relation_ids_all=relation_ids_all,
+                                                                  metapaths=self.metapaths,
+                                                                  local2batch=local2batch)
 
         return X, None, None
