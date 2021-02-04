@@ -233,10 +233,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
                            for node_type in self.x_dict}
 
         # y_dict
-        if len(self.y_dict) > 1:
+        if hasattr(self, "y_dict") and len(self.y_dict) > 1:
             y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
-        else:
+        elif hasattr(self, "y_dict"):
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
+        else:
+            y = None
 
         weights = (y != -1) & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
         weights = torch.tensor(weights, dtype=torch.float)
