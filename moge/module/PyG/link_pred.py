@@ -1,17 +1,11 @@
 import multiprocessing
-from abc import ABCMeta, abstractmethod
 
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE, untag_negative, is_negative
-from ..trainer import NodeClfTrainer
-
-
-class LinkPredTrainer(NodeClfTrainer, metaclass=ABCMeta):
-    def __init__(self, hparams, dataset, metrics):
-        super(LinkPredTrainer, self).__init__(hparams, dataset, metrics)
+from ..trainer import LinkPredTrainer
 
 
 class LATTELinkPred(LinkPredTrainer):
@@ -93,24 +87,19 @@ class LATTELinkPred(LinkPredTrainer):
 
         return {"test_loss": loss}
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=int(
-                                                 0.4 * multiprocessing.cpu_count()))  # int(0.8 * multiprocessing.cpu_count())
-
-    def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size // 4,
-                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
-    def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size // 4,
-                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=self.hparams.weight_decay)
+        param_optimizer = list(self.named_parameters())
+        no_decay = ['bias', 'alpha_activation']
+        optimizer_grouped_parameters = [
+            {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
+             'weight_decay': 0.01},
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
+        ]
+
+        # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
+        optimizer = torch.optim.Adam(optimizer_grouped_parameters,
+                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
+                                     weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}

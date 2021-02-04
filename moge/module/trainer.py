@@ -1,5 +1,6 @@
 import itertools
 import logging
+from abc import ABCMeta
 
 import pandas as pd
 import pytorch_lightning as pl
@@ -9,6 +10,11 @@ from pytorch_lightning import LightningModule
 from .metrics import Metrics
 from .utils import tensor_sizes, preprocess_input
 from ..evaluation.clustering import clustering_metrics
+
+
+class LinkPredTrainer(NodeClfTrainer):
+    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
+        super(LinkPredTrainer, self).__init__(hparams, dataset, metrics, *args, **kwargs)
 
 
 class NodeClfTrainer(ClusteringEvaluator):
