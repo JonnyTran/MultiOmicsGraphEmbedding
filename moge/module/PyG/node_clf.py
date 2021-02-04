@@ -393,7 +393,7 @@ class HAN(Han, NodeClfMetrics):
                 X = self.embedding.weight[x_idx]
 
         for i in range(len(self.layers)):
-            X = self.layers[i].forward(X, A, )
+            X = self.layers[i](X, A)
 
         X = self.embedder(X, A)
 
