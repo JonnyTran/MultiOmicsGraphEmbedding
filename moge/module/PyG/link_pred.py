@@ -1,11 +1,21 @@
 import multiprocessing
+from typing import Callable
 
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.hooks import RemovableHandle
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE, untag_negative, is_negative
 from ..trainer import LinkPredTrainer
+
+
+class DistMulti(torch.nn.Module):
+    def __init__(self, embedding_dim, n_metapaths):
+        super(DistMulti, self).__init__()
+
+    def forward(self):
+        pass
 
 
 class LATTELinkPred(LinkPredTrainer):

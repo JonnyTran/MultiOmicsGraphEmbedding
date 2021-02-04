@@ -112,14 +112,18 @@ class TripletSampler(HeteroNetDataset):
         assert self.validation_idx.max() < self.testing_idx.min()
         assert self.testing_idx.max() < self.training_idx.min()
 
+    def get_collate_fn(self, collate_fn: str, mode=None):
+        assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
 
-    def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
+        def collate_wrapper(iloc):
+            return self.sample(iloc, mode=mode)
+
         if "triples_batch" in collate_fn:
-            return self.sample
+            return collate_wrapper
         else:
             raise Exception(f"Correct collate function {collate_fn} not found.")
 
-    def sample(self, iloc):
+    def sample(self, iloc, mode=None):
         if not isinstance(iloc, torch.Tensor):
             iloc = torch.tensor(iloc)
 

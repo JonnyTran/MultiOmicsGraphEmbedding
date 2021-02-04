@@ -12,10 +12,82 @@ from .utils import tensor_sizes, preprocess_input
 from ..evaluation.clustering import clustering_metrics
 
 
-class LinkPredTrainer(NodeClfTrainer):
-    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
-        super(LinkPredTrainer, self).__init__(hparams, dataset, metrics, *args, **kwargs)
+class ClusteringEvaluator(LightningModule):
+    def register_hooks(self):
+        # Register hooks for embedding layer and classifier layer
+        for name, layer in self.named_children():
+            layer.__name__ = name
+            print(name)
+            layer.register_forward_hook(self.save_embedding)
+            layer.register_forward_hook(self.save_pred)
 
+        # def save_node_ids(module, inputs):
+        #     # if module.training: return
+        #     logging.info(f"save_node_ids @ {module.__name__} {tensor_sizes(inputs)}")
+        #
+        # # Register a hook to get node_ids input
+        # for layer in itertools.islice(self.modules(), 1):
+        #     print(layer.name())
+        #     layer.register_forward_pre_hook(save_node_ids)
+
+    def save_embedding(self, module, _, outputs):
+        if self.training:
+            return
+
+        if module.__name__ == "embedder":
+            logging.info(f"save_embedding @ {module.__name__}")
+
+            if isinstance(outputs, (list, tuple)):
+                self._embeddings = outputs[0]
+            else:
+                self._embeddings = outputs
+
+    def save_pred(self, module, _, outputs):
+        if self.training:
+            return
+
+        if module.__name__ in ["classifier"]:
+            logging.info(
+                f"save_pred @ {module.__name__}, output {tensor_sizes(outputs)}")
+
+            if isinstance(outputs, (list, tuple)):
+                self._y_pred = outputs[0]
+            else:
+                self._y_pred = outputs
+
+    def trainvalidtest_dataloader(self):
+        return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
+
+    def clustering_metrics(self, n_runs=10, compare_node_types=True):
+        loader = self.trainvalidtest_dataloader()
+        X_all, y_all, _ = next(iter(loader))
+        self.cpu().forward(preprocess_input(X_all, device="cpu"))
+
+        if not isinstance(self._embeddings, dict):
+            self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
+
+        embeddings_all, types_all, y_true = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
+
+        # Record metrics for each run in a list of dict's
+        res = [{}, ] * n_runs
+        for i in range(n_runs):
+            y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()), seed=i)
+
+            if compare_node_types and len(self.dataset.node_types) > 1:
+                res[i].update(clustering_metrics(y_true=types_all,
+                                                 # Match y_pred to type_all's index
+                                                 y_pred=types_all.index.map(lambda idx: y_pred.get(idx, "")),
+                                                 metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
+
+            if y_pred.shape[0] != y_true.shape[0]:
+                y_pred = y_pred.loc[y_true.index]
+            res[i].update(clustering_metrics(y_true,
+                                             y_pred,
+                                             metrics=["homogeneity", "completeness", "nmi"]))
+
+        res_df = pd.DataFrame(res)
+        metrics = res_df.mean(0).to_dict()
+        return metrics
 
 class NodeClfTrainer(ClusteringEvaluator):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
@@ -109,79 +181,16 @@ class NodeClfTrainer(ClusteringEvaluator):
         return size
 
 
-class ClusteringEvaluator(LightningModule):
-    def register_hooks(self):
-        # Register hooks for embedding layer and classifier layer
-        for name, layer in self.named_children():
-            layer.__name__ = name
-            print(name)
-            layer.register_forward_hook(self.save_embedding)
-            layer.register_forward_hook(self.save_pred)
+class LinkPredTrainer(NodeClfTrainer):
+    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
+        super(LinkPredTrainer, self).__init__(hparams, dataset, metrics, *args, **kwargs)
 
-        # def save_node_ids(module, inputs):
-        #     # if module.training: return
-        #     logging.info(f"save_node_ids @ {module.__name__} {tensor_sizes(inputs)}")
-        #
-        # # Register a hook to get node_ids input
-        # for layer in itertools.islice(self.modules(), 1):
-        #     print(layer.name())
-        #     layer.register_forward_pre_hook(save_node_ids)
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
-    def save_embedding(self, module, _, outputs):
-        if self.training:
-            return
+    def val_dataloader(self):
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
-        if module.__name__ == "embedder":
-            logging.info(f"save_embedding @ {module.__name__}")
-
-            if isinstance(outputs, (list, tuple)):
-                self._embeddings = outputs[0]
-            else:
-                self._embeddings = outputs
-
-    def save_pred(self, module, _, outputs):
-        if self.training:
-            return
-
-        if module.__name__ in ["classifier"]:
-            logging.info(
-                f"save_pred @ {module.__name__}, output {tensor_sizes(outputs)}")
-
-            if isinstance(outputs, (list, tuple)):
-                self._y_pred = outputs[0]
-            else:
-                self._y_pred = outputs
-
-    def trainvalidtest_dataloader(self):
-        return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
-
-    def clustering_metrics(self, n_runs=10, compare_node_types=True):
-        loader = self.trainvalidtest_dataloader()
-        X_all, y_all, _ = next(iter(loader))
-        self.cpu().forward(preprocess_input(X_all, device="cpu"))
-
-        if not isinstance(self._embeddings, dict):
-            self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
-
-        embeddings_all, types_all, y_true = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
-
-        # Record metrics for each run in a list of dict's
-        res = [{}, ] * n_runs
-        for i in range(n_runs):
-            y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()), seed=i)
-
-            if compare_node_types and len(self.dataset.node_types) > 1:
-                res[i].update(clustering_metrics(y_true=types_all,
-                                                 # Match y_pred to type_all's index
-                                                 y_pred=types_all.index.map(lambda idx: y_pred.get(idx, "")),
-                                                 metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
-
-            if y_pred.shape[0] != y_true.shape[0]:
-                y_pred = y_pred.loc[y_true.index]
-            res[i].update(clustering_metrics(y_true,
-                                             y_pred,
-                                             metrics=["homogeneity", "completeness", "nmi"]))
-
-        res_df = pd.DataFrame(res)
-        metrics = res_df.mean(0).to_dict()
-        return metrics
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size)
