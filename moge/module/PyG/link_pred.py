@@ -6,15 +6,15 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE, untag_negative, is_negative
-from .base import NodeClfMetrics
+from ..trainer import NodeClfTrainer
 
 
-class LinkPredMetrics(NodeClfMetrics, metaclass=ABCMeta):
+class LinkPredTrainer(NodeClfTrainer, metaclass=ABCMeta):
     def __init__(self, hparams, dataset, metrics):
-        super(LinkPredMetrics, self).__init__(hparams, dataset, metrics)
+        super(LinkPredTrainer, self).__init__(hparams, dataset, metrics)
 
 
-class LATTELinkPred(LinkPredMetrics):
+class LATTELinkPred(LinkPredTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["obgl-biokg"],
                  collate_fn="neighbor_sampler") -> None:
         super(LATTELinkPred, self).__init__(hparams, dataset, metrics)

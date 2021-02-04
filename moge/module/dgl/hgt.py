@@ -16,7 +16,7 @@ from moge.generator import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from ...module.utils import tensor_sizes
-from ..PyG.base import NodeClfMetrics
+from ..trainer import NodeClfTrainer
 
 
 class HGTLayer(nn.Module):
@@ -189,7 +189,7 @@ class HGT(nn.Module):
         return h
 
 
-class HGTNodeClassifier(NodeClfMetrics):
+class HGTNodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(HGTNodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type

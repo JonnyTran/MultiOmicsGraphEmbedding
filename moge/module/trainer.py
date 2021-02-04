@@ -1,155 +1,14 @@
+import itertools
+import logging
+
+import pandas as pd
 import pytorch_lightning as pl
 import torch
+from pytorch_lightning import LightningModule
 
 from .metrics import Metrics
-
-
-class ModelTrainer(pl.LightningModule):
-    def __init__(self, model: torch.nn.Module, gpus=1, data_path=None, metrics=["precision", "recall", "top_k"]):
-        super(ModelTrainer, self).__init__()
-
-        self._model = model
-        self.hparams = self._model.hparams
-        self.training_metrics = Metrics(prefix=None, loss_type=self.hparams.loss_type, n_classes=self.hparams.n_classes,
-                                        metrics=metrics)
-        self.validation_metrics = Metrics(prefix="val_", loss_type=self.hparams.loss_type,
-                                          n_classes=self.hparams.n_classes, metrics=metrics)
-
-        self.n_gpus = gpus
-        self.data_path = data_path
-        if self.data_path is not None:
-            self.prepare_data()
-
-    def forward(self, X):
-        return self._model.forward(X)
-
-    def training_step(self, batch, batch_nb):
-        X, y, weights = batch
-        if y.dim() > 2:
-            assert y.size(0) == 1
-            y = y.squeeze(0)
-        if weights is not None and weights.dim() > 2:
-            assert weights.size(0) == 1
-            weights = weights.squeeze(0)
-
-        Y_hat = self.forward(X)
-        loss = self._model.loss(Y_hat, y, weights)
-
-        self.training_metrics.update_metrics(Y_hat, y, weights)
-        logs = self.training_metrics.compute_metrics()
-        logs = _fix_dp_return_type(logs, device=Y_hat.device)
-
-        return {'loss': loss, 'progress_bar': logs, }
-
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.training_metrics.compute_metrics()
-        logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
-
-        logs.update({"loss": avg_loss})
-        self.training_metrics.reset_metrics()
-
-        return {"log": logs}
-
-    # def training_step_end(self, batch_parts_outputs):
-    #     outputs = torch.cat(batch_parts_outputs, dim=1)
-    #     return outputs
-
-    def validation_step(self, batch, batch_nb):
-        X, y, weights = batch
-        if y.dim() > 2:
-            assert y.size(0) == 1
-            y = y.squeeze(0)
-        if weights is not None and weights.dim() > 2:
-            assert weights.size(0) == 1
-            weights = weights.squeeze(0)
-
-        Y_hat = self._model.forward(X)
-        loss = self._model.loss(Y_hat, y, weights)
-
-        self.validation_metrics.update_metrics(Y_hat, y, weights, )
-        return {"val_loss": loss}
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-
-        logs = self.validation_metrics.compute_metrics()
-        self.validation_metrics.reset_metrics()
-        logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
-        logs.update({"val_loss": avg_loss})
-        print_logs(logs)
-        return {"progress_bar": logs, "log": logs}
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self._model.parameters(), lr=self.hparams.lr,
-                                     weight_decay=self.hparams.weight_decay)
-
-        # scheduler = ReduceLROnPlateau(optimizer, )
-        # return [optimizer], [scheduler]
-        return optimizer
-
-    # def prepare_data(self) -> None:
-    #     with open(self.data_path, 'rb') as file:
-    #         network = pickle.load(file)
-    #
-    #     variables = []
-    #     targets = ['go_id']
-    #     network.process_feature_tranformer(filter_label=targets[0], min_count=self.hparams.classes_min_count, verbose=False)
-    #     classes = network.feature_transformer[targets[0]].classes_
-    #     self.hparams.n_classes = len(classes)
-    #     batch_size = 1000
-    #     max_length = 1000
-    #     n_steps = int(400000 / batch_size)
-    #     seed = random.randint(0, 1000)
-    #
-    #     split_idx = 0
-    #     self.generator_train = network.get_train_generator(
-    #         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-    #         traversal=self.hparams.traversal, batch_size=batch_size,
-    #         sampling=self.hparams.sampling, n_steps=n_steps,
-    #         method="GAT", adj_output="coo",
-    #         maxlen=max_length, padding='post', truncating='post',
-    #         seed=seed, verbose=False)
-    #
-    #     self.generator_test = network.get_test_generator(
-    #         MultiplexGenerator, split_idx=split_idx, variables=variables, targets=targets,
-    #         traversal='all_slices', batch_size=np.ceil(len(network.testing.node_list)*.25).astype(int),
-    #         sampling="cycle", n_steps=1,
-    #         method="GAT", adj_output="coo",
-    #         maxlen=max_length, padding='post', truncating='post',
-    #         seed=seed, verbose=False)
-    #
-    #     self.vocab = self.generator_train.tokenizer.word_index
-    #
-    # def train_dataloader(self):
-    #     if self.gpus == 1 or self.gpus == None:
-    #         batch_size = None
-    #     else:
-    #         batch_size = self.gpus
-    #
-    #     return torch.utils.data.DataLoader(
-    #         self.generator_train,
-    #         batch_size=batch_size,
-    #         shuffle=False,
-    #         num_workers=18,
-    #         collate_fn=get_multiplex_collate_fn(node_types=list(self.hparams.encoder.keys()),
-    #                                             layers=list(self.hparams.embedder.keys())) if self.gpus > 1 else None
-    #     )
-    #
-    # def val_dataloader(self):
-    #     if self.gpus == 1 or self.gpus == None:
-    #         batch_size = None
-    #     else:
-    #         batch_size = self.gpus
-    #
-    #     return torch.utils.data.DataLoader(
-    #         self.generator_test,
-    #         batch_size=batch_size,
-    #         shuffle=False,
-    #         num_workers=4,
-    #         collate_fn=get_multiplex_collate_fn(node_types=list(self.hparams.encoder.keys()),
-    #                                             layers=list(self.hparams.embedder.keys())) if self.gpus > 1 else None
-    #     )
+from .utils import tensor_sizes, preprocess_input
+from ..evaluation.clustering import clustering_metrics
 
 
 def _fix_dp_return_type(result, device):
@@ -166,3 +25,171 @@ def print_logs(logs):
         else f"{item:.5f}" for key, item in logs.items()})
 
 
+class ClusteringEvaluator(LightningModule):
+    def register_hooks(self):
+        # Register hooks for embedding layer and classifier layer
+        for name, layer in self.named_children():
+            layer.__name__ = name
+            print(name)
+            layer.register_forward_hook(self.save_embedding)
+            layer.register_forward_hook(self.save_pred)
+
+        # def save_node_ids(module, inputs):
+        #     # if module.training: return
+        #     logging.info(f"save_node_ids @ {module.__name__} {tensor_sizes(inputs)}")
+        #
+        # # Register a hook to get node_ids input
+        # for layer in itertools.islice(self.modules(), 1):
+        #     print(layer.name())
+        #     layer.register_forward_pre_hook(save_node_ids)
+
+    def save_embedding(self, module, _, outputs):
+        if self.training:
+            return
+
+        if module.__name__ == "embedder":
+            logging.info(f"save_embedding @ {module.__name__}")
+
+            if isinstance(outputs, (list, tuple)):
+                self._embeddings = outputs[0]
+            else:
+                self._embeddings = outputs
+
+    def save_pred(self, module, _, outputs):
+        if self.training:
+            return
+
+        if module.__name__ in ["classifier"]:
+            logging.info(
+                f"save_pred @ {module.__name__}, output {tensor_sizes(outputs)}")
+
+            if isinstance(outputs, (list, tuple)):
+                self._y_pred = outputs[0]
+            else:
+                self._y_pred = outputs
+
+    def trainvalidtest_dataloader(self):
+        return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
+
+    def clustering_metrics(self, n_runs=10, compare_node_types=True):
+        loader = self.trainvalidtest_dataloader()
+        X_all, y_all, _ = next(iter(loader))
+        self.cpu().forward(preprocess_input(X_all, device="cpu"))
+
+        if not isinstance(self._embeddings, dict):
+            self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
+
+        embeddings_all, types_all, y_true = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
+
+        # Record metrics for each run in a list of dict's
+        res = [{}, ] * n_runs
+        for i in range(n_runs):
+            y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()), seed=i)
+
+            if compare_node_types and len(self.dataset.node_types) > 1:
+                res[i].update(clustering_metrics(y_true=types_all,
+                                                 # Match y_pred to type_all's index
+                                                 y_pred=types_all.index.map(lambda idx: y_pred.get(idx, "")),
+                                                 metrics=["homogeneity_ntype", "completeness_ntype", "nmi_ntype"]))
+
+            if y_pred.shape[0] != y_true.shape[0]:
+                y_pred = y_pred.loc[y_true.index]
+            res[i].update(clustering_metrics(y_true,
+                                             y_pred,
+                                             metrics=["homogeneity", "completeness", "nmi"]))
+
+        res_df = pd.DataFrame(res)
+        metrics = res_df.mean(0).to_dict()
+        return metrics
+
+
+class NodeClfTrainer(ClusteringEvaluator):
+    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                    multilabel=dataset.multilabel, metrics=metrics)
+        hparams.name = self.name()
+        hparams.inductive = dataset.inductive
+        self.hparams = hparams
+
+    def name(self):
+        if hasattr(self, "_name"):
+            return self._name
+        else:
+            return self.__class__.__name__
+
+    def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
+        logs = self.train_metrics.compute_metrics()
+        # logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
+
+        logs.update({"loss": avg_loss})
+        self.train_metrics.reset_metrics()
+        self.log_dict(logs)
+        return None
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
+        logs = self.valid_metrics.compute_metrics()
+        # logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
+        # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
+
+        logs.update({"val_loss": avg_loss})
+        self.valid_metrics.reset_metrics()
+        self.log_dict(logs, prog_bar=logs)
+        return None
+
+    def test_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
+        if hasattr(self, "test_metrics"):
+            logs = self.test_metrics.compute_metrics()
+            self.test_metrics.reset_metrics()
+        else:
+            logs = {}
+        logs.update({"test_loss": avg_loss})
+
+        self.log_dict(logs, prog_bar=logs)
+        return None
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size)
+
+    def test_dataloader(self):
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+
+    def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
+        if multilabel:
+            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            print(f"y_pred {len(y_pred_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
+            print(f"y_true {len(y_true_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+        else:
+            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+            print(f"y_pred {len(y_pred_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
+            print(f"y_true {len(y_true_dict)} classes",
+                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
+
+    def get_n_params(self):
+        size = 0
+        for name, param in dict(self.named_parameters()).items():
+            nn = 1
+            for s in list(param.size()):
+                nn = nn * s
+            size += nn
+        return size

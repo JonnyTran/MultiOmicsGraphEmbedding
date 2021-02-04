@@ -17,7 +17,7 @@ from moge.generator import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.utils import filter_samples
-from ..PyG.base import NodeClfMetrics
+from ..trainer import NodeClfTrainer
 
 from moge.module.dgl.latte import LATTE
 from ...module.utils import tensor_sizes
@@ -152,7 +152,8 @@ class GATLayer(nn.Module):
 
             return new_h
 
-class LATTENodeClassifier(NodeClfMetrics):
+
+class LATTENodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type

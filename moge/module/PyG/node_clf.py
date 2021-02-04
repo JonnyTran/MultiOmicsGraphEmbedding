@@ -22,11 +22,11 @@ from moge.module.PyG.hgt import HGTModel, Graph, sample_subgraph, feature_MAG, t
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.metrics import Metrics
-from moge.module.PyG.base import NodeClfMetrics
+from moge.module.trainer import NodeClfTrainer
 from moge.module.utils import filter_samples
 
 
-class LATTENodeClf(NodeClfMetrics):
+class LATTENodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
@@ -144,7 +144,7 @@ class LATTENodeClf(NodeClfMetrics):
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
-class HGT(HGTModel, NodeClfMetrics):
+class HGT(HGTModel, NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         super(HGT, self).__init__(
             in_dim=dataset.in_features,
@@ -241,7 +241,7 @@ class HGT(HGTModel, NodeClfMetrics):
         return {"optimizer": optimizer, "scheduler": scheduler, "monitor": "val_loss"}
 
 
-class GTN(Gtn, NodeClfMetrics):
+class GTN(Gtn, NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = hparams.num_layers
@@ -350,7 +350,7 @@ class GTN(Gtn, NodeClfMetrics):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class HAN(Han, NodeClfMetrics):
+class HAN(Han, NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = hparams.num_layers
