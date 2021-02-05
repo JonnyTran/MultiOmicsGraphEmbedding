@@ -36,16 +36,14 @@ class DistMulti(torch.nn.Module):
         # Head batch
         edge_head_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_index_dict"],
                                                                         neg_batch=inputs["edge_neg_head"],
-                                                                        neg_samp_size=neg_samp_size,
                                                                         mode="head")
-        output["edge_neg_head"] = self.predict(edge_head_batch, embeddings, mode="head")
+        output["edge_neg_head"] = self.predict(edge_head_batch, embeddings, neg_samp_size=neg_samp_size, mode="head")
 
         # Tail batch
         edge_tail_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_index_dict"],
                                                                         neg_batch=inputs["edge_neg_tail"],
-                                                                        neg_samp_size=neg_samp_size,
                                                                         mode="tail")
-        output["edge_neg_tail"] = self.predict(edge_tail_batch, embeddings, mode="tail")
+        output["edge_neg_tail"] = self.predict(edge_tail_batch, embeddings, neg_samp_size=neg_samp_size, mode="tail")
 
         return output
 
