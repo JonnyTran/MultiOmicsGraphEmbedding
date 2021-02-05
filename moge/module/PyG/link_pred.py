@@ -166,10 +166,6 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
 
-        if prox_loss is not None:
-            print("prox_loss", prox_loss)
-            loss += prox_loss
-
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         logs = {"loss": loss, **self.train_metrics.compute_metrics()}
@@ -184,8 +180,6 @@ class LATTELinkPred(LinkPredTrainer):
 
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
-        if prox_loss is not None:
-            loss += prox_loss
 
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
 
@@ -197,8 +191,6 @@ class LATTELinkPred(LinkPredTrainer):
 
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
-        if prox_loss is not None:
-            loss += prox_loss
 
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
@@ -219,4 +211,4 @@ class LATTELinkPred(LinkPredTrainer):
                                      weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "loss"}
