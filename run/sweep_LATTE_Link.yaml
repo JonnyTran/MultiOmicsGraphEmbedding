@@ -1,7 +1,7 @@
 program: run/latte_link.py
 method: bayes
 metric:
-  name: val_loss
+  name: val_mrr
   goal: minimize
 early_terminate:
   type: hyperband
