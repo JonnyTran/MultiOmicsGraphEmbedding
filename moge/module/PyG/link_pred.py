@@ -171,9 +171,11 @@ class LATTELinkPred(LinkPredTrainer):
             loss += prox_loss
 
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
-        self.log_dict({"loss": loss, **self.train_metrics.compute_metrics()})
 
-        outputs = {'loss': loss}
+        logs = {"loss": loss, **self.train_metrics.compute_metrics()}
+        self.log_dict(logs)
+
+        outputs = {'loss': loss, 'progress_bar': logs}
         return outputs
 
     def validation_step(self, batch, batch_nb):
