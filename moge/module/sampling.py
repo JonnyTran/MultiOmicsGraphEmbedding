@@ -26,7 +26,7 @@ def negative_sample(edge_index, M: int, N: int, n_sample_per_edge: int):
     return neg_edge_index.to(edge_index.device)
 
 
-def negative_sample_head_tail(edge_index, M: int, N: int, n_sample_per_edge: int):
+def negative_sample_head_tail(edge_index, M: int, N: int, n_sample_per_edge: int, ):
     """
     Corrupt the tail or head of each edge `n_sample_per_edge` times.
     :param edge_index:
@@ -38,9 +38,21 @@ def negative_sample_head_tail(edge_index, M: int, N: int, n_sample_per_edge: int
     K = int(min(n_sample_per_edge, (M * N) / edge_index.size(1))) // 2
 
     sampled_tails = torch.randint(0, N, (edge_index[0].size(0) * K,), dtype=torch.long)
-    sampled_heads = torch.randint(0, M, (edge_index[1].size(0) * K,), dtype=torch.long)
     neg_tail_batch = torch.stack((edge_index[0].cpu().repeat_interleave(K), sampled_tails))
+
+    sampled_heads = torch.randint(0, M, (edge_index[1].size(0) * K,), dtype=torch.long)
     neg_head_batch = torch.stack((sampled_heads, edge_index[1].cpu().repeat_interleave(K)))
 
     neg_edge_index = torch.cat((neg_tail_batch, neg_head_batch), dim=1)
+
     return neg_edge_index.to(edge_index.device)
+
+
+def negative_sample_head(edge_index, M: int, N: int, n_sample_per_edge):
+    K = int(min(n_sample_per_edge, (M * N) / edge_index.size(1))) // 2
+
+    sampled_heads = torch.randint(0, M, (edge_index[1].size(0) * K,), dtype=torch.long)
+    neg_head_batch = torch.stack((sampled_heads, edge_index[1].cpu().repeat_interleave(K)))
+    neg_head_batch = neg_head_batch.view(edge_index.size(1), K)
+
+    return neg_head_batch.to(edge_index.device)

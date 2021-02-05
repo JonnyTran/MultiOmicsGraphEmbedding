@@ -522,7 +522,7 @@ def untag_negative(metapath):
 
 
 def is_negative(metapath):
-    if isinstance(metapath, tuple) and metapath[-1] == "neg":
+    if isinstance(metapath, tuple) and "neg" in metapath:
         return True
     elif isinstance(metapath, str) and "_neg" in metapath:
         return True

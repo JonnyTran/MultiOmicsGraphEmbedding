@@ -2,6 +2,7 @@ import multiprocessing
 from typing import Callable
 
 import torch
+from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.hooks import RemovableHandle
 
@@ -13,10 +14,21 @@ from ..trainer import LinkPredTrainer
 class DistMulti(torch.nn.Module):
     def __init__(self, embedding_dim, metapaths):
         super(DistMulti, self).__init__()
+        self.metapaths = metapaths
+        self.embedding_dim = embedding_dim
 
-    def forward(self):
-        pass
+        self.linears = nn.ModuleDict(
+            {metapath: nn.Parameter(torch.Tensor((embedding_dim, embedding_dim))) \
+             for metapath in metapaths}
+        )
 
+    def forward(self, edge_index_dict, embeddings):
+        edge_pred_dict = {} if isinstance(edge_index_dict, dict) else []
+        for metapath, edge_index in (
+        edge_index_dict.items() if isinstance(edge_index_dict, dict) else enumerate(edge_index_dict)):
+            edge_pred_dict[metapath] = embeddings[metapath[0]].t() @ self.linears[metapath] * embeddings[metapath[-1]]
+
+        return edge_pred_dict
 
 class LATTELinkPred(LinkPredTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["obgl-biokg"],
