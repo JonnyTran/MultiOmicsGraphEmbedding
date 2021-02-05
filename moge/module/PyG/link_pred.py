@@ -112,7 +112,7 @@ class LATTELinkPred(LinkPredTrainer):
                               in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(), attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
-                              use_proximity=True, neg_sampling_ratio=hparams.neg_sampling_ratio)
+                              use_proximity=hparams.use_proximity, neg_sampling_ratio=hparams.neg_sampling_ratio)
 
         self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.get_metapaths())
         self.criterion = LinkPredLoss()
@@ -165,7 +165,9 @@ class LATTELinkPred(LinkPredTrainer):
 
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
+
         if prox_loss is not None:
+            print("prox_loss", prox_loss)
             loss += prox_loss
 
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)

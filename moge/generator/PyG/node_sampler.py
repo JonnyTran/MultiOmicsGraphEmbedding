@@ -290,7 +290,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
                         mask = np.isin(edge_index[1], allowed_nodes_idx)
                         edge_index = edge_index[:, mask]
 
-                # Filter nodes from all node types, not just head node type
+                # Filter nodes from all node types
                 else:
                     allowed_nodes_idx = torch.cat([self.local2global[ntype][list(local_global.keys())] \
                                                    for ntype, local_global in local2batch.items()], dim=0)
