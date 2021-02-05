@@ -6,22 +6,32 @@ import numpy as np
 import torch
 
 from torch.utils.data import Dataset
-from moge.generator.PyG.triplet_sampler import HeteroNetDataset, TripletSampler
+from moge.generator import HeteroNeighborSampler, TripletSampler
 from moge.module.PyG.latte import tag_negative, untag_negative, is_negative
 from moge.module.sampling import negative_sample_head_tail
+from moge.module.utils import tensor_sizes
 
 
-class BidirectionalSampler(TripletSampler):
+class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
-    def __init__(self, dataset, node_types=None, metapaths=None,
-                 negative_sampling_size=128, test_negative_sampling_size=500,
-                 head_node_type=None, directed=True,
-                 resample_train=None, add_reverse_metapaths=True):
-        super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
-                         add_reverse_metapaths)
-
+    def __init__(self, dataset, neighbor_sizes=[20, 10], negative_sampling_size=128, test_negative_sampling_size=500,
+                 node_types=None, metapaths=None, head_node_type=None, directed=True,
+                 resample_train=None, add_reverse_metapaths=True, **kwargs):
+        super().__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types, metapaths=metapaths,
+                         head_node_type=head_node_type, directed=directed, resample_train=resample_train,
+                         add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.negative_sampling_size = negative_sampling_size
         self.test_negative_sampling_size = test_negative_sampling_size
+
+    # def __init__(self, dataset, node_types=None, metapaths=None,
+    #              negative_sampling_size=128, test_negative_sampling_size=500,
+    #              head_node_type=None, directed=True,
+    #              resample_train=None, add_reverse_metapaths=True):
+    #     super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
+    #                      add_reverse_metapaths)
+    #
+    # self.negative_sampling_size = negative_sampling_size
+    # self.test_negative_sampling_size = test_negative_sampling_size
 
     def get_collate_fn(self, collate_fn: str, mode=None):
         assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
@@ -70,9 +80,23 @@ class BidirectionalSampler(TripletSampler):
                 torch.randint(high=len(global_node_index[metapath[-1]]),
                               size=(edge_index.shape[1], negative_sampling_size,))
 
-        # Do this last to avoid sampling negative edges on the reverse metapaths
+        # Neighbor sampling with global_node_index
+        batch_nodes_global = torch.cat([self.local2global[ntype][nid] for ntype, nid in global_node_index.items()], 0)
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(batch_nodes_global)
+        if not isinstance(adjs, list):
+            adjs = [adjs]
+
+        local2batch = {node_type: dict(zip(global_node_index[node_type].numpy(),
+                                           range(len(global_node_index[node_type])))) \
+                       for node_type in global_node_index}
+
+        edge_index_dict = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
+                                                         sampled_local_nodes=global_node_index,
+                                                         local2batch=local2batch,
+                                                         filter_nodes=2)
+
         if self.use_reverse:
-            self.add_reverse_edge_index(pos_edges)
+            self.add_reverse_edge_index(edge_index_dict)
 
         # Make x_dict
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
@@ -81,7 +105,17 @@ class BidirectionalSampler(TripletSampler):
         else:
             node_feats = {}
 
-        X = {"edge_index_dict": pos_edges,
+        # Ensure no edges are outside of batch_nodes_ids
+        # for m, edge_index in pos_edges.items():
+        #     assert set(global_node_index[m[0]][edge_index[0]].tolist()) <= set(local2batch[m[0]].keys()), f"{m}, {m[0]}"
+        #     assert set(global_node_index[m[-1]][edge_index[1]].tolist()) <= set(local2batch[m[-1]].keys()), f"{m}, {m[-1]}"
+        #
+        # for m, edge_index in edge_index_dict.items():
+        #     assert set(global_node_index[m[0]][edge_index[0]].tolist()) <= set(local2batch[m[0]].keys()), f"{m}, {m[0]}"
+        #     assert set(global_node_index[m[-1]][edge_index[1]].tolist()) <= set(local2batch[m[-1]].keys()), f"{m}, {m[-1]}"
+
+        X = {"edge_index_dict": edge_index_dict,
+             "edge_pos": pos_edges,
              "edge_neg_head": neg_head,
              "edge_neg_tail": neg_tail,
              "global_node_index": global_node_index,
@@ -141,76 +175,3 @@ class TrainDataset(Dataset):
         return positive_sample, negative_sample, subsample_weight
 
 
-class TestDataset(Dataset):
-    def __init__(self, triples, args, mode, random_sampling, entity_dict):
-        self.len = len(triples['head'])
-        self.triples = triples
-        self.nentity = args.nentity
-        self.nrelation = args.nrelation
-        self.mode = mode
-        self.random_sampling = random_sampling
-        if random_sampling:
-            self.neg_size = args.neg_size_eval_train
-        self.entity_dict = entity_dict
-
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, idx):
-        head, relation, tail = self.triples['head'][idx], self.triples['relation'][idx], self.triples['tail'][idx]
-        head_type, tail_type = self.triples['head_type'][idx], self.triples['tail_type'][idx]
-        positive_sample = torch.LongTensor(
-            (head + self.entity_dict[head_type][0], relation, tail + self.entity_dict[tail_type][0]))
-
-        if self.mode == 'head-batch':
-            if not self.random_sampling:
-                negative_sample = torch.cat([torch.LongTensor([head + self.entity_dict[head_type][0]]),
-                                             torch.from_numpy(
-                                                 self.triples['head_neg'][idx] + self.entity_dict[head_type][0])])
-            else:
-                negative_sample = torch.cat([torch.LongTensor([head + self.entity_dict[head_type][0]]),
-                                             torch.randint(self.entity_dict[head_type][0],
-                                                           self.entity_dict[head_type][1], size=(self.neg_size,))])
-        elif self.mode == 'tail-batch':
-            if not self.random_sampling:
-                negative_sample = torch.cat([torch.LongTensor([tail + self.entity_dict[tail_type][0]]),
-                                             torch.from_numpy(
-                                                 self.triples['tail_neg'][idx] + self.entity_dict[tail_type][0])])
-            else:
-                negative_sample = torch.cat([torch.LongTensor([tail + self.entity_dict[tail_type][0]]),
-                                             torch.randint(self.entity_dict[tail_type][0],
-                                                           self.entity_dict[tail_type][1], size=(self.neg_size,))])
-
-        return positive_sample, negative_sample, self.mode
-
-    @staticmethod
-    def collate_fn(data):
-        positive_sample = torch.stack([_[0] for _ in data], dim=0)
-        negative_sample = torch.stack([_[1] for _ in data], dim=0)
-        mode = data[0][2]
-
-        return positive_sample, negative_sample, mode
-
-
-class BidirectionalOneShotIterator(object):
-    def __init__(self, dataloader_head, dataloader_tail):
-        self.iterator_head = self.one_shot_iterator(dataloader_head)
-        self.iterator_tail = self.one_shot_iterator(dataloader_tail)
-        self.step = 0
-
-    def __next__(self):
-        self.step += 1
-        if self.step % 2 == 0:
-            data = next(self.iterator_head)
-        else:
-            data = next(self.iterator_tail)
-        return data
-
-    @staticmethod
-    def one_shot_iterator(dataloader):
-        '''
-        Transform a PyTorch Dataloader into python iterator
-        '''
-        while True:
-            for data in dataloader:
-                yield data

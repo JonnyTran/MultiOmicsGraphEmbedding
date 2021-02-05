@@ -31,16 +31,16 @@ class DistMulti(torch.nn.Module):
         output = {}
 
         # Single edges
-        output["edge_pos"] = self.predict(inputs["edge_index_dict"], embeddings, neg_samp_size=None, mode=None)
+        output["edge_pos"] = self.predict(inputs["edge_pos"], embeddings, neg_samp_size=None, mode=None)
 
         # Head batch
-        edge_head_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_index_dict"],
+        edge_head_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_pos"],
                                                                         neg_batch=inputs["edge_neg_head"],
                                                                         mode="head")
         output["edge_neg_head"] = self.predict(edge_head_batch, embeddings, neg_samp_size=neg_samp_size, mode="head")
 
         # Tail batch
-        edge_tail_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_index_dict"],
+        edge_tail_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_pos"],
                                                                         neg_batch=inputs["edge_neg_tail"],
                                                                         mode="tail")
         output["edge_neg_tail"] = self.predict(edge_tail_batch, embeddings, neg_samp_size=neg_samp_size, mode="tail")
@@ -48,8 +48,6 @@ class DistMulti(torch.nn.Module):
         return output
 
     def predict(self, edge_index_dict, embeddings, neg_samp_size, mode=None):
-        # Find neg_sampling size
-
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():

@@ -10,9 +10,11 @@ from moge.module.utils import tensor_sizes
 
 class TripletSampler(HeteroNetDataset):
     def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
-                 resample_train=None, add_reverse_metapaths=True):
-        super(TripletSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
-                                             add_reverse_metapaths)
+                 resample_train=None, add_reverse_metapaths=True, **kwargs):
+        super(TripletSampler, self).__init__(dataset, node_types=node_types, metapaths=metapaths,
+                                             head_node_type=head_node_type,
+                                             directed=directed, resample_train=resample_train,
+                                             add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.n_classes = None
         self.classes = None
         assert hasattr(self, "validation_idx") and hasattr(self, "triples")
@@ -222,7 +224,7 @@ class TripletSampler(HeteroNetDataset):
         return global_node_index
 
 
-class NegativeSampler(HeteroNeighborSampler):
+class TripletNeighborSampler(HeteroNeighborSampler):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True, inductive=False):
         super().__init__(dataset, neighbor_sizes, node_types, metapaths, head_node_type, directed, resample_train,

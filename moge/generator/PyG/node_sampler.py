@@ -8,7 +8,7 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.network import HeteroNetDataset
-
+from moge.module.utils import tensor_sizes
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
@@ -275,9 +275,11 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 edge_index[0] = n_id[edge_index[0]]
                 edge_index[1] = n_id[edge_index[1]]
 
-                if filter_nodes:
+                # Filter nodes for only head node type
+                if filter_nodes < 2:
                     # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
                     allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
+
                     if head_type == self.head_node_type and tail_type == self.head_node_type:
                         mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
                         edge_index = edge_index[:, mask]
@@ -288,15 +290,25 @@ class HeteroNeighborSampler(HeteroNetDataset):
                         mask = np.isin(edge_index[1], allowed_nodes_idx)
                         edge_index = edge_index[:, mask]
 
+                # Filter nodes from all node types, not just head node type
+                else:
+                    allowed_nodes_idx = torch.cat([self.local2global[ntype][list(local_global.keys())] \
+                                                   for ntype, local_global in local2batch.items()], dim=0)
+
+                    mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
+                    edge_index = edge_index[:, mask]
+
                 # Convert node global index -> local index -> batch index
                 edge_index[0] = self.local_node_idx[edge_index[0]].apply_(local2batch[head_type].get)
                 edge_index[1] = self.local_node_idx[edge_index[1]].apply_(local2batch[tail_type].get)
 
                 edge_index_dict.setdefault(metapath, []).append(edge_index)
-        # Join edges from the adjs
+
+        # Join edges from the adjs (from iterative layer-wise sampling)
         edge_index_dict = {metapath: torch.cat(edge_index, dim=1) \
                            for metapath, edge_index in edge_index_dict.items()}
-        # Ensure no duplicate edge from adjs[0] to adjs[1]...
+
+        # Ensure no duplicate edges in each metapath
         edge_index_dict = {metapath: edge_index[:, self.nonduplicate_indices(edge_index)] \
                            for metapath, edge_index in edge_index_dict.items()}
         return edge_index_dict

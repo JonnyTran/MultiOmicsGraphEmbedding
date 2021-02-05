@@ -7,7 +7,8 @@ from ogb.linkproppred import PygLinkPropPredDataset
 import torch
 from torch_geometric.datasets import AMiner
 
-from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler, NegativeSampler, BidirectionalSampler
+from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler, TripletNeighborSampler, \
+    BidirectionalSampler
 from moge.module.utils import preprocess_input
 
 def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
