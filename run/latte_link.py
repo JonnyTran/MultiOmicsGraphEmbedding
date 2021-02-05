@@ -33,7 +33,7 @@ def train(hparams):
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
         auto_lr_find=False,
         max_epochs=MAX_EPOCHS,
-        callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.01, strict=False)],
+        callbacks=[EarlyStopping(monitor='val_loss', patience=1, min_delta=0.01, strict=False)],
         logger=wandb_logger,
         # regularizers=regularizers,
         weights_summary='top',

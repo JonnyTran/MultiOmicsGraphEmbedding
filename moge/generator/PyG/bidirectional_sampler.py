@@ -48,7 +48,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         if "test" in mode:
             negative_sampling_size = self.test_negative_sampling_size
         elif "valid" in mode:
-            negative_sampling_size = self.negative_sampling_size * 2
+            negative_sampling_size = self.test_negative_sampling_size
         else:
             negative_sampling_size = self.negative_sampling_size
 

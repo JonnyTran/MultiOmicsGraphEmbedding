@@ -1,4 +1,4 @@
-program: run/latte_node.py
+program: run/latte_link.py
 method: bayes
 metric:
   name: val_loss
@@ -9,24 +9,16 @@ early_terminate:
   s: 2
 parameters:
   embedding_dim:
-    values: [64, 128, 256]
+    values: [ 128, 256, 500 ]
   t_order:
     values: [1, 2]
   n_neighbors_1:
-    values: [5, 15, 25, 30]
+    values: [ 30, 50, 100 ]
   activation:
-    values: ["sigmoid", "tanh", "relu", "none"]
+    values: [ "relu" ]
   attn_dropout:
-    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.8 ]
   attn_activation:
     values: ["sharpening", "PReLU", "LeakyReLU", "none"]
-  nb_cls_dense_size:
-    values: [0, 512, 1024]
-  nb_cls_dropout:
-    values: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-  loss_type:
-    values: ["SOFTMAX_CROSS_ENTROPY", "SOFTMAX_FOCAL_CROSS_ENTROPY"]
-  use_class_weights:
-    values: [True, False]
   lr:
     values: [0.005, 0.001, 0.01]
