@@ -14,7 +14,7 @@ from moge.module.utils import tensor_sizes
 
 class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
-    def __init__(self, dataset, neighbor_sizes=[20, 10], negative_sampling_size=128, test_negative_sampling_size=500,
+    def __init__(self, dataset, neighbor_sizes=[40], negative_sampling_size=128, test_negative_sampling_size=500,
                  node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
         super().__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types, metapaths=metapaths,
