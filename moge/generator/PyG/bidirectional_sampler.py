@@ -14,9 +14,8 @@ from moge.module.sampling import negative_sample_head_tail
 class BidirectionalSampler(TripletSampler):
 
     def __init__(self, dataset, node_types=None, metapaths=None,
-                 negative_sampling_size=128,
-                 head_node_type=None, directed=True, test_negative_sampling_size=500,
-
+                 negative_sampling_size=128, test_negative_sampling_size=500,
+                 head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True):
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
                          add_reverse_metapaths)
