@@ -29,8 +29,8 @@ def train(hparams):
     wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
 
     trainer = Trainer(
-        gpus=NUM_GPUS,
-        distributed_backend='horovod' if NUM_GPUS > 1 else None,
+        # gpus=NUM_GPUS,
+        distributed_backend='horovod',
         auto_lr_find=False,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.01, strict=False)],

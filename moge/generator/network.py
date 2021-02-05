@@ -7,7 +7,7 @@ import torch_sparse
 from cogdl.datasets.gtn_data import GTNDataset
 from cogdl.datasets.han_data import HANDataset
 from ogb.linkproppred import PygLinkPropPredDataset
-from ogb.nodeproppred import PygNodePropPredDataset
+from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 from scipy.io import loadmat
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset
