@@ -34,32 +34,39 @@ class DistMulti(torch.nn.Module):
         output["edge_pos"] = self.predict(inputs["edge_index_dict"], embeddings, mode=None)
 
         # Head batch
-        edge_head_batch = self.get_edge_index_from_batch(inputs["edge_index_dict"],
-                                                         batch=inputs["edge_neg_head"],
-                                                         mode="head")
+        edge_head_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_index_dict"],
+                                                                        neg_batch=inputs["edge_neg_head"],
+                                                                        neg_samp_size=neg_samp_size,
+                                                                        mode="head")
         output["edge_neg_head"] = self.predict(edge_head_batch, embeddings, mode="head")
 
         # Tail batch
-        edge_tail_batch = self.get_edge_index_from_batch(inputs["edge_index_dict"],
-                                                         batch=inputs["edge_neg_tail"],
-                                                         mode="tail")
+        edge_tail_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_index_dict"],
+                                                                        neg_batch=inputs["edge_neg_tail"],
+                                                                        neg_samp_size=neg_samp_size,
+                                                                        mode="tail")
         output["edge_neg_tail"] = self.predict(edge_tail_batch, embeddings, mode="tail")
 
         return output
 
-    def predict(self, edge_index_dict, embeddings, mode=None):
+    def predict(self, edge_index_dict, embeddings, neg_samp_size, mode=None):
+        # Find neg_sampling size
+
         edge_pred_dict = {}
+
         for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
             kernel = self.relation_embedding[metapath_idx]
-
-            assert edge_index_dict[metapath].shape[0] == 2
 
             emb_A = embeddings[metapath[0]][edge_index_dict[metapath][0]]
             emb_B = embeddings[metapath[-1]][edge_index_dict[metapath][1]]
 
             if "head" == mode:
+                # logging.info(emb_B)
                 score = emb_A @ (kernel @ emb_B.t())
+            elif "tail" == mode:
+                # logging.info(emb_A)
+                score = (emb_A @ kernel) @ emb_B.t()
             else:
                 score = (emb_A @ kernel) @ emb_B.t()
 
@@ -68,22 +75,22 @@ class DistMulti(torch.nn.Module):
 
         return edge_pred_dict
 
-    def get_edge_index_from_batch(self, edge_index_dict, batch, mode):
-        output = {}
+    def get_edge_index_from_batch(self, pos_batch, neg_batch, mode):
+        edge_index_dict = {}
 
-        for metapath, edge_index in edge_index_dict.items():
-            e_size, neg_samp_size = batch[metapath].shape
+        for metapath, edge_index in pos_batch.items():
+            e_size, neg_samp_size = neg_batch[metapath].shape
 
             if mode == "head":
-                nid_A = batch[metapath].reshape(-1)
-                nid_B = edge_index_dict[metapath][1].repeat_interleave(neg_samp_size)
-                output[metapath] = torch.stack([nid_A, nid_B], dim=0)
+                nid_A = neg_batch[metapath].reshape(-1)
+                nid_B = pos_batch[metapath][1].repeat_interleave(neg_samp_size)
+                edge_index_dict[metapath] = torch.stack([nid_A, nid_B], dim=0)
             elif mode == "tail":
-                nid_A = edge_index_dict[metapath][0].repeat_interleave(neg_samp_size)
-                nid_B = batch[metapath].reshape(-1)
-                output[metapath] = torch.stack([nid_A, nid_B], dim=0)
+                nid_A = pos_batch[metapath][0].repeat_interleave(neg_samp_size)
+                nid_B = neg_batch[metapath].reshape(-1)
+                edge_index_dict[metapath] = torch.stack([nid_A, nid_B], dim=0)
 
-        return output
+        return edge_index_dict, neg_samp_size
 
 
 class LATTELinkPred(LinkPredTrainer):
