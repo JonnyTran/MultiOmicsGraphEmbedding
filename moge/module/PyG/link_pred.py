@@ -61,15 +61,15 @@ class DistMulti(torch.nn.Module):
                 side_B = kernel @ embeddings[metapath[0]][idx_B].t()
                 side_B = side_B.repeat_interleave(neg_samp_size, dim=-1)
 
-                score = emb_A @ side_B
+                score = torch.bmm(emb_A.unsqueeze(1), side_B.t().unsqueeze(-1))
             elif "tail" == mode:
                 emb_B = embeddings[metapath[-1]][edge_index[1]]
                 num_edges = edge_index.shape[1] / neg_samp_size
                 idx_A = edge_index[1][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
                 side_A = embeddings[metapath[-1]][idx_A] @ kernel
                 side_A = side_A.repeat_interleave(neg_samp_size, dim=0)
-                # logging.info(emb_A)
-                score = side_A @ emb_B.t()
+
+                score = torch.bmm(side_A.unsqueeze(1), emb_B.unsqueeze(-1))
             else:
                 emb_A = embeddings[metapath[0]][edge_index[0]]
                 emb_B = embeddings[metapath[-1]][edge_index[1]]
