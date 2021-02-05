@@ -2,7 +2,7 @@ import codecs as cs
 
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 
 class ClassificationLoss(nn.Module):
     def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multilabel=True, use_hierar=False,
@@ -77,6 +77,17 @@ class ClassificationLoss(nn.Module):
             diff_paras = diff_paras.view(diff_paras.size(0), -1)
             recursive_loss += 1.0 / 2 * torch.norm(diff_paras, p=2) ** 2
         return recursive_loss
+
+
+class LinkPredLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, pos_pred, neg_pred):
+        pos_loss = F.logsigmoid(pos_pred).mean()
+        neg_loss = F.logsigmoid(-neg_pred.view(-1)).mean()
+        loss = (pos_loss + neg_loss) / 2
+        return loss
 
 
 class FocalLoss(nn.Module):

@@ -11,7 +11,7 @@ from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE, untag_negative, is_negative
 from moge.module.utils import tensor_sizes
 from ..trainer import LinkPredTrainer
-
+from moge.module.losses import LinkPredLoss
 
 class DistMulti(torch.nn.Module):
     def __init__(self, embedding_dim, metapaths):
@@ -34,12 +34,14 @@ class DistMulti(torch.nn.Module):
         output["edge_pos"] = self.predict(inputs["edge_index_dict"], embeddings, mode=None)
 
         # Head batch
-        edge_head_batch = self.get_edge_index_from_batch(inputs["edge_index_dict"], batch=inputs["edge_neg_head"],
+        edge_head_batch = self.get_edge_index_from_batch(inputs["edge_index_dict"],
+                                                         batch=inputs["edge_neg_head"],
                                                          mode="head")
         output["edge_neg_head"] = self.predict(edge_head_batch, embeddings, mode="head")
 
-        # Head batch
-        edge_tail_batch = self.get_edge_index_from_batch(inputs["edge_index_dict"], batch=inputs["edge_tail_head"],
+        # Tail batch
+        edge_tail_batch = self.get_edge_index_from_batch(inputs["edge_index_dict"],
+                                                         batch=inputs["edge_neg_tail"],
                                                          mode="tail")
         output["edge_neg_tail"] = self.predict(edge_tail_batch, embeddings, mode="tail")
 
@@ -61,8 +63,7 @@ class DistMulti(torch.nn.Module):
             else:
                 score = (emb_A @ kernel) @ emb_B.t()
 
-            score = score.sum(dim=2)
-
+            score = score.sum(dim=1)
             edge_pred_dict[metapath] = score
 
         return edge_pred_dict
@@ -70,7 +71,7 @@ class DistMulti(torch.nn.Module):
     def get_edge_index_from_batch(self, edge_index_dict, batch, mode):
         output = {}
 
-        for metapath, edge_index in edge_index_dict:
+        for metapath, edge_index in edge_index_dict.items():
             e_size, neg_samp_size = batch[metapath].shape
 
             if mode == "head":
@@ -81,9 +82,6 @@ class DistMulti(torch.nn.Module):
                 nid_A = edge_index_dict[metapath][0].repeat_interleave(neg_samp_size)
                 nid_B = batch[metapath].reshape(-1)
                 output[metapath] = torch.stack([nid_A, nid_B], dim=0)
-
-            assert e_size == edge_index_dict[metapath].shape[1]
-            assert nid_A.shape == nid_B.shape
 
         return output
 
@@ -105,6 +103,7 @@ class LATTELinkPred(LinkPredTrainer):
                               use_proximity=True, neg_sampling_ratio=hparams.neg_sampling_ratio)
 
         self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.get_metapaths())
+        self.criterion = LinkPredLoss()
 
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
@@ -114,7 +113,7 @@ class LATTELinkPred(LinkPredTrainer):
                                                       global_node_idx=inputs["global_node_index"],
                                                       **kwargs)
 
-        output = self.classifier(inputs, embeddings, mode=None)
+        output = self.classifier(inputs, embeddings)
 
         return embeddings, proximity_loss, output
 
@@ -150,21 +149,25 @@ class LATTELinkPred(LinkPredTrainer):
     def training_step(self, batch, batch_nb):
         X, _, _ = batch
 
-        _, loss, edge_pred_dict = self.forward(X)
+        _, prox_loss, edge_pred_dict = self.forward(X)
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
+        loss = self.criterion.forward(e_pos, e_neg)
+        if prox_loss is not None:
+            loss += prox_loss
         outputs = {'loss': loss, **self.train_metrics.compute_metrics()}
         return outputs
 
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
-        _, loss, edge_pred_dict = self.forward(X)
-        print(edge_pred_dict.keys())
+        _, prox_loss, edge_pred_dict = self.forward(X)
 
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
-        print("e_pos", tensor_sizes(e_pos))
-        print("e_neg", tensor_sizes(e_neg))
+        loss = self.criterion.forward(e_pos, e_neg)
+        if prox_loss is not None:
+            loss += prox_loss
+
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"val_loss": loss}
@@ -173,8 +176,6 @@ class LATTELinkPred(LinkPredTrainer):
         X, _, _ = batch
         y_hat, loss, edge_pred_dict = self.forward(X)
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
-        print("e_pos", tensor_sizes(e_pos))
-        print("e_neg", tensor_sizes(e_neg))
 
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 

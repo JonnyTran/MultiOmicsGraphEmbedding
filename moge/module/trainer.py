@@ -188,15 +188,16 @@ class LinkPredTrainer(NodeClfTrainer):
     def reshape_e_pos_neg(self, edge_pred_dict):
         e_pos = []
         e_neg = []
-        for metapath in edge_pred_dict["edge_pos"]:
-            print(f"edge_pred_dict[edge_pos][{metapath}]", edge_pred_dict["edge_pos"][metapath].shape)
-            e_pos.append(edge_pred_dict["edge_pos"][metapath])
-            e_neg.append(torch.cat([edge_pred_dict["edge_neg_head"][metapath],
-                                    edge_pred_dict["edge_neg_tail"][metapath]],
-                                   dim=0))
+        for metapath, edge_pred in edge_pred_dict["edge_pos"].items():
+            num_edges = edge_pred.shape[0]
+            e_pos.append(edge_pred)
 
-        e_pos = torch.stack(e_pos, dim=0)
-        e_neg = torch.stack(e_neg, dim=0)
+            e_pred_head = edge_pred_dict["edge_neg_head"][metapath].reshape(num_edges, -1)
+            e_pred_tail = edge_pred_dict["edge_neg_tail"][metapath].reshape(num_edges, -1)
+            e_neg.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
+
+        e_pos = torch.cat(e_pos, dim=0)
+        e_neg = torch.cat(e_neg, dim=0)
 
         return e_pos, e_neg
 

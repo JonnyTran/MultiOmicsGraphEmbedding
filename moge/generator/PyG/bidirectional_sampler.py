@@ -47,9 +47,11 @@ class BidirectionalSampler(TripletSampler):
         neg_tail = {}
         for metapath, edge_index in pos_edges.items():
             neg_head[metapath] = \
-                torch.randint(len(global_node_index[metapath[0]]), (edge_index.shape[1], self.negative_sampling_size,))
+                torch.randint(high=len(global_node_index[metapath[0]]),
+                              size=(edge_index.shape[1], self.negative_sampling_size,))
             neg_tail[metapath] = \
-                torch.randint(len(global_node_index[metapath[-1]]), (edge_index.shape[1], self.negative_sampling_size,))
+                torch.randint(high=len(global_node_index[metapath[-1]]),
+                              size=(edge_index.shape[1], self.negative_sampling_size,))
 
         # Do this last to avoid sampling negative edges on the reverse metapaths
         if self.use_reverse:
