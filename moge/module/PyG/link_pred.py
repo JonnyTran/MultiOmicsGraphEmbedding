@@ -8,6 +8,7 @@ from torch.utils.hooks import RemovableHandle
 
 from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE, untag_negative, is_negative
+from moge.module.utils import tensor_sizes
 from ..trainer import LinkPredTrainer
 
 
@@ -17,18 +18,28 @@ class DistMulti(torch.nn.Module):
         self.metapaths = metapaths
         self.embedding_dim = embedding_dim
 
-        self.linears = nn.ModuleDict(
-            {metapath: nn.Parameter(torch.Tensor((embedding_dim, embedding_dim))) \
-             for metapath in metapaths}
-        )
+        # self.linears = nn.ModuleDict(
+        #     {metapath: nn.Parameter(torch.Tensor((embedding_dim, embedding_dim))) \
+        #      for metapath in metapaths}
+        # )
 
-    def forward(self, edge_index_dict, embeddings):
+        self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim, embedding_dim))
+        nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
+
+    def forward(self, edge_index_dict, embeddings, mode=None):
         edge_pred_dict = {} if isinstance(edge_index_dict, dict) else []
         for metapath, edge_index in (
-        edge_index_dict.items() if isinstance(edge_index_dict, dict) else enumerate(edge_index_dict)):
-            edge_pred_dict[metapath] = embeddings[metapath[0]].t() @ self.linears[metapath] * embeddings[metapath[-1]]
+                edge_index_dict.items() if isinstance(edge_index_dict, dict) else enumerate(edge_index_dict)):
+            metapath_idx = self.metapaths.index(metapath)
+            kernel = self.relation_embedding[metapath_idx]
+
+            if "head" in mode:
+                edge_pred_dict[metapath] = embeddings[metapath[0]].t() @ (kernel @ embeddings[metapath[-1]])
+            else:
+                edge_pred_dict[metapath] = (embeddings[metapath[0]].t() @ kernel) @ embeddings[metapath[-1]]
 
         return edge_pred_dict
+
 
 class LATTELinkPred(LinkPredTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["obgl-biokg"],
@@ -45,13 +56,21 @@ class LATTELinkPred(LinkPredTrainer):
                               metapaths=dataset.get_metapaths(), attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
                               use_proximity=True, neg_sampling_ratio=hparams.neg_sampling_ratio)
+
+        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.get_metapaths())
+
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
     def forward(self, inputs: dict, **kwargs):
-        embeddings, proximity_loss, edge_pred_dict = self.embedder(inputs["x_dict"],
-                                                                   edge_index_dict=inputs["edge_index_dict"],
-                                                                   global_node_idx=inputs["global_node_index"],
-                                                                   **kwargs)
+        embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],
+                                                      edge_index_dict=inputs["edge_index_dict"],
+                                                      global_node_idx=inputs["global_node_index"],
+                                                      **kwargs)
+
+        edge_pred_dict = {}
+        edge_pred_dict["edge_neg_head"] = self.classifier(inputs["edge_neg_head"], embeddings)
+        edge_pred_dict["edge_neg_head"] = self.classifier(inputs["edge_neg_tail"], embeddings)
+
         return embeddings, proximity_loss, edge_pred_dict
 
     def get_e_pos_neg(self, edge_pred_dict: dict):
@@ -94,8 +113,10 @@ class LATTELinkPred(LinkPredTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
-
+        print(tensor_sizes(X["global_node_index"]))
         _, loss, edge_pred_dict = self.forward(X)
+        print(tensor_sizes(edge_pred_dict))
+
         e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
 

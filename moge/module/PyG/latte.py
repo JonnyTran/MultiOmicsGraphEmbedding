@@ -210,7 +210,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         if first and len(non_attr_node_types) > 0:
             if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
-                print("INFO: Embedding.device = 'cpu'")
+                logging.info("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
                                                            sparse=True).cpu() for node_type in non_attr_node_types}

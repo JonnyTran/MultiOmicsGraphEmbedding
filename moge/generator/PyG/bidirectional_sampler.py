@@ -29,8 +29,8 @@ class BidirectionalSampler(TripletSampler):
 
         triples = {k: v[e_idx] for k, v in self.triples.items() if not is_negative(k)}
         # Add neg edges if valid or test
-        if e_idx.max() < self.start_idx["train"]:
-            triples.update({k: v[e_idx] for k, v in self.triples.items() if is_negative(k)})
+        # if e_idx.max() < self.start_idx["train"]:
+        #     triples.update({k: v[e_idx] for k, v in self.triples.items() if is_negative(k)})
 
         relation_ids_all = triples["relation"].unique()
 
@@ -60,7 +60,7 @@ class BidirectionalSampler(TripletSampler):
             node_feats = {node_type: self.x_dict[node_type][global_node_index[node_type]] \
                           for node_type in self.x_dict}
         else:
-            node_feats = None
+            node_feats = {}
 
         X = {"edge_index_dict": pos_edges,
              "edge_neg_head": neg_head,
