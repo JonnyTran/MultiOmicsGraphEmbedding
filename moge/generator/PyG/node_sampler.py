@@ -292,11 +292,15 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
                 # Filter nodes from all node types
                 else:
+                    if head_type not in local2batch or tail_type not in local2batch: continue
+
                     allowed_nodes_idx = torch.cat([self.local2global[ntype][list(local_global.keys())] \
                                                    for ntype, local_global in local2batch.items()], dim=0)
 
                     mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
                     edge_index = edge_index[:, mask]
+
+                if edge_index.shape[1] == 0: continue
 
                 # Convert node global index -> local index -> batch index
                 edge_index[0] = self.local_node_idx[edge_index[0]].apply_(local2batch[head_type].get)

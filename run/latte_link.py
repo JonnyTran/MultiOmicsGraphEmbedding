@@ -55,7 +55,7 @@ if __name__ == "__main__":
     parser.add_argument('--activation', type=str, default="relu")
     parser.add_argument('--attn_heads', type=int, default=1)
     parser.add_argument('--attn_activation', type=str, default="sharpening")
-    parser.add_argument('--attn_dropout', type=float, default=0.2)
+    parser.add_argument('--attn_dropout', type=float, default=0.5)
 
     parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=64.0)
