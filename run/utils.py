@@ -7,7 +7,7 @@ from ogb.linkproppred import PygLinkPropPredDataset
 import torch
 from torch_geometric.datasets import AMiner
 
-from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler, NegativeSampler
+from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler, NegativeSampler, BidirectionalSampler
 from moge.module.utils import preprocess_input
 
 def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
@@ -85,9 +85,10 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
                 and not hasattr(ogbl[0], "edge_reltype"):
             dataset = EdgeSampler(ogbl, directed=True, add_reverse_metapaths=hparams.use_reverse)
         else:
-            dataset = NegativeSampler(ogbl, neighbor_sizes=[25, 20], directed=True,
-                                      head_node_type=None,
-                                      add_reverse_metapaths=hparams.use_reverse)
+            dataset = BidirectionalSampler(ogbl, directed=True,
+                                           negative_sampling_size=hparams.neg_sampling_ratio,
+                                           head_node_type=None,
+                                           add_reverse_metapaths=hparams.use_reverse)
 
         logging.info(f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
 

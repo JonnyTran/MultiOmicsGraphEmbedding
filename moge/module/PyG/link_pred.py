@@ -150,13 +150,16 @@ class LATTELinkPred(LinkPredTrainer):
         X, _, _ = batch
 
         _, prox_loss, edge_pred_dict = self.forward(X)
-        e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
-        self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
+        e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
         if prox_loss is not None:
             loss += prox_loss
-        outputs = {'loss': loss, **self.train_metrics.compute_metrics()}
+
+        self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
+        self.log_dict(self.train_metrics.compute_metrics())
+
+        outputs = {'loss': loss}
         return outputs
 
     def validation_step(self, batch, batch_nb):
@@ -174,8 +177,12 @@ class LATTELinkPred(LinkPredTrainer):
 
     def test_step(self, batch, batch_nb):
         X, _, _ = batch
-        y_hat, loss, edge_pred_dict = self.forward(X)
+        _, prox_loss, edge_pred_dict = self.forward(X)
+
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
+        loss = self.criterion.forward(e_pos, e_neg)
+        if prox_loss is not None:
+            loss += prox_loss
 
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 

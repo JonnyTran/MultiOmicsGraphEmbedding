@@ -14,18 +14,36 @@ from moge.module.sampling import negative_sample_head_tail
 class BidirectionalSampler(TripletSampler):
 
     def __init__(self, dataset, node_types=None, metapaths=None,
-                 negative_sampling_size=128, mode=["tail", "head"],
-                 head_node_type=None, directed=True,
+                 negative_sampling_size=128,
+                 head_node_type=None, directed=True, test_negative_sampling_size=500,
+
                  resample_train=None, add_reverse_metapaths=True):
         super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
                          add_reverse_metapaths)
 
         self.negative_sampling_size = negative_sampling_size
-        self.mode = mode
+        self.test_negative_sampling_size = test_negative_sampling_size
 
-    def sample(self, e_idx, mode=None):
+    def get_collate_fn(self, collate_fn: str, mode=None):
+        assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
+
+        def collate_wrapper(iloc):
+            return self.sample(iloc, mode=mode)
+
+        return collate_wrapper
+
+    def sample(self, e_idx, mode):
         if not isinstance(e_idx, torch.Tensor):
             e_idx = torch.tensor(e_idx)
+
+        if "test" in mode:
+            negative_sampling_size = self.test_negative_sampling_size
+        elif "valid" in mode:
+            negative_sampling_size = self.negative_sampling_size * 2
+        else:
+            negative_sampling_size = self.negative_sampling_size
+
+        negative_sampling_size = int(negative_sampling_size / 2)
 
         triples = {k: v[e_idx] for k, v in self.triples.items() if not is_negative(k)}
         # Add neg edges if valid or test
@@ -48,10 +66,10 @@ class BidirectionalSampler(TripletSampler):
         for metapath, edge_index in pos_edges.items():
             neg_head[metapath] = \
                 torch.randint(high=len(global_node_index[metapath[0]]),
-                              size=(edge_index.shape[1], self.negative_sampling_size,))
+                              size=(edge_index.shape[1], negative_sampling_size,))
             neg_tail[metapath] = \
                 torch.randint(high=len(global_node_index[metapath[-1]]),
-                              size=(edge_index.shape[1], self.negative_sampling_size,))
+                              size=(edge_index.shape[1], negative_sampling_size,))
 
         # Do this last to avoid sampling negative edges on the reverse metapaths
         if self.use_reverse:

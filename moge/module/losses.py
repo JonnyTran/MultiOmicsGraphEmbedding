@@ -86,7 +86,7 @@ class LinkPredLoss(nn.Module):
     def forward(self, pos_pred, neg_pred):
         pos_loss = F.logsigmoid(pos_pred).mean()
         neg_loss = F.logsigmoid(-neg_pred.view(-1)).mean()
-        loss = (pos_loss + neg_loss) / 2
+        loss = (-pos_loss + -neg_loss) / 2
         return loss
 
 
