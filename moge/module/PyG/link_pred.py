@@ -31,7 +31,7 @@ class DistMulti(torch.nn.Module):
         output = {}
 
         # Single edges
-        output["edge_pos"] = self.predict(inputs["edge_index_dict"], embeddings, mode=None)
+        output["edge_pos"] = self.predict(inputs["edge_index_dict"], embeddings, neg_samp_size=None, mode=None)
 
         # Head batch
         edge_head_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_index_dict"],
@@ -48,24 +48,33 @@ class DistMulti(torch.nn.Module):
         return output
 
     def predict(self, edge_index_dict, embeddings, neg_samp_size, mode=None):
-        # Find neg_sampling size
-
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
             kernel = self.relation_embedding[metapath_idx]
 
-            emb_A = embeddings[metapath[0]][edge_index_dict[metapath][0]]
-            emb_B = embeddings[metapath[-1]][edge_index_dict[metapath][1]]
-
             if "head" == mode:
-                # logging.info(emb_B)
-                score = emb_A @ (kernel @ emb_B.t())
+                emb_A = embeddings[metapath[0]][edge_index_dict[metapath][0]]
+                num_edges = edge_index_dict[metapath].shape[1] / neg_samp_size
+                idx_B = edge_index_dict[metapath][0][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
+
+                side_B = kernel @ embeddings[metapath[0]][idx_B].t()
+                side_B = side_B.repeat_interleave(neg_samp_size, dim=-1)
+
+                score = emb_A @ side_B
             elif "tail" == mode:
-                # logging.info(emb_A)
-                score = (emb_A @ kernel) @ emb_B.t()
+                emb_B = embeddings[metapath[-1]][edge_index_dict[metapath][1]]
+                num_edges = edge_index_dict[metapath].shape[1] / neg_samp_size
+                idx_A = edge_index_dict[metapath][1][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
+
+                side_A = embeddings[metapath[-1]][idx_A] @ kernel
+                side_A = side_A.repeat_interleave(neg_samp_size, dim=0)
+
+                score = side_A @ emb_B.t()
             else:
+                emb_A = embeddings[metapath[0]][edge_index_dict[metapath][0]]
+                emb_B = embeddings[metapath[-1]][edge_index_dict[metapath][1]]
                 score = (emb_A @ kernel) @ emb_B.t()
 
             score = score.sum(dim=1)
