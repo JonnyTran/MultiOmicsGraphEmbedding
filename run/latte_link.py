@@ -30,7 +30,7 @@ def train(hparams):
 
     trainer = Trainer(
         gpus=NUM_GPUS,
-        distributed_backend='ddp' if NUM_GPUS > 1 else None,
+        distributed_backend='horovod' if NUM_GPUS > 1 else None,
         auto_lr_find=False,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.01, strict=False)],

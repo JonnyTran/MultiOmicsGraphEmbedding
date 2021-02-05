@@ -90,23 +90,6 @@ class BidirectionalSampler(TripletSampler):
         return X, None, None
 
 
-def tag_negative_head(metapath):
-    if isinstance(metapath, tuple):
-        return metapath + ("neg", "head")
-    elif isinstance(metapath, str):
-        return metapath + "_neg_head"
-    else:
-        return "neg"
-
-
-def tag_negative_tail(metapath):
-    if isinstance(metapath, tuple):
-        return metapath + ("neg", "tail")
-    elif isinstance(metapath, str):
-        return metapath + "_neg_tail"
-    else:
-        return "neg"
-
 
 class TrainDataset(Dataset):
     def __init__(self, triples, nentity, nrelation, mode=None, negative_sample_size=128, count=None, true_head=None,

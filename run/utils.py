@@ -87,6 +87,7 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
         else:
             dataset = BidirectionalSampler(ogbl, directed=True,
                                            negative_sampling_size=hparams.neg_sampling_ratio,
+                                           test_negative_sampling_size=500,
                                            head_node_type=None,
                                            add_reverse_metapaths=hparams.use_reverse)
 
