@@ -87,6 +87,7 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
             dataset = EdgeSampler(ogbl, directed=True, add_reverse_metapaths=hparams.use_reverse)
         else:
             dataset = BidirectionalSampler(ogbl, directed=True,
+                                           neighbor_sizes=[hparams.n_neighbors_1],
                                            negative_sampling_size=hparams.neg_sampling_ratio,
                                            test_negative_sampling_size=500,
                                            head_node_type=None,

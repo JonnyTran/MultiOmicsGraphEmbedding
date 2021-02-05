@@ -57,6 +57,7 @@ if __name__ == "__main__":
     parser.add_argument('--attn_activation', type=str, default="sharpening")
     parser.add_argument('--attn_dropout', type=float, default=0.5)
 
+    parser.add_argument('--n_neighbors_1', type=int, default=50)
     parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=64.0)
 
@@ -69,7 +70,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
-    parser.add_argument('--n_neighbors_1', type=int, default=30, help="Not used - only for compatibility")
 
     args = parser.parse_args()
     train(args)
