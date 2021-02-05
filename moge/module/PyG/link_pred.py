@@ -1,5 +1,6 @@
 import multiprocessing
 from typing import Callable
+import logging
 
 import torch
 from torch import nn
@@ -26,19 +27,65 @@ class DistMulti(torch.nn.Module):
         self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim, embedding_dim))
         nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
 
-    def forward(self, edge_index_dict, embeddings, mode=None):
-        edge_pred_dict = {} if isinstance(edge_index_dict, dict) else []
-        for metapath, edge_index in (
-                edge_index_dict.items() if isinstance(edge_index_dict, dict) else enumerate(edge_index_dict)):
+    def forward(self, inputs, embeddings):
+        output = {}
+
+        # Single edges
+        output["edge_pos"] = self.predict(inputs["edge_index_dict"], embeddings, mode=None)
+
+        # Head batch
+        edge_head_batch = self.get_edge_index_from_batch(inputs["edge_index_dict"], batch=inputs["edge_neg_head"],
+                                                         mode="head")
+        output["edge_neg_head"] = self.predict(edge_head_batch, embeddings, mode="head")
+
+        # Head batch
+        edge_tail_batch = self.get_edge_index_from_batch(inputs["edge_index_dict"], batch=inputs["edge_tail_head"],
+                                                         mode="tail")
+        output["edge_neg_tail"] = self.predict(edge_tail_batch, embeddings, mode="tail")
+
+        return output
+
+    def predict(self, edge_index_dict, embeddings, mode=None):
+        edge_pred_dict = {}
+        for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
             kernel = self.relation_embedding[metapath_idx]
 
-            if "head" in mode:
-                edge_pred_dict[metapath] = embeddings[metapath[0]].t() @ (kernel @ embeddings[metapath[-1]])
+            assert edge_index_dict[metapath].shape[0] == 2
+
+            emb_A = embeddings[metapath[0]][edge_index_dict[metapath][0]]
+            emb_B = embeddings[metapath[-1]][edge_index_dict[metapath][1]]
+
+            if "head" == mode:
+                score = emb_A @ (kernel @ emb_B.t())
             else:
-                edge_pred_dict[metapath] = (embeddings[metapath[0]].t() @ kernel) @ embeddings[metapath[-1]]
+                score = (emb_A @ kernel) @ emb_B.t()
+
+            score = score.sum(dim=2)
+
+            edge_pred_dict[metapath] = score
 
         return edge_pred_dict
+
+    def get_edge_index_from_batch(self, edge_index_dict, batch, mode):
+        output = {}
+
+        for metapath, edge_index in edge_index_dict:
+            e_size, neg_samp_size = batch[metapath].shape
+
+            if mode == "head":
+                nid_A = batch[metapath].reshape(-1)
+                nid_B = edge_index_dict[metapath][1].repeat_interleave(neg_samp_size)
+                output[metapath] = torch.stack([nid_A, nid_B], dim=0)
+            elif mode == "tail":
+                nid_A = edge_index_dict[metapath][0].repeat_interleave(neg_samp_size)
+                nid_B = batch[metapath].reshape(-1)
+                output[metapath] = torch.stack([nid_A, nid_B], dim=0)
+
+            assert e_size == edge_index_dict[metapath].shape[1]
+            assert nid_A.shape == nid_B.shape
+
+        return output
 
 
 class LATTELinkPred(LinkPredTrainer):
@@ -67,12 +114,11 @@ class LATTELinkPred(LinkPredTrainer):
                                                       global_node_idx=inputs["global_node_index"],
                                                       **kwargs)
 
-        edge_pred_dict = {}
-        edge_pred_dict["edge_neg_head"] = self.classifier(inputs["edge_neg_head"], embeddings)
-        edge_pred_dict["edge_neg_head"] = self.classifier(inputs["edge_neg_tail"], embeddings)
+        output = self.classifier(inputs, embeddings, mode=None)
 
-        return embeddings, proximity_loss, edge_pred_dict
+        return embeddings, proximity_loss, output
 
+    @DeprecationWarning
     def get_e_pos_neg(self, edge_pred_dict: dict):
         """
         Given pos edges and sampled neg edges from LATTE proximity, align e_pos and e_neg to shape (num_edge, ) and (num_edge, num_nodes_neg). This ignores reverse metapaths.
@@ -105,7 +151,7 @@ class LATTELinkPred(LinkPredTrainer):
         X, _, _ = batch
 
         _, loss, edge_pred_dict = self.forward(X)
-        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
+        e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         outputs = {'loss': loss, **self.train_metrics.compute_metrics()}
@@ -113,11 +159,12 @@ class LATTELinkPred(LinkPredTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, _, _ = batch
-        print(tensor_sizes(X["global_node_index"]))
         _, loss, edge_pred_dict = self.forward(X)
-        print(tensor_sizes(edge_pred_dict))
+        print(edge_pred_dict.keys())
 
-        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
+        e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
+        print("e_pos", tensor_sizes(e_pos))
+        print("e_neg", tensor_sizes(e_neg))
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"val_loss": loss}
@@ -125,7 +172,10 @@ class LATTELinkPred(LinkPredTrainer):
     def test_step(self, batch, batch_nb):
         X, _, _ = batch
         y_hat, loss, edge_pred_dict = self.forward(X)
-        e_pos, e_neg = self.get_e_pos_neg(edge_pred_dict)
+        e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
+        print("e_pos", tensor_sizes(e_pos))
+        print("e_neg", tensor_sizes(e_neg))
+
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"test_loss": loss}

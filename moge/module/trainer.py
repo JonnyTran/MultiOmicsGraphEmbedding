@@ -185,6 +185,21 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
         super(LinkPredTrainer, self).__init__(hparams, dataset, metrics, *args, **kwargs)
 
+    def reshape_e_pos_neg(self, edge_pred_dict):
+        e_pos = []
+        e_neg = []
+        for metapath in edge_pred_dict["edge_pos"]:
+            print(f"edge_pred_dict[edge_pos][{metapath}]", edge_pred_dict["edge_pos"][metapath].shape)
+            e_pos.append(edge_pred_dict["edge_pos"][metapath])
+            e_neg.append(torch.cat([edge_pred_dict["edge_neg_head"][metapath],
+                                    edge_pred_dict["edge_neg_tail"][metapath]],
+                                   dim=0))
+
+        e_pos = torch.stack(e_pos, dim=0)
+        e_neg = torch.stack(e_neg, dim=0)
+
+        return e_pos, e_neg
+
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
