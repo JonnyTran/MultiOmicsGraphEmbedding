@@ -46,12 +46,12 @@ def train(hparams):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument('--num_gpus', type=int, default=4)
+    parser.add_argument('--num_gpus', type=int, default=1)
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
     parser.add_argument('-t', '--t_order', type=int, default=1)
-    parser.add_argument('-b', '--batch_size', type=int, default=2048)
+    parser.add_argument('-b', '--batch_size', type=int, default=32768)
     parser.add_argument('--activation', type=str, default="relu")
     parser.add_argument('--attn_heads', type=int, default=1)
     parser.add_argument('--attn_activation', type=str, default="sharpening")
