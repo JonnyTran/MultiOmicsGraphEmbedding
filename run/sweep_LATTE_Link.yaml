@@ -9,7 +9,7 @@ early_terminate:
   s: 2
 parameters:
   embedding_dim:
-    values: [ 128, 256, 500 ]
+    values: [ 128, 500 ]
   t_order:
     values: [1, 2]
   n_neighbors_1:
@@ -21,4 +21,4 @@ parameters:
   attn_activation:
     values: ["sharpening", "PReLU", "LeakyReLU", "none"]
   lr:
-    values: [0.005, 0.001, 0.01]
+    values: [ 0.001, 0.005, 0.01 ]
