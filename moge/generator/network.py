@@ -246,6 +246,10 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
 
     def get_metapaths(self):
+        """
+        Returns original metapaths including reverse metapaths if use_reverse
+        :return:
+        """
         if self.use_reverse:
             return self.metapaths + self.get_reverse_metapath(self.metapaths, self.edge_index_dict)
         else:

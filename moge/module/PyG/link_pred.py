@@ -114,7 +114,7 @@ class LATTELinkPred(LinkPredTrainer):
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
                               use_proximity=hparams.use_proximity, neg_sampling_ratio=hparams.neg_sampling_ratio)
 
-        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.get_metapaths())
+        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.metapaths)
         self.criterion = LinkPredLoss()
 
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
