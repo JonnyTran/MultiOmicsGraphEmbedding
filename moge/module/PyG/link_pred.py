@@ -50,6 +50,8 @@ class DistMulti(torch.nn.Module):
 
         elif "edge_neg" in inputs:
             output["edge_neg"] = self.predict(inputs["edge_neg"], embeddings, neg_samp_size=None, mode="single")
+        else:
+            raise Exception(f"No negative edges in inputs {inputs.keys()}")
 
         return output
 

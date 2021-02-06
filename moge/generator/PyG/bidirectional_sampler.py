@@ -115,7 +115,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         if not edges_neg:
             X.update({"head-batch": head_batch, "tail-batch": tail_batch, })
         else:
-            X.update({"edges_neg": edges_neg})
+            X.update({"edge_neg": edges_neg})
 
         return X, None, None
 

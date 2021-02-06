@@ -202,7 +202,7 @@ class LinkPredTrainer(NodeClfTrainer):
             elif "edge_neg" in edge_pred_dict:
                 e_neg.append(edge_pred_dict["edge_neg"][metapath].reshape(num_edges, -1))
             else:
-                Exception(f"No negative edges in {edge_pred_dict.keys()}")
+                raise Exception(f"No negative edges in {edge_pred_dict.keys()}")
 
         e_pos = torch.cat(e_pos, dim=0)
         e_neg = torch.cat(e_neg, dim=0)
