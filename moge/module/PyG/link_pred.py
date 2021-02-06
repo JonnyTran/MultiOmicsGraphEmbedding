@@ -73,6 +73,7 @@ class DistMulti(torch.nn.Module):
                 side_B = side_B.repeat_interleave(neg_samp_size, dim=-1)
 
                 score = torch.bmm(emb_A.unsqueeze(1), side_B.t().unsqueeze(-1))
+
             elif "tail" == mode:
                 emb_B = embeddings[metapath[-1]][edge_index[1]]
                 num_edges = edge_index.shape[1] / neg_samp_size
@@ -82,13 +83,18 @@ class DistMulti(torch.nn.Module):
                 side_A = side_A.repeat_interleave(neg_samp_size, dim=0)
 
                 score = torch.bmm(side_A.unsqueeze(1), emb_B.unsqueeze(-1))
+
             elif mode == "single":
                 emb_A = embeddings[metapath[0]][edge_index[0]]
                 emb_B = embeddings[metapath[-1]][edge_index[1]]
 
-                score = torch.bmm((emb_A @ kernel).unsqueeze(1), emb_B.unsqueeze(-1))
+                score = (emb_A @ kernel) @ emb_B.t()
+                # side_A = (emb_A @ kernel).unsqueeze(1)
+                # score = torch.bmm(side_A, emb_B.unsqueeze(-1)).squeeze(-1)
 
-            score = score.sum(dim=1).squeeze(-1)
+            # score shape (num_edges, num_edges)
+            score = score.sum(dim=1)
+            # assert score.dim() == 1, f"{mode} score={score.shape}"
             edge_pred_dict[metapath] = score
 
         return edge_pred_dict
