@@ -85,7 +85,7 @@ class DistMulti(torch.nn.Module):
                 score = torch.bmm((emb_A @ kernel).unsqueeze(1), emb_B.unsqueeze(-1))
                 # score = (emb_A @ kernel) @ emb_B.t()
 
-            score = score.sum(dim=1)
+            score = score.sum(dim=1).squeeze(-1)
             edge_pred_dict[metapath] = score
 
         return edge_pred_dict

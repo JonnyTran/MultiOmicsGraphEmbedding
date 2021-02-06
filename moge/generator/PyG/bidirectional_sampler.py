@@ -53,8 +53,6 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         else:
             negative_sampling_size = self.negative_sampling_size
 
-        negative_sampling_size = int(negative_sampling_size / 2)
-
         triples = {k: v[e_idx] for k, v in self.triples.items() if not is_negative(k)}
         # Add true neg edges if valid or test
         if e_idx.max() < self.start_idx["train"]:
