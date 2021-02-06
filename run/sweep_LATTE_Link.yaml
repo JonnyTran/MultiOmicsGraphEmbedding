@@ -9,11 +9,11 @@ early_terminate:
   s: 2
 parameters:
   embedding_dim:
-    values: [ 128, 500 ]
+    values: [ 128, 256 ]
   t_order:
-    values: [ 1, 2 ]
-  use_reverseL
-  values: [ True, False ]
+    values: [ 1 ]
+  use_reverse:
+    values: [ True, False ]
   n_neighbors_1:
     values: [ 30, 50, 100 ]
   activation:
