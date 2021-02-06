@@ -1,5 +1,5 @@
 import logging
-import sys
+import sys, random
 from argparse import ArgumentParser, Namespace
 
 logger = logging.getLogger("wandb")
@@ -32,7 +32,7 @@ def train(hparams):
     wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
 
     trainer = Trainer(
-        gpus=NUM_GPUS,
+        gpus=random.sample([0, 1, 2, 3], NUM_GPUS),
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
         auto_lr_find=False,
         max_epochs=MAX_EPOCHS,
