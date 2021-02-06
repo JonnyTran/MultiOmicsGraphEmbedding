@@ -192,9 +192,17 @@ class LinkPredTrainer(NodeClfTrainer):
             num_edges = edge_pred.shape[0]
             e_pos.append(edge_pred)
 
-            e_pred_head = edge_pred_dict["edge_neg_head"][metapath].reshape(num_edges, -1)
-            e_pred_tail = edge_pred_dict["edge_neg_tail"][metapath].reshape(num_edges, -1)
-            e_neg.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
+            # Negative sampling
+            if "edge_neg_head" in edge_pred_dict:
+                e_pred_head = edge_pred_dict["edge_neg_head"][metapath].reshape(num_edges, -1)
+                e_pred_tail = edge_pred_dict["edge_neg_tail"][metapath].reshape(num_edges, -1)
+                e_neg.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
+
+            # True negatives
+            elif "edge_neg" in edge_pred_dict:
+                e_pos.append(edge_pred_dict["edge_neg"][metapath].reshape(num_edges, -1))
+            else:
+                Exception(f"No negative edges in {edge_pred_dict.keys()}")
 
         e_pos = torch.cat(e_pos, dim=0)
         e_neg = torch.cat(e_neg, dim=0)
