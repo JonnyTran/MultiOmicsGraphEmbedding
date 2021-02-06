@@ -20,7 +20,7 @@ from run.utils import load_link_dataset
 def train(hparams):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = False  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 20
+    MAX_EPOCHS = 30
 
     if hparams.t_order > 1:
         hparams.batch_size = hparams.batch_size // hparams.t_order
@@ -36,7 +36,7 @@ def train(hparams):
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
         auto_lr_find=False,
         max_epochs=MAX_EPOCHS,
-        callbacks=[EarlyStopping(monitor='val_loss', patience=2, min_delta=0.01, strict=False)],
+        callbacks=[EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01, strict=False)],
         logger=wandb_logger,
         # regularizers=regularizers,
         weights_summary='top',
