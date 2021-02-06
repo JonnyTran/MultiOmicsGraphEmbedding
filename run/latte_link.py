@@ -20,7 +20,7 @@ from run.utils import load_link_dataset
 def train(hparams):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = False  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 50
+    MAX_EPOCHS = 20
 
     if hparams.t_order > 1:
         hparams.batch_size = hparams.batch_size // hparams.t_order
