@@ -33,6 +33,7 @@ class DistMulti(torch.nn.Module):
         # Single edges
         output["edge_pos"] = self.predict(inputs["edge_pos"], embeddings, neg_samp_size=None, mode="single")
 
+        # Sampled head or tail batch
         if "head-batch" in inputs or "tail-batch" in inputs:
             # Head batch
             edge_head_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_pos"],
@@ -48,6 +49,7 @@ class DistMulti(torch.nn.Module):
             output["tail-batch"] = self.predict(edge_tail_batch, embeddings, neg_samp_size=neg_samp_size,
                                                 mode="tail")
 
+        # Single edges
         elif "edge_neg" in inputs:
             output["edge_neg"] = self.predict(inputs["edge_neg"], embeddings, neg_samp_size=None, mode="single")
         else:
@@ -83,7 +85,6 @@ class DistMulti(torch.nn.Module):
                 emb_B = embeddings[metapath[-1]][edge_index[1]]
 
                 score = torch.bmm((emb_A @ kernel).unsqueeze(1), emb_B.unsqueeze(-1))
-                # score = (emb_A @ kernel) @ emb_B.t()
 
             score = score.sum(dim=1).squeeze(-1)
             edge_pred_dict[metapath] = score
