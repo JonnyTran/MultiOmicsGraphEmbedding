@@ -11,7 +11,9 @@ parameters:
   embedding_dim:
     values: [ 128, 500 ]
   t_order:
-    values: [1, 2]
+    values: [ 1, 2 ]
+  use_reverseL
+  values: [ True, False ]
   n_neighbors_1:
     values: [ 30, 50, 100 ]
   activation:
