@@ -14,14 +14,17 @@ from moge.module.utils import tensor_sizes
 
 class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
-    def __init__(self, dataset, neighbor_sizes=[40], negative_sampling_size=128, test_negative_sampling_size=500,
+    def __init__(self, dataset, neighbor_sizes,
+                 negative_sampling_size=128, test_negative_sampling_size=500,
+                 force_negative_sampling=False,
                  node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
         super().__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types, metapaths=metapaths,
                          head_node_type=head_node_type, directed=directed, resample_train=resample_train,
                          add_reverse_metapaths=add_reverse_metapaths, **kwargs)
-        self.negative_sampling_size = negative_sampling_size
-        self.test_negative_sampling_size = test_negative_sampling_size
+        self.neg_sampling_size = negative_sampling_size
+        self.test_neg_sampling_size = test_negative_sampling_size
+        self.force_neg_sampling = force_negative_sampling
 
     # def __init__(self, dataset, node_types=None, metapaths=None,
     #              negative_sampling_size=128, test_negative_sampling_size=500,
@@ -47,19 +50,21 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         # Select sampling size
         if "test" in mode:
-            negative_sampling_size = self.test_negative_sampling_size
+            negative_sampling_size = self.test_neg_sampling_size
         elif "valid" in mode:
-            negative_sampling_size = self.test_negative_sampling_size
+            negative_sampling_size = self.test_neg_sampling_size
         else:
-            negative_sampling_size = self.negative_sampling_size
+            negative_sampling_size = self.neg_sampling_size
         negative_sampling_size = int(negative_sampling_size)
 
         triples = {k: v[e_idx] for k, v in self.triples.items() if not is_negative(k)}
-        # Add true neg edges if valid or test
-        if e_idx.max() < self.start_idx["train"]:
+        # Add true neg edges if on valid or test triplet indices
+        if e_idx.max() < self.start_idx["train"] and not self.force_neg_sampling:
             triples.update({k: v[e_idx] for k, v in self.triples.items() if is_negative(k)})
 
         relation_ids_all = triples["relation"].unique()
+
+        # Set of all nodes from sampled triples
         global_node_index = self.get_global_node_index(triples, relation_ids_all, metapaths=self.metapaths)
 
         # Get true edges from triples
