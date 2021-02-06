@@ -71,13 +71,13 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         # Whether to negative sampling
         if not edges_neg:
-            neg_head = {}
-            neg_tail = {}
+            head_batch = {}
+            tail_batch = {}
             for metapath, edge_index in edges_pos.items():
-                neg_head[metapath] = \
+                head_batch[metapath] = \
                     torch.randint(high=len(global_node_index[metapath[0]]),
                                   size=(edge_index.shape[1], negative_sampling_size,))
-                neg_tail[metapath] = \
+                tail_batch[metapath] = \
                     torch.randint(high=len(global_node_index[metapath[-1]]),
                                   size=(edge_index.shape[1], negative_sampling_size,))
 
@@ -113,7 +113,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
              "x_dict": node_feats}
 
         if not edges_neg:
-            X.update({"edge_neg_head": neg_head, "edge_neg_tail": neg_tail, })
+            X.update({"head-batch": head_batch, "tail-batch": tail_batch, })
         else:
             X.update({"edges_neg": edges_neg})
 

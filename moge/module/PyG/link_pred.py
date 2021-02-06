@@ -31,29 +31,29 @@ class DistMulti(torch.nn.Module):
         output = {}
 
         # Single edges
-        output["edge_pos"] = self.predict(inputs["edge_pos"], embeddings, neg_samp_size=None, mode=None)
+        output["edge_pos"] = self.predict(inputs["edge_pos"], embeddings, neg_samp_size=None, mode="single")
 
-        if "edge_neg_head" in inputs or "edge_neg_tail" in inputs:
+        if "head-batch" in inputs or "tail-batch" in inputs:
             # Head batch
             edge_head_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_pos"],
-                                                                            neg_batch=inputs["edge_neg_head"],
+                                                                            neg_batch=inputs["head-batch"],
                                                                             mode="head")
-            output["edge_neg_head"] = self.predict(edge_head_batch, embeddings, neg_samp_size=neg_samp_size,
-                                                   mode="head")
+            output["head-batch"] = self.predict(edge_head_batch, embeddings, neg_samp_size=neg_samp_size,
+                                                mode="head")
 
             # Tail batch
             edge_tail_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_pos"],
-                                                                            neg_batch=inputs["edge_neg_tail"],
+                                                                            neg_batch=inputs["tail-batch"],
                                                                             mode="tail")
-            output["edge_neg_tail"] = self.predict(edge_tail_batch, embeddings, neg_samp_size=neg_samp_size,
-                                                   mode="tail")
+            output["tail-batch"] = self.predict(edge_tail_batch, embeddings, neg_samp_size=neg_samp_size,
+                                                mode="tail")
 
         elif "edge_neg" in inputs:
-            output["edge_neg"] = self.predict(inputs["edge_neg"], embeddings, neg_samp_size=None, mode=None)
+            output["edge_neg"] = self.predict(inputs["edge_neg"], embeddings, neg_samp_size=None, mode="single")
 
         return output
 
-    def predict(self, edge_index_dict, embeddings, neg_samp_size, mode=None):
+    def predict(self, edge_index_dict, embeddings, neg_samp_size, mode):
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
@@ -76,7 +76,7 @@ class DistMulti(torch.nn.Module):
                 side_A = side_A.repeat_interleave(neg_samp_size, dim=0)
 
                 score = torch.bmm(side_A.unsqueeze(1), emb_B.unsqueeze(-1))
-            else:
+            elif mode == "single":
                 emb_A = embeddings[metapath[0]][edge_index[0]]
                 emb_B = embeddings[metapath[-1]][edge_index[1]]
 
