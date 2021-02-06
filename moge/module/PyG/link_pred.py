@@ -168,9 +168,7 @@ class LATTELinkPred(LinkPredTrainer):
 
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
-        logs = {"loss": loss, **self.train_metrics.compute_metrics()}
-        self.log_dict(logs)
-
+        logs = self.train_metrics.compute_metrics()
         outputs = {'loss': loss, 'progress_bar': logs}
         return outputs
 

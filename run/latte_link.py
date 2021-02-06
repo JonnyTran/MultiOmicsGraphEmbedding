@@ -22,6 +22,9 @@ def train(hparams):
     USE_AMP = False  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 50
 
+    if hparams.t_order > 1:
+        hparams.batch_size = hparams.batch_size // hparams.t_order
+
     dataset = load_link_dataset(hparams.dataset, hparams=hparams, path="datasets")
     hparams.n_classes = dataset.n_classes
 
