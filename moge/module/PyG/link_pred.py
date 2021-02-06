@@ -68,6 +68,7 @@ class DistMulti(torch.nn.Module):
                 emb_A = embeddings[metapath[0]][edge_index[0]]
                 num_edges = edge_index.shape[1] / neg_samp_size
                 idx_B = edge_index[0][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
+
                 side_B = kernel @ embeddings[metapath[0]][idx_B].t()
                 side_B = side_B.repeat_interleave(neg_samp_size, dim=-1)
 
@@ -76,6 +77,7 @@ class DistMulti(torch.nn.Module):
                 emb_B = embeddings[metapath[-1]][edge_index[1]]
                 num_edges = edge_index.shape[1] / neg_samp_size
                 idx_A = edge_index[1][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
+
                 side_A = embeddings[metapath[-1]][idx_A] @ kernel
                 side_A = side_A.repeat_interleave(neg_samp_size, dim=0)
 
@@ -125,7 +127,7 @@ class LATTELinkPred(LinkPredTrainer):
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
                               use_proximity=hparams.use_proximity, neg_sampling_ratio=hparams.neg_sampling_ratio)
 
-        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.metapaths)
+        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim * hparams.t_order, metapaths=dataset.metapaths)
         self.criterion = LinkPredLoss()
 
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
