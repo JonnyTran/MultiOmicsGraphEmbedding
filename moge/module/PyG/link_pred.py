@@ -14,7 +14,7 @@ from ..trainer import LinkPredTrainer
 from moge.module.losses import LinkPredLoss
 
 class DistMulti(torch.nn.Module):
-    def __init__(self, embedding_dim, metapaths):
+    def __init__(self, embedding_dim, metapaths, k_components):
         super(DistMulti, self).__init__()
         self.metapaths = metapaths
         self.embedding_dim = embedding_dim
@@ -24,8 +24,10 @@ class DistMulti(torch.nn.Module):
         #      for metapath in metapaths}
         # )
 
-        self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim, embedding_dim))
-        nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
+        self.relation_embedding_A = nn.Parameter(torch.zeros(len(metapaths), embedding_dim, k_components))
+        self.relation_embedding_B = nn.Parameter(torch.zeros(len(metapaths), embedding_dim, k_components))
+        nn.init.uniform_(tensor=self.relation_embedding_A, a=-1, b=1)
+        nn.init.uniform_(tensor=self.relation_embedding_B, a=-1, b=1)
 
     def forward(self, inputs, embeddings):
         output = {}
@@ -62,35 +64,43 @@ class DistMulti(torch.nn.Module):
 
         for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
-            kernel = self.relation_embedding[metapath_idx]
+            kernel_A = self.relation_embedding_A[metapath_idx]
+            kernel_B = self.relation_embedding_B[metapath_idx]
 
+            # head torch.Size([10, 1, 128]), relationtorch.Size([10, 1, 128, 128]), tail torch.Size([10, 1, 128])
             if "head" == mode:
-                emb_A = embeddings[metapath[0]][edge_index[0]]
                 num_edges = edge_index.shape[1] / neg_samp_size
+
+                side_A = (embeddings[metapath[0]] @ kernel_A)
+                side_A = side_A[edge_index[0]]
+
                 idx_B = edge_index[0][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
+                side_B = (embeddings[metapath[0]] @ kernel_B)[idx_B]
+                side_B = side_B.repeat_interleave(neg_samp_size, dim=0)
 
-                side_B = kernel @ embeddings[metapath[0]][idx_B].t()
-                side_B = side_B.repeat_interleave(neg_samp_size, dim=-1)
+                score = side_A + side_B
 
-                score = torch.bmm(emb_A.unsqueeze(1), side_B.t().unsqueeze(-1))
 
             elif "tail" == mode:
-                emb_B = embeddings[metapath[-1]][edge_index[1]]
                 num_edges = edge_index.shape[1] / neg_samp_size
-                idx_A = edge_index[1][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
 
-                side_A = embeddings[metapath[-1]][idx_A] @ kernel
+                idx_A = edge_index[1][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
+                side_A = (embeddings[metapath[-1]] @ kernel_A)[idx_A]
                 side_A = side_A.repeat_interleave(neg_samp_size, dim=0)
 
-                score = torch.bmm(side_A.unsqueeze(1), emb_B.unsqueeze(-1))
+                side_B = (embeddings[metapath[-1]] @ kernel_B)
+                side_B = side_B[edge_index[1]]
+
+                score = side_A + side_B
 
             elif mode == "single":
-                emb_A = embeddings[metapath[0]][edge_index[0]]
-                emb_B = embeddings[metapath[-1]][edge_index[1]]
+                side_A = (embeddings[metapath[0]] @ kernel_A)
+                side_A = side_A[edge_index[0]]
 
-                score = (emb_A @ kernel) @ emb_B.t()
-                # side_A = (emb_A @ kernel).unsqueeze(1)
-                # score = torch.bmm(side_A, emb_B.unsqueeze(-1)).squeeze(-1)
+                side_B = (embeddings[metapath[-1]] @ kernel_B)
+                side_B = side_B[edge_index[1]]
+
+                score = side_A + side_B
 
             # score shape (num_edges, num_edges)
             score = score.sum(dim=1)
@@ -133,7 +143,9 @@ class LATTELinkPred(LinkPredTrainer):
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
                               use_proximity=hparams.use_proximity, neg_sampling_ratio=hparams.neg_sampling_ratio)
 
-        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim * hparams.t_order, metapaths=dataset.metapaths)
+        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim * hparams.t_order,
+                                    metapaths=dataset.metapaths,
+                                    k_components=hparams.attn_heads)
         self.criterion = LinkPredLoss()
 
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
