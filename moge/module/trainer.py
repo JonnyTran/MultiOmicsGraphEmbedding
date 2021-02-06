@@ -217,8 +217,8 @@ class LinkPredTrainer(NodeClfTrainer):
                                                 batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size // 4)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size // 8)
 
     def test_dataloader(self):
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size // 4)
+                                            batch_size=self.hparams.batch_size // 8)
