@@ -171,7 +171,8 @@ class TripletSampler(HeteroNetDataset):
 
     @staticmethod
     def get_local_edge_index(triples, global_node_index, relation_ids_all, metapaths, local2batch=None):
-        edge_index_dict = {}
+        edges_pos = {}
+        edges_neg = {}
 
         if local2batch is None:
             local2batch = {
@@ -188,7 +189,7 @@ class TripletSampler(HeteroNetDataset):
             mask = triples["relation"] == relation_id
             sources = triples["head"][mask].apply_(local2batch[head_type].get)
             targets = triples["tail"][mask].apply_(local2batch[tail_type].get)
-            edge_index_dict[metapath] = torch.stack([sources, targets], dim=1).t()
+            edges_pos[metapath] = torch.stack([sources, targets], dim=1).t()
 
             if any(["neg" in k for k in triples.keys()]):
                 head_neg = triples["head_neg"][mask].apply_(local2batch[head_type].get)
@@ -197,9 +198,9 @@ class TripletSampler(HeteroNetDataset):
                                           targets.repeat(head_neg.size(1))])
                 tail_batch = torch.stack([sources.repeat(tail_neg.size(1)),
                                           tail_neg.view(-1)])
-                edge_index_dict[tag_negative(metapath)] = torch.cat([head_batch, tail_batch], dim=1)
+                edges_neg[metapath] = torch.cat([head_batch, tail_batch], dim=1)
 
-        return edge_index_dict
+        return edges_pos, edges_neg
 
     @staticmethod
     def get_global_node_index(triples, relation_ids, metapaths):
@@ -327,10 +328,10 @@ class TripletNeighborSampler(HeteroNeighborSampler):
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
                            for node_type in self.x_dict}
 
-        X["edge_pred_dict"] = TripletSampler.get_local_edge_index(triples=triples,
-                                                                  global_node_index=sampled_local_nodes,
-                                                                  relation_ids_all=relation_ids_all,
-                                                                  metapaths=self.metapaths,
-                                                                  local2batch=local2batch)
+        X["edge_pred_dict"], edges_neg = TripletSampler.get_local_edge_index(triples=triples,
+                                                                             global_node_index=sampled_local_nodes,
+                                                                             relation_ids_all=relation_ids_all,
+                                                                             metapaths=self.metapaths,
+                                                                             local2batch=local2batch)
 
         return X, None, None

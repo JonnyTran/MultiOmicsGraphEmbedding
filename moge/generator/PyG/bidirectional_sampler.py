@@ -45,6 +45,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         if not isinstance(e_idx, torch.Tensor):
             e_idx = torch.tensor(e_idx)
 
+        # Select sampling size
         if "test" in mode:
             negative_sampling_size = self.test_negative_sampling_size
         elif "valid" in mode:
@@ -55,30 +56,30 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         negative_sampling_size = int(negative_sampling_size / 2)
 
         triples = {k: v[e_idx] for k, v in self.triples.items() if not is_negative(k)}
-        # Add neg edges if valid or test
-        # if e_idx.max() < self.start_idx["train"]:
-        #     triples.update({k: v[e_idx] for k, v in self.triples.items() if is_negative(k)})
+        # Add true neg edges if valid or test
+        if e_idx.max() < self.start_idx["train"]:
+            triples.update({k: v[e_idx] for k, v in self.triples.items() if is_negative(k)})
 
         relation_ids_all = triples["relation"].unique()
-
         global_node_index = self.get_global_node_index(triples, relation_ids_all, metapaths=self.metapaths)
 
-        # Positive edges
-        pos_edges = self.get_local_edge_index(triples=triples,
-                                              global_node_index=global_node_index,
-                                              relation_ids_all=relation_ids_all,
-                                              metapaths=self.metapaths)
+        # Get true edges from triples
+        edges_pos, edges_neg = self.get_local_edge_index(triples=triples,
+                                                         global_node_index=global_node_index,
+                                                         relation_ids_all=relation_ids_all,
+                                                         metapaths=self.metapaths)
 
-        # Negative edges
-        neg_head = {}
-        neg_tail = {}
-        for metapath, edge_index in pos_edges.items():
-            neg_head[metapath] = \
-                torch.randint(high=len(global_node_index[metapath[0]]),
-                              size=(edge_index.shape[1], negative_sampling_size,))
-            neg_tail[metapath] = \
-                torch.randint(high=len(global_node_index[metapath[-1]]),
-                              size=(edge_index.shape[1], negative_sampling_size,))
+        # Whether to negative sampling
+        if not edges_neg:
+            neg_head = {}
+            neg_tail = {}
+            for metapath, edge_index in edges_pos.items():
+                neg_head[metapath] = \
+                    torch.randint(high=len(global_node_index[metapath[0]]),
+                                  size=(edge_index.shape[1], negative_sampling_size,))
+                neg_tail[metapath] = \
+                    torch.randint(high=len(global_node_index[metapath[-1]]),
+                                  size=(edge_index.shape[1], negative_sampling_size,))
 
         # Neighbor sampling with global_node_index
         batch_nodes_global = torch.cat([self.local2global[ntype][nid] for ntype, nid in global_node_index.items()], 0)
@@ -105,21 +106,16 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         else:
             node_feats = {}
 
-        # Ensure no edges are outside of batch_nodes_ids
-        # for m, edge_index in pos_edges.items():
-        #     assert set(global_node_index[m[0]][edge_index[0]].tolist()) <= set(local2batch[m[0]].keys()), f"{m}, {m[0]}"
-        #     assert set(global_node_index[m[-1]][edge_index[1]].tolist()) <= set(local2batch[m[-1]].keys()), f"{m}, {m[-1]}"
-        #
-        # for m, edge_index in edge_index_dict.items():
-        #     assert set(global_node_index[m[0]][edge_index[0]].tolist()) <= set(local2batch[m[0]].keys()), f"{m}, {m[0]}"
-        #     assert set(global_node_index[m[-1]][edge_index[1]].tolist()) <= set(local2batch[m[-1]].keys()), f"{m}, {m[-1]}"
-
+        # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
-             "edge_pos": pos_edges,
-             "edge_neg_head": neg_head,
-             "edge_neg_tail": neg_tail,
+             "edge_pos": edges_pos,
              "global_node_index": global_node_index,
              "x_dict": node_feats}
+
+        if not edges_neg:
+            X.update({"edge_neg_head": neg_head, "edge_neg_tail": neg_tail, })
+        else:
+            X.update({"edges_neg": edges_neg})
 
         return X, None, None
 
