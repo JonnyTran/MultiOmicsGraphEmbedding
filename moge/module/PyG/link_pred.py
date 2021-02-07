@@ -11,7 +11,7 @@ from moge.generator import HeteroNetDataset
 from moge.module.PyG.latte import LATTE, untag_negative, is_negative
 from moge.module.utils import tensor_sizes
 from ..trainer import LinkPredTrainer
-from moge.module.losses import LinkPredLoss
+from moge.module.losses import LinkPredLoss, ClassificationLoss
 
 class DistMulti(torch.nn.Module):
     def __init__(self, embedding_dim, metapaths):
@@ -77,7 +77,7 @@ class DistMulti(torch.nn.Module):
 
             # score shape should be (num_edges, 1)
             score = score.sum(dim=1)
-            assert score.dim() == 1, f"{mode} score={score.shape}"
+            # assert score.dim() == 1, f"{mode} score={score.shape}"
             edge_pred_dict[metapath] = score
 
         return edge_pred_dict
@@ -132,34 +132,6 @@ class LATTELinkPred(LinkPredTrainer):
 
         return embeddings, proximity_loss, output
 
-    @DeprecationWarning
-    def get_e_pos_neg(self, edge_pred_dict: dict):
-        """
-        Given pos edges and sampled neg edges from LATTE proximity, align e_pos and e_neg to shape (num_edge, ) and (num_edge, num_nodes_neg). This ignores reverse metapaths.
-
-        :param edge_pred_dict:
-        :return:
-        """
-        e_pos = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() \
-                           if not is_negative(metapath) and metapath in self.dataset.metapaths], dim=0)
-        e_neg = torch.cat([e_pred for metapath, e_pred in edge_pred_dict.items() if
-                           is_negative(metapath) and untag_negative(metapath) in self.dataset.metapaths], dim=0)
-
-        if self.training:
-            num_nodes_neg = int(self.hparams.neg_sampling_ratio)
-        else:
-            num_nodes_neg = int(e_neg.numel() // e_pos.numel())
-
-        if e_neg.size(0) % num_nodes_neg:
-            e_neg = e_neg[:e_neg.size(0) - e_neg.size(0) % num_nodes_neg]
-        e_neg = e_neg.view(-1, num_nodes_neg)
-
-        # ensure same num_edge in dim 0
-        min_idx = min(e_pos.size(0), e_neg.size(0))
-        e_pos = e_pos[:min_idx]
-        e_neg = e_neg[:min_idx]
-
-        return e_pos, e_neg
 
     def training_step(self, batch, batch_nb):
         X, _, _ = batch
