@@ -194,13 +194,13 @@ class LinkPredTrainer(NodeClfTrainer):
 
             # Negative sampling
             if "head-batch" in edge_pred_dict:
-                e_pred_head = edge_pred_dict["head-batch"][metapath].reshape(num_edges, -1)
-                e_pred_tail = edge_pred_dict["tail-batch"][metapath].reshape(num_edges, -1)
+                e_pred_head = edge_pred_dict["head-batch"][metapath].view(num_edges, -1)
+                e_pred_tail = edge_pred_dict["tail-batch"][metapath].view(num_edges, -1)
                 e_neg.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
 
             # True negatives
             elif "edge_neg" in edge_pred_dict:
-                e_neg.append(edge_pred_dict["edge_neg"][metapath].reshape(num_edges, -1))
+                e_neg.append(edge_pred_dict["edge_neg"][metapath].view(num_edges, -1))
             else:
                 raise Exception(f"No negative edges in {edge_pred_dict.keys()}")
 

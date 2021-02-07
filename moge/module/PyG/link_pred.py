@@ -156,6 +156,7 @@ class LATTELinkPred(LinkPredTrainer):
         loss = self.criterion.forward(e_pos, e_neg)
 
         self.valid_metrics.update_metrics(F.sigmoid(e_pos), F.sigmoid(e_neg), weights=None)
+        print(F.sigmoid(e_pos[:5]), "\t", F.sigmoid(e_neg[:5, 0].view(-1)))
 
         return {"val_loss": loss}
 
