@@ -43,10 +43,10 @@ class LATTE(nn.Module):
 
         self.layers = nn.ModuleList(layers)
 
-    def forward(self, node_inps: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
+    def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
         """
         This
-        :param node_inps: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
+        :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
         :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
         :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
         :param save_betas: whether to save _beta values for batch
@@ -58,7 +58,7 @@ class LATTE(nn.Module):
         h_layers = {node_type: [] for node_type in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=node_inps, x_r=node_inps,
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=node_feats, x_r=node_feats,
                                                                         edge_index_dict=edge_index_dict,
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
