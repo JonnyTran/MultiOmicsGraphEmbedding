@@ -41,7 +41,8 @@ class LATTENodeClf(NodeClfTrainer):
                               metapaths=dataset.get_metapaths(), activation=hparams.activation,
                               attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
-                              neg_sampling_ratio=hparams.neg_sampling_ratio)
+                              neg_sampling_ratio=hparams.neg_sampling_ratio,
+                              cpu_embeddings=True if "cpu_embedding" in hparams else False)
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
         self.classifier = DenseClassification(hparams)

@@ -1,4 +1,3 @@
-import logging
 import numpy as np
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset

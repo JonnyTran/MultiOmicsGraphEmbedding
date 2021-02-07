@@ -14,7 +14,7 @@ from ..trainer import LinkPredTrainer
 from moge.module.losses import LinkPredLoss
 
 class DistMulti(torch.nn.Module):
-    def __init__(self, embedding_dim, metapaths, k_components):
+    def __init__(self, embedding_dim, metapaths):
         super(DistMulti, self).__init__()
         self.metapaths = metapaths
         self.embedding_dim = embedding_dim
@@ -24,10 +24,8 @@ class DistMulti(torch.nn.Module):
         #      for metapath in metapaths}
         # )
 
-        self.relation_embedding_A = nn.Parameter(torch.zeros(len(metapaths), embedding_dim, k_components))
-        self.relation_embedding_B = nn.Parameter(torch.zeros(len(metapaths), embedding_dim, k_components))
-        nn.init.uniform_(tensor=self.relation_embedding_A, a=-1, b=1)
-        nn.init.uniform_(tensor=self.relation_embedding_B, a=-1, b=1)
+        self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim))
+        nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
 
     def forward(self, inputs, embeddings):
         output = {}
@@ -64,47 +62,22 @@ class DistMulti(torch.nn.Module):
 
         for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
-            kernel_A = self.relation_embedding_A[metapath_idx]
-            kernel_B = self.relation_embedding_B[metapath_idx]
+            kernel = self.relation_embedding[metapath_idx]  # (emb_dim)
 
-            # head torch.Size([10, 1, 128]), relationtorch.Size([10, 1, 128, 128]), tail torch.Size([10, 1, 128])
+            emb_A = embeddings[metapath[0]][edge_index[0]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
+            emb_B = embeddings[metapath[-1]][edge_index[1]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
+
             if "head" == mode:
-                num_edges = edge_index.shape[1] / neg_samp_size
+                score = emb_A * (kernel * emb_B)
+                score = score.sum(-1)
+            else:
+                side_A = (emb_A * kernel)
+                score = side_A * emb_B
+                score = score.sum(-1)
 
-                side_A = (embeddings[metapath[0]] @ kernel_A)
-                side_A = side_A[edge_index[0]]
-
-                idx_B = edge_index[0][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
-                side_B = (embeddings[metapath[0]] @ kernel_B)[idx_B]
-                side_B = side_B.repeat_interleave(neg_samp_size, dim=0)
-
-                score = side_A + side_B
-
-
-            elif "tail" == mode:
-                num_edges = edge_index.shape[1] / neg_samp_size
-
-                idx_A = edge_index[1][torch.arange(num_edges, dtype=torch.long) * neg_samp_size]
-                side_A = (embeddings[metapath[-1]] @ kernel_A)[idx_A]
-                side_A = side_A.repeat_interleave(neg_samp_size, dim=0)
-
-                side_B = (embeddings[metapath[-1]] @ kernel_B)
-                side_B = side_B[edge_index[1]]
-
-                score = side_A + side_B
-
-            elif mode == "single":
-                side_A = (embeddings[metapath[0]] @ kernel_A)
-                side_A = side_A[edge_index[0]]
-
-                side_B = (embeddings[metapath[-1]] @ kernel_B)
-                side_B = side_B[edge_index[1]]
-
-                score = side_A + side_B
-
-            # score shape (num_edges, num_edges)
+            # score shape should be (num_edges, 1)
             score = score.sum(dim=1)
-            # assert score.dim() == 1, f"{mode} score={score.shape}"
+            assert score.dim() == 1, f"{mode} score={score.shape}"
             edge_pred_dict[metapath] = score
 
         return edge_pred_dict
@@ -141,11 +114,10 @@ class LATTELinkPred(LinkPredTrainer):
                               in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(), attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
-                              use_proximity=hparams.use_proximity, neg_sampling_ratio=hparams.neg_sampling_ratio)
+                              use_proximity=hparams.use_proximity, neg_sampling_ratio=hparams.neg_sampling_ratio,
+                              cpu_embeddings=True if "cpu_embedding" in hparams else False)
 
-        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim * hparams.t_order,
-                                    metapaths=dataset.metapaths,
-                                    k_components=hparams.attn_heads)
+        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim * hparams.t_order, metapaths=dataset.metapaths)
         self.criterion = LinkPredLoss()
 
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
@@ -240,4 +212,4 @@ class LATTELinkPred(LinkPredTrainer):
                                      weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "loss"}
