@@ -240,4 +240,4 @@ class LATTELinkPred(LinkPredTrainer):
                                      weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "loss"}
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
