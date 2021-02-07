@@ -4,6 +4,7 @@ import logging
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.hooks import RemovableHandle
 
@@ -76,7 +77,7 @@ class DistMulti(torch.nn.Module):
                 score = score.sum(-1)
 
             # score shape should be (num_edges, 1)
-            score = score.sum(dim=1)
+            score = F.sigmoid(score.sum(dim=1))
             # assert score.dim() == 1, f"{mode} score={score.shape}"
             edge_pred_dict[metapath] = score
 

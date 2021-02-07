@@ -96,7 +96,7 @@ class LinkPredLoss(nn.Module):
 
         preds = torch.cat([pos_pred, neg_pred.view(-1)])
 
-        loss = F.binary_cross_entropy_with_logits(preds, targets)
+        loss = F.binary_cross_entropy(preds, targets)
         return loss
 
 
