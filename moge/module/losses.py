@@ -90,13 +90,13 @@ class LinkPredLoss(nn.Module):
         # loss += -torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
         # loss = loss / 2
 
-        pos_target = torch.ones_like(pos_pred)
-        neg_target = torch.zeros_like(neg_pred.view(-1))
-        targets = torch.cat([pos_target, neg_target])
-
         preds = torch.cat([pos_pred, neg_pred.view(-1)])
 
-        loss = F.binary_cross_entropy(preds, targets)
+        pos_target = torch.ones_like(pos_pred, requires_grad=False)
+        neg_target = torch.zeros_like(neg_pred.view(-1), requires_grad=False)
+        targets = torch.cat([pos_target, neg_target])
+
+        loss = F.binary_cross_entropy_with_logits(preds, targets)
         return loss
 
 

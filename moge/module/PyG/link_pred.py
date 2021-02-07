@@ -77,7 +77,7 @@ class DistMulti(torch.nn.Module):
                 score = score.sum(-1)
 
             # score shape should be (num_edges, 1)
-            score = F.sigmoid(score.sum(dim=1))
+            score = score.sum(dim=1)
             # assert score.dim() == 1, f"{mode} score={score.shape}"
             edge_pred_dict[metapath] = score
 
@@ -142,7 +142,7 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
 
-        self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
+        self.train_metrics.update_metrics(F.sigmoid(e_pos), F.sigmoid(e_neg), weights=None)
 
         logs = self.train_metrics.compute_metrics()
         outputs = {'loss': loss, 'progress_bar': logs}
@@ -155,7 +155,7 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
 
-        self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
+        self.valid_metrics.update_metrics(F.sigmoid(e_pos), F.sigmoid(e_neg), weights=None)
 
         return {"val_loss": loss}
 
@@ -166,7 +166,7 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
 
-        self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
+        self.test_metrics.update_metrics(F.sigmoid(e_pos), F.sigmoid(e_neg), weights=None)
 
         return {"test_loss": loss}
 
