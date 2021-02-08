@@ -172,6 +172,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--disable_alpha', type=bool, default=False)
     parser.add_argument('--disable_beta', type=bool, default=False)
+    parser.add_argument('--attn_activation', type=str, default=None)
 
     parser.add_argument('--num_gpus', type=int, default=1)
 
