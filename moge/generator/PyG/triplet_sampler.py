@@ -306,7 +306,7 @@ class TripletNeighborSampler(HeteroNeighborSampler):
             adjs = [adjs]
 
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        sampled_local_nodes = self.get_local_nodes_dict(adjs, n_id)
+        sampled_local_nodes = self.get_local_node_index(adjs, n_id)
         X = {"edge_index_dict": {},
              "global_node_index": sampled_local_nodes,
              "x_dict": {}}

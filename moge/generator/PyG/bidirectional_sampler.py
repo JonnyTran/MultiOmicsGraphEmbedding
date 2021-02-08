@@ -65,11 +65,11 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         relation_ids_all = triples["relation"].unique()
 
         # Set of all nodes from sampled triples
-        global_node_index = self.get_global_node_index(triples, relation_ids_all, metapaths=self.metapaths)
+        triplets_node_index = self.get_global_node_index(triples, relation_ids_all, metapaths=self.metapaths)
 
         # Get true edges from triples
         edges_pos, edges_neg = self.get_local_edge_index(triples=triples,
-                                                         global_node_index=global_node_index,
+                                                         global_node_index=triplets_node_index,
                                                          relation_ids_all=relation_ids_all,
                                                          metapaths=self.metapaths)
 
@@ -79,18 +79,32 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
             tail_batch = {}
             for metapath, edge_index in edges_pos.items():
                 head_batch[metapath] = \
-                    torch.randint(high=len(global_node_index[metapath[0]]),
+                    torch.randint(high=len(triplets_node_index[metapath[0]]),
                                   size=(edge_index.shape[1], negative_sampling_size,))
                 tail_batch[metapath] = \
-                    torch.randint(high=len(global_node_index[metapath[-1]]),
+                    torch.randint(high=len(triplets_node_index[metapath[-1]]),
                                   size=(edge_index.shape[1], negative_sampling_size,))
 
         # Neighbor sampling with global_node_index
-        batch_nodes_global = torch.cat([self.local2global[ntype][nid] for ntype, nid in global_node_index.items()], 0)
+        batch_nodes_global = torch.cat([self.local2global[ntype][nid] for ntype, nid in triplets_node_index.items()], 0)
         batch_size, n_id, adjs = self.neighbor_sampler.sample(batch_nodes_global)
         if not isinstance(adjs, list):
             adjs = [adjs]
 
+        sampled_local_nodes = self.get_local_node_index(adjs, n_id)
+
+        # Merge triplets_node_index + sampled_local_nodes = global_node_index, while ensuring index order in triplets_node_index
+        global_node_index = {}
+        for ntype, neighbor_nodes in sampled_local_nodes.items():
+            if ntype not in triplets_node_index:
+                global_node_index.setdefault(ntype, []).append(neighbor_nodes)
+            else:
+                global_node_index.setdefault(ntype, []).append(triplets_node_index[ntype])
+                new_nodes_mask = np.isin(neighbor_nodes, triplets_node_index[ntype], invert=True)
+                global_node_index[ntype].append(neighbor_nodes[new_nodes_mask])
+            global_node_index[ntype] = torch.cat(global_node_index[ntype], 0)
+
+        # Get dict to convert from global node index to batch node index
         local2batch = {node_type: dict(zip(global_node_index[node_type].numpy(),
                                            range(len(global_node_index[node_type])))) \
                        for node_type in global_node_index}

@@ -148,7 +148,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             return super().get_collate_fn(collate_fn, mode=mode)
 
-    def get_local_nodes_dict(self, adjs, n_id):
+    def get_local_node_index(self, adjs, n_id):
         """
 
         :param iloc: A tensor of indices for nodes of `head_node_type`
@@ -187,7 +187,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if not isinstance(adjs, list):
             adjs = [adjs]
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        sampled_local_nodes = self.get_local_nodes_dict(adjs, n_id)
+        sampled_local_nodes = self.get_local_node_index(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         if "train" in mode:
