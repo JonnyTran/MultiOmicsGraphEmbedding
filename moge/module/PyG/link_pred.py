@@ -171,7 +171,7 @@ class LATTELinkPred(LinkPredTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation']
+        no_decay = ['bias', 'alpha_activation', 'embedding']
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
              'weight_decay': 0.01},

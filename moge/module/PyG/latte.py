@@ -323,14 +323,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def get_h_dict(self, input, global_node_idx, left_right="left"):
         h_dict = {}
         for node_type in global_node_idx:
-            if node_type in input:
-                if left_right == "left":
-                    h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
-                elif left_right == "right":
-                    h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
-            else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
-                    .to(self.conv[node_type].weight.device)
+            if node_type not in input:
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
+                    self.conv[node_type].weight.device)
+                continue
+
+            if left_right == "left":
+                h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
+            elif left_right == "right":
+                h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
+
         return h_dict
 
     def get_alphas(self, edge_index_dict, l_dict, r_dict):
