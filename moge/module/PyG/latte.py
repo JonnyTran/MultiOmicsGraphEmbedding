@@ -231,7 +231,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.metapaths):
             glorot(self.attn_l[i].weight)
             glorot(self.attn_r[i].weight)
-
         # glorot(self.attn_q[-1].weight)
 
         for node_type in self.linear_l:
