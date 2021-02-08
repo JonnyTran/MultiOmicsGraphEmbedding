@@ -67,7 +67,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_gpus', type=int, default=1)
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
-    parser.add_argument('--dir_path', type=str, default="~/Bioinformatics_ExternalData/OGB/")
+    parser.add_argument('--dir_path', type=str, default="datasets/")
 
     parser.add_argument("-d", '--embedding_dim', type=int, default=128)
     parser.add_argument("-t", '--t_order', type=int, default=2)
@@ -80,6 +80,9 @@ if __name__ == "__main__":
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
     parser.add_argument('--nb_cls_dropout', type=float, default=0.3)
+
+    parser.add_argument('--disable_alpha', type=bool, default=False)
+    parser.add_argument('--disable_beta', type=bool, default=False)
 
     parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)

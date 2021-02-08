@@ -59,19 +59,19 @@ class ClusteringEvaluator(LightningModule):
         return self.dataset.trainvalidtest_dataloader(collate_fn=self.collate_fn, )
 
     def clustering_metrics(self, n_runs=10, compare_node_types=True):
-        loader = self.trainvalidtest_dataloader()
-        X_all, y_all, _ = next(iter(loader))
-        self.cpu().forward(preprocess_input(X_all, device="cpu"))
-
-        if not isinstance(self._embeddings, dict):
-            self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
+        # loader = self.trainvalidtest_dataloader()
+        # X_all, y_all, _ = next(iter(loader))
+        # self.cpu().forward(preprocess_input(X_all, device="cpu"))
+        #
+        # if not isinstance(self._embeddings, dict):
+        #     self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
 
         embeddings_all, types_all, y_true = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
 
         # Record metrics for each run in a list of dict's
         res = [{}, ] * n_runs
         for i in range(n_runs):
-            y_pred = self.dataset.predict_cluster(n_clusters=len(y_all.unique()), seed=i)
+            y_pred = self.dataset.predict_cluster(n_clusters=len(y_true.unique()), seed=i)
 
             if compare_node_types and len(self.dataset.node_types) > 1:
                 res[i].update(clustering_metrics(y_true=types_all,
