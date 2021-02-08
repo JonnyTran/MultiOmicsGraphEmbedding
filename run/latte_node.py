@@ -11,25 +11,17 @@ from pytorch_lightning.trainer import Trainer
 
 from pytorch_lightning.callbacks import EarlyStopping
 
-from ogb.nodeproppred import PygNodePropPredDataset
-from ogb.linkproppred import PygLinkPropPredDataset
-from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
-from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
-from torch_geometric.datasets import AMiner
-
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.generator import HeteroNeighborSampler, TripletSampler
 from moge.module.PyG.node_clf import LATTENodeClf
-from moge.module.PyG.link_pred import LATTELinkPred
 from run.utils import load_node_dataset
 
 
 def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = False  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 50
+    MAX_EPOCHS = 100
 
     neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.t_order):
@@ -53,7 +45,7 @@ def train(hparams: Namespace):
         gradient_clip_val=hparams.gradient_clip_val,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
-        # early_stop_callback=EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False),
+        callbacks=[EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False)],
         logger=logger,
         amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32

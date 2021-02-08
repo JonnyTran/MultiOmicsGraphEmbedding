@@ -12,6 +12,8 @@ parameters:
     values: [ True, False ]
   disable_beta:
     values: [ True, False ]
+  attn_activation:
+    values: [ "LeakyReLU", "sharpening" ]
   train_ratio:
     values: [ 0.0 ]
   run:
