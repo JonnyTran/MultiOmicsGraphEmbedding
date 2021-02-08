@@ -126,7 +126,7 @@ def train(hparams):
             "weight_decay": 1e-2,
         }
 
-        model_hparams.update(hparams)
+        model_hparams.update(hparams.__dict__)
 
         metrics = ["precision", "recall", "micro_f1",
                    "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
