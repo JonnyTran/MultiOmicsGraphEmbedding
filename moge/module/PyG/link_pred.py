@@ -72,11 +72,9 @@ class DistMulti(torch.nn.Module):
                 score = emb_A * (kernel * emb_B)
                 score = score.sum(-1)
             else:
-                side_A = (emb_A * kernel)
-                score = side_A * emb_B
+                score = (emb_A * kernel) * emb_B
                 score = score.sum(-1)
 
-            # score shape should be (num_edges, 1)
             score = score.sum(dim=1)
             # assert score.dim() == 1, f"{mode} score={score.shape}"
             edge_pred_dict[metapath] = score
