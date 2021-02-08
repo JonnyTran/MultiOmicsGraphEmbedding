@@ -25,7 +25,7 @@ class DistMulti(torch.nn.Module):
         #      for metapath in metapaths}
         # )
 
-        self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim))
+        self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
         nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
 
     def forward(self, inputs, embeddings):
