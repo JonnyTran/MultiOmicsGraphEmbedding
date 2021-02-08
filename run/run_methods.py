@@ -126,6 +126,8 @@ def train(hparams):
             "weight_decay": 1e-2,
         }
 
+        model_hparams.update(hparams)
+
         metrics = ["precision", "recall", "micro_f1",
                    "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
 
@@ -167,6 +169,9 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--method', type=str, default="MetaPath2Vec")
     parser.add_argument('--train_ratio', type=float, default=None)
+
+    parser.add_argument('--disable_alpha', type=bool, default=False)
+    parser.add_argument('--disable_beta', type=bool, default=False)
 
     parser.add_argument('--num_gpus', type=int, default=1)
 
