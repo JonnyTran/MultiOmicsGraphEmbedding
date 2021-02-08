@@ -142,7 +142,7 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
 
-        self.train_metrics.update_metrics(F.sigmoid(e_pos), F.sigmoid(e_neg), weights=None)
+        self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         logs = self.train_metrics.compute_metrics()
         outputs = {'loss': loss, 'progress_bar': logs}
@@ -155,7 +155,7 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
 
-        self.valid_metrics.update_metrics(F.sigmoid(e_pos), F.sigmoid(e_neg), weights=None)
+        self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
         print(F.sigmoid(e_pos[:5]), "\t", F.sigmoid(e_neg[:5, 0].view(-1))) if batch_nb == 1 else None
 
         return {"val_loss": loss}
@@ -167,7 +167,7 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
         loss = self.criterion.forward(e_pos, e_neg)
 
-        self.test_metrics.update_metrics(F.sigmoid(e_pos), F.sigmoid(e_neg), weights=None)
+        self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
         return {"test_loss": loss}
 
