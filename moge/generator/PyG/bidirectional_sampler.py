@@ -26,6 +26,8 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
 
+        self.train_counts = defaultdict(lambda: 4)
+
     # def __init__(self, dataset, node_types=None, metapaths=None,
     #              negative_sampling_size=128, test_negative_sampling_size=500,
     #              head_node_type=None, directed=True,
