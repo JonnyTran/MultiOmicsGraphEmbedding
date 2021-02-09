@@ -44,8 +44,11 @@ class LATTENodeClf(NodeClfTrainer):
                               neg_sampling_ratio=hparams.neg_sampling_ratio,
                               cpu_embeddings=True if "cpu_embedding" in hparams else False,
                               disable_alpha=hparams.disable_alpha if "disable_alpha" in hparams else False,
-                              disable_beta=hparams.disable_beta if "disable_beta" in hparams else False)
-        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+                              disable_beta=hparams.disable_beta if "disable_beta" in hparams else False,
+                              disable_concat=hparams.disable_concat if "disable_concat" in hparams else False, )
+
+        if not (hparams.disable_concat if "disable_concat" in hparams else False):
+            hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,

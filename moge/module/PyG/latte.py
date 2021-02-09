@@ -20,7 +20,7 @@ class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True, cpu_embeddings=False,
-                 disable_alpha=False, disable_beta=False):
+                 disable_alpha=False, disable_beta=False, disable_concat=False):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -32,6 +32,7 @@ class LATTE(nn.Module):
 
         self.disable_beta = disable_beta
         self.disable_alpha = disable_alpha
+        self.disable_concat = disable_concat
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -81,6 +82,9 @@ class LATTE(nn.Module):
 
             if self.use_proximity:
                 proximity_loss += t_loss
+
+        if self.disable_concat:
+            return h_dict, proximity_loss, edge_pred_dict
 
         concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
                       if len(h_list) > 0}
