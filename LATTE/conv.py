@@ -1,4 +1,4 @@
-import copy
+import copy, logging
 import numpy as np
 import pandas as pd
 import torch
@@ -8,14 +8,20 @@ import torch.nn.functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.inits import glorot
 from torch_geometric.utils import softmax
+import torch_sparse
 from torch_sparse.tensor import SparseTensor
+from torch_sparse.matmul import matmul
 import pytorch_lightning as pl
+
+from moge.module.sampling import negative_sample, negative_sample_head_tail
+from moge.module.utils import preprocess_input, tensor_sizes
 
 
 class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
-                 use_proximity=True, neg_sampling_ratio=2.0):
+                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True, cpu_embeddings=False,
+                 disable_alpha=False, disable_beta=False, disable_concat=False):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -23,6 +29,11 @@ class LATTE(nn.Module):
         self.use_proximity = use_proximity
         self.t_order = t_order
         self.neg_sampling_ratio = neg_sampling_ratio
+        self.edge_sampling = edge_sampling
+
+        self.disable_beta = disable_beta
+        self.disable_alpha = disable_alpha
+        self.disable_concat = disable_concat
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -33,9 +44,53 @@ class LATTE(nn.Module):
                           attn_activation=attn_activation, attn_dropout=attn_dropout, use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio,
                           first=True if t == 0 else False,
-                          embeddings=layers[0].embeddings if t > 0 else None))
+                          cpu_embeddings=cpu_embeddings, disable_alpha=disable_alpha, disable_beta=disable_beta))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
+
         self.layers = nn.ModuleList(layers)
+
+    def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
+        """
+        This
+        :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
+        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
+        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
+        :param save_betas: whether to save _beta values for batch
+        :return embedding_output, proximity_loss, edge_pred_dict:
+        """
+        # device = global_node_idx[list(global_node_idx.keys())[0]].device
+        proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
+
+        h_layers = {node_type: [] for node_type in global_node_idx}
+        for t in range(self.t_order):
+            if t == 0:
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=node_feats, x_r=node_feats,
+                                                                        edge_index_dict=edge_index_dict,
+                                                                        global_node_idx=global_node_idx,
+                                                                        save_betas=save_betas)
+                next_edge_index_dict = edge_index_dict
+            else:
+                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
+                                                               edge_sampling=self.edge_sampling)
+                # logging.info('h_dict', tensor_sizes(h_dict))
+                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=h_dict,
+                                                           edge_index_dict=next_edge_index_dict,
+                                                           global_node_idx=global_node_idx,
+                                                           save_betas=save_betas)
+
+            for node_type in global_node_idx:
+                h_layers[node_type].append(h_dict[node_type])
+
+            if self.use_proximity:
+                proximity_loss += t_loss
+
+        if self.disable_concat:
+            return h_dict, proximity_loss, edge_pred_dict
+
+        concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                      if len(h_list) > 0}
+
+        return concat_out, proximity_loss, edge_pred_dict
 
     @staticmethod
     def join_metapaths(metapath_A, metapath_B):
@@ -64,7 +119,7 @@ class LATTE(nn.Module):
         return edge_index, edge_values
 
     @staticmethod
-    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx):
+    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False):
         output_dict = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
@@ -78,12 +133,14 @@ class LATTE(nn.Module):
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                 if edge_index_b is None: continue
                 try:
-                    new_edge_index = adamic_adar(indexA=edge_index_a, valueA=values_a, indexB=edge_index_b,
-                                                 valueB=values_b,
-                                                 m=global_node_idx[metapath_a[0]].size(0),
-                                                 k=global_node_idx[metapath_a[-1]].size(0),
-                                                 n=global_node_idx[metapath_b[-1]].size(0),
-                                                 coalesced=True, sampling=True)
+                    new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                         indexB=edge_index_b, valueB=values_b,
+                                                         m=global_node_idx[metapath_a[0]].size(0),
+                                                         k=global_node_idx[metapath_a[-1]].size(0),
+                                                         n=global_node_idx[metapath_b[-1]].size(0),
+                                                         coalesced=True,
+                                                         # sampling=edge_sampling
+                                                         )
                     if new_edge_index[0].size(1) == 0: continue
                     output_dict[new_metapath] = new_edge_index
 
@@ -92,44 +149,6 @@ class LATTE(nn.Module):
                     continue
 
         return output_dict
-
-    def forward(self, X: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
-        """
-        This
-        :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
-        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
-        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
-        :param save_betas: whether to save _beta values for batch
-        :return embedding_output, proximity_loss, edge_pred_dict:
-        """
-        # device = global_node_idx[list(global_node_idx.keys())[0]].device
-        proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
-
-        h_layers = {node_type: [] for node_type in global_node_idx}
-        for t in range(self.t_order):
-            if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=X, x_r=X,
-                                                                        edge_index_dict=edge_index_dict,
-                                                                        global_node_idx=global_node_idx,
-                                                                        save_betas=save_betas)
-                next_edge_index_dict = edge_index_dict
-            else:
-                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx)
-                h_dict, t_loss, _ = self.layers[t].forward(x_l=h_dict, x_r=X,
-                                                           edge_index_dict=next_edge_index_dict,
-                                                           global_node_idx=global_node_idx,
-                                                           save_betas=save_betas)
-
-            for node_type in global_node_idx:
-                h_layers[node_type].append(h_dict[node_type])
-
-            if self.use_proximity:
-                proximity_loss += t_loss
-
-        concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                      if len(h_list) > 0}
-
-        return concat_out, proximity_loss, edge_pred_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -141,7 +160,8 @@ class LATTE(nn.Module):
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, in_channels_dict: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
-                 use_proximity=False, neg_sampling_ratio=1.0, first=True, embeddings=None) -> None:
+                 use_proximity=False, neg_sampling_ratio=1.0, first=True, cpu_embeddings=False,
+                 disable_alpha=False, disable_beta=False) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
@@ -152,6 +172,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
+
+        self.disable_beta = disable_beta
+        self.disable_alpha = disable_alpha
 
         self.activation = activation.lower()
         if self.activation not in ["sigmoid", "tanh", "relu"]:
@@ -177,8 +200,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (F x F)
             self.linear_r = nn.ModuleDict(
-                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
-                 for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m}
+                {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.ModuleList(
@@ -198,21 +221,20 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             print(f"WARNING: alpha_activation `{attn_activation}` did not match, so used linear activation")
             self.alpha_activation = None
 
-        # If some node type are not attributed, instantiate embeddings for them
+        # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         if first and len(non_attr_node_types) > 0:
-            if embedding_dim > 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
-                print("INFO: Embedding.device = 'cpu'")
+            if cpu_embeddings or embedding_dim >= 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
+                logging.info("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
                                                            sparse=True).cpu() for node_type in non_attr_node_types}
             else:
+                logging.info("Embedding.device = 'gpu'")
                 self.embeddings = nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
                                              sparse=False) for node_type in non_attr_node_types})
-        elif embeddings is not None:
-            self.embeddings = embeddings
         else:
             self.embeddings = None
 
@@ -222,7 +244,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.metapaths):
             glorot(self.attn_l[i].weight)
             glorot(self.attn_r[i].weight)
-
         # glorot(self.attn_q[-1].weight)
 
         for node_type in self.linear_l:
@@ -264,11 +285,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                          l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
                                                          global_node_idx=global_node_idx)
             out[node_type][:, -1] = l_dict[node_type]
+
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
+            if not self.disable_beta:
+                out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
+            else:
+                out[node_type] = out[node_type].mean(1)
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
+
 
         proximity_loss, edge_pred_dict = None, None
         if self.use_proximity:
@@ -303,24 +329,30 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return emb_relations
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
+        if self.disable_alpha:
+            same_alpha = torch.ones((x_j.shape[0], 1)).type_as(x_j)
+            return x_j * same_alpha / same_alpha.sum(0)
+
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        # alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
+
         return x_j * alpha
 
     def get_h_dict(self, input, global_node_idx, left_right="left"):
         h_dict = {}
         for node_type in global_node_idx:
-            if node_type in input:
-                if left_right == "left":
-                    h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
-                elif left_right == "right":
-                    h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
-            else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
-                    .to(self.conv[node_type].weight.device)
+            if node_type not in input:
+                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(
+                    self.conv[node_type].weight.device)
+                continue
+
+            if left_right == "left":
+                h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
+            elif left_right == "right":
+                h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
+
         return h_dict
 
     def get_alphas(self, edge_index_dict, l_dict, r_dict):
@@ -503,7 +535,6 @@ def tag_negative(metapath):
     else:
         return "neg"
 
-
 def untag_negative(metapath):
     if isinstance(metapath, tuple) and metapath[-1] == "neg":
         return metapath[:-1]
@@ -514,7 +545,7 @@ def untag_negative(metapath):
 
 
 def is_negative(metapath):
-    if isinstance(metapath, tuple) and metapath[-1] == "neg":
+    if isinstance(metapath, tuple) and "neg" in metapath:
         return True
     elif isinstance(metapath, str) and "_neg" in metapath:
         return True
@@ -548,25 +579,3 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
         row, col, values = row[idx], col[idx], values[idx]
 
     return torch.stack([row, col], dim=0), values
-
-
-def negative_sample(edge_index, M: int, N: int, n_sample_per_edge: int):
-    num_neg_samples = edge_index.size(1) * n_sample_per_edge
-    num_neg_samples = int(min(num_neg_samples, M * N - edge_index.size(1)))
-    rng = range(M * N)
-    idx = (edge_index[0] * N + edge_index[1]).to('cpu')  # idx = N * i + j
-
-    perm = torch.tensor(random.sample(rng, num_neg_samples))
-    mask = torch.from_numpy(np.isin(perm, idx)).to(torch.bool)
-    rest = mask.nonzero().view(-1)
-    while rest.numel() > 0:  # pragma: no cover
-        tmp = torch.tensor(random.sample(rng, rest.size(0)))
-        mask = torch.from_numpy(np.isin(tmp, idx)).to(torch.bool)
-        perm[rest] = tmp
-        rest = rest[mask.nonzero().view(-1)]
-
-    row = perm // N
-    col = perm % N
-    neg_edge_index = torch.stack([row, col], dim=0).long()
-
-    return neg_edge_index.to(edge_index.device)

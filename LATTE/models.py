@@ -1,109 +1,34 @@
-from collections import OrderedDict
-import multiprocessing
 import itertools
+import multiprocessing
+import numpy as np
 
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.multiclass import OneVsRestClassifier
-from sklearn.metrics import precision_recall_fscore_support
-
-import torch
-from torch import nn
-from torch.nn import functional as F
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-from torch_geometric.utils import remove_self_loops, add_self_loops
 import pytorch_lightning as pl
+import torch
+from cogdl.models.emb.hin2vec import Hin2vec, Hin2vec_layer, RWgraph, tqdm
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch_geometric.nn.inits import glorot, zeros
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
-from cogdl.models.nn.pyg_gtn import GTN as Gtn
-from cogdl.models.nn.pyg_han import HAN as Han
-from cogdl.models.emb.hin2vec import Hin2vec, RWgraph, Hin2vec_layer, tqdm
+from moge.module.cogdl.conv import GTN as Gtn
+from moge.module.cogdl.conv import HAN as Han
 
-from data import HeteroNetDataset
-from utils import Metrics
-from conv import LATTE
-from utils import filter_samples
-
-
-class NodeClfMetrics(pl.LightningModule):
-    def __init__(self, hparams, dataset, metrics, *args):
-        super().__init__(*args)
-
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
-        hparams.name = self.name()
-        hparams.inductive = dataset.inductive
-        self.hparams = hparams
-
-    def name(self):
-        if hasattr(self, "_name"):
-            return self._name
-        else:
-            return self.__class__.__name__
-
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.train_metrics.compute_metrics()
-
-        logs.update({"loss": avg_loss})
-        self.train_metrics.reset_metrics()
-        return {"log": logs}
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.valid_metrics.compute_metrics()
-
-        logs.update({"val_loss": avg_loss})
-        self.valid_metrics.reset_metrics()
-        return {"progress_bar": logs,
-                "log": logs}
-
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
-        if hasattr(self, "test_metrics"):
-            logs = self.test_metrics.compute_metrics()
-            self.test_metrics.reset_metrics()
-        else:
-            logs = {}
-        logs.update({"test_loss": avg_loss})
-
-        return {"progress_bar": logs,
-                "log": logs}
-
-    def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
-        if multilabel:
-            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-        else:
-            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-
-    def get_n_params(self):
-        size = 0
-        for name, param in dict(self.named_parameters()).items():
-            nn = 1
-            for s in list(param.size()):
-                nn = nn * s
-            size += nn
-        return size
+from moge.generator import HeteroNetDataset
+from moge.module.PyG.latte import LATTE
+from moge.module.PyG.hgt import HGTModel, Graph, sample_subgraph, feature_MAG, to_torch
+from moge.module.classifier import DenseClassification
+from moge.module.losses import ClassificationLoss
+from moge.module.metrics import Metrics
+from moge.module.trainer import NodeClfTrainer
+from moge.module.utils import filter_samples
 
 
-class LATTENodeClassifier(NodeClfMetrics):
+class LATTENodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
-        super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
@@ -111,15 +36,24 @@ class LATTENodeClassifier(NodeClfMetrics):
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
-                           in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-                           metapaths=dataset.get_metapaths(), activation=hparams.activation,
-                           attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-                           attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
-                           neg_sampling_ratio=hparams.neg_sampling_ratio)
-        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+                              in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
+                              metapaths=dataset.get_metapaths(), activation=hparams.activation,
+                              attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
+                              attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
+                              neg_sampling_ratio=hparams.neg_sampling_ratio,
+                              cpu_embeddings=True if "cpu_embedding" in hparams else False,
+                              disable_alpha=hparams.disable_alpha if "disable_alpha" in hparams else False,
+                              disable_beta=hparams.disable_beta if "disable_beta" in hparams else False,
+                              disable_concat=hparams.disable_concat if "disable_concat" in hparams else False, )
+
+        if not (hparams.disable_concat if "disable_concat" in hparams else False):
+            hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
         self.classifier = DenseClassification(hparams)
+        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
+        #                                            num_class=hparams.n_classes,
+        #                                            loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
@@ -127,10 +61,15 @@ class LATTENodeClassifier(NodeClfMetrics):
                                             multilabel=dataset.multilabel)
         self.hparams.n_params = self.get_n_params()
 
-    def forward(self, input: dict, **kwargs):
-        embeddings, proximity_loss, _ = self.latte.forward(X=input["x_dict"], edge_index_dict=input["edge_index_dict"],
-                                                           global_node_idx=input["global_node_index"], **kwargs)
-        y_hat = self.classifier.forward(embeddings[self.head_node_type])
+    def forward(self, inputs: dict, **kwargs):
+        if not self.training:
+            self._node_ids = inputs["global_node_index"]
+
+        embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],
+                                                      inputs["edge_index_dict"],
+                                                      inputs["global_node_index"], **kwargs)
+
+        y_hat = self.classifier(embeddings[self.head_node_type])
         return y_hat, proximity_loss
 
     def training_step(self, batch, batch_nb):
@@ -192,34 +131,13 @@ class LATTENodeClassifier(NodeClfMetrics):
 
         return {"test_loss": test_loss}
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=int(0.4 * multiprocessing.cpu_count()))
-
-    def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size,
-                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
-    def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size,
-                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation']
+        no_decay = ['bias', 'alpha_activation', 'embedding']
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
              'weight_decay': 0.01},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
-             'weight_decay': 0.0}
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
         # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
@@ -229,10 +147,107 @@ class LATTENodeClassifier(NodeClfMetrics):
                                      weight_decay=self.hparams.weight_decay)
         scheduler = ReduceLROnPlateau(optimizer)
 
-        return [optimizer], [scheduler]
+        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
 
 
-class GTN(Gtn, pl.LightningModule):
+class HGT(HGTModel, NodeClfTrainer):
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
+        super(HGT, self).__init__(
+            in_dim=dataset.in_features,
+            n_hid=hparams.embedding_dim,
+            n_layers=hparams.n_layers,
+            num_types=len(dataset.node_types),
+            num_relations=len(dataset.edge_index_dict),
+            n_heads=hparams.attn_heads,
+            dropout=hparams.attn_dropout,
+            prev_norm=hparams.prev_norm,
+            last_norm=hparams.last_norm,
+            use_RTE=False, hparams=hparams, dataset=dataset, metrics=metrics)
+
+        self.classifier = DenseClassification(hparams)
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
+                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
+                                                                                 hparams.use_class_weights else None,
+                                            loss_type=hparams.loss_type,
+                                            multilabel=dataset.multilabel)
+
+        self.collate_fn = hparams.collate_fn
+        self.dataset = dataset
+        self.hparams.n_params = self.get_n_params()
+
+    def name(self):
+        if hasattr(self, "_name"):
+            return self._name
+        else:
+            return self.__class__.__name__
+
+    def forward(self, X):
+        if not self.training:
+            self._node_ids = X["global_node_index"]
+
+        return super().forward(node_feature=X["node_inp"],
+                               node_type=X["node_type"],
+                               edge_time=X["edge_time"],
+                               edge_index=X["edge_index"],
+                               edge_type=X["edge_type"])
+
+    def training_step(self, batch, batch_nb):
+        X, y, weights = batch
+        embeddings = self.forward(X)
+
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        y_hat = self.classifier.forward(embeddings[nids])
+
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        self.train_metrics.update_metrics(y_hat, y, weights=None)
+        loss = self.criterion(y_hat, y)
+        return {'loss': loss}
+
+    def validation_step(self, batch, batch_nb):
+        X, y, weights = batch
+        embeddings = self.forward(X)
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        y_hat = self.classifier.forward(embeddings[nids])
+
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.criterion(y_hat, y)
+        self.valid_metrics.update_metrics(y_hat, y, weights=None)
+
+        return {"val_loss": loss}
+
+    def test_step(self, batch, batch_nb):
+        X, y, weights = batch
+        embeddings = self.forward(X)
+
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        y_hat = self.classifier.forward(embeddings[nids])
+
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.criterion(y_hat, y)
+        self.test_metrics.update_metrics(y_hat, y, weights=None)
+
+        return {"test_loss": loss}
+
+    def configure_optimizers(self):
+        param_optimizer = list(self.named_parameters())
+        no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+        optimizer_grouped_parameters = [
+            {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+            {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer,
+                                                        pct_start=0.05, anneal_strategy='linear',
+                                                        final_div_factor=10, max_lr=5e-4,
+                                                        epochs=self.hparams.n_epoch,
+                                                        steps_per_epoch=int(np.ceil(self.dataset.training_idx.shape[
+                                                                                        0] / self.hparams.batch_size)))
+
+        return {"optimizer": optimizer, "scheduler": scheduler, "monitor": "val_loss"}
+
+
+class GTN(Gtn, NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = hparams.num_layers
@@ -249,7 +264,8 @@ class GTN(Gtn, pl.LightningModule):
 
         w_out = hparams.embedding_dim
         num_channels = hparams.num_channels
-        super(GTN, self).__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers)
+        super(GTN, self).__init__(num_edge, num_channels, w_in, w_out, num_class, num_nodes, num_layers,
+                                  hparams=hparams, dataset=dataset, metrics=metrics)
 
         if not hasattr(dataset, "x") and not hasattr(dataset, "x_dict"):
             if num_nodes > 10000:
@@ -260,78 +276,14 @@ class GTN(Gtn, pl.LightningModule):
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
-        hparams.n_params = self.get_n_params()
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
-        hparams.name = self.name()
-        hparams.inductive = dataset.inductive
-        self.hparams = hparams
+        self.hparams.n_params = self.get_n_params()
 
-    def name(self):
-        if hasattr(self, "_name"):
-            return self._name
-        else:
-            return self.__class__.__name__
+    def forward(self, inputs):
+        A, X, x_idx = inputs["adj"], inputs["x"], inputs["idx"]
 
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.train_metrics.compute_metrics()
+        if not self.training:
+            self._node_ids = inputs["global_node_index"]
 
-        logs.update({"loss": avg_loss})
-        self.train_metrics.reset_metrics()
-        return {"log": logs}
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.valid_metrics.compute_metrics()
-
-        logs.update({"val_loss": avg_loss})
-        self.valid_metrics.reset_metrics()
-        return {"progress_bar": logs,
-                "log": logs}
-
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
-        if hasattr(self, "test_metrics"):
-            logs = self.test_metrics.compute_metrics()
-            self.test_metrics.reset_metrics()
-        else:
-            logs = {}
-        logs.update({"test_loss": avg_loss})
-
-        return {"progress_bar": logs,
-                "log": logs}
-
-    def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
-        if multilabel:
-            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-        else:
-            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-
-    def get_n_params(self):
-        size = 0
-        for name, param in dict(self.named_parameters()).items():
-            nn = 1
-            for s in list(param.size()):
-                nn = nn * s
-            size += nn
-        return size
-
-    def forward(self, A, X, x_idx):
         if X is None:
             if isinstance(self.embedding, dict):
                 X = self.embedding[self.head_node_type].weight[x_idx].to(self.layers[0].device)
@@ -355,13 +307,13 @@ class GTN(Gtn, pl.LightningModule):
                 edge_index, edge_weight = H[i][0], H[i][1]
                 X_ = torch.cat((X_, F.relu(self.gcn(X, edge_index=edge_index.detach(), edge_weight=edge_weight))),
                                dim=1)
-        X_ = self.linear1(X_)
+        X_ = self.embedder(X_)
         X_ = F.relu(X_)
         # X_ = F.dropout(X_, p=0.5)
         if x_idx is not None and X_.size(0) > x_idx.size(0):
-            y = self.linear2(X_[x_idx])
+            y = self.classifier(X_[x_idx])
         else:
-            y = self.linear2(X_)
+            y = self.classifier(X_)
 
         return y
 
@@ -375,7 +327,7 @@ class GTN(Gtn, pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.train_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
@@ -384,7 +336,7 @@ class GTN(Gtn, pl.LightningModule):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
 
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
@@ -393,32 +345,18 @@ class GTN(Gtn, pl.LightningModule):
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         loss = self.loss(y_hat, y)
         self.test_metrics.update_metrics(y_hat, y, weights=None)
 
         return {"test_loss": loss}
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size,
-                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
-
-    def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
 
-class HAN(Han, pl.LightningModule):
+class HAN(Han, NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = hparams.num_layers
@@ -434,8 +372,8 @@ class HAN(Han, pl.LightningModule):
 
         w_out = hparams.embedding_dim
 
-        super(HAN, self).__init__(num_edge=num_edge, w_in=w_in, w_out=w_out, num_class=num_class,
-                                  num_nodes=num_nodes, num_layers=num_layers)
+        super(HAN, self).__init__(num_edge, w_in, w_out, num_class, num_nodes, num_layers,
+                                  hparams=hparams, dataset=dataset, metrics=metrics)
 
         if not hasattr(dataset, "x") and not hasattr(dataset, "x_dict"):
             if num_nodes > 10000:
@@ -446,94 +384,29 @@ class HAN(Han, pl.LightningModule):
 
         self.dataset = dataset
         self.head_node_type = self.dataset.head_node_type
-        hparams.n_params = self.get_n_params()
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
-        hparams.name = self.name()
-        hparams.inductive = dataset.inductive
-        self.hparams = hparams
+        self.hparams.n_params = self.get_n_params()
 
-    def name(self):
-        if hasattr(self, "_name"):
-            return self._name
-        else:
-            return self.__class__.__name__
+    def forward(self, inputs):
+        A, X, x_idx = inputs["adj"], inputs["x"], inputs["idx"]
 
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
-        logs = self.train_metrics.compute_metrics()
-        # logs = _fix_dp_return_type(logs, device=outputs[0]["loss"].device)
+        if not self.training:
+            self._node_ids = inputs["global_node_index"]
 
-        logs.update({"loss": avg_loss})
-        self.train_metrics.reset_metrics()
-        return {"log": logs}
-
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
-        logs = self.valid_metrics.compute_metrics()
-        # logs = _fix_dp_return_type(logs, device=outputs[0]["val_loss"].device)
-        # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
-
-        logs.update({"val_loss": avg_loss})
-        self.valid_metrics.reset_metrics()
-        return {"progress_bar": logs,
-                "log": logs}
-
-    def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
-        if hasattr(self, "test_metrics"):
-            logs = self.test_metrics.compute_metrics()
-            self.test_metrics.reset_metrics()
-        else:
-            logs = {}
-        logs.update({"test_loss": avg_loss})
-
-        return {"progress_bar": logs,
-                "log": logs}
-
-    def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
-        if multilabel:
-            y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-        else:
-            y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-            print(f"y_pred {len(y_pred_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
-            print(f"y_true {len(y_true_dict)} classes",
-                  {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
-
-    def get_n_params(self):
-        size = 0
-        for name, param in dict(self.named_parameters()).items():
-            nn = 1
-            for s in list(param.size()):
-                nn = nn * s
-            size += nn
-        return size
-
-    def forward(self, A, X, x_idx):
         if X is None:
             if isinstance(self.embedding, dict):
                 X = self.embedding[self.head_node_type].weight[x_idx].to(self.layers[0].device)
             else:
                 X = self.embedding.weight[x_idx]
 
-        for i in range(self.num_layers):
-            X = self.layers[i].forward(X, A, )
+        for i in range(len(self.layers)):
+            X = self.layers[i](X, A)
+
+        X = self.embedder(X, A)
 
         if x_idx is not None and X.size(0) > x_idx.size(0):
-            y = self.linear(X[x_idx])
+            y = self.classifier(X[x_idx])
         else:
-            y = self.linear(X)
+            y = self.classifier(X)
         return y
 
     def loss(self, y_hat, y):
@@ -545,7 +418,7 @@ class HAN(Han, pl.LightningModule):
 
     def training_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.train_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
@@ -553,7 +426,7 @@ class HAN(Han, pl.LightningModule):
 
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
@@ -562,25 +435,12 @@ class HAN(Han, pl.LightningModule):
 
     def test_step(self, batch, batch_nb):
         X, y, weights = batch
-        y_hat = self.forward(X["adj"], X["x"], X["idx"])
+        y_hat = self.forward(X)
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         self.test_metrics.update_metrics(y_hat, y, weights=None)
         loss = self.loss(y_hat, y)
 
         return {"test_loss": loss}
-
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size)
-
-    def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
@@ -670,21 +530,24 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         else:
             results = {}
 
-        return {"progress_bar": results,
-                "log": {"loss": avg_loss, **results}}
+        logs = {"val_loss": avg_loss, **results}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
         logs = {"val_loss": avg_loss}
         if self.current_epoch % 5 == 0:
             logs.update({"val_" + k: v for k, v in self.classification_results(training=False).items()})
-        return {"progress_bar": logs, "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def test_epoch_end(self, outputs):
         avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
         logs = {"test_loss": avg_loss}
         logs.update({"test_" + k: v for k, v in self.classification_results(training=False, testing=True).items()})
-        return {"progress_bar": logs, "log": logs}
+        self.log_dict(logs, prog_bar=logs)
+        return None
 
     def classification_results(self, training=True, testing=False):
         if training:
@@ -774,23 +637,11 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             walks.append(rw[:, j:j + self.context_size])
         return torch.cat(walks, dim=0)
 
-    def sample(self, batch):
+    def collate_fn(self, batch):
         if not isinstance(batch, torch.Tensor):
             batch = torch.tensor(batch)
         return self.pos_sample(batch), self.neg_sample(batch)
 
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
-
-    def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.sample,
-                                                batch_size=self.hparams.batch_size)
-
-    def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.sample, batch_size=self.hparams.batch_size)
 
     def configure_optimizers(self):
         if self.sparse:
@@ -905,100 +756,3 @@ class HIN2Vec(Hin2vec):
             return torch.optim.SparseAdam(self.parameters(), lr=self.hparams.lr)
         else:
             return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
-
-
-class DenseClassification(nn.Module):
-    def __init__(self, hparams) -> None:
-        super(DenseClassification, self).__init__()
-
-        # Classifier
-        if hparams.nb_cls_dense_size > 0:
-            self.fc_classifier = nn.Sequential(OrderedDict([
-                ("linear_1", nn.Linear(hparams.embedding_dim, hparams.nb_cls_dense_size)),
-                ("relu", nn.ReLU()),
-                ("dropout", nn.Dropout(p=hparams.nb_cls_dropout)),
-                ("linear", nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes))
-            ]))
-        else:
-            if hparams.nb_cls_dropout > 0.0:
-                self.fc_classifier = nn.Sequential(OrderedDict([
-                    ("dropout", nn.Dropout(p=hparams.nb_cls_dropout)),
-                    ("linear", nn.Linear(hparams.embedding_dim, hparams.n_classes))
-                ]))
-            else:
-                self.fc_classifier = nn.Sequential(OrderedDict([
-                    ("linear", nn.Linear(hparams.embedding_dim, hparams.n_classes))
-                ]))
-
-        # Activation
-        if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:
-            print("INFO: Output of `_classifier` is logits")
-        elif "NEGATIVE_LOG_LIKELIHOOD" == hparams.loss_type:
-            print("INFO: Output of `_classifier` is LogSoftmax")
-            self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
-        elif "SOFTMAX_CROSS_ENTROPY" == hparams.loss_type:
-            print("INFO: Output of `_classifier` is logits")
-        elif "BCE" == hparams.loss_type:
-            print("INFO: Output of `_classifier` is sigmoid probabilities")
-            self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
-        else:
-            print("INFO: [Else Case] Output of `_classifier` is logits")
-        self.reset_parameters()
-
-    def forward(self, embeddings):
-        return self.fc_classifier(embeddings)
-
-    def reset_parameters(self):
-        for linear in self.fc_classifier:
-            if isinstance(linear, torch.nn.Linear):
-                glorot(linear.weight)
-
-
-class ClassificationLoss(nn.Module):
-    def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multilabel=True, use_hierar=False,
-                 loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1e-6, hierar_relations=None):
-        super(ClassificationLoss, self).__init__()
-        self.n_classes = n_classes
-        self.loss_type = loss_type
-        self.hierar_penalty = hierar_penalty
-        self.hierar_relations = hierar_relations
-        self.multilabel = multilabel
-        self.use_hierar = use_hierar
-        print(f"INFO: Using {loss_type}")
-        print(f"class_weight for {class_weight.shape} classes") if class_weight is not None else None
-
-        if loss_type == "SOFTMAX_CROSS_ENTROPY":
-            self.criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
-        elif loss_type == "NEGATIVE_LOG_LIKELIHOOD":
-            self.criterion = torch.nn.NLLLoss(class_weight)
-        elif loss_type == "BCE_WITH_LOGITS":
-            self.criterion = torch.nn.BCEWithLogitsLoss(weight=class_weight)
-        elif loss_type == "BCE":
-            self.criterion = torch.nn.BCELoss(weight=class_weight)
-        elif loss_type == "MULTI_LABEL_MARGIN":
-            self.criterion = torch.nn.MultiLabelMarginLoss(weight=class_weight)
-        elif loss_type == "KL_DIVERGENCE":
-            self.criterion = torch.nn.KLDivLoss()
-        else:
-            raise TypeError(f"Unsupported loss type:{loss_type}")
-
-    def forward(self, logits, target, linear_weight: torch.Tensor = None):
-        if self.use_hierar:
-            assert self.loss_type in ["BCE_WITH_LOGITS",
-                                      "SIGMOID_FOCAL_CROSS_ENTROPY"]
-            assert linear_weight is not None
-            if not self.multilabel:
-                target = torch.eye(self.n_classes)[target]
-
-            return self.criterion(logits, target.type_as(logits)) + \
-                   self.hierar_penalty * self.recursive_regularize(linear_weight, self.hierar_relations)
-        else:
-            if self.multilabel:
-                assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
-                                          "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
-                target = target.type_as(logits)
-            else:
-                if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
-                                          "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
-                    target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
-            return self.criterion.forward(logits, target)

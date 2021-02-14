@@ -3,11 +3,12 @@ import networkx as nx
 import pandas as pd
 import numpy as np
 
-import torch
+import torch, logging
 from cogdl.datasets.gtn_data import GTNDataset, ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
 from cogdl.datasets.han_data import HANDataset, ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
 
 from ogb.nodeproppred import PygNodePropPredDataset
+from sklearn.cluster import KMeans
 
 from torch.utils import data
 
@@ -79,26 +80,43 @@ class Network:
 
         return self.G
 
-    def get_projection_pos(self, embeddings_all, UMAP: classmethod, n_components=2):
-        pos = UMAP(n_components=n_components).fit_transform(embeddings_all)
-        pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
-        return pos
-
-    def get_node_degrees(self, directed=True):
+    def get_node_degrees(self, directed=True, order=1):
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
-        multi_index = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
+        ntype_nid = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
 
         metapaths = list(self.edge_index_dict.keys())
         metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
                           metapaths]
-        self.node_degrees = pd.DataFrame(data=0, index=multi_index,
-                                         columns=metapath_names)
+        self.node_degrees = pd.DataFrame(data=0, index=ntype_nid, columns=metapath_names)
 
         for metapath, name in zip(metapaths, metapath_names):
             edge_index = self.edge_index_dict[metapath]
-
             head, tail = metapath[0], metapath[-1]
+
+            D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
+                                          sparse_sizes=(self.num_nodes_dict[head],
+                                                        self.num_nodes_dict[tail]))
+
+            self.node_degrees.loc[(head, name)] = (
+                    self.node_degrees.loc[(head, name)] + D.storage.rowcount().numpy()).values
+            if not directed:
+                self.node_degrees.loc[(tail, name)] = (
+                        self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
+
+        if order >= 2:
+            global_node_idx = self.get_node_id_dict(self.edge_index_dict)
+            new_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict_A=self.edge_index_dict,
+                                                          edge_index_dict_B=self.edge_index_dict,
+                                                          global_node_idx=global_node_idx)
+
+            metapaths = list(new_edge_index_dict.keys())
+            metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
+                              metapaths]
+            for metapath, name in zip(metapaths, metapath_names):
+                edge_index = new_edge_index_dict[metapath]
+                head, tail = metapath[0], metapath[-1]
+
             D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
                                           sparse_sizes=(self.num_nodes_dict[head],
                                                         self.num_nodes_dict[tail]))
@@ -111,32 +129,53 @@ class Network:
 
         return self.node_degrees
 
-    def get_embedding_dfs(self, embeddings_dict, global_node_index):
-        embeddings = []
-        for node_type in self.node_types:
-            nodes = global_node_index[node_type].numpy().astype(str)
-            nodes = np.core.defchararray.add(node_type[0], nodes)
-            if isinstance(embeddings_dict[node_type], torch.Tensor):
-                df = pd.DataFrame(embeddings_dict[node_type].detach().cpu().numpy(), index=nodes)
+    def get_projection_pos(self, embeddings_all, UMAP: classmethod, n_components=2):
+        pos = UMAP(n_components=n_components).fit_transform(embeddings_all)
+        pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
+        return pos
+
+    def get_embeddings_labels(self, h_dict: dict, global_node_index: dict, cache=True):
+        if hasattr(self, "embeddings") and hasattr(self, "ntypes") and hasattr(self, "labels") and cache:
+            return self.embeddings, self.ntypes, self.labels
+
+        # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
+        emb_df_list = []
+        for ntype in self.node_types:
+            nid = global_node_index[ntype].cpu().numpy().astype(str)
+            n_type_id = np.core.defchararray.add(ntype[0], nid)
+
+            if isinstance(h_dict[ntype], torch.Tensor):
+                df = pd.DataFrame(h_dict[ntype].detach().cpu().numpy(), index=n_type_id)
             else:
-                df = pd.DataFrame(embeddings_dict[node_type], index=nodes)
-            embeddings.append(df)
+                df = pd.DataFrame(h_dict[ntype], index=n_type_id)
+            emb_df_list.append(df)
 
-        return embeddings
+        embeddings = pd.concat(emb_df_list, axis=0)
+        ntypes = embeddings.index.to_series().str.slice(0, 1)
 
-    def get_embeddings_types_labels(self, embeddings, global_node_index):
-        embeddings_all = pd.concat(embeddings, axis=0)
-
-        types_all = embeddings_all.index.to_series().str.slice(0, 1)
+        # Build vector of labels for all node types
         if hasattr(self, "y_dict") and len(self.y_dict) > 0:
             labels = pd.Series(
                 self.y_dict[self.head_node_type][global_node_index[self.head_node_type]].squeeze(-1).numpy(),
-                index=embeddings[0].index,
+                index=emb_df_list[0].index,
                 dtype=str)
         else:
             labels = None
 
-        return embeddings_all, types_all, labels
+        # Save results
+        self.embeddings, self.ntypes, self.labels = embeddings, ntypes, labels
+
+        return embeddings, ntypes, labels
+
+    def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False, seed=None):
+        kmeans = KMeans(n_clusters, n_jobs=n_jobs, random_state=seed)
+        logging.info(f"Kmeans with k={n_clusters}")
+        y_pred = kmeans.fit_predict(self.embeddings)
+        if save_kmeans:
+            self.kmeans = kmeans
+
+        y_pred = pd.Series(y_pred, index=self.embeddings.index, dtype=str)
+        return y_pred
 
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):
@@ -160,9 +199,37 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         self.inductive = inductive
 
         # PyTorchGeometric Dataset
-        if isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
+
+        if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):
+            print("PygNodePropPredDataset Homogenous (use HeteroNeighborSampler class)")
+            self.process_PygNodeDataset_homo(dataset)
+        elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
+            print("PygNodePropPredDataset Hetero (use HeteroNeighborSampler class)")
+            self.process_PygNodeDataset_hetero(dataset)
+        elif isinstance(dataset, DglNodePropPredDataset):
+            print("DGLNodePropPredDataset Hetero")
+            self.process_DglNodeDataset_hetero(dataset)
+
+        elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
+                not hasattr(dataset[0], "edge_index_dict"):
+            print("PygLink_edge_reltype_dataset Hetero (use TripletSampler class)")
+            self.process_edge_reltype_dataset(dataset)
+        elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
+            print("PygLinkDataset Hetero (use TripletSampler class)")
+            self.process_PygLinkDataset_hetero(dataset)
+        elif isinstance(dataset, PygLinkPropPredDataset) and not hasattr(dataset[0], "edge_index_dict") \
+                and not hasattr(dataset[0], "edge_reltype"):
+            print("PygLinkDataset Homo (use EdgeSampler class)")
+            self.process_PygLinkDataset_homo(dataset)
+
+        elif isinstance(dataset, InMemoryDataset):
+            print("InMemoryDataset")
+            self.process_inmemorydataset(dataset, train_ratio=0.5)
+        elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             print(f"{dataset.__class__.__name__}")
             self.process_COGDLdataset(dataset, metapaths, node_types, resample_train)
+        elif "blogcatalog6k" in dataset:
+            self.process_BlogCatalog6k(dataset, train_ratio=0.5)
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
@@ -219,6 +286,17 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             node_attr_shape = {k: v.size(1) for k, v in self.x_dict.items()}
         return node_attr_shape
 
+    @property
+    def node_attr_size(self):
+        node_feat_sizes = np.unique(list(self.node_attr_shape.values()))
+        if len(node_feat_sizes) == 1:
+            in_features = node_feat_sizes[0]
+        else:
+            raise Exception(
+                f"Must use self.node_attr_shape as node types have different feature sizes. {node_feat_sizes}")
+
+        return in_features
+
     def split_train_val_test(self, train_ratio, sample_indices=None):
         if sample_indices is not None:
             indices = sample_indices[torch.randperm(sample_indices.size(0))]
@@ -238,6 +316,10 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         print(f"Resampled training set at {self.get_train_ratio()}%")
 
     def get_metapaths(self):
+        """
+        Returns original metapaths including reverse metapaths if use_reverse
+        :return:
+        """
         if self.use_reverse:
             return self.metapaths + self.get_reverse_metapath(self.metapaths, self.edge_index_dict)
         else:
@@ -255,6 +337,17 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             num_nodes_dict[key] = max(N, num_nodes_dict.get(key, N))
         return num_nodes_dict
 
+    def get_node_id_dict(self, edge_index_dict):
+        node_ids_dict = {}
+        for metapath, edge_index in edge_index_dict.items():
+            node_ids_dict.setdefault(metapath[0], []).append(edge_index[0])
+            node_ids_dict.setdefault(metapath[-1], []).append(edge_index[1])
+
+        for ntype in node_ids_dict:
+            node_ids_dict[ntype] = torch.cat(node_ids_dict[ntype], 0).unique()
+
+        return node_ids_dict
+
     @staticmethod
     def add_reverse_edge_index(edge_index_dict) -> None:
         reverse_edge_index_dict = {}
@@ -266,7 +359,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         edge_index_dict.update(reverse_edge_index_dict)
 
     @staticmethod
-    def get_reverse_metapath_name(metapath, edge_index_dict):
+    def get_reverse_metapath_name(metapath, edge_index_dict=None):
         if isinstance(metapath, tuple):
             reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
         elif isinstance(metapath, str):
@@ -291,6 +384,27 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
     def sps_adj_to_edgeindex(adj):
         adj = adj.tocoo(copy=False)
         return torch.tensor(np.vstack((adj.row, adj.col)).astype("long"))
+
+    def process_BlogCatalog6k(self, dataset, train_ratio):
+        data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
+        self._name = "BlogCatalog3"
+        self.y_index_dict = {"user": torch.arange(data["friendship"].shape[0]),
+                             "tag": torch.arange(data["tagnetwork"].shape[0])}
+        self.node_types = ["user", "tag"]
+        self.head_node_type = "user"
+        self.y_dict = {self.head_node_type: torch.tensor(data["usercategory"].toarray().astype(int))}
+        print("self.y_dict", {k: v.shape for k, v in self.y_dict.items()})
+
+        self.metapaths = [("user", "usertag", "tag"),
+                          ("tag", "tagnetwork", "tag"),
+                          ("user", "friendship", "user"), ]
+        self.edge_index_dict = {
+            ("user", "friendship", "user"): self.sps_adj_to_edgeindex(data["friendship"]),
+            ("user", "usertag", "tag"): self.sps_adj_to_edgeindex(data["usertag"]),
+            ("tag", "tagnetwork", "tag"): self.sps_adj_to_edgeindex(data["tagnetwork"])}
+        self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
+        assert train_ratio is not None
+        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
     def process_COGDLdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
         data = dataset.data
@@ -337,32 +451,80 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         self.data = data
 
+    def process_stellargraph(self, dataset, metapath, node_types, train_ratio):
+        graph = dataset.load()
+        self.node_types = graph.node_types if node_types is None else node_types
+        self.metapaths = graph.metapaths
+        self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
+
+        edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
+        edge_index_dict = {path: [] for path in metapath}
+        for u, v, t in edgelist:
+            edge_index_dict[metapath[t]].append([u, v])
+        self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
+                                edge_index_dict.items()}
+        self.training_node, self.validation_node, self.testing_node = self.split_train_val_test(train_ratio)
+
+    def process_inmemorydataset(self, dataset: InMemoryDataset, train_ratio):
+        data = dataset[0]
+        self.edge_index_dict = data.edge_index_dict
+        self.num_nodes_dict = data.num_nodes_dict
+        if self.node_types is None:
+            self.node_types = list(data.num_nodes_dict.keys())
+        self.y_dict = data.y_dict
+        self.y_index_dict = data.y_index_dict
+
+        new_y_dict = {nodetype: -torch.ones(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) for
+                      nodetype in self.y_dict}
+        for node_type in self.y_dict:
+            new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
+        self.y_dict = new_y_dict
+
+        self.metapaths = list(self.edge_index_dict.keys())
+        assert train_ratio is not None
+        self.training_idx, self.validation_idx, self.testing_idx = \
+            self.split_train_val_test(train_ratio,
+                                      sample_indices=self.y_index_dict[self.head_node_type])
+
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) \
-                                     else self.get_collate_fn(collate_fn, mode="train", **kwargs))
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        mode="train",
+                                                                                                        **kwargs))
         return loader
 
     def valtrain_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         loader = data.DataLoader(torch.cat([self.training_idx, self.validation_idx]), batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) \
-                                     else self.get_collate_fn(collate_fn, mode="validation", **kwargs))
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        mode="validation",
+                                                                                                        **kwargs))
+        return loader
+
+    def trainvalidtest_dataloader(self, collate_fn=None, batch_size=None, num_workers=12, **kwargs):
+        all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
+        loader = data.DataLoader(all_idx, batch_size=all_idx.shape[0],
+                                 shuffle=True, num_workers=num_workers,
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        mode="validation",
+                                                                                                        **kwargs))
         return loader
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
-                                 shuffle=True, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) \
-                                     else self.get_collate_fn(collate_fn, mode="validation", **kwargs))
+                                 shuffle=False, num_workers=num_workers,
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        mode="validation",
+                                                                                                        **kwargs))
         return loader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
-                                 shuffle=True, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) \
-                                     else self.get_collate_fn(collate_fn, mode="testing", **kwargs))
+                                 shuffle=False, num_workers=num_workers,
+                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
+                                                                                                        mode="testing",
+                                                                                                        **kwargs))
         return loader
 
     def get_collate_fn(self, collate_fn: str, mode=None, **kwargs):
@@ -372,6 +534,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 return self.collate_HAN_batch(iloc, mode=mode)
             elif "HAN" in collate_fn:
                 return self.collate_HAN(iloc, mode=mode)
+            elif "collate_HGT_batch" in collate_fn:
+                return self.collate_HGT_batch(iloc, mode=mode)
             else:
                 raise Exception(f"Correct collate function {collate_fn} not found.")
 
@@ -434,6 +598,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         X["adj"] = [edge for edge in X["adj"] if edge[0].size(1) > 0]
 
+        X["global_node_index"] = torch.arange(X["x"].shape[0])
+
         y = self.y_dict[self.head_node_type][iloc]
         return X, y, None
 
@@ -448,6 +614,29 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                     for metapath in self.metapaths if metapath in X_batch["edge_index_dict"]]
         X["x"] = self.data["x"][X_batch["global_node_index"][self.head_node_type]]
         X["idx"] = X_batch["global_node_index"][self.head_node_type]
+
+        X["global_node_index"] = X_batch["global_node_index"]  # Debugging purposes
+
+        return X, y, weights
+
+    def collate_HGT_batch(self, iloc, mode=None):
+        X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
+
+        X = {}
+        X["node_inp"] = torch.vstack([X_batch["x_dict"][ntype] for ntype in self.node_types])
+        X["node_type"] = torch.hstack([nid * torch.ones((X_batch["x_dict"][ntype].shape[0],), dtype=int) \
+                                       for nid, ntype in enumerate(self.node_types)])
+        # assert X["node_inp"].shape[0] == X["node_type"].shape[0]
+
+        X["edge_index"] = torch.hstack([X_batch["edge_index_dict"][metapath] \
+                                        for metapath in self.metapaths if metapath in X_batch["edge_index_dict"]])
+        X["edge_type"] = torch.hstack([eid * torch.ones(X_batch["edge_index_dict"][metapath].shape[1], dtype=int) \
+                                       for eid, metapath in enumerate(self.metapaths) if
+                                       metapath in X_batch["edge_index_dict"]])
+        # assert X["edge_index"].shape[1] == X["edge_type"].shape[0]
+
+        X["global_node_index"] = X_batch["global_node_index"]  # Debugging purposes
+        X["edge_time"] = None
 
         return X, y, weights
 
@@ -593,12 +782,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
         def collate_wrapper(iloc):
             return self.sample(iloc, mode=mode)
 
-        if "neighbor_sampler" in collate_fn:
+        if "neighbor_sampler" in collate_fn or collate_fn is None:
             return collate_wrapper
         else:
             return super().get_collate_fn(collate_fn, mode=mode)
 
-    def get_local_nodes_dict(self, adjs, n_id):
+    def get_local_node_index(self, adjs, n_id):
         """
 
         :param iloc: A tensor of indices for nodes of `head_node_type`
@@ -619,20 +808,25 @@ class HeteroNeighborSampler(HeteroNetDataset):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def sample(self, iloc, mode):
+    def sample(self, n_idx, mode):
         """
 
-        :param iloc: A tensor of a batch of indices in training_idx, validation_idx, or testing_idx
+        :param n_idx: A tensor of a batch of node indices in training_idx, validation_idx, or testing_idx
         :return:
         """
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
+        if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):
+            n_idx = torch.tensor(n_idx)
 
-        batch_size, n_id, adjs = self.neighbor_sampler.sample(self.local2global[self.head_node_type][iloc])
+        if isinstance(n_idx, dict):
+            n_idx_to_sample = torch.cat([self.local2global[ntype][nid] for ntype, nid in n_idx.items()], 0)
+        else:
+            n_idx_to_sample = self.local2global[self.head_node_type][n_idx]
+
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(n_idx_to_sample)
         if not isinstance(adjs, list):
             adjs = [adjs]
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        sampled_local_nodes = self.get_local_nodes_dict(adjs, n_id)
+        sampled_local_nodes = self.get_local_node_index(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         if "train" in mode:
@@ -678,10 +872,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
                            for node_type in self.x_dict}
 
         # y_dict
-        if len(self.y_dict) > 1:
+        if hasattr(self, "y_dict") and len(self.y_dict) > 1:
             y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
-        else:
+        elif hasattr(self, "y_dict"):
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
+        else:
+            y = None
 
         weights = (y != -1) & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
         weights = torch.tensor(weights, dtype=torch.float)
@@ -718,9 +914,11 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 edge_index[0] = n_id[edge_index[0]]
                 edge_index[1] = n_id[edge_index[1]]
 
-                if filter_nodes:
+                # Filter nodes for only head node type
+                if filter_nodes < 2:
                     # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
                     allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
+
                     if head_type == self.head_node_type and tail_type == self.head_node_type:
                         mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
                         edge_index = edge_index[:, mask]
@@ -731,15 +929,29 @@ class HeteroNeighborSampler(HeteroNetDataset):
                         mask = np.isin(edge_index[1], allowed_nodes_idx)
                         edge_index = edge_index[:, mask]
 
+                # Filter nodes from all node types
+                else:
+                    if head_type not in local2batch or tail_type not in local2batch: continue
+
+                    allowed_nodes_idx = torch.cat([self.local2global[ntype][list(local_global.keys())] \
+                                                   for ntype, local_global in local2batch.items()], dim=0)
+
+                    mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
+                    edge_index = edge_index[:, mask]
+
+                if edge_index.shape[1] == 0: continue
+
                 # Convert node global index -> local index -> batch index
                 edge_index[0] = self.local_node_idx[edge_index[0]].apply_(local2batch[head_type].get)
                 edge_index[1] = self.local_node_idx[edge_index[1]].apply_(local2batch[tail_type].get)
 
                 edge_index_dict.setdefault(metapath, []).append(edge_index)
-        # Join edges from the adjs
+
+        # Join edges from the adjs (from iterative layer-wise sampling)
         edge_index_dict = {metapath: torch.cat(edge_index, dim=1) \
                            for metapath, edge_index in edge_index_dict.items()}
-        # Ensure no duplicate edge from adjs[0] to adjs[1]...
+
+        # Ensure no duplicate edges in each metapath
         edge_index_dict = {metapath: edge_index[:, self.nonduplicate_indices(edge_index)] \
                            for metapath, edge_index in edge_index_dict.items()}
         return edge_index_dict

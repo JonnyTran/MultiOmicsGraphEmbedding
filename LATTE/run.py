@@ -11,15 +11,16 @@ from pytorch_lightning.trainer import Trainer
 
 from pytorch_lightning.callbacks import EarlyStopping
 
+from moge.module.PyG.node_clf import MetaPath2Vec, HAN, GTN, HGT, LATTENodeClf
 from pytorch_lightning.loggers import WandbLogger
 
-from models import MetaPath2Vec, HAN, GTN, LATTENodeClassifier
-from data import load_node_dataset
-
+from run.utils import load_node_dataset
 
 def train(hparams):
     EMBEDDING_DIM = 128
+    USE_AMP = None
     NUM_GPUS = hparams.num_gpus
+    MAX_EPOCHS = 1000
     batch_order = 11
 
     dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio)
@@ -30,13 +31,13 @@ def train(hparams):
         USE_AMP = True
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "batch_size": 2 ** batch_order,
+            "batch_size": 2 ** batch_order * NUM_GPUS,
             "num_layers": 2,
             "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.0005,
+            "lr": 0.0005 * NUM_GPUS,
         }
         model = HAN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
     elif hparams.method == "GTN":
@@ -45,14 +46,15 @@ def train(hparams):
             "embedding_dim": EMBEDDING_DIM,
             "num_channels": len(dataset.metapaths),
             "num_layers": 2,
-            "batch_size": 2 ** batch_order,
+            "batch_size": 2 ** batch_order * NUM_GPUS,
             "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
             "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.0005,
+            "lr": 0.0005 * NUM_GPUS,
         }
         model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
+
     elif hparams.method == "MetaPath2Vec":
         USE_AMP = True
         model_hparams = {
@@ -62,12 +64,35 @@ def train(hparams):
             "walks_per_node": 5,
             "num_negative_samples": 5,
             "sparse": True,
-            "batch_size": 400,
+            "batch_size": 400 * NUM_GPUS,
             "train_ratio": dataset.train_ratio,
             "n_classes": dataset.n_classes,
-            "lr": 0.01,
+            "lr": 0.01 * NUM_GPUS,
         }
         model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
+
+    elif hparams.method == "HGT":
+        USE_AMP = False
+        model_hparams = {
+            "embedding_dim": EMBEDDING_DIM,
+            "num_channels": len(dataset.metapaths),
+            "n_layers": 2,
+            "attn_heads": 8,
+            "attn_dropout": 0.2,
+            "prev_norm": True,
+            "last_norm": True,
+            "nb_cls_dense_size": 0, "nb_cls_dropout": 0.0,
+            "use_class_weights": False,
+            "batch_size": 2 ** batch_order,
+            "n_epoch": MAX_EPOCHS,
+            "train_ratio": dataset.train_ratio,
+            "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "n_classes": dataset.n_classes,
+            "collate_fn": "collate_HGT_batch",
+            "lr": 0.001,  # Not used here, defaults to 1e-3
+        }
+        model = HGT(Namespace(**model_hparams), dataset, metrics=METRICS)
+
     elif "LATTE" in hparams.method:
         USE_AMP = False
         num_gpus = 1
@@ -93,7 +118,7 @@ def train(hparams):
             "attn_dropout": 0.2,
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "use_proximity": True if "proximity" in hparams.method else False,
-            "neg_sampling_ratio": 5.0,
+            "neg_sampling_ratio": 2.0,
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
             "lr": 0.001 * num_gpus,
@@ -101,10 +126,12 @@ def train(hparams):
             "weight_decay": 1e-2,
         }
 
+        model_hparams.update(hparams.__dict__)
+
         metrics = ["precision", "recall", "micro_f1",
                    "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
 
-        model = LATTENodeClassifier(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
+        model = LATTENodeClf(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
 
     MAX_EPOCHS = 250
     wandb_logger = WandbLogger(name=model.name(),
@@ -126,6 +153,9 @@ def train(hparams):
     trainer.fit(model)
     trainer.test(model)
 
+    wandb_logger.log_metrics(model.clustering_metrics(compare_node_types=True))
+
+
 if __name__ == "__main__":
     parser = ArgumentParser()
     # parametrize the network
@@ -133,7 +163,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--dataset', type=str, default="ACM", help="[ACM, DBLP, IMDB]")
     parser.add_argument('--method', type=str, default="LATTE-1",
-                        help="[MetaPath2Vec, HAN, GTN, LATTE-1, LATTE-2, LATTE-2 proximity]")
+                        help="[MetaPath2Vec, HAN, GTN, HGT, LATTE-1, LATTE-2, LATTE-2 proximity]")
     parser.add_argument('--inductive', type=bool, default=True, help="True for inductive, False for transductive")
 
     parser.add_argument('--train_ratio', type=float, default=None,
