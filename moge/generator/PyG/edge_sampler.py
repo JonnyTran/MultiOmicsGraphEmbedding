@@ -52,8 +52,8 @@ class EdgeSampler(HeteroNetDataset):
         # Concat neg edges
         for key in valid_triples.keys():
             if is_negative(key):  # edge_neg
-                self.triples[("self", key, "self")] = torch.cat([valid_triples[key], test_triples[key]],
-                                                                dim=0).permute(1, 0)
+                self.triples[("self", "neg", "self")] = torch.cat([valid_triples[key], test_triples[key]],
+                                                                  dim=0).permute(1, 0)
 
         # Create samples index for validation, testing, and training
         self.start_idx = {"valid": 0,
