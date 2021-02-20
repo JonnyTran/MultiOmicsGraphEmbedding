@@ -30,7 +30,7 @@ class TripletSampler(HeteroNetDataset):
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
         if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
+            self.node_types = list(self.num_nodes_dict.keys())
 
         if hasattr(data, "x") and data.x is not None:
             self.x_dict = {self.head_node_type: data.x}
@@ -96,25 +96,29 @@ class TripletSampler(HeteroNetDataset):
         # Concat pos edges
         for key in train_triples.keys():
             if isinstance(train_triples[key], torch.Tensor):
-                self.triples[key] = torch.cat([valid_triples[key], test_triples[key], train_triples[key]], dim=0)
+                self.triples[("self", key, "self")] = torch.cat(
+                    [valid_triples[key], test_triples[key], train_triples[key]],
+                    dim=0).permute(1, 0)
             else:
-                self.triples[key] = np.array(valid_triples[key] + test_triples[key] + train_triples[key])
+                self.triples[("self", key, "self")] = np.array(
+                    valid_triples[key] + test_triples[key] + train_triples[key])
 
         # Concat neg edges
         for key in valid_triples.keys():
             if is_negative(key):  # edge_neg
-                self.triples[key] = torch.cat([valid_triples[key], test_triples[key]], dim=0)
+                self.triples[("self", key, "self")] = torch.cat([valid_triples[key], test_triples[key]],
+                                                                dim=0).permute(1, 0)
 
         # Create samples index for validation, testing, and training
         self.start_idx = {"valid": 0,
-                          "test": valid_triples.shape[1],
-                          "train": valid_triples.shape[1] + test_triples.shape[1]}
+                          "test": valid_triples["edge"].shape[1],
+                          "train": valid_triples["edge"].shape[1] + test_triples["edge"].shape[1]}
 
         self.validation_idx = torch.arange(self.start_idx["valid"],
-                                           self.start_idx["valid"] + valid_triples.shape[1])
-        self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["test"] + test_triples.shape[1])
+                                           self.start_idx["valid"] + valid_triples["edge"].shape[1])
+        self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["test"] + test_triples["edge"].shape[1])
         self.training_idx = torch.arange(self.start_idx["train"],
-                                         self.start_idx["train"] + train_triples.shape[1])
+                                         self.start_idx["train"] + train_triples["edge"].shape[1])
 
         assert self.validation_idx.max() < self.testing_idx.min()
         assert self.testing_idx.max() < self.training_idx.min()
