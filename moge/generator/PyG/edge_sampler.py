@@ -44,11 +44,11 @@ class EdgeSampler(HeteroNetDataset):
         # Concat pos edges
         for key in train_triples.keys():
             if isinstance(train_triples[key], torch.Tensor):
-                self.triples[EdgeSampler.default_metapath] = torch.cat(
+                self.triples[EdgeSampler.DEFAULT_METAPATH] = torch.cat(
                     [valid_triples[key], test_triples[key], train_triples[key]],
                     dim=0).permute(1, 0)
             else:
-                self.triples[EdgeSampler.default_metapath] = np.array(
+                self.triples[EdgeSampler.DEFAULT_METAPATH] = np.array(
                     valid_triples[key] + test_triples[key] + train_triples[key])
 
         # Concat neg edges
@@ -106,12 +106,12 @@ class EdgeSampler(HeteroNetDataset):
             if not is_negative(metapath):
                 sources = triples[metapath][0].apply_(local2batch[head_type].get)
                 targets = triples[metapath][1].apply_(local2batch[tail_type].get)
-                edges_pos[EdgeSampler.default_metapath] = torch.stack([sources, targets], dim=0)
+                edges_pos[EdgeSampler.DEFAULT_METAPATH] = torch.stack([sources, targets], dim=0)
 
             elif is_negative(metapath):
                 sources = triples[metapath][0].apply_(local2batch[head_type].get)
                 targets = triples[metapath][1].apply_(local2batch[tail_type].get)
-                edges_neg[EdgeSampler.default_metapath] = torch.cat([sources, targets], dim=0)
+                edges_neg[EdgeSampler.DEFAULT_METAPATH] = torch.cat([sources, targets], dim=0)
 
             else:
                 raise Exception(f"something wrong with metapath {metapath}")
