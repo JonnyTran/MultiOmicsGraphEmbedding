@@ -52,8 +52,8 @@ class EdgeSampler(HeteroNetDataset):
         # Concat neg edges
         for key in valid_triples.keys():
             if is_negative(key):  # edge_neg
-                self.triples[("self", "neg", "self")] = torch.cat([valid_triples[key], test_triples[key]],
-                                                                  dim=0).permute(1, 0)
+                self.triples[("edge_neg")] = torch.cat([valid_triples[key], test_triples[key]],
+                                                       dim=0).permute(1, 0)
 
         # Create samples index for validation, testing, and training
         self.start_idx = {"valid": 0,
@@ -104,12 +104,12 @@ class EdgeSampler(HeteroNetDataset):
             if not is_negative(metapath):
                 sources = triples[metapath][0].apply_(local2batch[head_type].get)
                 targets = triples[metapath][1].apply_(local2batch[tail_type].get)
-                edges_pos[metapath] = torch.stack([sources, targets], dim=1)
+                edges_pos[metapath] = torch.stack([sources, targets], dim=0)
 
             elif is_negative(metapath):
                 sources = triples[metapath][0].apply_(local2batch[head_type].get)
                 targets = triples[metapath][1].apply_(local2batch[tail_type].get)
-                edges_neg[metapath] = torch.cat([sources, targets], dim=1)
+                edges_neg[metapath] = torch.cat([sources, targets], dim=0)
 
             else:
                 raise Exception(f"something wrong with metapath {metapath}")
@@ -118,45 +118,6 @@ class EdgeSampler(HeteroNetDataset):
 
     def get_collate_fn(self, collate_fn: str, batch_size=None, mode=None):
         return self.sample
-
-    def sample(self, iloc):
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
-
-        X = {"edge_index_dict": {}, "global_node_index": {}, "x_dict": {}}
-
-        edge_index = self.edge_index[iloc]
-        edge_reltype = self.edge_reltype[iloc]
-        reltype_ids = self.edge_reltype[iloc].unique()
-
-        # Gather all nodes sampled
-        X["global_node_index"][self.head_node_type] = edge_index.view(-1).unique()
-
-        local2batch = {
-            node_type: dict(zip(X["global_node_index"][node_type].numpy(),
-                                range(len(X["global_node_index"][node_type])))
-                            ) for node_type in X["global_node_index"]}
-
-        # Get edge_index with batch id
-        for relation_id in reltype_ids:
-            if relation_id == 1:
-                mask = edge_reltype == relation_id
-                X["edge_index_dict"][self.metapaths[0]] = edge_index[mask, :].apply_(
-                    local2batch[self.head_node_type].get).t()
-            elif relation_id == 0:
-                mask = edge_reltype == relation_id
-                X["edge_index_dict"][tag_negative(self.metapaths[0])] = edge_index[mask, :].apply_(
-                    local2batch[self.head_node_type].get).t()
-
-        if self.use_reverse:
-            self.add_reverse_edge_index(X["edge_index_dict"])
-
-        # Make x_dict
-        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
-            X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
-                           for node_type in self.x_dict}
-
-        return X, None, None
 
 
 class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
@@ -188,7 +149,7 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
         if not isinstance(e_idx, torch.Tensor):
             e_idx = torch.tensor(e_idx)
 
-        # Select sampling size
+        # Select negative sampling size
         if "test" in mode:
             negative_sampling_size = self.test_neg_sampling_size
         elif "valid" in mode:
