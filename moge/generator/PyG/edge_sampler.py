@@ -10,7 +10,8 @@ from moge.module.PyG.latte import tag_negative, is_negative
 
 
 class EdgeSampler(HeteroNetDataset):
-    DEFAULT_METAPATH = ("self", "edge", "self")
+    DEFAULT_NODE_TYPE = "self"
+    DEFAULT_METAPATH = (DEFAULT_NODE_TYPE, "edge", DEFAULT_NODE_TYPE)
 
     def __init__(self, *args, **kwargs):
         super(EdgeSampler, self).__init__(*args, **kwargs)
@@ -78,10 +79,8 @@ class EdgeSampler(HeteroNetDataset):
         global_node_index = {}
 
         for metapath in triples:
-            head_type, tail_type = metapath[0], metapath[-1]
-
-            global_node_index.setdefault(head_type, []).append(triples[metapath][0])
-            global_node_index.setdefault(tail_type, []).append(triples[metapath][1])
+            global_node_index.setdefault(EdgeSampler.DEFAULT_NODE_TYPE, []).append(triples[metapath][0])
+            global_node_index.setdefault(EdgeSampler.DEFAULT_NODE_TYPE, []).append(triples[metapath][1])
 
         # Find union of nodes from all relations
         global_node_index = {node_type: torch.cat(node_sets, dim=0).unique() \
@@ -101,16 +100,14 @@ class EdgeSampler(HeteroNetDataset):
 
         # Get edge_index with batch id
         for metapath in triples:
-            head_type, tail_type = metapath[0], metapath[-1]
-
-            if not is_negative(metapath):
-                sources = triples[metapath][0].apply_(local2batch[head_type].get)
-                targets = triples[metapath][1].apply_(local2batch[tail_type].get)
+            if not is_negative(metapath):  # ("self", "edge", "self")
+                sources = triples[metapath][0].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
+                targets = triples[metapath][1].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
                 edges_pos[EdgeSampler.DEFAULT_METAPATH] = torch.stack([sources, targets], dim=0)
 
-            elif is_negative(metapath):
-                sources = triples[metapath][0].apply_(local2batch[head_type].get)
-                targets = triples[metapath][1].apply_(local2batch[tail_type].get)
+            elif is_negative(metapath):  # "edge_neg"
+                sources = triples[metapath][0].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
+                targets = triples[metapath][1].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
                 edges_neg[EdgeSampler.DEFAULT_METAPATH] = torch.cat([sources, targets], dim=0)
 
             else:
