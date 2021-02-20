@@ -32,6 +32,11 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         self.train_counts = defaultdict(lambda: 4)
 
+        for key, tensor in self.triples.items():
+            if is_negative(key): continue
+
+        print("train_counts", self.train_counts)
+
     # def __init__(self, dataset, node_types=None, metapaths=None,
     #              negative_sampling_size=128, test_negative_sampling_size=500,
     #              head_node_type=None, directed=True,
