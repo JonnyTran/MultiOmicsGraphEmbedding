@@ -198,11 +198,11 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
         negative_sampling_size = int(negative_sampling_size)
 
         # True positive edges
-        triples = {k: v[e_idx] for k, v in self.triples.items() if not is_negative(k)}
+        triples = {k: v[:, e_idx] for k, v in self.triples.items() if not is_negative(k)}
 
         # Add true neg edges if on valid or test triplet indices
         if e_idx.max() < self.start_idx["train"] and not self.force_neg_sampling:
-            triples.update({metapath: edge_index[e_idx % edge_index.shape[1]] \
+            triples.update({metapath: edge_index[:, e_idx % edge_index.shape[1]] \
                             for metapath, edge_index in self.triples.items() \
                             if is_negative(metapath)})
 
