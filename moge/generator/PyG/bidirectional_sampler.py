@@ -34,7 +34,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         relation_counts = self.triples["relation"].bincount()
         for metapath_id, count in enumerate(relation_counts):
-            self.train_counts[self.metapaths[metapath_id]] = count
+            self.train_counts[self.metapaths[metapath_id]] = count.astype(torch.float)
 
     # def __init__(self, dataset, node_types=None, metapaths=None,
     #              negative_sampling_size=128, test_negative_sampling_size=500,
@@ -133,7 +133,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         edge_pos_weights = {}
         for metapath, edge_index in edges_pos.items():
             edge_pos_weights[metapath] = torch.ones(edge_index.shape[1], dtype=torch.float) * torch.sqrt(
-                1 / torch.Tensor(self.train_counts[metapath]))
+                1 / self.train_counts[metapath])
 
         # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
