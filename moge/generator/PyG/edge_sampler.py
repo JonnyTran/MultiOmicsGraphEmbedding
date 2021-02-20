@@ -207,12 +207,11 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
                             if is_negative(metapath)})
 
         # Set of all nodes from sampled triples
-        triplets_node_index = self.get_global_node_index(triples)
+        triplets_node_index = EdgeSampler.get_global_node_index(triples)
 
         # Get true edges from triples
-        edges_pos, edges_neg = self.get_local_edge_index(triples=triples,
-                                                         global_node_index=triplets_node_index,
-                                                         metapaths=self.metapaths)
+        edges_pos, edges_neg = EdgeSampler.get_local_edge_index(triples=triples,
+                                                                global_node_index=triplets_node_index)
 
         # Whether to negative sampling
         if not edges_neg:
