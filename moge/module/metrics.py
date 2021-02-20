@@ -220,9 +220,10 @@ class OGBLinkPredMetrics(Metric):
                                       "y_pred_neg": e_pred_neg})
         for k, v in output.items():
             if isinstance(v, float):
-                self.outputs.setdefault(k.strip("_list"), []).append(torch.tensor(v))
+                score = torch.tensor([v])
+                print(score, score.shape)
+                self.outputs.setdefault(k.strip("_list"), []).append(score)
             else:
-                print("v.shape", v.shape)
                 self.outputs.setdefault(k.strip("_list"), []).append(v.mean())
 
     def compute(self, prefix=None):
