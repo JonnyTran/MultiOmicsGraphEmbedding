@@ -52,9 +52,9 @@ class Metrics():
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=multilabel, output_transform=None)
             elif "ogbn" in metric:
-                self.metrics[metric] = NodeClfMetrics(NodeEvaluator(metric))
+                self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric))
             elif "ogbg" in metric:
-                self.metrics[metric] = NodeClfMetrics(GraphEvaluator(metric))
+                self.metrics[metric] = OGBNodeClfMetrics(GraphEvaluator(metric))
             elif "ogbl" in metric:
                 self.metrics[metric] = OGBLinkPredMetrics(LinkEvaluator(metric))
             else:
@@ -147,7 +147,7 @@ class Metrics():
             self.metrics[metric].reset()
 
 
-class NodeClfMetrics(Metric):
+class OGBNodeClfMetrics(Metric):
     def __init__(self, evaluator: NodeEvaluator, output_transform=None, device=None):
         super().__init__(output_transform, device)
         self.evaluator = evaluator
@@ -204,8 +204,8 @@ class OGBLinkPredMetrics(Metric):
     def update(self, outputs):
         e_pred_pos, e_pred_neg = outputs
 
-        # print("e_pred_pos", e_pred_pos)
-        # print("e_pred_neg", e_pred_neg)
+        print("e_pred_pos", e_pred_pos.shape)
+        print("e_pred_neg", e_pred_neg.shape)
         if e_pred_pos.dim() > 1:
             e_pred_pos = e_pred_pos.squeeze(-1)
         if e_pred_neg.dim() <= 1:

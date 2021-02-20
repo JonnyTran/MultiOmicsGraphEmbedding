@@ -151,6 +151,8 @@ class LATTELinkPred(LinkPredTrainer):
         _, prox_loss, edge_pred_dict = self.forward(X)
 
         e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
+        print("e_pos", tensor_sizes(e_pos))
+        print("e_neg", tensor_sizes(e_neg))
         loss = self.criterion.forward(e_pos, e_neg)
 
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
