@@ -7,9 +7,10 @@ from ogb.linkproppred import PygLinkPropPredDataset
 import torch
 from torch_geometric.datasets import AMiner
 
-from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler, TripletNeighborSampler, \
-    BidirectionalSampler
+import moge
+from moge.generator.PyG.bidirectional_sampler import HeteroNeighborSampler
 from moge.module.utils import preprocess_input
+
 
 def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
     if "ogbn" in dataset:
@@ -84,14 +85,22 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
 
         if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
                 and not hasattr(ogbl[0], "edge_reltype"):
-            dataset = EdgeSampler(ogbl, directed=True, add_reverse_metapaths=hparams.use_reverse)
+
+            dataset = moge.generator.PyG.edge_sampler.BidirectionalSampler(ogbl,
+                                                                           neighbor_sizes=[20, 15],
+                                                                           directed=False,
+                                                                           add_reverse_metapaths=hparams.use_reverse)
+
         else:
-            dataset = BidirectionalSampler(ogbl, directed=True,
-                                           neighbor_sizes=[hparams.n_neighbors_1],
-                                           negative_sampling_size=hparams.neg_sampling_ratio,
-                                           test_negative_sampling_size=500,
-                                           head_node_type=None,
-                                           add_reverse_metapaths=hparams.use_reverse)
+            from moge.generator.PyG.bidirectional_sampler import BidirectionalSampler
+
+            dataset = moge.generator.PyG.bidirectional_sampler.BidirectionalSampler(ogbl, directed=True,
+                                                                                    neighbor_sizes=[
+                                                                                        hparams.n_neighbors_1],
+                                                                                    negative_sampling_size=hparams.neg_sampling_ratio,
+                                                                                    test_negative_sampling_size=500,
+                                                                                    head_node_type=None,
+                                                                                    add_reverse_metapaths=hparams.use_reverse)
 
         logging.info(f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
 
