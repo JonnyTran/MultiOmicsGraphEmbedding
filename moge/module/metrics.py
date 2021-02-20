@@ -24,7 +24,7 @@ class Metrics(torch.nn.Module):
         self.multilabel = multilabel
         self.top_ks = top_k
         self.prefix = prefix
-        self._parameters = None
+        self._parameters = {}
         add_f1_metric = False
 
         if n_classes:
