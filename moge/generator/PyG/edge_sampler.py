@@ -10,11 +10,8 @@ from moge.module.PyG.latte import tag_negative, is_negative
 
 
 class EdgeSampler(HeteroNetDataset):
-    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
-                 resample_train=None,
-                 add_reverse_metapaths=True, **kwargs):
-        super(EdgeSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
-                                          add_reverse_metapaths, **kwargs)
+    def __init__(self, dataset: PygLinkPropPredDataset, **kwargs):
+        super(EdgeSampler, self).__init__(dataset, **kwargs)
 
     def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
@@ -163,7 +160,6 @@ class EdgeSampler(HeteroNetDataset):
 
 
 class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
-
     def __init__(self, dataset: PygLinkPropPredDataset, neighbor_sizes,
                  negative_sampling_size=128, test_negative_sampling_size=500,
                  force_negative_sampling=False,
