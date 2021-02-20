@@ -109,7 +109,11 @@ class Metrics():
 
             elif metric == "top_k":
                 self.metrics[metric].update((y_pred, y_true))
+
             elif "ogb" in metric:
+                if metric == "ogbl-ddi":
+                    y_true = y_true.squeeze(-1)
+
                 self.metrics[metric].update((y_pred, y_true))
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
