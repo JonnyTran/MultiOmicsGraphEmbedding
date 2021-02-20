@@ -24,6 +24,7 @@ class Metrics(torch.nn.Module):
         self.multilabel = multilabel
         self.top_ks = top_k
         self.prefix = prefix
+        self._parameters = None
         add_f1_metric = False
 
         if n_classes:
@@ -75,7 +76,6 @@ class Metrics(torch.nn.Module):
                 self.metrics["micro_f1"] = MetricsLambda(micro_f1, self.metrics["precision_avg"],
                                                          self.metrics["recall_avg"])
 
-        self.metrics = torch.nn.ModuleDict(self.metrics)
         self.reset_metrics()
 
     def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights):
