@@ -2,8 +2,6 @@ from typing import Callable, Optional, Union
 import pandas as pd
 import numpy as np
 
-import pytorch_lightning as pl
-
 import torch
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, Accuracy, TopKCategoricalAccuracy, MetricsLambda, Fbeta
@@ -16,7 +14,7 @@ from ogb.linkproppred import Evaluator as LinkEvaluator
 from .utils import filter_samples
 
 
-class Metrics(pl.LightningModule):
+class Metrics(torch.nn.Module):
     def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
                  multilabel: bool = None,
                  metrics=["precision", "recall", "top_k", "accuracy"]):
