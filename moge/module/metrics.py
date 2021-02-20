@@ -56,7 +56,7 @@ class Metrics():
             elif "ogbg" in metric:
                 self.metrics[metric] = NodeClfMetrics(GraphEvaluator(metric))
             elif "ogbl" in metric:
-                self.metrics[metric] = LinkPredMetrics(LinkEvaluator(metric))
+                self.metrics[metric] = OGBLinkPredMetrics(LinkEvaluator(metric))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
@@ -192,9 +192,9 @@ class NodeClfMetrics(Metric):
             return {f"{prefix}{k}": v for k, v in output.items()}
 
 
-class LinkPredMetrics(Metric):
+class OGBLinkPredMetrics(Metric):
     def __init__(self, evaluator: LinkEvaluator, output_transform=None, device=None):
-        super().__init__(output_transform, device)
+        super(OGBLinkPredMetrics, self).__init__(output_transform)
         self.evaluator = evaluator
         self.outputs = {}
 

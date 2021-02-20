@@ -156,7 +156,7 @@ def train(hparams):
 
     trainer.test(model)
 
-    wandb_logger.log_metrics(model.clustering_metrics(compare_node_types=True))
+    wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
 
 
 if __name__ == "__main__":

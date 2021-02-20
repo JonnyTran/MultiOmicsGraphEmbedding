@@ -1,9 +1,0 @@
-sklearn
-networkx
-pandas
-numpy
-torch
-pytorch-lightning
-torch-geometric
-pytorch-ignite
-ogb
