@@ -209,16 +209,29 @@ class LinkPredTrainer(NodeClfTrainer):
 
         return e_pos, e_neg
 
+    def get_weights(self, weights):
+        pass
+
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=self.hparams.batch_size)
 
     def valtrain_dataloader(self):
         return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
                                                 batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size // 10)
+        if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
+            batch_size = self.hparams.batch_size // 10
+        else:
+            batch_size = self.hparams.batch_size
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=batch_size)
 
     def test_dataloader(self):
+        if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
+            batch_size = self.hparams.batch_size // 10
+        else:
+            batch_size = self.hparams.batch_size
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size // 10)
+                                            batch_size=batch_size)
