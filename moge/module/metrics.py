@@ -29,7 +29,7 @@ class Metrics(torch.nn.Module):
         if n_classes:
             top_k = [k for k in top_k if k < n_classes]
 
-        self.metrics = {}
+        self.metrics = torch.nn.ModuleDict()
         for metric in metrics:
             if "precision" == metric:
                 self.metrics[metric] = Precision(average=False, is_multilabel=multilabel, output_transform=None)
