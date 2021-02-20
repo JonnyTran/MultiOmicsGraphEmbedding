@@ -10,13 +10,15 @@ from moge.module.PyG.latte import tag_negative, is_negative
 
 
 class EdgeSampler(HeteroNetDataset):
+    DEFAULT_METAPATH = ("self", "edge", "self")
+
     def __init__(self, *args, **kwargs):
         super(EdgeSampler, self).__init__(*args, **kwargs)
 
     def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
         self._name = dataset.name
-        self.edge_index_dict = {("self", "edge", "self"): data.edge_index}
+        self.edge_index_dict = {EdgeSampler.DEFAULT_METAPATH: data.edge_index}
 
         if hasattr(data, "num_nodes_dict"):
             self.num_nodes_dict = data.num_nodes_dict
@@ -42,11 +44,11 @@ class EdgeSampler(HeteroNetDataset):
         # Concat pos edges
         for key in train_triples.keys():
             if isinstance(train_triples[key], torch.Tensor):
-                self.triples[("self", key, "self")] = torch.cat(
+                self.triples[EdgeSampler.default_metapath] = torch.cat(
                     [valid_triples[key], test_triples[key], train_triples[key]],
                     dim=0).permute(1, 0)
             else:
-                self.triples[("self", key, "self")] = np.array(
+                self.triples[EdgeSampler.default_metapath] = np.array(
                     valid_triples[key] + test_triples[key] + train_triples[key])
 
         # Concat neg edges
@@ -104,12 +106,12 @@ class EdgeSampler(HeteroNetDataset):
             if not is_negative(metapath):
                 sources = triples[metapath][0].apply_(local2batch[head_type].get)
                 targets = triples[metapath][1].apply_(local2batch[tail_type].get)
-                edges_pos[metapath] = torch.stack([sources, targets], dim=0)
+                edges_pos[EdgeSampler.default_metapath] = torch.stack([sources, targets], dim=0)
 
             elif is_negative(metapath):
                 sources = triples[metapath][0].apply_(local2batch[head_type].get)
                 targets = triples[metapath][1].apply_(local2batch[tail_type].get)
-                edges_neg[metapath] = torch.cat([sources, targets], dim=0)
+                edges_neg[EdgeSampler.default_metapath] = torch.cat([sources, targets], dim=0)
 
             else:
                 raise Exception(f"something wrong with metapath {metapath}")
@@ -163,9 +165,9 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
 
         # Add true neg edges if on valid or test triplet indices
         if e_idx.max() < self.start_idx["train"] and not self.force_neg_sampling:
-            triples.update({metapath: edge_index[:, e_idx % edge_index.shape[1]] \
-                            for metapath, edge_index in self.triples.items() \
-                            if is_negative(metapath)})
+            triples.update({key: edge_index[:, e_idx % edge_index.shape[1]] \
+                            for key, edge_index in self.triples.items() \
+                            if is_negative(key)})
 
         # Set of all nodes from sampled triples
         triplets_node_index = EdgeSampler.get_global_node_index(triples)
