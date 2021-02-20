@@ -219,10 +219,10 @@ class OGBLinkPredMetrics(Metric):
         output = self.evaluator.eval({"y_pred_pos": e_pred_pos,
                                       "y_pred_neg": e_pred_neg})
         for k, v in output.items():
-            if not isinstance(v, float):
-                self.outputs.setdefault(k.strip("_list"), []).append(v.mean())
-            else:
+            if isinstance(v, float):
                 self.outputs.setdefault(k.strip("_list"), []).append(torch.tensor(v))
+            else:
+                self.outputs.setdefault(k.strip("_list"), []).append(v.mean())
 
     def compute(self, prefix=None):
         output = {k: torch.stack(v, dim=0).mean().item() for k, v in self.outputs.items()}
