@@ -198,7 +198,7 @@ class OGBNodeClfMetrics(Metric):
 
 class OGBLinkPredMetrics(Metric):
     def __init__(self, evaluator: LinkEvaluator, output_transform=None, device=None):
-        super(OGBLinkPredMetrics, self).__init__(output_transform, device)
+        super(OGBLinkPredMetrics, self).__init__(output_transform)
         self.evaluator = evaluator
         self.outputs = {}
 
