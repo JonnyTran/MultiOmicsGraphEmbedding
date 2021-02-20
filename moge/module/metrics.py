@@ -18,13 +18,14 @@ class Metrics(torch.nn.Module):
     def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
                  multilabel: bool = None,
                  metrics=["precision", "recall", "top_k", "accuracy"]):
+        super().__init__()
+
         self.loss_type = loss_type.upper()
         self.threshold = threshold
         self.n_classes = n_classes
         self.multilabel = multilabel
         self.top_ks = top_k
         self.prefix = prefix
-        self._parameters = {}
         add_f1_metric = False
 
         if n_classes:
