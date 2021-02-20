@@ -131,8 +131,8 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         # Calculate subsampling weights on each edge_pos
         edge_pos_weights = {}
-        for metapath, edge_index in edges_pos:
-            edge_pos_weights[metapath] = torch.ones(edge_index.shape[1]) * torch.sqrt(
+        for metapath, edge_index in edges_pos.items():
+            edge_pos_weights[metapath] = torch.ones_like(edge_index[0]) * torch.sqrt(
                 1 / torch.Tensor(self.train_counts[metapath]))
 
         # Build X input dict
