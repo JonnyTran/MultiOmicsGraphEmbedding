@@ -108,7 +108,7 @@ class EdgeSampler(HeteroNetDataset):
             elif is_negative(metapath):  # "edge_neg"
                 sources = triples[metapath][0].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
                 targets = triples[metapath][1].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
-                edges_neg[EdgeSampler.DEFAULT_METAPATH] = torch.cat([sources, targets], dim=0)
+                edges_neg[EdgeSampler.DEFAULT_METAPATH] = torch.stack([sources, targets], dim=0)
 
             else:
                 raise Exception(f"something wrong with metapath {metapath}")
