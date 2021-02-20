@@ -111,8 +111,8 @@ class Metrics():
                 self.metrics[metric].update((y_pred, y_true))
 
             elif "ogb" in metric:
-                if metric == "ogbl-ddi":
-                    y_true = y_true.squeeze(-1)
+                if metric in ["ogbl-ddi", "ogbl-collab"]:
+                    y_true = y_true[:, 0]
 
                 self.metrics[metric].update((y_pred, y_true))
             else:
@@ -214,6 +214,8 @@ class OGBLinkPredMetrics(Metric):
         if e_pred_neg.dim() <= 1:
             e_pred_neg = e_pred_neg.unsqueeze(-1)
 
+        # print("e_pred_pos", e_pred_pos.shape)
+        # print("e_pred_neg", e_pred_neg.shape)
         output = self.evaluator.eval({"y_pred_pos": e_pred_pos,
                                       "y_pred_neg": e_pred_neg})
         for k, v in output.items():
