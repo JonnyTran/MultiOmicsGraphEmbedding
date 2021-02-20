@@ -8,7 +8,7 @@ import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
 from torch.utils.data import Dataset
-from moge.generator import HeteroNeighborSampler, TripletSampler
+from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler
 from moge.module.PyG.latte import tag_negative, untag_negative, is_negative
 from moge.module.sampling import negative_sample_head_tail
 from moge.module.utils import tensor_sizes
@@ -66,7 +66,9 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         triples = {k: v[e_idx] for k, v in self.triples.items() if not is_negative(k)}
         # Add true neg edges if on valid or test triplet indices
         if e_idx.max() < self.start_idx["train"] and not self.force_neg_sampling:
-            triples.update({k: v[e_idx] for k, v in self.triples.items() if is_negative(k)})
+            triples.update({k: v[e_idx] \
+                            for k, v in self.triples.items() \
+                            if is_negative(k)})
 
         relation_ids_all = triples["relation"].unique()
 

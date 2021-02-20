@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
@@ -63,62 +64,6 @@ class TripletSampler(HeteroNetDataset):
         self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["test"] + len(test_triples["relation"]))
         self.training_idx = torch.arange(self.start_idx["train"],
                                          self.start_idx["train"] + len(train_triples["relation"]))
-
-        assert self.validation_idx.max() < self.testing_idx.min()
-        assert self.testing_idx.max() < self.training_idx.min()
-
-    def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset):
-        data = dataset[0]
-        self._name = dataset.name
-        self.edge_index_dict = {("self", "edge", "self"): data.edge_index}
-
-        if hasattr(data, "num_nodes_dict"):
-            self.num_nodes_dict = data.num_nodes_dict
-        else:
-            self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
-
-        if self.node_types is None:
-            self.node_types = list(self.num_nodes_dict.keys())
-
-        if hasattr(data, "x") and data.x is not None:
-            self.x_dict = {self.head_node_type: data.x}
-        elif hasattr(data, "x_dict") and data.x_dict is not None:
-            self.x_dict = data.x_dict
-        else:
-            self.x_dict = {}
-
-        self.metapaths = list(self.edge_index_dict.keys())
-
-        split_idx = dataset.get_edge_split()
-        train_triples, valid_triples, test_triples = split_idx["train"], split_idx["valid"], split_idx["test"]
-        self.triples = {}
-
-        # Concat pos edges
-        for key in train_triples.keys():
-            if isinstance(train_triples[key], torch.Tensor):
-                self.triples[("self", key, "self")] = torch.cat(
-                    [valid_triples[key], test_triples[key], train_triples[key]],
-                    dim=0).permute(1, 0)
-            else:
-                self.triples[("self", key, "self")] = np.array(
-                    valid_triples[key] + test_triples[key] + train_triples[key])
-
-        # Concat neg edges
-        for key in valid_triples.keys():
-            if is_negative(key):  # edge_neg
-                self.triples[("self", key, "self")] = torch.cat([valid_triples[key], test_triples[key]],
-                                                                dim=0).permute(1, 0)
-
-        # Create samples index for validation, testing, and training
-        self.start_idx = {"valid": 0,
-                          "test": valid_triples["edge"].shape[1],
-                          "train": valid_triples["edge"].shape[1] + test_triples["edge"].shape[1]}
-
-        self.validation_idx = torch.arange(self.start_idx["valid"],
-                                           self.start_idx["valid"] + valid_triples["edge"].shape[1])
-        self.testing_idx = torch.arange(self.start_idx["test"], self.start_idx["test"] + test_triples["edge"].shape[1])
-        self.training_idx = torch.arange(self.start_idx["train"],
-                                         self.start_idx["train"] + train_triples["edge"].shape[1])
 
         assert self.validation_idx.max() < self.testing_idx.min()
         assert self.testing_idx.max() < self.training_idx.min()
@@ -284,8 +229,9 @@ class TripletSampler(HeteroNetDataset):
 class TripletNeighborSampler(HeteroNeighborSampler):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True, inductive=False):
-        super().__init__(dataset, neighbor_sizes, node_types, metapaths, head_node_type, directed, resample_train,
-                         add_reverse_metapaths, inductive)
+        super(TripletNeighborSampler, self).__init__(dataset, neighbor_sizes, node_types, metapaths, head_node_type,
+                                                     directed, resample_train,
+                                                     add_reverse_metapaths, inductive)
 
     def process_PygLinkDataset_hetero(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
