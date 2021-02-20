@@ -10,8 +10,8 @@ from moge.module.PyG.latte import tag_negative, is_negative
 
 
 class EdgeSampler(HeteroNetDataset):
-    def __init__(self, dataset: PygLinkPropPredDataset, **kwargs):
-        super(EdgeSampler, self).__init__(dataset, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super(EdgeSampler, self).__init__(*args, **kwargs)
 
     def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
