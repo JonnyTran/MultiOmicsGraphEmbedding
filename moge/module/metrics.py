@@ -222,7 +222,7 @@ class OGBLinkPredMetrics(Metric):
             if not isinstance(v, float):
                 self.outputs.setdefault(k.strip("_list"), []).append(v.mean())
             else:
-                self.outputs.setdefault(k.strip("_list"), []).append(v)
+                self.outputs.setdefault(k.strip("_list"), []).append(torch.tensor(v))
 
     def compute(self, prefix=None):
         output = {k: torch.stack(v, dim=0).mean().item() for k, v in self.outputs.items()}
