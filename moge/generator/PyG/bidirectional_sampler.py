@@ -5,6 +5,8 @@ from collections import defaultdict
 import numpy as np
 import torch
 
+from ogb.linkproppred import PygLinkPropPredDataset
+
 from torch.utils.data import Dataset
 from moge.generator import HeteroNeighborSampler, TripletSampler
 from moge.module.PyG.latte import tag_negative, untag_negative, is_negative
@@ -14,14 +16,16 @@ from moge.module.utils import tensor_sizes
 
 class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
-    def __init__(self, dataset, neighbor_sizes,
+    def __init__(self, dataset: PygLinkPropPredDataset, neighbor_sizes,
                  negative_sampling_size=128, test_negative_sampling_size=500,
                  force_negative_sampling=False,
                  node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
-        super().__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types, metapaths=metapaths,
-                         head_node_type=head_node_type, directed=directed, resample_train=resample_train,
-                         add_reverse_metapaths=add_reverse_metapaths, **kwargs)
+        super(BidirectionalSampler, self).__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
+                                                   metapaths=metapaths,
+                                                   head_node_type=head_node_type, directed=directed,
+                                                   resample_train=resample_train,
+                                                   add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.neg_sampling_size = negative_sampling_size
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
