@@ -32,8 +32,9 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         self.train_counts = defaultdict(lambda: 4)
 
-        for key, tensor in self.triples.items():
-            if is_negative(key): continue
+        relation_counts = self.triples["relation"].bincount()
+        for metapath_id, count in enumerate(relation_counts):
+            self.train_counts[self.metapaths[metapath_id]] = count
 
         print("train_counts", self.train_counts)
 
