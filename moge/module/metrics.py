@@ -29,7 +29,7 @@ class Metrics(torch.nn.Module):
         if n_classes:
             top_k = [k for k in top_k if k < n_classes]
 
-        self.metrics = torch.nn.ModuleDict()
+        self.metrics = {}
         for metric in metrics:
             if "precision" == metric:
                 self.metrics[metric] = Precision(average=False, is_multilabel=multilabel, output_transform=None)
@@ -75,6 +75,7 @@ class Metrics(torch.nn.Module):
                 self.metrics["micro_f1"] = MetricsLambda(micro_f1, self.metrics["precision_avg"],
                                                          self.metrics["recall_avg"])
 
+        self.metrics = torch.nn.ModuleDict(self.metrics)
         self.reset_metrics()
 
     def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights):
