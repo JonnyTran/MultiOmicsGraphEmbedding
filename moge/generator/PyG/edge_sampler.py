@@ -196,12 +196,23 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
             head_batch = {}
             tail_batch = {}
             for metapath, edge_index in edges_pos.items():
-                head_batch[metapath] = \
-                    torch.randint(high=len(triplets_node_index[metapath[0]]),
-                                  size=(edge_index.shape[1], negative_sampling_size,))
-                tail_batch[metapath] = \
-                    torch.randint(high=len(triplets_node_index[metapath[-1]]),
-                                  size=(edge_index.shape[1], negative_sampling_size,))
+                # head_batch[metapath] = \
+                #     torch.randint(high=len(triplets_node_index[metapath[0]]),
+                #                   size=(edge_index.shape[1], negative_sampling_size,))
+                head_batch[metapath] = torch.multinomial(
+                    input=self.get_degrees(triplets_node_index[metapath[0]]).type(torch.float),
+                    num_samples=edge_index.shape[1] * negative_sampling_size,
+                    replacement=True) \
+                    .view(edge_index.shape[1], negative_sampling_size)
+
+                # tail_batch[metapath] = \
+                #     torch.randint(high=len(triplets_node_index[metapath[-1]]),
+                #                   size=(edge_index.shape[1], negative_sampling_size,))
+                tail_batch[metapath] = torch.multinomial(
+                    input=self.get_degrees(triplets_node_index[metapath[-1]]).type(torch.float),
+                    num_samples=edge_index.shape[1] * negative_sampling_size,
+                    replacement=True) \
+                    .view(edge_index.shape[1], negative_sampling_size)
 
         # Neighbor sampling with global_node_index
         batch_nodes_global = torch.cat([self.local2global[ntype][nid] for ntype, nid in triplets_node_index.items()], 0)
@@ -236,7 +247,7 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
             node_feats = {}
 
         edge_pos_weights = {}
-        if hasattr(self, "train_counts") and "train" in mode:
+        if hasattr(self, "degree_counts") and "train" in mode:
             for metapath, edge_index in edges_pos.items():
                 head_type, tail_type = metapath[0], metapath[-1]
 

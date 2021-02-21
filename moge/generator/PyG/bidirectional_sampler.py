@@ -146,7 +146,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         # Calculate subsampling weights on each edge_pos
         edge_pos_weights = {}
-        if hasattr(self, "train_counts") and "train" in mode:
+        if hasattr(self, "degree_counts") and "train" in mode:
             for metapath, edge_index in edges_pos.items():
                 head_type, tail_type = metapath[0], metapath[-1]
                 relation_id = self.metapaths.index(metapath)
