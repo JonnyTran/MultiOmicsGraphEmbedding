@@ -45,7 +45,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         head_counts.index = head_counts.index.set_names(["nid", "relation", "ntype"])
         tail_counts.index = tail_counts.index.set_names(["nid", "relation", "ntype"])
 
-        self.train_counts = head_counts.append(tail_counts)  # (node_id, relation, ntype): count
+        self.train_counts = head_counts.append(tail_counts).to_dict()  # (node_id, relation, ntype): count
 
         # relation_counts = self.triples["relation"].bincount()
         # for metapath_id, count in enumerate(relation_counts):
