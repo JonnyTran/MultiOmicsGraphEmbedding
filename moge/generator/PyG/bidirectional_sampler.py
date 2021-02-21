@@ -142,8 +142,10 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
             head_type, tail_type = metapath[0], metapath[-1]
             relation_id = self.metapaths.index(metapath)
 
-            subsampling_weight = self.train_counts[(head, relation_id, head_type)] + self.train_counts[
-                (tail, -relation_id - 1, tail_type)]
+            head_weights = edges_pos[0].apply_(lambda nid: self.train_counts[nid, relation_id, head_type])
+            tail_weights = edges_pos[1].apply_(lambda nid: self.train_counts[nid, -relation_id - 1, tail_type])
+
+            subsampling_weight = head_weights + tail_weights
             edge_pos_weights[metapath] = torch.sqrt(1 / torch.Tensor(subsampling_weight))
 
         # Build X input dict
