@@ -199,17 +199,17 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
                 # head_batch[metapath] = \
                 #     torch.randint(high=len(triplets_node_index[metapath[0]]),
                 #                   size=(edge_index.shape[1], negative_sampling_size,))
+                # tail_batch[metapath] = \
+                #     torch.randint(high=len(triplets_node_index[metapath[-1]]),
+                #                   size=(edge_index.shape[1], negative_sampling_size,))
                 head_batch[metapath] = torch.multinomial(
-                    input=self.get_degrees(triplets_node_index[metapath[0]]).type(torch.float),
+                    input=self.get_degrees(triplets_node_index[metapath[0]]),
                     num_samples=edge_index.shape[1] * negative_sampling_size,
                     replacement=True) \
                     .view(edge_index.shape[1], negative_sampling_size)
 
-                # tail_batch[metapath] = \
-                #     torch.randint(high=len(triplets_node_index[metapath[-1]]),
-                #                   size=(edge_index.shape[1], negative_sampling_size,))
                 tail_batch[metapath] = torch.multinomial(
-                    input=self.get_degrees(triplets_node_index[metapath[-1]]).type(torch.float),
+                    input=self.get_degrees(triplets_node_index[metapath[-1]]),
                     num_samples=edge_index.shape[1] * negative_sampling_size,
                     replacement=True) \
                     .view(edge_index.shape[1], negative_sampling_size)
@@ -255,7 +255,7 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
                 tail_weights = self.get_degrees(global_node_index[tail_type][edge_index[1]])
 
                 subsampling_weight = head_weights + tail_weights
-                edge_pos_weights[metapath] = torch.sqrt(1.0 / torch.tensor(subsampling_weight, dtype=torch.float))
+                edge_pos_weights[metapath] = torch.sqrt(1.0 / subsampling_weight)
 
         # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
@@ -271,7 +271,7 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
         return X, None, edge_pos_weights
 
     def get_degrees(self, node_ids: torch.LongTensor):
-        return node_ids.apply_(lambda nid: self.degree_counts.get((nid), 1))
+        return node_ids.apply_(lambda nid: self.degree_counts.get((nid), 1)).type(torch.float)
 
     def merge_node_index(self, old_node_index, new_node_index):
         merged = {}
