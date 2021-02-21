@@ -83,10 +83,15 @@ class LinkPredLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, pos_pred, neg_pred, weight=None):
-        pos_loss = -torch.mean(F.logsigmoid(pos_pred), dim=-1)
-        neg_loss = -torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
-        loss = (pos_loss + neg_loss) / 2
+    def forward(self, pos_pred, neg_pred, subsampling_weight=None):
+        if subsampling_weight is None:
+            pos_loss = -torch.mean(F.logsigmoid(pos_pred), dim=-1)
+            neg_loss = -torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
+            loss = (pos_loss + neg_loss) / 2
+        else:
+            pos_loss = - (subsampling_weight * F.logsigmoid(pos_pred)).sum() / subsampling_weight.sum()
+            neg_loss = -torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
+            loss = (pos_loss + neg_loss) / 2
 
         # preds = torch.cat([pos_pred, neg_pred.view(-1)])
         #

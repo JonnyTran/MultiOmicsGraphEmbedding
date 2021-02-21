@@ -373,8 +373,8 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
 
     def save_network_weights(self):
         if hasattr(self, "alpha_network"):
-            self.alpha_directed = self.alpha_network.get_layer(name="alpha_directed").get_weights()
-            self.alpha_undirected = self.alpha_network.get_layer(name="alpha_undirected").get_weights()
+            self.alpha_directed = self.alpha_network.get_layer(name="alpha_directed").reshape_weights_dict()
+            self.alpha_undirected = self.alpha_network.get_layer(name="alpha_undirected").reshape_weights_dict()
 
     def get_reconstructed_adj(self, beta=2.0, X=None, node_l=None, node_l_b=None, edge_type="d", var_len=False):
         """

@@ -133,12 +133,12 @@ class LATTELinkPred(LinkPredTrainer):
 
 
     def training_step(self, batch, batch_nb):
-        X, _, _ = batch
+        X, _, edge_pos_weights = batch
 
         _, prox_loss, edge_pred_dict = self.forward(X)
 
-        e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
-        loss = self.criterion.forward(e_pos, e_neg)
+        e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
+        loss = self.criterion.forward(e_pos, e_neg, subsampling_weight=e_weights)
 
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
@@ -147,11 +147,11 @@ class LATTELinkPred(LinkPredTrainer):
         return outputs
 
     def validation_step(self, batch, batch_nb):
-        X, _, _ = batch
+        X, _, edge_pos_weights = batch
         _, prox_loss, edge_pred_dict = self.forward(X)
 
-        e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
-        loss = self.criterion.forward(e_pos, e_neg)
+        e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
+        loss = self.criterion.forward(e_pos, e_neg, subsampling_weight=e_weights)
 
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
         print(F.sigmoid(e_pos[:5]), "\t", F.sigmoid(e_neg[:5, 0].view(-1))) if batch_nb == 1 else None
@@ -159,11 +159,11 @@ class LATTELinkPred(LinkPredTrainer):
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
-        X, _, _ = batch
+        X, _, edge_pos_weights = batch
         _, prox_loss, edge_pred_dict = self.forward(X)
 
-        e_pos, e_neg = self.reshape_e_pos_neg(edge_pred_dict)
-        loss = self.criterion.forward(e_pos, e_neg)
+        e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
+        loss = self.criterion.forward(e_pos, e_neg, subsampling_weight=e_weights)
 
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 

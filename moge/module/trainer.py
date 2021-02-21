@@ -185,12 +185,15 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
         super(LinkPredTrainer, self).__init__(hparams, dataset, metrics, *args, **kwargs)
 
-    def reshape_e_pos_neg(self, edge_pred_dict):
+    def reshape_e_pos_neg(self, edge_pred_dict, edge_weights_dict=None):
         e_pos = []
         e_neg = []
+        e_weights = []
+
         for metapath, edge_pred in edge_pred_dict["edge_pos"].items():
             num_edges = edge_pred.shape[0]
             e_pos.append(edge_pred)
+            e_weights.append(edge_weights_dict[metapath])
 
             # Negative sampling
             if "head-batch" in edge_pred_dict:
@@ -207,10 +210,12 @@ class LinkPredTrainer(NodeClfTrainer):
         e_pos = torch.cat(e_pos, dim=0)
         e_neg = torch.cat(e_neg, dim=0)
 
-        return e_pos, e_neg
+        if e_weights:
+            e_weights = torch.cat(e_weights, dim=0)
+        else:
+            e_weights = None
 
-    def get_weights(self, weights):
-        pass
+        return e_pos, e_neg, e_weights
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
