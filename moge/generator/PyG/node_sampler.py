@@ -8,6 +8,7 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.network import HeteroNetDataset
+from moge.generator.PyG.graph_sampler import KHopSampler
 from moge.module.utils import tensor_sizes
 
 class HeteroNeighborSampler(HeteroNetDataset):
@@ -31,8 +32,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
                               edge_type in self.edge_index_dict}
 
-        self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
-                                                sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
+        self.neighbor_sampler = KHopSampler(self.edge_index, node_idx=self.training_idx,
+                                            sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
@@ -149,15 +150,10 @@ class HeteroNeighborSampler(HeteroNetDataset):
             return super().get_collate_fn(collate_fn, mode=mode)
 
     def get_local_node_index(self, adjs, n_id):
-        """
-
-        :param iloc: A tensor of indices for nodes of `head_node_type`
-        :return sampled_nodes, n_id, adjs:
-        """
         sampled_nodes = {}
         for adj in adjs:
-            for row_col in [0, 1]:
-                node_ids = n_id[adj.edge_index[row_col]]
+            for i in [0, 1]:
+                node_ids = n_id[adj.edge_index[i]]
                 node_types = self.node_type[node_ids]
 
                 for node_type_id in node_types.unique():
@@ -172,8 +168,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
     def sample(self, n_idx, mode):
         """
 
-        :param n_idx: A tensor of a batch of node indices in training_idx, validation_idx, or testing_idx
-        :return:
+        Args:
+            n_idx: A tensor of a batch of node indices in training_idx, validation_idx, or testing_idx
+            mode:
+
+        Returns:
+
         """
         if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):
             n_idx = torch.tensor(n_idx)
@@ -186,6 +186,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         batch_size, n_id, adjs = self.neighbor_sampler.sample(n_idx_to_sample)
         if not isinstance(adjs, list):
             adjs = [adjs]
+
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
         sampled_local_nodes = self.get_local_node_index(adjs, n_id)
 
