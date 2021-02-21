@@ -142,9 +142,12 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
             head_type, tail_type = metapath[0], metapath[-1]
             relation_id = self.metapaths.index(metapath)
 
-            head_weights = triplets_node_index[head_type][edges_pos[0]].apply_(
+            print("triplets_node_index[head_type][edges_pos[0]]", global_node_index[head_type][edges_pos[0]])
+            print("triplets_node_index[tail_type][edges_pos[1]]", global_node_index[tail_type][edges_pos[1]])
+
+            head_weights = global_node_index[head_type][edges_pos[0]].apply_(
                 lambda nid: self.train_counts[nid, relation_id, head_type])
-            tail_weights = triplets_node_index[tail_type][edges_pos[1]].apply_(
+            tail_weights = global_node_index[tail_type][edges_pos[1]].apply_(
                 lambda nid: self.train_counts[nid, -relation_id - 1, tail_type])
 
             subsampling_weight = head_weights + tail_weights
