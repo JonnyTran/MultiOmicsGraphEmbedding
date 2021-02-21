@@ -42,8 +42,11 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         tail_counts.index = tail_counts.index.set_levels(levels=-tail_counts.index.get_level_values(1) - 1,
                                                          level=1,
                                                          verify_integrity=False, )
-        self.train_counts.update(head_counts.to_dict())
-        self.train_counts.update(tail_counts.to_dict())
+
+        head_counts.index = head_counts.index.set_names(["nid", "relation", "ntype"])
+        tail_counts.index = tail_counts.index.set_names(["nid", "relation", "ntype"])
+
+        self.train_counts = head_counts.append(tail_counts)
 
         # relation_counts = self.triples["relation"].bincount()
         # for metapath_id, count in enumerate(relation_counts):
@@ -149,9 +152,10 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
             relation_id = self.metapaths.index(metapath)
 
             head_weights = global_node_index[head_type][edge_index[0]].apply_(
-                lambda nid: self.train_counts[(nid, relation_id, head_type)])
+                lambda nid: self.train_counts.get((nid, relation_id, head_type), 1))
+
             tail_weights = global_node_index[tail_type][edge_index[1]].apply_(
-                lambda nid: self.train_counts[(nid, -relation_id - 1, tail_type)])
+                lambda nid: self.train_counts.get((nid, int(-relation_id - 1), tail_type), 1))
 
             subsampling_weight = head_weights + tail_weights
             edge_pos_weights[metapath] = torch.sqrt(1.0 / torch.tensor(subsampling_weight, dtype=torch.float))
