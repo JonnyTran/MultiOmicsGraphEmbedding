@@ -3,6 +3,7 @@
 from collections import defaultdict
 from tqdm import tqdm
 
+import pandas as pd
 import numpy as np
 import torch
 
@@ -31,13 +32,19 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
 
-        self.train_counts = defaultdict(lambda: 4)  # (node_id, relation, ntype): count
+        self.train_counts = {}  # (node_id, relation, ntype): count
 
-        for i in tqdm(range(len(self.triples['head']))):
-            head, relation_id, tail = self.triples['head'][i], self.triples['relation'][i], self.triples['tail'][i]
-            head_type, tail_type = self.triples['head_type'][i], self.triples['tail_type'][i]
-            self.train_counts[(head, relation_id, head_type)] += 1
-            self.train_counts[(tail, -relation_id - 1, tail_type)] += 1
+        df = pd.DataFrame(
+            {key: self.triples[key].numpy() if isinstance(self.triples[key], torch.Tensor) else self.triples[key] \
+             for key in ["head", "head_type", "relation", "tail", "tail_type"]})
+
+        head_counts = df.groupby(["head", "relation", "head_type"])["tail"].count()
+        tail_counts = df.groupby(["tail", "relation", "tail_type"])["head"].count()
+        tail_counts.index = tail_counts.index.set_levels(levels=-tail_counts.index.get_level_values(1) - 1,
+                                                         level=1,
+                                                         verify_integrity=False, )
+        self.train_counts.update(head_counts.to_dict())
+        self.train_counts.update(tail_counts.to_dict())
 
         # relation_counts = self.triples["relation"].bincount()
         # for metapath_id, count in enumerate(relation_counts):
