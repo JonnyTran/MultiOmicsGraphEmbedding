@@ -33,7 +33,6 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         self.force_neg_sampling = force_negative_sampling
 
         self.train_counts = {}  # (node_id, relation, ntype): count
-
         df = pd.DataFrame(
             {key: self.triples[key].numpy() if isinstance(self.triples[key], torch.Tensor) else self.triples[key] \
              for key in ["head", "head_type", "relation", "tail", "tail_type"]})
@@ -150,9 +149,9 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
             relation_id = self.metapaths.index(metapath)
 
             head_weights = global_node_index[head_type][edge_index[0]].apply_(
-                lambda nid: self.train_counts[nid, relation_id, head_type])
+                lambda nid: self.train_counts[(nid, relation_id, head_type)])
             tail_weights = global_node_index[tail_type][edge_index[1]].apply_(
-                lambda nid: self.train_counts[nid, -relation_id - 1, tail_type])
+                lambda nid: self.train_counts[(nid, -relation_id - 1, tail_type)])
 
             subsampling_weight = head_weights + tail_weights
             edge_pos_weights[metapath] = torch.sqrt(1.0 / torch.tensor(subsampling_weight, dtype=torch.float))
