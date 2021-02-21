@@ -46,15 +46,24 @@ class EdgeSampler(HeteroNetDataset):
         # Concat pos edges
         for key in train_triples.keys():
             if isinstance(train_triples[key], torch.Tensor):
+                # True edges
                 if valid_triples[key].dim() == 2 and min(valid_triples[key].shape) == 2:
-                    self.triples[EdgeSampler.DEFAULT_METAPATH] = torch.cat(
-                        [valid_triples[key], test_triples[key], train_triples[key]],
-                        dim=0).permute(1, 0)
+                    if valid_triples[key].shape[1] == 2:
+                        self.triples[EdgeSampler.DEFAULT_METAPATH] = torch.cat(
+                            [valid_triples[key], test_triples[key], train_triples[key]],
+                            dim=0).permute(1, 0)
+                    else:
+                        self.triples[EdgeSampler.DEFAULT_METAPATH] = torch.cat(
+                            [valid_triples[key], test_triples[key], train_triples[key]],
+                            dim=0)
+
+                # Edge attributes
                 else:
                     self.triples[key] = torch.cat(
                         [valid_triples[key], test_triples[key], train_triples[key]],
                         dim=0)
             else:
+                # Edge attribuets
                 self.triples[EdgeSampler.DEFAULT_METAPATH] = np.array(
                     valid_triples[key] + test_triples[key] + train_triples[key])
 
