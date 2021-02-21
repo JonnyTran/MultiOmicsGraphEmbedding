@@ -32,7 +32,6 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
 
-        self.train_counts = {}  # (node_id, relation, ntype): count
         df = pd.DataFrame(
             {key: self.triples[key].numpy() if isinstance(self.triples[key], torch.Tensor) else self.triples[key] \
              for key in ["head", "head_type", "relation", "tail", "tail_type"]})
