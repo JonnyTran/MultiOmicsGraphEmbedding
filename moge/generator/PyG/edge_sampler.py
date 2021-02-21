@@ -20,6 +20,7 @@ class EdgeSampler(HeteroNetDataset):
         data = dataset[0]
         self._name = dataset.name
         self.edge_index_dict = {EdgeSampler.DEFAULT_METAPATH: data.edge_index}
+        self.head_node_type = EdgeSampler.DEFAULT_NODE_TYPE
 
         if hasattr(data, "num_nodes_dict"):
             self.num_nodes_dict = data.num_nodes_dict
@@ -163,7 +164,7 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
         negative_sampling_size = int(negative_sampling_size)
 
         # True positive edges
-        triples = {k: v[:, e_idx] for k, v in self.triples.items() if not is_negative(k)}
+        triples = {k: v[:, e_idx] for k, v in self.triples.items() if not is_negative(k) and k == "edge"}
 
         # Add true neg edges if on valid or test triplet indices
         if e_idx.max() < self.start_idx["train"] and not self.force_neg_sampling:
