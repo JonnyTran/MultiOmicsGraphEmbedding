@@ -142,16 +142,17 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
             head_type, tail_type = metapath[0], metapath[-1]
             relation_id = self.metapaths.index(metapath)
 
-            print("triplets_node_index[head_type][edges_pos[0]]", global_node_index[head_type][edges_pos[0]])
-            print("triplets_node_index[tail_type][edges_pos[1]]", global_node_index[tail_type][edges_pos[1]])
+            print("edges_pos", edge_index.shape)
+            print("triplets_node_index[head_type][edges_pos[0]]", global_node_index[head_type][edge_index[0]])
+            print("triplets_node_index[tail_type][edges_pos[1]]", global_node_index[tail_type][edge_index[1]])
 
-            head_weights = global_node_index[head_type][edges_pos[0]].apply_(
+            head_weights = global_node_index[head_type][edge_index[0]].apply_(
                 lambda nid: self.train_counts[nid, relation_id, head_type])
-            tail_weights = global_node_index[tail_type][edges_pos[1]].apply_(
+            tail_weights = global_node_index[tail_type][edge_index[1]].apply_(
                 lambda nid: self.train_counts[nid, -relation_id - 1, tail_type])
 
             subsampling_weight = head_weights + tail_weights
-            edge_pos_weights[metapath] = torch.sqrt(1 / torch.Tensor(subsampling_weight))
+            edge_pos_weights[metapath] = torch.sqrt(1 / torch.Tensor(subsampling_weight, dtype=torch.float))
 
         # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
