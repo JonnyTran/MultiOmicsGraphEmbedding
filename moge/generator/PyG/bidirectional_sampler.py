@@ -158,7 +158,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
                 tail_weights = global_node_index[tail_type][edge_index[1]].apply_(
                     lambda nid: self.train_counts.get((nid, -relation_id - 1, tail_type), 1))
             except:
-                tail_weights = 0
+                tail_weights = 1
                 print("global_node_index[tail_type][edge_index[1]]", global_node_index[tail_type][edge_index[1]])
 
             subsampling_weight = head_weights + tail_weights
