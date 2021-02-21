@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+import pandas as pd
 import numpy as np
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
@@ -149,7 +150,9 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
 
-        self.train_counts = defaultdict(lambda: 4)
+        df = pd.DataFrame(self.triples[EdgeSampler.DEFAULT_METAPATH].numpy().T)
+        self.degree_counts = df.groupby(0)[1].count().add(df.groupby(1)[0].count(),
+                                                          fill_value=0)  # <node_id: in_degree + out_degree>
 
     def get_collate_fn(self, collate_fn: str, mode=None):
         assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
@@ -232,6 +235,17 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
         else:
             node_feats = {}
 
+        edge_pos_weights = {}
+        if hasattr(self, "train_counts") and "train" in mode:
+            for metapath, edge_index in edges_pos.items():
+                head_type, tail_type = metapath[0], metapath[-1]
+
+                head_weights = self.get_degrees(global_node_index[head_type][edge_index[0]])
+                tail_weights = self.get_degrees(global_node_index[tail_type][edge_index[1]])
+
+                subsampling_weight = head_weights + tail_weights
+                edge_pos_weights[metapath] = torch.sqrt(1.0 / torch.tensor(subsampling_weight, dtype=torch.float))
+
         # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
              "edge_pos": edges_pos,
@@ -243,7 +257,10 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
         else:
             X.update({"edge_neg": edges_neg})
 
-        return X, None, None
+        return X, None, edge_pos_weights
+
+    def get_degrees(self, node_ids: torch.LongTensor):
+        return node_ids.apply_(lambda nid: self.degree_counts.get((nid), 1))
 
     def merge_node_index(self, old_node_index, new_node_index):
         merged = {}
@@ -256,3 +273,4 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
                 merged[ntype].append(new_nodes[new_nodes_mask])
             merged[ntype] = torch.cat(merged[ntype], 0)
         return merged
+

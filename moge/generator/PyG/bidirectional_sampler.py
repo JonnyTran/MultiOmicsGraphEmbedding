@@ -45,7 +45,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         head_counts.index = head_counts.index.set_names(["nid", "relation", "ntype"])
         tail_counts.index = tail_counts.index.set_names(["nid", "relation", "ntype"])
 
-        self.train_counts = head_counts.append(tail_counts).to_dict()  # (node_id, relation, ntype): count
+        self.degree_counts = head_counts.append(tail_counts).to_dict()  # (node_id, relation, ntype): count
 
         # relation_counts = self.triples["relation"].bincount()
         # for metapath_id, count in enumerate(relation_counts):
@@ -151,11 +151,10 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
                 head_type, tail_type = metapath[0], metapath[-1]
                 relation_id = self.metapaths.index(metapath)
 
-                head_weights = global_node_index[head_type][edge_index[0]].apply_(
-                    lambda nid: self.train_counts.get((nid, relation_id, head_type), 1))
-
-                tail_weights = global_node_index[tail_type][edge_index[1]].apply_(
-                    lambda nid: self.train_counts.get((nid, -relation_id - 1, tail_type), 1))
+                head_weights = self.get_degrees(global_node_index[head_type][edge_index[0]], relation_id=relation_id,
+                                                node_type=head_type)
+                tail_weights = self.get_degrees(global_node_index[tail_type][edge_index[1]],
+                                                relation_id=-relation_id - 1, node_type=tail_type)
 
                 subsampling_weight = head_weights + tail_weights
                 edge_pos_weights[metapath] = torch.sqrt(1.0 / torch.tensor(subsampling_weight, dtype=torch.float))
@@ -173,6 +172,9 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         return X, None, edge_pos_weights
 
+    def get_degrees(self, node_ids: torch.LongTensor, relation_id, node_type):
+        return node_ids.apply_(lambda nid: self.degree_counts.get((nid, relation_id, node_type), 1))
+
     def merge_node_index(self, old_node_index, new_node_index):
         merged = {}
         for ntype, new_nodes in new_node_index.items():
@@ -186,53 +188,5 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         return merged
 
 
-class TrainDataset(Dataset):
-    def __init__(self, triples, nentity, nrelation, mode=None, negative_sample_size=128, count=None, true_head=None,
-                 true_tail=None, entity_dict=defaultdict()):
-        self.entity_dict = entity_dict
-        if true_tail is None:
-            self.true_tail = defaultdict(list)
-        if true_head is None:
-            self.true_head = defaultdict(list)
-        if count is None:
-            self.count = defaultdict(lambda: 4)
-
-        self.len = len(triples['head'])
-        self.triples = triples
-        self.nentity = nentity
-        self.nrelation = nrelation
-        self.negative_sample_size = negative_sample_size
-        self.mode = mode
-
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, idx):
-        head, relation, tail = self.triples['head'][idx], self.triples['relation'][idx], self.triples['tail'][idx]
-        head_type, tail_type = self.triples['head_type'][idx], self.triples['tail_type'][idx]
-        positive_sample = [head + self.entity_dict[head_type][0],
-                           relation, tail + self.entity_dict[tail_type][0]]
-
-        subsampling_weight = self.count[(head, relation, head_type)] + self.count[(tail, -relation - 1, tail_type)]
-        subsampling_weight = torch.sqrt(1 / torch.Tensor([subsampling_weight]))
-
-        if self.mode == 'head-batch':
-            negative_sample = torch.randint(self.entity_dict[head_type][0], self.entity_dict[head_type][1],
-                                            (self.negative_sample_size,))
-        elif self.mode == 'tail-batch':
-            negative_sample = torch.randint(self.entity_dict[tail_type][0], self.entity_dict[tail_type][1],
-                                            (self.negative_sample_size,))
-        else:
-            raise
-        positive_sample = torch.LongTensor(positive_sample)
-
-        return positive_sample, negative_sample, subsampling_weight
-
-    @staticmethod
-    def collate_fn(data):
-        positive_sample = torch.stack([_[0] for _ in data], dim=0)
-        negative_sample = torch.stack([_[1] for _ in data], dim=0)
-        subsample_weight = torch.cat([_[2] for _ in data], dim=0)
-        return positive_sample, negative_sample, subsample_weight
 
 

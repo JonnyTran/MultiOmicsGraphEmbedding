@@ -244,7 +244,7 @@ class TripletNeighborSampler(HeteroNeighborSampler):
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
         if self.node_types is None:
-            self.node_types = list(data.num_nodes_dict.keys())
+            self.node_types = list(self.num_nodes_dict.keys())
 
         if hasattr(data, "x") and data.x is not None:
             self.x_dict = {self.head_node_type: data.x}

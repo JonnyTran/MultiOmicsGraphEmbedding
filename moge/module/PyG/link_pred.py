@@ -138,7 +138,7 @@ class LATTELinkPred(LinkPredTrainer):
         _, prox_loss, edge_pred_dict = self.forward(X)
 
         e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
-        loss = self.criterion.forward(e_pos, e_neg, subsampling_weight=e_weights)
+        loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
 
@@ -151,7 +151,7 @@ class LATTELinkPred(LinkPredTrainer):
         _, prox_loss, edge_pred_dict = self.forward(X)
 
         e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
-        loss = self.criterion.forward(e_pos, e_neg, subsampling_weight=e_weights)
+        loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
         print(F.sigmoid(e_pos[:5]), "\t", F.sigmoid(e_neg[:5, 0].view(-1))) if batch_nb == 1 else None
@@ -163,7 +163,7 @@ class LATTELinkPred(LinkPredTrainer):
         _, prox_loss, edge_pred_dict = self.forward(X)
 
         e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
-        loss = self.criterion.forward(e_pos, e_neg, subsampling_weight=e_weights)
+        loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
