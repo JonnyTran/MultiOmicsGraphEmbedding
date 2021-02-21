@@ -121,7 +121,8 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
                                            range(len(global_node_index[node_type])))) \
                        for node_type in global_node_index}
 
-        edge_index_dict = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
+        edge_index_dict = self.get_local_edge_index_dict(adjs=adjs,
+                                                         n_id=n_id,
                                                          sampled_local_nodes=global_node_index,
                                                          local2batch=local2batch,
                                                          filter_nodes=2)
@@ -131,8 +132,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         # Make x_dict
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
-            node_feats = {node_type: self.x_dict[node_type][global_node_index[node_type]] \
-                          for node_type in self.x_dict}
+            node_feats = {node_type: self.x_dict[node_type][global_node_index[node_type]] for node_type in self.x_dict}
         else:
             node_feats = {}
 
