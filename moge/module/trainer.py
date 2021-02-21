@@ -193,7 +193,8 @@ class LinkPredTrainer(NodeClfTrainer):
         for metapath, edge_pred in edge_pred_dict["edge_pos"].items():
             num_edges = edge_pred.shape[0]
             e_pos.append(edge_pred)
-            e_weights.append(edge_weights_dict[metapath])
+            if edge_weights_dict is not None:
+                e_weights.append(edge_weights_dict[metapath])
 
             # Negative sampling
             if "head-batch" in edge_pred_dict:
