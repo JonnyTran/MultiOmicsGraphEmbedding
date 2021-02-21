@@ -158,7 +158,6 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
                     lambda nid: self.train_counts.get((nid, -relation_id - 1, tail_type), 1))
             except:
                 tail_weights = 1
-                print("global_node_index[tail_type][edge_index[1]]", global_node_index[tail_type][edge_index[1]])
 
             subsampling_weight = head_weights + tail_weights
             edge_pos_weights[metapath] = torch.sqrt(1.0 / torch.tensor(subsampling_weight, dtype=torch.float))
