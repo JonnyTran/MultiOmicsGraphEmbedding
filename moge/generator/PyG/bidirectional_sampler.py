@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 from collections import defaultdict
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -30,11 +31,17 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
 
-        self.train_counts = defaultdict(lambda: 4)
+        self.train_counts = defaultdict(lambda: 4)  # (node_id, relation, ntype): count
 
-        relation_counts = self.triples["relation"].bincount()
-        for metapath_id, count in enumerate(relation_counts):
-            self.train_counts[self.metapaths[metapath_id]] = count.astype(torch.float)
+        for i in tqdm(range(len(self.triples['head']))):
+            head, relation_id, tail = self.triples['head'][i], self.triples['relation'][i], self.triples['tail'][i]
+            head_type, tail_type = self.triples['head_type'][i], self.triples['tail_type'][i]
+            self.train_counts[(head, relation_id, head_type)] += 1
+            self.train_counts[(tail, -relation_id - 1, tail_type)] += 1
+
+        # relation_counts = self.triples["relation"].bincount()
+        # for metapath_id, count in enumerate(relation_counts):
+        #     self.train_counts[self.metapaths[metapath_id]] = count.astype(torch.float)
 
     # def __init__(self, dataset, node_types=None, metapaths=None,
     #              negative_sampling_size=128, test_negative_sampling_size=500,
@@ -132,8 +139,12 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         # Calculate subsampling weights on each edge_pos
         edge_pos_weights = {}
         for metapath, edge_index in edges_pos.items():
-            edge_pos_weights[metapath] = torch.ones(edge_index.shape[1], dtype=torch.float) * torch.sqrt(
-                1 / self.train_counts[metapath])
+            head_type, tail_type = metapath[0], metapath[-1]
+            relation_id = self.metapaths.index(metapath)
+
+            subsampling_weight = self.train_counts[(head, relation_id, head_type)] + self.train_counts[
+                (tail, -relation_id - 1, tail_type)]
+            edge_pos_weights[metapath] = torch.sqrt(1 / torch.Tensor(subsampling_weight))
 
         # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
