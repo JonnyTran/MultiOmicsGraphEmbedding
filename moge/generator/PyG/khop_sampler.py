@@ -73,12 +73,13 @@ class Adj(NamedTuple):
 class KHopSampler(torch.utils.data.DataLoader):
     def __init__(self, edge_index,
                  sizes, node_idx=None,
-                 num_nodes=None, return_e_id=True,
+                 num_nodes=None, return_e_id=True, flow="target_to_source",
                  **kwargs):
 
         self.sizes = sizes
         self.return_e_id = return_e_id
         self.is_sparse_tensor = isinstance(edge_index, SparseTensor)
+        self.flow = flow
         self.__val__ = None
 
         # Obtain a *transposed* `SparseTensor` instance.
@@ -125,7 +126,10 @@ class KHopSampler(torch.utils.data.DataLoader):
                 adjs.append(Adj(adj_t, e_id, size))
             else:
                 row, col, _ = adj_t.coo()
-                edge_index = torch.stack([col, row], dim=0)
+                if self.flow == "target_to_source":
+                    edge_index = torch.stack([row, col], dim=0)
+                else:
+                    edge_index = torch.stack([row, col], dim=0)
                 adjs.append(EdgeIndex(edge_index, e_id, size))
 
         if len(adjs) > 1:
