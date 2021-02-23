@@ -145,7 +145,7 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
             node_feats = {}
 
         # Calculate subsampling weights on each edge_pos
-        edge_pos_weights = {}
+        edge_weights = {}
         if hasattr(self, "degree_counts") and "train" in mode:
             for metapath, edge_index in edges_pos.items():
                 head_type, tail_type = metapath[0], metapath[-1]
@@ -159,20 +159,21 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
                                                 node_type=tail_type)
 
                 subsampling_weight = head_weights + tail_weights
-                edge_pos_weights[metapath] = torch.sqrt(1.0 / subsampling_weight)
+                edge_weights[metapath] = torch.sqrt(1.0 / subsampling_weight)
 
         # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
-             "edge_pos": edges_pos,
              "global_node_index": global_node_index,
              "x_dict": node_feats}
 
+        # Build edges_true dict
+        y = {"edge_pos": edges_pos, }
         if not edges_neg:
-            X.update({"head-batch": head_batch, "tail-batch": tail_batch, })
+            y.update({"head-batch": head_batch, "tail-batch": tail_batch, })
         else:
-            X.update({"edge_neg": edges_neg})
+            y.update({"edge_neg": edges_neg})
 
-        return X, None, edge_pos_weights
+        return X, y, edge_weights
 
     def get_degrees(self, node_ids: torch.LongTensor, relation_id, node_type):
         return node_ids.apply_(lambda nid: self.degree_counts.get((nid, relation_id, node_type), 1)).type(torch.float)

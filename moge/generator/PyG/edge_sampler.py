@@ -236,8 +236,8 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
         else:
             node_feats = {}
 
-        edge_pos_weights = {}
-        if hasattr(self, "degree_counts") and "train" in mode:
+        edge_weights = {}
+        if hasattr(self, "degree_counts"):
             for metapath, edge_index in edges_pos.items():
                 head_type, tail_type = metapath[0], metapath[-1]
 
@@ -245,21 +245,21 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
                 tail_weights = self.get_degrees(global_node_index[tail_type][edge_index[1]])
 
                 subsampling_weight = head_weights + tail_weights
-                edge_pos_weights[metapath] = torch.sqrt(1.0 / subsampling_weight)
+                edge_weights[metapath] = torch.sqrt(1.0 / subsampling_weight)
 
         # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
              "global_node_index": global_node_index,
              "x_dict": node_feats}
 
+        # Build edge_true dict
         y = {"edge_pos": edges_pos, }
-
         if not edges_neg:
             y.update({"head-batch": head_batch, "tail-batch": tail_batch, })
         else:
             y.update({"edge_neg": edges_neg})
 
-        return X, y, edge_pos_weights
+        return X, y, edge_weights
 
     def get_degrees(self, node_ids: torch.LongTensor):
         return node_ids.apply_(lambda nid: self.degree_counts.get((nid), 1)).type(torch.float)
