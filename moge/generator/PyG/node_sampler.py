@@ -34,7 +34,7 @@ class NeighborSampler(torch_geometric.data.NeighborSampler):
                 adjs.append(Adj(adj_t, e_id, size))
             else:
                 row, col, _ = adj_t.coo()
-                edge_index = torch.stack([row, col], dim=0)  # flow target_to_source
+                edge_index = torch.stack([col, row], dim=0)  # flow source_to_target
                 adjs.append(EdgeIndex(edge_index, e_id, size))
 
         if len(adjs) > 1:
@@ -280,8 +280,9 @@ class HeteroNeighborSampler(HeteroNetDataset):
         return X, y, weights
 
     def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, filter_nodes: bool):
-        """
-        # Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and `global_node_index`
+        """ Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and
+        `global_node_index`
+
         :param adjs:
         :param n_id:
         :param sampled_local_nodes:
