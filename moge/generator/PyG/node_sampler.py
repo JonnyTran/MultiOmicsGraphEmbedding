@@ -8,7 +8,7 @@ from torch_geometric.data import NeighborSampler
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.network import HeteroNetDataset
-from moge.generator.PyG.graph_sampler import KHopSampler
+from moge.generator.PyG.khop_sampler import KHopSampler
 from moge.module.utils import tensor_sizes
 
 class HeteroNeighborSampler(HeteroNetDataset):

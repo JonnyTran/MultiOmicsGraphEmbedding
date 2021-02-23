@@ -249,16 +249,17 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
 
         # Build X input dict
         X = {"edge_index_dict": edge_index_dict,
-             "edge_pos": edges_pos,
              "global_node_index": global_node_index,
              "x_dict": node_feats}
 
-        if not edges_neg:
-            X.update({"head-batch": head_batch, "tail-batch": tail_batch, })
-        else:
-            X.update({"edge_neg": edges_neg})
+        y = {"edge_pos": edges_pos, }
 
-        return X, None, edge_pos_weights
+        if not edges_neg:
+            y.update({"head-batch": head_batch, "tail-batch": tail_batch, })
+        else:
+            y.update({"edge_neg": edges_neg})
+
+        return X, y, edge_pos_weights
 
     def get_degrees(self, node_ids: torch.LongTensor):
         return node_ids.apply_(lambda nid: self.degree_counts.get((nid), 1)).type(torch.float)

@@ -49,7 +49,7 @@ class EncoderEmbedderClassifier(torch.nn.Module):
         return encodings
 
     def predict(self, embeddings):
-        y_pred = self._classifier.forward(embeddings, )
+        y_pred = self._classifier.forward(embeddings, None)
         if "LOGITS" in self.hparams.loss_type:
             if "SOFTMAX" in self.hparams.loss_type:
                 print("INFO: Applied softmax to predictions")

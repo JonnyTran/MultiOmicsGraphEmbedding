@@ -58,10 +58,10 @@ class DistMulti(torch.nn.Module):
 
         return output
 
-    def predict(self, edge_index_dict, embeddings, neg_samp_size, mode):
+    def predict(self, edges_true: dict, embeddings, neg_samp_size, mode):
         edge_pred_dict = {}
 
-        for metapath, edge_index in edge_index_dict.items():
+        for metapath, edge_index in edges_true.items():
             metapath_idx = self.metapaths.index(metapath)
             kernel = self.relation_embedding[metapath_idx]  # (emb_dim)
 
@@ -121,21 +121,19 @@ class LATTELinkPred(LinkPredTrainer):
 
         hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-    def forward(self, inputs: dict, **kwargs):
+    def forward(self, inputs: dict, edges_true: dict, **kwargs):
         embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],
                                                       edge_index_dict=inputs["edge_index_dict"],
                                                       global_node_idx=inputs["global_node_index"],
                                                       **kwargs)
 
-        output = self.classifier(inputs, embeddings)
+        edges_pred = self.classifier(edges_true, embeddings)
 
-        return embeddings, proximity_loss, output
-
+        return embeddings, proximity_loss, edges_pred
 
     def training_step(self, batch, batch_nb):
-        X, _, edge_pos_weights = batch
-
-        _, prox_loss, edge_pred_dict = self.forward(X)
+        X, edge_true, edge_pos_weights = batch
+        embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
@@ -147,8 +145,8 @@ class LATTELinkPred(LinkPredTrainer):
         return outputs
 
     def validation_step(self, batch, batch_nb):
-        X, _, edge_pos_weights = batch
-        _, prox_loss, edge_pred_dict = self.forward(X)
+        X, edge_true, edge_pos_weights = batch
+        embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
@@ -160,8 +158,8 @@ class LATTELinkPred(LinkPredTrainer):
         return {"val_loss": loss}
 
     def test_step(self, batch, batch_nb):
-        X, _, edge_pos_weights = batch
-        _, prox_loss, edge_pred_dict = self.forward(X)
+        X, edge_true, edge_pos_weights = batch
+        embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_pos_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)

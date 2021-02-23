@@ -114,17 +114,17 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
         if X[self.node_types[0]].dim() > 2:
             X[self.node_types[0]] = X[self.node_types[0]].squeeze(0)
 
-        encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"], )
+        encodings = self.get_encoder("Protein_seqs").forward(X["Protein_seqs"], None)
 
         embeddings = []
         for layer, _ in self.hparams.embedder.items():
             if X[layer].dim() > 2:
                 X[layer] = X[layer].squeeze(0)
                 X[layer], _ = remove_self_loops(X[layer], None)
-            embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
+            embeddings.append(self.get_embedder(layer).forward(encodings, None))
 
         if hasattr(self, "_multiplex_embedder"):
-            embeddings = self._multiplex_embedder.forward(embeddings, )
+            embeddings = self._multiplex_embedder.forward(embeddings, None)
         else:
             embeddings = torch.cat(embeddings, dim=1)
 
@@ -157,13 +157,13 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
             if X[layer].dim() > 2:
                 X[layer] = X[layer].squeeze(0)
                 X[layer], _ = remove_self_loops(X[layer], None)
-            multi_embeddings.append(self.get_embedder(layer).forward(encodings, X[layer]))
+            multi_embeddings.append(self.get_embedder(layer).forward(encodings, None))
 
         if return_multi_emb:
             return multi_embeddings
 
         if hasattr(self, "_multiplex_embedder"):
-            embeddings = self._multiplex_embedder.forward(multi_embeddings, )
+            embeddings = self._multiplex_embedder.forward(multi_embeddings, None)
         else:
             embeddings = torch.cat(multi_embeddings, 1)
 
@@ -257,7 +257,7 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             # nonzero_index = X[node_type].sum(1) > 0
             # print("nonzero_index", nonzero_index)
             # inputs = X[node_type][nonzero_index, :]
-            encodings[node_type] = self.get_encoder(node_type).forward(X[node_type], )
+            encodings[node_type] = self.get_encoder(node_type).forward(X[node_type], None)
             # print(f"{node_type}, {encodings[node_type].shape}")
 
         sample_idx_by_type = {}
@@ -266,7 +266,7 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             sample_idx_by_type[node_type] = index
             index += encodings[node_type].size(0)
 
-        embeddings = self._embedder.forward(,
+        embeddings = self._embedder.forward(, None,
                      # print("embeddings", embeddings.shape)
 
                      merge_embeddings = []
@@ -300,7 +300,7 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             sample_idx_by_type[node_type] = index
             index += encodings[node_type].size(0)
 
-        embeddings = self._embedder.forward(,
+        embeddings = self._embedder.forward(, None,
                      # print("embeddings", embeddings.shape)
 
                      merge_embeddings = []
