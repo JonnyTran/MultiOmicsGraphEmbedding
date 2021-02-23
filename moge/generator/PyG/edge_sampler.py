@@ -90,7 +90,7 @@ class EdgeSampler(HeteroNetDataset):
         assert self.testing_idx.max() < self.training_idx.min()
 
     @staticmethod
-    def get_global_node_index(triples):
+    def get_nodes(triples):
         # Gather all unique nodes from sampled triples
         global_node_index = {}
 
@@ -104,7 +104,7 @@ class EdgeSampler(HeteroNetDataset):
         return global_node_index
 
     @staticmethod
-    def get_local_edge_index(triples, global_node_index):
+    def get_relabled_edge_index(triples, global_node_index):
         edges_pos = {}
         edges_neg = {}
 
@@ -185,11 +185,11 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
                             if is_negative(key)})
 
         # Set of all nodes from sampled triples
-        triplets_node_index = EdgeSampler.get_global_node_index(triples)
+        triplets_node_index = EdgeSampler.get_nodes(triples)
 
         # Get true edges from triples
-        edges_pos, edges_neg = EdgeSampler.get_local_edge_index(triples=triples,
-                                                                global_node_index=triplets_node_index)
+        edges_pos, edges_neg = EdgeSampler.get_relabled_edge_index(triples=triples,
+                                                                   global_node_index=triplets_node_index)
 
         # Whether to negative sampling
         if not edges_neg:
@@ -217,13 +217,7 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
                                                   new_node_index=sampled_local_nodes)
 
         # Get dict to convert from global node index to batch node index
-        local2batch = {node_type: dict(zip(global_node_index[node_type].numpy(),
-                                           range(len(global_node_index[node_type])))) \
-                       for node_type in global_node_index}
-
-        edge_index_dict = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
-                                                         sampled_local_nodes=global_node_index,
-                                                         local2batch=local2batch,
+        edge_index_dict = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id, sampled_local_nodes=global_node_index,
                                                          filter_nodes=2)
 
         if self.use_reverse:

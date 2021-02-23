@@ -218,14 +218,10 @@ class HeteroNeighborSampler(HeteroNetDataset):
              "global_node_index": sampled_local_nodes,
              "x_dict": {}}
 
-        local2batch = {
-            node_type: dict(zip(sampled_local_nodes[node_type].numpy(),
-                                range(len(sampled_local_nodes[node_type])))
-                            ) for node_type in sampled_local_nodes}
+
 
         X["edge_index_dict"] = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
                                                               sampled_local_nodes=sampled_local_nodes,
-                                                              local2batch=local2batch,
                                                               filter_nodes=filter)
 
         # x_dict attributes
@@ -251,17 +247,20 @@ class HeteroNeighborSampler(HeteroNetDataset):
         # assert y.size(0) == weights.size(0)
         return X, y, weights
 
-    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, local2batch: dict,
-                                  filter_nodes: bool):
+    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, filter_nodes: bool):
         """
         # Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and `global_node_index`
         :param adjs:
         :param n_id:
         :param sampled_local_nodes:
-        :param local2batch:
         :param filter_nodes:
         :return:
         """
+        relabel_nodes = {
+            node_type: dict(zip(sampled_local_nodes[node_type].numpy(),
+                                range(len(sampled_local_nodes[node_type])))
+                            ) for node_type in sampled_local_nodes}
+
         edge_index_dict = {}
         for adj in adjs:
             for edge_type_id in self.edge_type[adj.e_id].unique():
@@ -293,10 +292,10 @@ class HeteroNeighborSampler(HeteroNetDataset):
 
                 # Filter nodes from all node types
                 else:
-                    if head_type not in local2batch or tail_type not in local2batch: continue
+                    if head_type not in relabel_nodes or tail_type not in relabel_nodes: continue
 
                     allowed_nodes_idx = torch.cat([self.local2global[ntype][list(local_global.keys())] \
-                                                   for ntype, local_global in local2batch.items()], dim=0)
+                                                   for ntype, local_global in relabel_nodes.items()], dim=0)
 
                     mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
                     edge_index = edge_index[:, mask]
@@ -304,8 +303,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
                 if edge_index.shape[1] == 0: continue
 
                 # Convert node global index -> local index -> batch index
-                edge_index[0] = self.local_node_idx[edge_index[0]].apply_(local2batch[head_type].get)
-                edge_index[1] = self.local_node_idx[edge_index[1]].apply_(local2batch[tail_type].get)
+                edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
+                edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
 
                 edge_index_dict.setdefault(metapath, []).append(edge_index)
 
@@ -323,3 +322,16 @@ class HeteroNeighborSampler(HeteroNetDataset):
         return ~edge_df.duplicated(subset=[0, 1])
 
 
+def intersection(edge_index_dict_A, edge_index_dict_B):
+    inters = {}
+    for metapath, edge_index in edge_index_dict_A.items():
+        if metapath not in edge_index_dict_B:
+            inters[metapath] = 0
+            continue
+
+        A = pd.DataFrame(edge_index.T.numpy())
+        B = pd.DataFrame(edge_index_dict_B[metapath].T.numpy())
+        int_df = pd.merge(A, B, how='inner', on=[0, 1])
+        inters[metapath] = int_df.shape[0]
+
+    return inters
