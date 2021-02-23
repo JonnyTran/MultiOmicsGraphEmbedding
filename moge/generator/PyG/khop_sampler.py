@@ -129,7 +129,7 @@ class KHopSampler(torch.utils.data.DataLoader):
                 if self.flow == "target_to_source":
                     edge_index = torch.stack([row, col], dim=0)
                 else:
-                    edge_index = torch.stack([row, col], dim=0)
+                    edge_index = torch.stack([col, row], dim=0)
                 adjs.append(EdgeIndex(edge_index, e_id, size))
 
         if len(adjs) > 1:

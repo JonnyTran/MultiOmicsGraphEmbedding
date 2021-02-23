@@ -4,12 +4,44 @@ import numpy as np
 import pandas as pd
 import torch
 from ogb.nodeproppred import PygNodePropPredDataset
-from torch_geometric.data import NeighborSampler
+
+import torch_geometric
+from torch_geometric.data.sampler import Adj, EdgeIndex
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.network import HeteroNetDataset
 from moge.generator.PyG.khop_sampler import KHopSampler
 from moge.module.utils import tensor_sizes
+
+
+class NeighborSampler(torch_geometric.data.NeighborSampler):
+    def sample(self, batch):
+        if not isinstance(batch, torch.Tensor):
+            batch = torch.tensor(batch)
+
+        batch_size: int = len(batch)
+
+        adjs = []
+        n_id = batch
+        for size in self.sizes:
+            adj_t, n_id = self.adj_t.sample_adj(n_id, size, replace=False)
+            e_id = adj_t.storage.value()
+            size = adj_t.sparse_sizes()[::-1]
+            if self.__val__ is not None:
+                adj_t.set_value_(self.__val__[e_id], layout='coo')
+
+            if self.is_sparse_tensor:
+                adjs.append(Adj(adj_t, e_id, size))
+            else:
+                row, col, _ = adj_t.coo()
+                edge_index = torch.stack([row, col], dim=0)  # flow target_to_source
+                adjs.append(EdgeIndex(edge_index, e_id, size))
+
+        if len(adjs) > 1:
+            return batch_size, n_id, adjs[::-1]
+        else:
+            return batch_size, n_id, adjs[0]
+
 
 class HeteroNeighborSampler(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
@@ -32,8 +64,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
                               edge_type in self.edge_index_dict}
 
-        self.neighbor_sampler = KHopSampler(self.edge_index, node_idx=self.training_idx,
-                                            sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
+        self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
+                                                sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
