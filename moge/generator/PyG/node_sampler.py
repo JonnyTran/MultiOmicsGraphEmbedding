@@ -134,7 +134,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)
 
-        self.graph_sampler = NeighborSampler(dataset)
+        self.graph_sampler = NeighborSampler(self)
 
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
