@@ -44,12 +44,12 @@ def get_sampler_homo(get_dataset_ogb_homo):
     return dataset
 
 
-def test_generator_hetero(get_sampler_homo):
-    X, y, z = get_sampler_homo.sample(get_sampler_homo.training_idx[:50], mode="train")
+def test_generator_hetero(get_dataset_ogb_hetero):
+    X, y, z = get_dataset_ogb_hetero.sample(get_dataset_ogb_hetero.training_idx[:50], mode="train")
     print(tensor_sizes({"X": X, "y": y, "z": z}))
     assert len(X) + len(y) + len(z) >= 3
 
-    X, y, z = get_sampler_homo.sample(get_sampler_homo.validation_idx[:50], mode="valid")
+    X, y, z = get_dataset_ogb_hetero.sample(get_dataset_ogb_hetero.validation_idx[:50], mode="valid")
     print(tensor_sizes({"X": X, "y": y, "z": z}))
     assert len(X) + len(y) + len(z) >= 3
 
@@ -65,30 +65,30 @@ def test_generator_homo(get_sampler_homo):
     assert len(X) + len(y) + len(z) >= 3
 
 
-def test_sampled_edges_exists(get_sampler_homo):
-    node_idx = torch.randint(len(get_sampler_homo.node_type), (100,))
-    batch_size, n_id, adjs = get_sampler_homo.graph_sampler.sample(node_idx)
+def test_sampled_edges_exists_hetero(get_dataset_ogb_hetero):
+    node_idx = torch.randint(len(get_dataset_ogb_hetero.node_type), (100,))
+    batch_size, n_id, adjs = get_dataset_ogb_hetero.graph_sampler.sample(node_idx)
 
-    global_node_index = get_sampler_homo.get_local_node_index(adjs, n_id, )
-
-    edge_index = get_sampler_homo.get_local_edge_index_dict(adjs, n_id, global_node_index, filter_nodes=False)
+    global_node_index = get_dataset_ogb_hetero.graph_sampler.get_local_node_index(adjs, n_id, )
+    edge_index = get_dataset_ogb_hetero.graph_sampler.get_local_edge_index_dict(adjs, n_id, global_node_index,
+                                                                                filter_nodes=False)
 
     edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], axis=0) \
                   for k, v in edge_index.items()}
 
     edge_counts = edge_sizes(edge_index)
-    intersection_counts = edge_sizes(edge_dict_intersection(edge_index, get_sampler_hetero.edge_index_dict))
+    intersection_counts = edge_sizes(edge_dict_intersection(edge_index, get_dataset_ogb_hetero.edge_index_dict))
 
     assert edge_counts == intersection_counts
 
 
-def test_sampled_edges_exists(get_sampler_homo):
+def test_sampled_edges_exists_homo(get_sampler_homo):
     node_idx = torch.randint(len(get_sampler_homo.node_type), (100,))
     batch_size, n_id, adjs = get_sampler_homo.graph_sampler.sample(node_idx)
 
-    global_node_index = get_sampler_homo.get_local_node_index(adjs, n_id, )
-
-    edge_index = get_sampler_homo.get_local_edge_index_dict(adjs, n_id, global_node_index, filter_nodes=False)
+    global_node_index = get_sampler_homo.graph_sampler.get_local_node_index(adjs, n_id, )
+    edge_index = get_sampler_homo.graph_sampler.get_local_edge_index_dict(adjs, n_id, global_node_index,
+                                                                          filter_nodes=False)
 
     edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], axis=0) \
                   for k, v in edge_index.items()}

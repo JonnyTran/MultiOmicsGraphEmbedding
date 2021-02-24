@@ -14,23 +14,23 @@ from moge.generator.utils import nonduplicate_indices
 
 
 class NeighborSampler():
-    def __init__(self, dataset: HeteroNetDataset):
-        self.head_node_type = dataset.head_node_type
+    def __init__(self, neighbor_sizes, edge_index_dict, num_nodes_dict, node_types, head_node_type):
+        self.head_node_type = head_node_type
 
         # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
         num_nodes_dict = OrderedDict(
-            [(node_type, dataset.num_nodes_dict[node_type]) for node_type in dataset.node_types])
+            [(node_type, num_nodes_dict[node_type]) for node_type in node_types])
 
         self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = \
-            group_hetero_graph(dataset.edge_index_dict, num_nodes_dict)
+            group_hetero_graph(edge_index_dict, num_nodes_dict)
 
         self.int2node_type = {type_int: node_type for node_type, type_int in self.key2int.items() if
-                              node_type in dataset.node_types}
+                              node_type in node_types}
         self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
-                              edge_type in dataset.edge_index_dict}
+                              edge_type in edge_index_dict}
 
-        self.neighbor_sampler = torch_geometric.data.NeighborSampler(self.edge_index, node_idx=dataset.training_idx,
-                                                                     sizes=dataset.neighbor_sizes, batch_size=128,
+        self.neighbor_sampler = torch_geometric.data.NeighborSampler(self.edge_index, node_idx=None,
+                                                                     sizes=neighbor_sizes, batch_size=128,
                                                                      shuffle=True)
 
     def sample(self, batch):
@@ -134,7 +134,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)
 
-        self.graph_sampler = NeighborSampler(self)
+        self.graph_sampler = NeighborSampler(neighbor_sizes, self.edge_index_dict, self.num_nodes_dict,
+                                             self.node_types, self.head_node_type)
 
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
