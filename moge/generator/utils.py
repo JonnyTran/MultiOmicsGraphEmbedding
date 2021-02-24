@@ -14,13 +14,18 @@ def edge_dict_intersection(edge_index_dict_A, edge_index_dict_B):
             inters[metapath] = 0
             continue
 
-        A = pd.DataFrame(edge_index.T.numpy(), columns=["source", "target"])
-        B = pd.DataFrame(edge_index_dict_B[metapath].T.numpy(), columns=["source", "target"])
-        int_df = pd.merge(A, B, how='inner', on=["source", "target"], sort=True)
-        int_df = int_df[~int_df.duplicated()]
-        inters[metapath] = torch.tensor(int_df.to_numpy().T, dtype=torch.long)
+        inters[metapath] = edge_intersection(edge_index, edge_index_dict_B[metapath])
 
     return inters
+
+
+def edge_intersection(edge_index_A, edge_index_B, remove_duplicates=True):
+    A = pd.DataFrame(edge_index_A.T.numpy(), columns=["source", "target"])
+    B = pd.DataFrame(edge_index_B.T.numpy(), columns=["source", "target"])
+    int_df = pd.merge(A, B, how='inner', on=["source", "target"], sort=True)
+    if remove_duplicates:
+        int_df = int_df[~int_df.duplicated()]
+    return torch.tensor(int_df.to_numpy().T, dtype=torch.long)
 
 
 def nonduplicate_indices(edge_index):
