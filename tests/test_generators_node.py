@@ -45,28 +45,24 @@ def generator_homo(generate_dataset_homo):
 
 
 def test_generator_hetero(generator_hetero):
-    X, y, _ = generator_hetero.sample(random.sample(generator_hetero.training_idx.numpy().tolist(), 50),
-                                      mode="train")
+    X, y, _ = generator_hetero.sample(random.sample(generator_hetero.training_idx.numpy().tolist(), 50), )
     print(tensor_sizes({"X": X, "y": y}))
     assert X is not None
     assert y is not None
 
-    X, y, _ = generator_hetero.sample(random.sample(generator_hetero.validation_idx.numpy().tolist(), 50),
-                                      mode="valid")
+    X, y, _ = generator_hetero.sample(random.sample(generator_hetero.validation_idx.numpy().tolist(), 50), )
     print(tensor_sizes({"X": X, "y": y}))
     assert X is not None
     assert y is not None
 
 
 def test_generator_homo(generator_homo):
-    X, y, _ = generator_homo.sample(random.sample(generator_homo.training_idx.numpy().tolist(), 50),
-                                    mode="train")
+    X, y, _ = generator_homo.sample(random.sample(generator_homo.training_idx.numpy().tolist(), 50))
     print(tensor_sizes({"X": X, "y": y}))
     assert X is not None
     assert y is not None
 
-    X, y, _ = generator_homo.sample(random.sample(generator_homo.validation_idx.numpy().tolist(), 50),
-                                    mode="valid")
+    X, y, _ = generator_homo.sample(random.sample(generator_homo.validation_idx.numpy().tolist(), 50))
     print(tensor_sizes({"X": X, "y": y}))
     assert X is not None
     assert y is not None

@@ -30,7 +30,7 @@ class NeighborSampler():
                                                                      sizes=neighbor_sizes, batch_size=128,
                                                                      shuffle=True)
 
-    def sample(self, node_ids, edge_index=None):
+    def sample(self, node_ids):
         local_node_idx = self.get_global_nidx(node_ids)
 
         batch_size, n_id, adjs = self.neighbor_sampler.sample(batch=local_node_idx)

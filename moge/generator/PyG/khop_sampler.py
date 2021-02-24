@@ -1,6 +1,7 @@
 from typing import Optional, Tuple, NamedTuple
 
 import torch
+import torch_geometric
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse.tensor import SparseTensor
 
@@ -74,8 +75,10 @@ class KHopSampler(torch.utils.data.DataLoader):
         self.sizes = sizes
         self.return_e_id = return_e_id
         self.is_sparse_tensor = isinstance(edge_index, SparseTensor)
-        self.flow = flow
         self.__val__ = None
+
+        self.flow = flow
+        func = torch_geometric.utils.k_hop_subgraph
 
         # Obtain a *transposed* `SparseTensor` instance.
         edge_index = edge_index.to('cpu')

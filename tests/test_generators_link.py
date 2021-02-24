@@ -53,11 +53,11 @@ def test_generator_hetero(generator_hetero):
 
 
 def test_generator_homo(generator_homo):
-    X, y, z = generator_homo.sample(generator_homo.training_idx[:50], mode="train")
+    X, y, z = generator_homo.sample(generator_homo.training_idx[:50])
     print(tensor_sizes({"X": X, "y": y, "z": z}))
     assert len(X) + len(y) + len(z) >= 3
 
-    X, y, z = generator_homo.sample(generator_homo.validation_idx[:50], mode="valid")
+    X, y, z = generator_homo.sample(generator_homo.validation_idx[:50])
     print(tensor_sizes({"X": X, "y": y, "z": z}))
     assert len(X) + len(y) + len(z) >= 3
 

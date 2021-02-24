@@ -1,8 +1,4 @@
-import itertools
-import multiprocessing
 import numpy as np
-
-import pandas as pd
 import pytorch_lightning as pl
 import torch
 from cogdl.models.emb.hin2vec import Hin2vec, Hin2vec_layer, RWgraph, tqdm
@@ -13,15 +9,13 @@ from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
+from moge.generator import HeteroNetDataset
+from moge.module.PyG.hgt import HGTModel
+from moge.module.PyG.latte import LATTE
+from moge.module.classifier import DenseClassification
 from moge.module.cogdl.conv import GTN as Gtn
 from moge.module.cogdl.conv import HAN as Han
-
-from moge.generator import HeteroNetDataset
-from moge.module.PyG.latte import LATTE
-from moge.module.PyG.hgt import HGTModel, Graph, sample_subgraph, feature_MAG, to_torch
-from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
-from moge.module.metrics import Metrics
 from moge.module.trainer import NodeClfTrainer
 from moge.module.utils import filter_samples
 
@@ -606,7 +600,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         for i in range(self.walk_length):
             keys = self.metapath[i % len(self.metapath)]
             adj = self.adj_dict[keys]
-            batch = adj.sample(num_neighbors=1, subset=batch).squeeze()
+            batch = adj.sample().squeeze()
             rws.append(batch)
 
         rw = torch.stack(rws, dim=-1)
