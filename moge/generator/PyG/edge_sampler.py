@@ -204,7 +204,8 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
 
 
         # Neighbor sampling with global_node_index
-        batch_nodes_global = torch.cat([self.local2global[ntype][nid] for ntype, nid in triplets_node_index.items()], 0)
+        batch_nodes_global = torch.cat(
+            [self.graph_sampler.local2global[ntype][nid] for ntype, nid in triplets_node_index.items()], 0)
         batch_size, n_id, adjs = self.graph_sampler.sample(batch_nodes_global)
         if not isinstance(adjs, list):
             adjs = [adjs]
