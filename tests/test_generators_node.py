@@ -16,14 +16,19 @@ dataset_path = "/home/jonny/Bioinformatics_ExternalData/OGB/"
 
 
 @pytest.fixture
-def get_dataset_ogb_hetero():
+def generate_dataset_hetero():
     ogbn = PygNodePropPredDataset(name="ogbn-mag", root=dataset_path)
     return ogbn
 
 
 @pytest.fixture
-def get_sampler_hetero(get_dataset_ogb_hetero):
-    dataset = HeteroNeighborSampler(get_dataset_ogb_hetero, neighbor_sizes=[20, 10],
+def generate_dataset_homo():
+    return DBLP_HANDataset()
+
+
+@pytest.fixture
+def generator_hetero(generate_dataset_hetero):
+    dataset = HeteroNeighborSampler(generate_dataset_hetero, neighbor_sizes=[20, 10],
                                     head_node_type="paper",
                                     directed=True,
                                     add_reverse_metapaths=True)
@@ -31,12 +36,7 @@ def get_sampler_hetero(get_dataset_ogb_hetero):
 
 
 @pytest.fixture
-def get_dataset_ogb_homo():
-    return DBLP_HANDataset()
-
-
-@pytest.fixture
-def get_sampler_homo(get_dataset_ogb_homo):
+def generator_homo(generate_dataset_homo):
     dataset = HeteroNeighborSampler(DBLP_HANDataset(), neighbor_sizes=[25, 20],
                                     node_types=["A", "P", "C", "T"], head_node_type="A",
                                     metapaths=["AC", "AP", "AT"],
@@ -47,63 +47,65 @@ def get_sampler_homo(get_dataset_ogb_homo):
     return dataset
 
 
-def test_generator_hetero(get_sampler_hetero):
-    X, y, _ = get_sampler_hetero.sample(random.sample(get_sampler_hetero.training_idx.numpy().tolist(), 50),
-                                        mode="train")
-    print(tensor_sizes({"X": X, "y": y}))
-    assert X is not None
-    assert y is not None
-
-    X, y, _ = get_sampler_hetero.sample(random.sample(get_sampler_hetero.validation_idx.numpy().tolist(), 50),
-                                        mode="valid")
-    print(tensor_sizes({"X": X, "y": y}))
-    assert X is not None
-    assert y is not None
-
-
-def test_generator_homo(get_sampler_homo):
-    X, y, _ = get_sampler_homo.sample(random.sample(get_sampler_homo.training_idx.numpy().tolist(), 50),
+def test_generator_hetero(generator_hetero):
+    X, y, _ = generator_hetero.sample(random.sample(generator_hetero.training_idx.numpy().tolist(), 50),
                                       mode="train")
     print(tensor_sizes({"X": X, "y": y}))
     assert X is not None
     assert y is not None
 
-    X, y, _ = get_sampler_homo.sample(random.sample(get_sampler_homo.validation_idx.numpy().tolist(), 50),
+    X, y, _ = generator_hetero.sample(random.sample(generator_hetero.validation_idx.numpy().tolist(), 50),
                                       mode="valid")
     print(tensor_sizes({"X": X, "y": y}))
     assert X is not None
     assert y is not None
 
 
-def test_sampled_edges_exists_hetero(get_sampler_hetero):
-    node_idx = torch.randint(sum(get_sampler_hetero.num_nodes_dict.values()), (100,))
-    batch_size, n_id, adjs = get_sampler_hetero.graph_sampler.sample(node_idx)
+def test_generator_homo(generator_homo):
+    X, y, _ = generator_homo.sample(random.sample(generator_homo.training_idx.numpy().tolist(), 50),
+                                    mode="train")
+    print(tensor_sizes({"X": X, "y": y}))
+    assert X is not None
+    assert y is not None
 
-    global_node_index = get_sampler_hetero.get_local_node_index(adjs, n_id, )
+    X, y, _ = generator_homo.sample(random.sample(generator_homo.validation_idx.numpy().tolist(), 50),
+                                    mode="valid")
+    print(tensor_sizes({"X": X, "y": y}))
+    assert X is not None
+    assert y is not None
 
-    edge_index = get_sampler_hetero.get_local_edge_index_dict(adjs, n_id, global_node_index, filter_nodes=False)
+
+def test_sampled_edges_exists_hetero(generator_hetero):
+    node_idx = torch.randint(sum(generator_hetero.num_nodes_dict.values()), (100,))
+    batch_size, n_id, adjs = generator_hetero.graph_sampler.sample(node_idx)
+
+    global_node_index = generator_hetero.graph_sampler.get_local_node_index(adjs, n_id, )
+
+    edge_index = generator_hetero.graph_sampler.get_local_edge_index_dict(adjs, n_id, global_node_index,
+                                                                          filter_nodes=False)
 
     edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], axis=0) \
                   for k, v in edge_index.items()}
 
     edge_counts = edge_sizes(edge_index)
-    intersection_counts = edge_sizes(edge_dict_intersection(edge_index, get_sampler_hetero.edge_index_dict))
+    intersection_counts = edge_sizes(edge_dict_intersection(edge_index, generator_hetero.edge_index_dict))
 
     assert edge_counts == intersection_counts
 
 
-def test_sampled_edges_exists_homo(get_sampler_homo):
-    node_idx = torch.randint(sum(get_sampler_homo.num_nodes_dict.values()), (100,))
-    batch_size, n_id, adjs = get_sampler_homo.graph_sampler.sample(node_idx)
+def test_sampled_edges_exists_homo(generator_homo):
+    node_idx = torch.randint(sum(generator_homo.num_nodes_dict.values()), (100,))
+    batch_size, n_id, adjs = generator_homo.graph_sampler.sample(node_idx)
 
-    global_node_index = get_sampler_homo.get_local_node_index(adjs, n_id, )
+    global_node_index = generator_homo.graph_sampler.get_local_node_index(adjs, n_id, )
 
-    edge_index = get_sampler_homo.get_local_edge_index_dict(adjs, n_id, global_node_index, filter_nodes=False)
+    edge_index = generator_homo.graph_sampler.get_local_edge_index_dict(adjs, n_id, global_node_index,
+                                                                        filter_nodes=False)
 
     edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], axis=0) \
                   for k, v in edge_index.items()}
 
     edge_counts = edge_sizes(edge_index)
-    intersection_counts = edge_sizes(edge_dict_intersection(edge_index, get_sampler_homo.edge_index_dict))
+    intersection_counts = edge_sizes(edge_dict_intersection(edge_index, generator_homo.edge_index_dict))
 
     assert edge_counts == intersection_counts
