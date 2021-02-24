@@ -1,4 +1,5 @@
 import pytest
+import random
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
@@ -61,7 +62,7 @@ def test_generator_homo(generator_homo):
 
 
 def test_sampled_edges_exists_hetero(generator_hetero):
-    node_idx = torch.randint(sum(generator_hetero.num_nodes_dict.values()), (100,))
+    node_idx = random.sample(generator_hetero.training_idx.numpy().tolist(), 50)
     batch_size, n_id, adjs = generator_hetero.graph_sampler.sample(node_idx)
     global_node_index = generator_hetero.graph_sampler.get_nodes_dict(adjs, n_id, )
     edge_index = generator_hetero.graph_sampler.get_edge_index_dict(adjs, n_id, global_node_index,
@@ -77,7 +78,7 @@ def test_sampled_edges_exists_hetero(generator_hetero):
 
 
 def test_sampled_edges_exists_homo(generator_homo):
-    node_idx = torch.randint(sum(generator_homo.num_nodes_dict.values()), (100,))
+    node_idx = random.sample(generator_homo.training_idx.numpy().tolist(), 50)
     batch_size, n_id, adjs = generator_homo.graph_sampler.sample(node_idx)
     global_node_index = generator_homo.graph_sampler.get_nodes_dict(adjs, n_id, )
     edge_index = generator_homo.graph_sampler.get_edge_index_dict(adjs, n_id, global_node_index,
