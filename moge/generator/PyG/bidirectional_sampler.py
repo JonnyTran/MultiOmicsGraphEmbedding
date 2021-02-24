@@ -1,19 +1,12 @@
 #!/usr/bin/python3
 
-from collections import defaultdict
-from tqdm import tqdm
-
 import pandas as pd
-import numpy as np
 import torch
-
 from ogb.linkproppred import PygLinkPropPredDataset
 
-from torch.utils.data import Dataset
-from moge.generator import HeteroNeighborSampler, TripletSampler, EdgeSampler
-from moge.module.PyG.latte import tag_negative, untag_negative, is_negative
-from moge.module.sampling import negative_sample_head_tail
-from moge.module.utils import tensor_sizes
+from moge.generator import HeteroNeighborSampler, TripletSampler
+from moge.generator.utils import merge_node_index
+from moge.module.PyG.latte import is_negative
 
 
 class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
@@ -107,8 +100,8 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         sampled_local_nodes = self.graph_sampler.get_local_node_index(adjs, n_id)
 
         # Merge triplets_node_index + sampled_local_nodes = global_node_index, while ensuring index order in triplets_node_index
-        global_node_index = self.merge_node_index(old_node_index=triplets_node_index,
-                                                  new_node_index=sampled_local_nodes)
+        global_node_index = merge_node_index(old_node_index=triplets_node_index,
+                                             new_node_index=sampled_local_nodes)
 
         # Get dict to convert from global node index to batch node index
         edge_index_dict = self.graph_sampler.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
@@ -157,19 +150,3 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
     def get_degrees(self, node_ids: torch.LongTensor, relation_id, node_type):
         return node_ids.apply_(lambda nid: self.degree_counts.get((nid, relation_id, node_type), 1)).type(torch.float)
-
-    def merge_node_index(self, old_node_index, new_node_index):
-        merged = {}
-        for ntype, new_nodes in new_node_index.items():
-            if ntype not in old_node_index:
-                merged.setdefault(ntype, []).append(new_nodes)
-            else:
-                merged.setdefault(ntype, []).append(old_node_index[ntype])
-                new_nodes_mask = np.isin(new_nodes, old_node_index[ntype], invert=True)
-                merged[ntype].append(new_nodes[new_nodes_mask])
-            merged[ntype] = torch.cat(merged[ntype], 0)
-        return merged
-
-
-
-

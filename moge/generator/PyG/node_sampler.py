@@ -1,12 +1,9 @@
 from collections import OrderedDict
 
 import numpy as np
-import pandas as pd
 import torch
-from ogb.nodeproppred import PygNodePropPredDataset
-
 import torch_geometric
-from torch_geometric.data.sampler import Adj, EdgeIndex
+from ogb.nodeproppred import PygNodePropPredDataset
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.network import HeteroNetDataset
@@ -267,9 +264,10 @@ class HeteroNeighborSampler(HeteroNetDataset):
             n_idx = torch.tensor(n_idx)
 
         if isinstance(n_idx, dict):
-            n_idx_to_sample = torch.cat([self.local2global[ntype][nid] for ntype, nid in n_idx.items()], 0)
+            n_idx_to_sample = torch.cat([self.graph_sampler.local2global[ntype][nid] for ntype, nid in n_idx.items()],
+                                        0)
         else:
-            n_idx_to_sample = self.local2global[self.head_node_type][n_idx]
+            n_idx_to_sample = self.graph_sampler.local2global[self.head_node_type][n_idx]
 
         # Sample subgraph
         batch_size, n_id, adjs = self.graph_sampler.sample(n_idx_to_sample)
