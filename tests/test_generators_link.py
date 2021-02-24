@@ -5,8 +5,8 @@ import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
 import moge
+import moge.generator.PyG.edge_sampler
 import moge.generator.PyG.triplet_sampler
-from moge.generator import BidirectionalSampler
 from moge.generator.utils import edge_dict_intersection, edge_sizes
 from moge.module.utils import tensor_sizes
 
@@ -27,19 +27,20 @@ def generate_dataset_homo():
 
 @pytest.fixture
 def generator_hetero(generate_dataset_hetero):
-    dataset = BidirectionalSampler(generate_dataset_hetero, neighbor_sizes=[10, 5],
-                                   directed=True,
-                                   node_types=['protein', 'drug', 'function', 'disease', 'sideeffect'],
-                                   head_node_type="protein",
-                                   add_reverse_metapaths=False)
+    dataset = moge.generator.PyG.triplet_sampler.BidirectionalSampler(generate_dataset_hetero, neighbor_sizes=[10, 5],
+                                                                      directed=True,
+                                                                      node_types=['protein', 'drug', 'function',
+                                                                                  'disease', 'sideeffect'],
+                                                                      head_node_type="protein",
+                                                                      add_reverse_metapaths=False)
     return dataset
 
 
 @pytest.fixture
 def generator_homo(generate_dataset_homo):
-    dataset = moge.generator.PyG.triplet_sampler.BidirectionalSampler(generate_dataset_homo, neighbor_sizes=[10, 5],
-                                                                      directed=True,
-                                                                      add_reverse_metapaths=False)
+    dataset = moge.generator.PyG.edge_sampler.BidirectionalSampler(generate_dataset_homo, neighbor_sizes=[10, 5],
+                                                                   directed=True,
+                                                                   add_reverse_metapaths=False)
     return dataset
 
 
