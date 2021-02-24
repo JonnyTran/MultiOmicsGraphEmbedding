@@ -1,14 +1,17 @@
-import os, logging
+import logging
+import os
+
 import dill
+import torch
 from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
-from ogb.nodeproppred import PygNodePropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
-import torch
+from ogb.nodeproppred import PygNodePropPredDataset
 from torch_geometric.datasets import AMiner
 
 import moge
-from moge.generator.PyG.bidirectional_sampler import HeteroNeighborSampler
+import moge.generator.PyG.triplet_sampler
+from moge.generator.PyG.graphsaint_sampler import HeteroNeighborSampler
 from moge.module.utils import preprocess_input
 
 
@@ -86,21 +89,21 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
         if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
                 and not hasattr(ogbl[0], "edge_reltype"):
 
-            dataset = moge.generator.PyG.edge_sampler.BidirectionalSampler(ogbl,
-                                                                           neighbor_sizes=[20, 15],
-                                                                           directed=False,
-                                                                           add_reverse_metapaths=hparams.use_reverse)
+            dataset = moge.generator.PyG.triplet_sampler.BidirectionalSampler(ogbl,
+                                                                              neighbor_sizes=[20, 15],
+                                                                              directed=False,
+                                                                              add_reverse_metapaths=hparams.use_reverse)
 
         else:
-            from moge.generator.PyG.bidirectional_sampler import BidirectionalSampler
+            from moge.generator import BidirectionalSampler
 
-            dataset = moge.generator.PyG.bidirectional_sampler.BidirectionalSampler(ogbl, directed=True,
-                                                                                    neighbor_sizes=[
-                                                                                        hparams.n_neighbors_1],
-                                                                                    negative_sampling_size=hparams.neg_sampling_ratio,
-                                                                                    test_negative_sampling_size=500,
-                                                                                    head_node_type=None,
-                                                                                    add_reverse_metapaths=hparams.use_reverse)
+            dataset = moge.generator.PyG.triplet_sampler.BidirectionalSampler(ogbl, directed=True,
+                                                                              neighbor_sizes=[
+                                                                                  hparams.n_neighbors_1],
+                                                                              negative_sampling_size=hparams.neg_sampling_ratio,
+                                                                              test_negative_sampling_size=500,
+                                                                              head_node_type=None,
+                                                                              add_reverse_metapaths=hparams.use_reverse)
 
         logging.info(f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
 
