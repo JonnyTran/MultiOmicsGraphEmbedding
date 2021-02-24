@@ -1,11 +1,8 @@
-from typing import List, Optional, Tuple, NamedTuple, Union
+from typing import Optional, Tuple, NamedTuple
 
 import torch
-from torch_geometric import utils
-from torch_sparse import SparseTensor
-
+import torch_geometric
 from torch_geometric.utils.num_nodes import maybe_num_nodes
-
 from torch_sparse.tensor import SparseTensor
 
 
@@ -46,6 +43,8 @@ def sample_adj(src: SparseTensor, subset: torch.Tensor, num_neighbors: int,
 
 SparseTensor.sample = sample
 SparseTensor.sample_adj = sample_adj
+
+torch_geometric.utils.k_hop_subgraph
 
 
 class EdgeIndex(NamedTuple):
