@@ -1,12 +1,14 @@
 import logging
+
 import numpy as np
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
-from moge.module.PyG.latte import tag_negative, is_negative
-from moge.generator.network import HeteroNetDataset
 from moge.generator.PyG.node_sampler import HeteroNeighborSampler
+from moge.generator.network import HeteroNetDataset
+from moge.module.PyG.latte import is_negative
 from moge.module.utils import tensor_sizes
+
 
 class TripletSampler(HeteroNetDataset):
     def __init__(self, dataset: PygLinkPropPredDataset, node_types=None, metapaths=None, head_node_type=None,
@@ -206,24 +208,24 @@ class TripletSampler(HeteroNetDataset):
     @staticmethod
     def get_nodes(triples, relation_ids, metapaths):
         # Gather all nodes sampled
-        global_node_index = {}
+        node_index_dict = {}
 
         for relation_id in relation_ids:
             metapath = metapaths[relation_id]
             head_type, tail_type = metapath[0], metapath[-1]
 
             mask = triples["relation"] == relation_id
-            global_node_index.setdefault(head_type, []).append(triples["head"][mask])
-            global_node_index.setdefault(tail_type, []).append(triples["tail"][mask])
+            node_index_dict.setdefault(head_type, []).append(triples["head"][mask])
+            node_index_dict.setdefault(tail_type, []).append(triples["tail"][mask])
 
             if any(["neg" in k for k in triples.keys()]):
-                global_node_index.setdefault(head_type, []).append(triples["head_neg"][mask].view(-1))
-                global_node_index.setdefault(tail_type, []).append(triples["tail_neg"][mask].view(-1))
+                node_index_dict.setdefault(head_type, []).append(triples["head_neg"][mask].view(-1))
+                node_index_dict.setdefault(tail_type, []).append(triples["tail_neg"][mask].view(-1))
 
         # Find union of nodes from all relations
-        global_node_index = {node_type: torch.cat(node_sets, dim=0).unique() \
-                             for node_type, node_sets in global_node_index.items()}
-        return global_node_index
+        node_index_dict = {node_type: torch.cat(node_sets, dim=0).unique() \
+                           for node_type, node_sets in node_index_dict.items()}
+        return node_index_dict
 
 
 class TripletNeighborSampler(HeteroNeighborSampler):

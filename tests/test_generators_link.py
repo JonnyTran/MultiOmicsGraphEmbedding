@@ -1,15 +1,11 @@
-import logging
 import pytest
-
 import torch
-
 from ogb.linkproppred import PygLinkPropPredDataset
-from ogb.nodeproppred import PygNodePropPredDataset
 
 import moge
 from moge.generator import BidirectionalSampler
-from moge.module.utils import tensor_sizes
 from moge.generator.utils import edge_dict_intersection, edge_sizes
+from moge.module.utils import tensor_sizes
 
 cohort_folder_path = "datasets"
 
@@ -67,9 +63,9 @@ def test_generator_homo(generator_homo):
 def test_sampled_edges_exists_hetero(generator_hetero):
     node_idx = torch.randint(sum(generator_hetero.num_nodes_dict.values()), (100,))
     batch_size, n_id, adjs = generator_hetero.graph_sampler.sample(node_idx)
-    global_node_index = generator_hetero.graph_sampler.get_local_node_index(adjs, n_id, )
-    edge_index = generator_hetero.graph_sampler.get_local_edge_index_dict(adjs, n_id, global_node_index,
-                                                                          filter_nodes=False)
+    global_node_index = generator_hetero.graph_sampler.get_nodes_dict(adjs, n_id, )
+    edge_index = generator_hetero.graph_sampler.get_edge_index_dict(adjs, n_id, global_node_index,
+                                                                    filter_nodes=False)
 
     edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], axis=0) \
                   for k, v in edge_index.items()}
@@ -83,9 +79,9 @@ def test_sampled_edges_exists_hetero(generator_hetero):
 def test_sampled_edges_exists_homo(generator_homo):
     node_idx = torch.randint(sum(generator_homo.num_nodes_dict.values()), (100,))
     batch_size, n_id, adjs = generator_homo.graph_sampler.sample(node_idx)
-    global_node_index = generator_homo.graph_sampler.get_local_node_index(adjs, n_id, )
-    edge_index = generator_homo.graph_sampler.get_local_edge_index_dict(adjs, n_id, global_node_index,
-                                                                        filter_nodes=False)
+    global_node_index = generator_homo.graph_sampler.get_nodes_dict(adjs, n_id, )
+    edge_index = generator_homo.graph_sampler.get_edge_index_dict(adjs, n_id, global_node_index,
+                                                                  filter_nodes=False)
 
     edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], axis=0) \
                   for k, v in edge_index.items()}

@@ -30,10 +30,23 @@ class NeighborSampler():
                                                                      sizes=neighbor_sizes, batch_size=128,
                                                                      shuffle=True)
 
-    def sample(self, batch):
-        return self.neighbor_sampler.sample(batch=batch)
+    def sample(self, node_ids, edge_index=None):
+        local_node_idx = self.get_global_nidx(node_ids)
 
-    def get_local_node_index(self, adjs, n_id):
+        batch_size, n_id, adjs = self.neighbor_sampler.sample(batch=local_node_idx)
+        if not isinstance(adjs, list):
+            adjs = [adjs]
+        return batch_size, n_id, adjs
+
+    def get_global_nidx(self, node_ids):
+        if isinstance(node_ids, dict):
+            n_idx_to_sample = torch.cat([self.local2global[ntype][nid] for ntype, nid in node_ids.items()], dim=0)
+        else:
+            n_idx_to_sample = self.local2global[self.head_node_type][node_ids]
+
+        return n_idx_to_sample
+
+    def get_nodes_dict(self, adjs, n_id):
         sampled_nodes = {}
         for adj in adjs:
             for i in [0, 1]:
@@ -49,7 +62,7 @@ class NeighborSampler():
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, filter_nodes: bool):
+    def get_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, filter_nodes: bool):
         """ Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and
         `global_node_index`
 
@@ -263,19 +276,12 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):
             n_idx = torch.tensor(n_idx)
 
-        if isinstance(n_idx, dict):
-            n_idx_to_sample = torch.cat([self.graph_sampler.local2global[ntype][nid] for ntype, nid in n_idx.items()],
-                                        0)
-        else:
-            n_idx_to_sample = self.graph_sampler.local2global[self.head_node_type][n_idx]
 
         # Sample subgraph
-        batch_size, n_id, adjs = self.graph_sampler.sample(n_idx_to_sample)
-        if not isinstance(adjs, list):
-            adjs = [adjs]
+        batch_size, n_id, adjs = self.graph_sampler.sample(n_idx)
 
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        sampled_local_nodes = self.graph_sampler.get_local_node_index(adjs, n_id)
+        sampled_local_nodes = self.graph_sampler.get_nodes_dict(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         if "train" in mode:
@@ -305,9 +311,9 @@ class HeteroNeighborSampler(HeteroNetDataset):
              "global_node_index": sampled_local_nodes,
              "x_dict": {}}
 
-        X["edge_index_dict"] = self.graph_sampler.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
-                                                                            sampled_local_nodes=sampled_local_nodes,
-                                                                            filter_nodes=filter)
+        X["edge_index_dict"] = self.graph_sampler.get_edge_index_dict(adjs=adjs, n_id=n_id,
+                                                                      sampled_local_nodes=sampled_local_nodes,
+                                                                      filter_nodes=filter)
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
