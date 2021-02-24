@@ -206,19 +206,20 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
 
         # Neighbor sampling with global_node_index
         batch_nodes_global = torch.cat([self.local2global[ntype][nid] for ntype, nid in triplets_node_index.items()], 0)
-        batch_size, n_id, adjs = self.neighbor_sampler.sample(batch_nodes_global)
+        batch_size, n_id, adjs = self.graph_sampler.sample(batch_nodes_global)
         if not isinstance(adjs, list):
             adjs = [adjs]
 
-        sampled_local_nodes = self.get_local_node_index(adjs, n_id)
+        sampled_local_nodes = self.graph_sampler.get_local_node_index(adjs, n_id)
 
         # Merge triplets_node_index + sampled_local_nodes = global_node_index, while ensuring index order in triplets_node_index
         global_node_index = self.merge_node_index(old_node_index=triplets_node_index,
                                                   new_node_index=sampled_local_nodes)
 
         # Get dict to convert from global node index to batch node index
-        edge_index_dict = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id, sampled_local_nodes=global_node_index,
-                                                         filter_nodes=2)
+        edge_index_dict = self.graph_sampler.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
+                                                                       sampled_local_nodes=global_node_index,
+                                                                       filter_nodes=2)
 
         if self.use_reverse:
             self.add_reverse_edge_index(edge_index_dict)

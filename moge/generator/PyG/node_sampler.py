@@ -10,35 +10,118 @@ from torch_geometric.data.sampler import Adj, EdgeIndex
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.network import HeteroNetDataset
+from moge.generator.utils import nonduplicate_indices
 
 
-class NeighborSampler(torch_geometric.data.NeighborSampler):
+class NeighborSampler():
+    def __init__(self, dataset: HeteroNetDataset):
+        self.head_node_type = dataset.head_node_type
+
+        # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
+        num_nodes_dict = OrderedDict(
+            [(node_type, dataset.num_nodes_dict[node_type]) for node_type in dataset.node_types])
+
+        self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = \
+            group_hetero_graph(dataset.edge_index_dict, num_nodes_dict)
+
+        self.int2node_type = {type_int: node_type for node_type, type_int in self.key2int.items() if
+                              node_type in dataset.node_types}
+        self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
+                              edge_type in dataset.edge_index_dict}
+
+        self.neighbor_sampler = torch_geometric.data.NeighborSampler(self.edge_index, node_idx=dataset.training_idx,
+                                                                     sizes=dataset.neighbor_sizes, batch_size=128,
+                                                                     shuffle=True)
+
     def sample(self, batch):
-        if not isinstance(batch, torch.Tensor):
-            batch = torch.tensor(batch)
+        return self.neighbor_sampler.sample(batch=batch)
 
-        batch_size: int = len(batch)
+    def get_local_node_index(self, adjs, n_id):
+        sampled_nodes = {}
+        for adj in adjs:
+            for i in [0, 1]:
+                node_ids = n_id[adj.edge_index[i]]
+                node_types = self.node_type[node_ids]
 
-        adjs = []
-        n_id = batch
-        for size in self.sizes:
-            adj_t, n_id = self.adj_t.sample_adj(n_id, size, replace=False)
-            e_id = adj_t.storage.value()
-            size = adj_t.sparse_sizes()[::-1]
-            if self.__val__ is not None:
-                adj_t.set_value_(self.__val__[e_id], layout='coo')
+                for node_type_id in node_types.unique():
+                    mask = node_types == node_type_id
+                    local_node_ids = self.local_node_idx[node_ids[mask]]
+                    sampled_nodes.setdefault(self.int2node_type[node_type_id.item()], []).append(local_node_ids)
 
-            if self.is_sparse_tensor:
-                adjs.append(Adj(adj_t, e_id, size))
-            else:
-                row, col, _ = adj_t.coo()
-                edge_index = torch.stack([col, row], dim=0)  # flow source_to_target
-                adjs.append(EdgeIndex(edge_index, e_id, size))
+        # Concatenate & remove duplicate nodes
+        sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
+        return sampled_nodes
 
-        if len(adjs) > 1:
-            return batch_size, n_id, adjs[::-1]
-        else:
-            return batch_size, n_id, adjs[0]
+    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, filter_nodes: bool):
+        """ Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and
+        `global_node_index`
+
+        :param adjs:
+        :param n_id:
+        :param sampled_local_nodes:
+        :param filter_nodes:
+        :return:
+        """
+        relabel_nodes = {
+            node_type: dict(zip(sampled_local_nodes[node_type].numpy(),
+                                range(len(sampled_local_nodes[node_type])))
+                            ) for node_type in sampled_local_nodes}
+
+        edge_index_dict = {}
+        for adj in adjs:
+            for edge_type_id in self.edge_type[adj.e_id].unique():
+                metapath = self.int2edge_type[edge_type_id.item()]
+                head_type, tail_type = metapath[0], metapath[-1]
+
+                # Filter edges to correct edge_type_id
+                edge_mask = self.edge_type[adj.e_id] == edge_type_id
+                edge_index = adj.edge_index[:, edge_mask]
+
+                # convert from "sampled_edge_index" to global index
+                edge_index[0] = n_id[edge_index[0]]
+                edge_index[1] = n_id[edge_index[1]]
+
+                # Filter nodes for only head node type
+                if filter_nodes < 2:
+                    # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
+                    allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
+
+                    if head_type == self.head_node_type and tail_type == self.head_node_type:
+                        mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
+                        edge_index = edge_index[:, mask]
+                    elif head_type == self.head_node_type:
+                        mask = np.isin(edge_index[0], allowed_nodes_idx)
+                        edge_index = edge_index[:, mask]
+                    elif tail_type == self.head_node_type:
+                        mask = np.isin(edge_index[1], allowed_nodes_idx)
+                        edge_index = edge_index[:, mask]
+
+                # Filter nodes from all node types
+                else:
+                    if head_type not in relabel_nodes or tail_type not in relabel_nodes: continue
+
+                    allowed_nodes_idx = torch.cat([self.local2global[ntype][list(local_global.keys())] \
+                                                   for ntype, local_global in relabel_nodes.items()], dim=0)
+
+                    mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
+                    edge_index = edge_index[:, mask]
+
+                if edge_index.shape[1] == 0: continue
+
+                # Convert node global index -> local index -> batch index
+                edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
+                edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
+
+                edge_index_dict.setdefault(metapath, []).append(edge_index)
+
+        # Join edges from the adjs (from iterative layer-wise sampling)
+        edge_index_dict = {metapath: torch.cat(edge_index, dim=1) \
+                           for metapath, edge_index in edge_index_dict.items()}
+
+        # Ensure no duplicate edges in each metapath
+        edge_index_dict = {metapath: edge_index[:, nonduplicate_indices(edge_index)] \
+                           for metapath, edge_index in edge_index_dict.items()}
+        return edge_index_dict
 
 
 class HeteroNeighborSampler(HeteroNetDataset):
@@ -51,19 +134,8 @@ class HeteroNeighborSampler(HeteroNetDataset):
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)
 
-        # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
-        num_nodes_dict = OrderedDict([(node_type, self.num_nodes_dict[node_type]) for node_type in self.node_types])
+        self.graph_sampler = NeighborSampler(dataset)
 
-        self.edge_index, self.edge_type, self.node_type, self.local_node_idx, self.local2global, self.key2int = \
-            group_hetero_graph(self.edge_index_dict, num_nodes_dict)
-
-        self.int2node_type = {type_int: node_type for node_type, type_int in self.key2int.items() if
-                              node_type in self.node_types}
-        self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
-                              edge_type in self.edge_index_dict}
-
-        self.neighbor_sampler = NeighborSampler(self.edge_index, node_idx=self.training_idx,
-                                                sizes=self.neighbor_sizes, batch_size=128, shuffle=True)
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
@@ -179,21 +251,6 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             return super().get_collate_fn(collate_fn, mode=mode)
 
-    def get_local_node_index(self, adjs, n_id):
-        sampled_nodes = {}
-        for adj in adjs:
-            for i in [0, 1]:
-                node_ids = n_id[adj.edge_index[i]]
-                node_types = self.node_type[node_ids]
-
-                for node_type_id in node_types.unique():
-                    mask = node_types == node_type_id
-                    local_node_ids = self.local_node_idx[node_ids[mask]]
-                    sampled_nodes.setdefault(self.int2node_type[node_type_id.item()], []).append(local_node_ids)
-
-        # Concatenate & remove duplicate nodes
-        sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
-        return sampled_nodes
 
     def sample(self, n_idx, mode):
         """
@@ -213,12 +270,13 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             n_idx_to_sample = self.local2global[self.head_node_type][n_idx]
 
-        batch_size, n_id, adjs = self.neighbor_sampler.sample(n_idx_to_sample)
+        # Sample subgraph
+        batch_size, n_id, adjs = self.graph_sampler.sample(n_idx_to_sample)
         if not isinstance(adjs, list):
             adjs = [adjs]
 
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        sampled_local_nodes = self.get_local_node_index(adjs, n_id)
+        sampled_local_nodes = self.graph_sampler.get_local_node_index(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         if "train" in mode:
@@ -248,16 +306,14 @@ class HeteroNeighborSampler(HeteroNetDataset):
              "global_node_index": sampled_local_nodes,
              "x_dict": {}}
 
-
-
-        X["edge_index_dict"] = self.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
-                                                              sampled_local_nodes=sampled_local_nodes,
-                                                              filter_nodes=filter)
+        X["edge_index_dict"] = self.graph_sampler.get_local_edge_index_dict(adjs=adjs, n_id=n_id,
+                                                                            sampled_local_nodes=sampled_local_nodes,
+                                                                            filter_nodes=filter)
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
-                           for node_type in self.x_dict}
+                           for node_type in self.x_dict if node_type in X["global_node_index"]}
 
         # y_dict
         if hasattr(self, "y_dict") and len(self.y_dict) > 1:
@@ -267,6 +323,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         else:
             y = None
 
+        # Weights
         weights = (y != -1) & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
         weights = torch.tensor(weights, dtype=torch.float)
 
@@ -277,79 +334,7 @@ class HeteroNeighborSampler(HeteroNetDataset):
         # assert y.size(0) == weights.size(0)
         return X, y, weights
 
-    def get_local_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, filter_nodes: bool):
-        """ Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and
-        `global_node_index`
 
-        :param adjs:
-        :param n_id:
-        :param sampled_local_nodes:
-        :param filter_nodes:
-        :return:
-        """
-        relabel_nodes = {
-            node_type: dict(zip(sampled_local_nodes[node_type].numpy(),
-                                range(len(sampled_local_nodes[node_type])))
-                            ) for node_type in sampled_local_nodes}
 
-        edge_index_dict = {}
-        for adj in adjs:
-            for edge_type_id in self.edge_type[adj.e_id].unique():
-                metapath = self.int2edge_type[edge_type_id.item()]
-                head_type, tail_type = metapath[0], metapath[-1]
-
-                # Filter edges to correct edge_type_id
-                edge_mask = self.edge_type[adj.e_id] == edge_type_id
-                edge_index = adj.edge_index[:, edge_mask]
-
-                # convert from "sampled_edge_index" to global index
-                edge_index[0] = n_id[edge_index[0]]
-                edge_index[1] = n_id[edge_index[1]]
-
-                # Filter nodes for only head node type
-                if filter_nodes < 2:
-                    # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
-                    allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
-
-                    if head_type == self.head_node_type and tail_type == self.head_node_type:
-                        mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
-                        edge_index = edge_index[:, mask]
-                    elif head_type == self.head_node_type:
-                        mask = np.isin(edge_index[0], allowed_nodes_idx)
-                        edge_index = edge_index[:, mask]
-                    elif tail_type == self.head_node_type:
-                        mask = np.isin(edge_index[1], allowed_nodes_idx)
-                        edge_index = edge_index[:, mask]
-
-                # Filter nodes from all node types
-                else:
-                    if head_type not in relabel_nodes or tail_type not in relabel_nodes: continue
-
-                    allowed_nodes_idx = torch.cat([self.local2global[ntype][list(local_global.keys())] \
-                                                   for ntype, local_global in relabel_nodes.items()], dim=0)
-
-                    mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
-                    edge_index = edge_index[:, mask]
-
-                if edge_index.shape[1] == 0: continue
-
-                # Convert node global index -> local index -> batch index
-                edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
-                edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
-
-                edge_index_dict.setdefault(metapath, []).append(edge_index)
-
-        # Join edges from the adjs (from iterative layer-wise sampling)
-        edge_index_dict = {metapath: torch.cat(edge_index, dim=1) \
-                           for metapath, edge_index in edge_index_dict.items()}
-
-        # Ensure no duplicate edges in each metapath
-        edge_index_dict = {metapath: edge_index[:, self.nonduplicate_indices(edge_index)] \
-                           for metapath, edge_index in edge_index_dict.items()}
-        return edge_index_dict
-
-    def nonduplicate_indices(self, edge_index):
-        edge_df = pd.DataFrame(edge_index.t().numpy())  # shape: (n_edges, 2)
-        return ~edge_df.duplicated(subset=[0, 1])
 
 

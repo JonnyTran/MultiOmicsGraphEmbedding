@@ -40,7 +40,7 @@ def get_sampler_homo(get_dataset_ogb_homo):
     dataset = HeteroNeighborSampler(DBLP_HANDataset(), neighbor_sizes=[25, 20],
                                     node_types=["A", "P", "C", "T"], head_node_type="A",
                                     metapaths=["AC", "AP", "AT"],
-                                    add_reverse_metapaths=True, inductive=False)
+                                    add_reverse_metapaths=True, inductive=True)
     dataset.x_dict["P"] = dataset.x_dict["A"]
     dataset.x_dict["C"] = dataset.x_dict["A"]
     dataset.x_dict["T"] = dataset.x_dict["A"]
@@ -77,7 +77,7 @@ def test_generator_homo(get_sampler_homo):
 
 def test_sampled_edges_exists_hetero(get_sampler_hetero):
     node_idx = torch.randint(len(get_sampler_hetero.node_type), (100,))
-    batch_size, n_id, adjs = get_sampler_hetero.neighbor_sampler.sample(node_idx)
+    batch_size, n_id, adjs = get_sampler_hetero.graph_sampler.sample(node_idx)
 
     global_node_index = get_sampler_hetero.get_local_node_index(adjs, n_id, )
 
@@ -94,7 +94,7 @@ def test_sampled_edges_exists_hetero(get_sampler_hetero):
 
 def test_sampled_edges_exists_homo(get_sampler_homo):
     node_idx = torch.randint(len(get_sampler_homo.node_type), (100,))
-    batch_size, n_id, adjs = get_sampler_homo.neighbor_sampler.sample(node_idx)
+    batch_size, n_id, adjs = get_sampler_homo.graph_sampler.sample(node_idx)
 
     global_node_index = get_sampler_homo.get_local_node_index(adjs, n_id, )
 

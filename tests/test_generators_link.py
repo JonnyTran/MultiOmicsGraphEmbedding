@@ -67,7 +67,7 @@ def test_generator_homo(get_sampler_homo):
 
 def test_sampled_edges_exists(get_sampler_homo):
     node_idx = torch.randint(len(get_sampler_homo.node_type), (100,))
-    batch_size, n_id, adjs = get_sampler_homo.neighbor_sampler.sample(node_idx)
+    batch_size, n_id, adjs = get_sampler_homo.graph_sampler.sample(node_idx)
 
     global_node_index = get_sampler_homo.get_local_node_index(adjs, n_id, )
 
@@ -84,7 +84,7 @@ def test_sampled_edges_exists(get_sampler_homo):
 
 def test_sampled_edges_exists(get_sampler_homo):
     node_idx = torch.randint(len(get_sampler_homo.node_type), (100,))
-    batch_size, n_id, adjs = get_sampler_homo.neighbor_sampler.sample(node_idx)
+    batch_size, n_id, adjs = get_sampler_homo.graph_sampler.sample(node_idx)
 
     global_node_index = get_sampler_homo.get_local_node_index(adjs, n_id, )
 

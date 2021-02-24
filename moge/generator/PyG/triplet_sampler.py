@@ -304,7 +304,7 @@ class TripletNeighborSampler(HeteroNeighborSampler):
         batch_nodes_local = torch.cat([self.local2global[ntype][nid] for ntype, nid in batch_nodes.items()], 0)
 
         # Get full subgraph from n_id's
-        batch_size, n_id, adjs = self.neighbor_sampler.sample(batch_nodes_local)
+        batch_size, n_id, adjs = self.graph_sampler.sample(batch_nodes_local)
         if not isinstance(adjs, list):
             adjs = [adjs]
 

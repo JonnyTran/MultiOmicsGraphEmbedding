@@ -21,3 +21,8 @@ def edge_dict_intersection(edge_index_dict_A, edge_index_dict_B):
         inters[metapath] = torch.tensor(int_df.to_numpy().T, dtype=torch.long)
 
     return inters
+
+
+def nonduplicate_indices(edge_index):
+    edge_df = pd.DataFrame(edge_index.t().numpy())  # shape: (n_edges, 2)
+    return ~edge_df.duplicated(subset=[0, 1])
