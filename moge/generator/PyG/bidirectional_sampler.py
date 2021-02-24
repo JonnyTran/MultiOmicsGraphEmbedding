@@ -47,20 +47,6 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
 
         self.degree_counts = head_counts.append(tail_counts).to_dict()  # (node_id, relation, ntype): count
 
-        # relation_counts = self.triples["relation"].bincount()
-        # for metapath_id, count in enumerate(relation_counts):
-        #     self.train_counts[self.metapaths[metapath_id]] = count.astype(torch.float)
-
-    # def __init__(self, dataset, node_types=None, metapaths=None,
-    #              negative_sampling_size=128, test_negative_sampling_size=500,
-    #              head_node_type=None, directed=True,
-    #              resample_train=None, add_reverse_metapaths=True):
-    #     super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
-    #                      add_reverse_metapaths)
-    #
-    # self.negative_sampling_size = negative_sampling_size
-    # self.test_negative_sampling_size = test_negative_sampling_size
-
     def get_collate_fn(self, collate_fn: str, mode=None):
         assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
 

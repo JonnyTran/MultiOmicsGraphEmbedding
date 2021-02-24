@@ -76,7 +76,7 @@ def test_generator_homo(get_sampler_homo):
 
 
 def test_sampled_edges_exists_hetero(get_sampler_hetero):
-    node_idx = torch.randint(len(get_sampler_hetero.node_type), (100,))
+    node_idx = torch.randint(sum(get_sampler_hetero.num_nodes_dict.values()), (100,))
     batch_size, n_id, adjs = get_sampler_hetero.graph_sampler.sample(node_idx)
 
     global_node_index = get_sampler_hetero.get_local_node_index(adjs, n_id, )
@@ -93,7 +93,7 @@ def test_sampled_edges_exists_hetero(get_sampler_hetero):
 
 
 def test_sampled_edges_exists_homo(get_sampler_homo):
-    node_idx = torch.randint(len(get_sampler_homo.node_type), (100,))
+    node_idx = torch.randint(sum(get_sampler_homo.num_nodes_dict.values()), (100,))
     batch_size, n_id, adjs = get_sampler_homo.graph_sampler.sample(node_idx)
 
     global_node_index = get_sampler_homo.get_local_node_index(adjs, n_id, )

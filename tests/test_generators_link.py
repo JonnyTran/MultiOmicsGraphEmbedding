@@ -59,16 +59,14 @@ def test_generator_homo(get_sampler_homo):
     print(tensor_sizes({"X": X, "y": y, "z": z}))
     assert len(X) + len(y) + len(z) >= 3
 
-    X, y, z = get_sampler_homo.sample(get_sampler_homo.validation_idx[:50],
-                                      mode="valid")
+    X, y, z = get_sampler_homo.sample(get_sampler_homo.validation_idx[:50], mode="valid")
     print(tensor_sizes({"X": X, "y": y, "z": z}))
     assert len(X) + len(y) + len(z) >= 3
 
 
 def test_sampled_edges_exists_hetero(get_dataset_ogb_hetero):
-    node_idx = torch.randint(len(get_dataset_ogb_hetero.node_type), (100,))
+    node_idx = torch.randint(sum(get_dataset_ogb_hetero.num_nodes_dict.values()), (100,))
     batch_size, n_id, adjs = get_dataset_ogb_hetero.graph_sampler.sample(node_idx)
-
     global_node_index = get_dataset_ogb_hetero.graph_sampler.get_local_node_index(adjs, n_id, )
     edge_index = get_dataset_ogb_hetero.graph_sampler.get_local_edge_index_dict(adjs, n_id, global_node_index,
                                                                                 filter_nodes=False)
@@ -83,9 +81,8 @@ def test_sampled_edges_exists_hetero(get_dataset_ogb_hetero):
 
 
 def test_sampled_edges_exists_homo(get_sampler_homo):
-    node_idx = torch.randint(len(get_sampler_homo.node_type), (100,))
+    node_idx = torch.randint(sum(get_sampler_homo.num_nodes_dict.values()), (100,))
     batch_size, n_id, adjs = get_sampler_homo.graph_sampler.sample(node_idx)
-
     global_node_index = get_sampler_homo.graph_sampler.get_local_node_index(adjs, n_id, )
     edge_index = get_sampler_homo.graph_sampler.get_local_edge_index_dict(adjs, n_id, global_node_index,
                                                                           filter_nodes=False)
