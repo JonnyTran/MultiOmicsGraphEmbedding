@@ -6,8 +6,7 @@ import numpy as np
 import torch
 import torch_geometric
 from torch_geometric.utils.hetero import group_hetero_graph
-
-from moge.generator.utils import nonduplicate_indices
+from torch_sparse import coalesce
 
 
 class Sampler(metaclass=ABCMeta):
@@ -142,7 +141,10 @@ class NeighborSampler(Sampler):
         edge_index_dict = {metapath: torch.cat(e_index_list, dim=1) \
                            for metapath, e_index_list in edge_index_dict.items()}
 
-        # # Ensure no duplicate edges in each metapath
-        edge_index_dict = {metapath: edge_index[:, nonduplicate_indices(edge_index)] \
+        # Ensure no duplicate edges in each metapath
+        edge_index_dict = {metapath: coalesce(index=edge_index, value=torch.ones_like(edge_index[0], dtype=torch.float),
+                                              m=sampled_local_nodes[metapath[0]].size(0),
+                                              n=sampled_local_nodes[metapath[-1]].size(0))[0] \
                            for metapath, edge_index in edge_index_dict.items()}
+
         return edge_index_dict
