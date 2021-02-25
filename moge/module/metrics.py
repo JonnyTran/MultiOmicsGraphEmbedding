@@ -1,15 +1,12 @@
-from typing import Callable, Optional, Union
-import pandas as pd
 import numpy as np
-
 import torch
 from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, Accuracy, TopKCategoricalAccuracy, MetricsLambda, Fbeta
+from ignite.metrics import Precision, Recall, Accuracy, TopKCategoricalAccuracy, MetricsLambda
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from ogb.graphproppred import Evaluator as GraphEvaluator
-from ogb.nodeproppred import Evaluator as NodeEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
+from ogb.nodeproppred import Evaluator as NodeEvaluator
 
 from .utils import filter_samples
 
@@ -155,7 +152,7 @@ class Metrics(torch.nn.Module):
 
 class OGBNodeClfMetrics(Metric):
     def __init__(self, evaluator: NodeEvaluator, output_transform=None, device=None):
-        super().__init__(output_transform, device)
+        super().__init__(output_transform)
         self.evaluator = evaluator
         self.y_pred = []
         self.y_true = []
