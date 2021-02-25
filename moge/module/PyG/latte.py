@@ -160,7 +160,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  use_proximity=False, neg_sampling_ratio=1.0, first=True, cpu_embeddings=False,
                  disable_alpha=False, disable_beta=False) -> None:
-        super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
+        super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
@@ -311,17 +311,21 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = len(global_node_idx[head]), len(global_node_idx[tail])
 
             edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
             if edge_index is None: continue
+
+            print("edge_index", edge_index.max(1).values)
+            print("head, tail", global_node_idx[head].size(0), global_node_idx[tail].size(0))
+
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
                 x=(l_dict[head], r_dict[tail]),
                 alpha=(alpha_l[metapath], alpha_r[metapath]),
-                size=(num_node_tail, num_node_head),
+                size=(global_node_idx[head].size(0), global_node_idx[tail].size(0)),
                 metapath_idx=self.metapaths.index(metapath))
+            print("out", out.shape)
             emb_relations[:, i] = out
 
         return emb_relations
