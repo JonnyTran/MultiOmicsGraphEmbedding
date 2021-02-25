@@ -103,8 +103,18 @@ class NeighborSampler(Sampler):
                 edge_index[0] = n_id[edge_index[0]]
                 edge_index[1] = n_id[edge_index[1]]
 
+                # Filter nodes from all node types
+                if filter_nodes == 2:
+                    if head_type not in relabel_nodes or tail_type not in relabel_nodes: continue
+
+                    allowed_nodes_idx = torch.cat([self.local2global[ntype][n_ids] \
+                                                   for ntype, n_ids in sampled_local_nodes.items()], dim=0)
+
+                    mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
+                    edge_index = edge_index[:, mask]
+
                 # Filter nodes for only head node type
-                if filter_nodes is True:
+                elif filter_nodes is True:
                     # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
                     allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
 
@@ -117,16 +127,6 @@ class NeighborSampler(Sampler):
                     elif tail_type == self.head_node_type:
                         mask = np.isin(edge_index[1], allowed_nodes_idx)
                         edge_index = edge_index[:, mask]
-
-                # Filter nodes from all node types
-                elif filter_nodes == 2:
-                    if head_type not in relabel_nodes or tail_type not in relabel_nodes: continue
-
-                    allowed_nodes_idx = torch.cat([self.local2global[ntype][n_ids] \
-                                                   for ntype, n_ids in sampled_local_nodes.items()], dim=0)
-
-                    mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
-                    edge_index = edge_index[:, mask]
 
                 if edge_index.shape[1] == 0: continue
 

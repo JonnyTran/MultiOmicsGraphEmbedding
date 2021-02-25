@@ -185,7 +185,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         X["edge_index_dict"] = self.graph_sampler.get_edge_index_dict(adjs=adjs, n_id=n_id,
                                                                       sampled_local_nodes=sampled_local_nodes,
-                                                                      filter_nodes=filter)
+                                                                      filter_nodes=True)
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
