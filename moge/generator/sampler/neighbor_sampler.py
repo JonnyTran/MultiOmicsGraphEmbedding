@@ -41,6 +41,8 @@ class HeteroNeighborSampler(torch.utils.data.DataLoader):
         if not self.is_sparse_tensor:
             num_nodes = maybe_num_nodes(edge_index, num_nodes)
             value = torch.arange(edge_index.size(1)) if return_e_id else None
+
+            # Sampling source_to_target
             self.adj_t = SparseTensor(row=edge_index[1], col=edge_index[0],
                                       value=value,
                                       sparse_sizes=(num_nodes, num_nodes)).t()
@@ -81,7 +83,7 @@ class HeteroNeighborSampler(torch.utils.data.DataLoader):
                 adjs.append(Adj(adj_t, e_id, size))
             else:
                 row, col, _ = adj_t.coo()
-                edge_index = torch.stack([col, row], dim=0)
+                edge_index = torch.stack([row, col], dim=0)
                 adjs.append(EdgeIndex(edge_index, e_id, size))
 
         return batch_size, n_id, adjs
