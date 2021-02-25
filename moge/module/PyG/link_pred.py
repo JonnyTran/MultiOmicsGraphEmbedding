@@ -136,6 +136,7 @@ class LATTELinkPred(LinkPredTrainer):
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
+        self.log_dict(self.train_metrics.compute_metrics(), prog_bar=True, on_step=True)
         outputs = {'loss': loss}
         return outputs
 
