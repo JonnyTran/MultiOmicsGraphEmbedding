@@ -320,7 +320,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 edge_index=edge_index,
                 x=(l_dict[tail], r_dict[head]),
                 alpha=(alpha_l[metapath], alpha_r[metapath]),
-                size=(num_node_tail, num_node_head),
+                size=(num_node_head, num_node_tail),
                 metapath_idx=self.metapaths.index(metapath))
             emb_relations[:, i] = out
 
