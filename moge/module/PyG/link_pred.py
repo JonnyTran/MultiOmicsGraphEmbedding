@@ -27,47 +27,49 @@ class DistMulti(torch.nn.Module):
         output = {}
 
         # Single edges
-        output["edge_pos"] = self.predict(inputs["edge_pos"], embeddings, neg_samp_size=None, mode="single")
+        output["edge_pos"] = self.predict(inputs["edge_pos"], embeddings, mode="single")
 
         # Sampled head or tail batch
         if "head-batch" in inputs or "tail-batch" in inputs:
             # Head batch
-            edge_head_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_pos"],
-                                                                            neg_batch=inputs["head-batch"],
-                                                                            mode="head")
-            output["head-batch"] = self.predict(edge_head_batch, embeddings, neg_samp_size=neg_samp_size,
-                                                mode="head")
+            edge_head_batch, neg_samp_size = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
+                                                                                neg_edges=inputs["head-batch"],
+                                                                                mode="head")
+            output["head-batch"] = self.predict(edge_head_batch, embeddings, mode="head")
 
             # Tail batch
-            edge_tail_batch, neg_samp_size = self.get_edge_index_from_batch(inputs["edge_pos"],
-                                                                            neg_batch=inputs["tail-batch"],
-                                                                            mode="tail")
-            output["tail-batch"] = self.predict(edge_tail_batch, embeddings, neg_samp_size=neg_samp_size,
-                                                mode="tail")
+            edge_tail_batch, neg_samp_size = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
+                                                                                neg_edges=inputs["tail-batch"],
+                                                                                mode="tail")
+            output["tail-batch"] = self.predict(edge_tail_batch, embeddings, mode="tail")
 
         # Single edges
         elif "edge_neg" in inputs:
-            output["edge_neg"] = self.predict(inputs["edge_neg"], embeddings, neg_samp_size=None, mode="single")
+            output["edge_neg"] = self.predict(inputs["edge_neg"], embeddings, mode="single")
         else:
             raise Exception(f"No negative edges in inputs {inputs.keys()}")
 
         return output
 
-    def predict(self, edges_true: dict, embeddings, neg_samp_size, mode):
+    def predict(self, edge_index_dict: dict, embeddings: dict, mode: str):
         edge_pred_dict = {}
 
-        for metapath, edge_index in edges_true.items():
+        for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
             kernel = self.relation_embedding[metapath_idx]  # (emb_dim)
 
-            emb_A = embeddings[metapath[0]][edge_index[0]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
-            emb_B = embeddings[metapath[-1]][edge_index[1]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
-
-            if "head" == mode:
-                score = emb_A * (kernel * emb_B)
+            if "tail" == mode:
+                side_A = (embeddings[metapath[0]] * kernel)[edge_index[0]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
+                emb_B = embeddings[metapath[-1]][edge_index[1]].unsqueeze(2)  # (n_nodes, emb_dim, 1)
+                # score = side_A * emb_B
+                score = torch.bmm(side_A, emb_B)
                 score = score.sum(-1)
             else:
-                score = (emb_A * kernel) * emb_B
+                emb_A = embeddings[metapath[0]][edge_index[0]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
+                side_B = (kernel * embeddings[metapath[-1]])[edge_index[1]].unsqueeze(2)  # (n_nodes, emb_dim, 1)
+
+                # score = emb_A * side_B
+                score = torch.bmm(emb_A, side_B)
                 score = score.sum(-1)
 
             score = score.sum(dim=1)
@@ -76,19 +78,19 @@ class DistMulti(torch.nn.Module):
 
         return edge_pred_dict
 
-    def get_edge_index_from_batch(self, pos_batch, neg_batch, mode):
+    def get_edge_index_from_neg_batch(self, pos_edges, neg_edges, mode):
         edge_index_dict = {}
 
-        for metapath, edge_index in pos_batch.items():
-            e_size, neg_samp_size = neg_batch[metapath].shape
+        for metapath, edge_index in pos_edges.items():
+            e_size, neg_samp_size = neg_edges[metapath].shape
 
             if mode == "head":
-                nid_A = neg_batch[metapath].reshape(-1)
-                nid_B = pos_batch[metapath][1].repeat_interleave(neg_samp_size)
+                nid_A = neg_edges[metapath].reshape(-1)
+                nid_B = pos_edges[metapath][1].repeat_interleave(neg_samp_size)
                 edge_index_dict[metapath] = torch.stack([nid_A, nid_B], dim=0)
             elif mode == "tail":
-                nid_A = pos_batch[metapath][0].repeat_interleave(neg_samp_size)
-                nid_B = neg_batch[metapath].reshape(-1)
+                nid_A = pos_edges[metapath][0].repeat_interleave(neg_samp_size)
+                nid_B = neg_edges[metapath].reshape(-1)
                 edge_index_dict[metapath] = torch.stack([nid_A, nid_B], dim=0)
 
         return edge_index_dict, neg_samp_size

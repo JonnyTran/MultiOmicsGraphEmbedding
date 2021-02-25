@@ -41,8 +41,8 @@ def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, f
         # if method is "siamese" and method == list(methods.keys())[-1]:
         #     y_prob_pred = methods[method].predict_generator(data_generator)
         # else:
-        y_prob_pred = methods[method].predict(X)
-        average_precision = average_precision_score(y_true=y_true, y_score=y_prob_pred)
+        y_prob_pred = methods[method].predict(X,,
+                      average_precision = average_precision_score(y_true=y_true, y_score=y_prob_pred)
         precision, recall, _ = precision_recall_curve(y_true=y_true, probas_pred=y_prob_pred, pos_label=1)
 
         ax.plot(recall, precision, color=color_dict[method], ls=ls_dict[method],

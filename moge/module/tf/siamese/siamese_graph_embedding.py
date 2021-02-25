@@ -12,14 +12,14 @@ from keras.models import Model
 from keras.models import load_model
 from keras.optimizers import RMSprop
 from keras.utils import multi_gpu_model
+from moge.generator.networkx.data_generator import DataGenerator
+from moge.generator.networkx.sampled_generator import SampledDataGenerator
+from moge.model.metrics import precision_d, recall_d, precision, recall
+from moge.model.static_graph_embedding import ImportedGraphEmbedding
 from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
-from moge.model.metrics import precision_d, recall_d, precision, recall
-from moge.generator.networkx.data_generator import DataGenerator
-from moge.generator.networkx.sampled_generator import SampledDataGenerator
-from moge.model.static_graph_embedding import ImportedGraphEmbedding
 from moge.network.multi_digraph import MultiDigraphNetwork
 
 
@@ -484,13 +484,14 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                                            minlen=minlen)
 
         if variable_length:
-            embs = [self.lstm_network.predict(seq, batch_size=1) for seq in seqs]
-        else:
-            embs = self.lstm_network.predict(seqs, batch_size=batch_size)
+            embs = [self.lstm_network.predict(seq,,
+            for seq in seqs]
+            else:
+                embs = self.lstm_network.predict(seqs,,
 
-        embs = np.array(embs)
-        embs = embs.reshape(embs.shape[0], embs.shape[-1])
-        self._X = embs
+                       embs = np.array(embs)
+            embs = embs.reshape(embs.shape[0], embs.shape[-1])
+            self._X = embs
 
     def load_weights(self, siamese_weights, alpha_weights, generator):
         self.generator_train = generator

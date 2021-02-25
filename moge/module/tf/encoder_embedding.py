@@ -215,14 +215,13 @@ class EncoderEmbedding(NeuralGraphEmbedding):
         self.model = load_model(os.path.join(log_dir, "model.h5"))
 
     def get_embeddings(self, X):
-        y_pred_encodings = self.encoder_model.predict(X)
-        y_pred_emb = self.embedding_model.predict([y_pred_encodings, X["subnetwork"]],
-                                                  batch_size=y_pred_encodings.shape[0])
+        y_pred_encodings = self.encoder_model.predict(X,,
+                           y_pred_emb = self.embedding_model.predict([y_pred_encodings, X["subnetwork"]],,
         return y_pred_emb
 
     def predict(self, X):
         y_pred_emb = self.get_embeddings(X)
-        y_pred = self.cls_model.predict(y_pred_emb, batch_size=y_pred_emb.shape[0])
+        y_pred = self.cls_model.predict(y_pred_emb,,
         return y_pred
 
     def get_callbacks(self, early_stopping=10, tensorboard=True, model_checkpoint=True, hparams=None,
