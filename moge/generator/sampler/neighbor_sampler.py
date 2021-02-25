@@ -14,14 +14,27 @@ from torch_sparse import coalesce, SparseTensor
 class Sampler(metaclass=ABCMeta):
     @abstractmethod
     def sample(self, node_ids):
+        """
+        Args:
+            node_ids:
+        """
         pass
 
     @abstractmethod
     def get_global_nidx(self, node_ids):
+        """
+        Args:
+            node_ids:
+        """
         pass
 
     @abstractmethod
     def get_nodes_dict(self, adjs, n_id):
+        """
+        Args:
+            adjs:
+            n_id:
+        """
         pass
 
 
@@ -31,6 +44,15 @@ class HeteroNeighborSampler(torch.utils.data.DataLoader):
                  num_nodes: Optional[int] = None, return_e_id: bool = True,
                  **kwargs):
 
+        """
+        Args:
+            edge_index:
+            sizes:
+            node_idx:
+            num_nodes:
+            return_e_id (bool):
+            **kwargs:
+        """
         self.sizes = sizes
         self.return_e_id = return_e_id
         self.is_sparse_tensor = isinstance(edge_index, SparseTensor)
@@ -65,6 +87,10 @@ class HeteroNeighborSampler(torch.utils.data.DataLoader):
             node_idx.view(-1).tolist(), collate_fn=self.sample, **kwargs)
 
     def sample(self, batch):
+        """
+        Args:
+            batch:
+        """
         if not isinstance(batch, Tensor):
             batch = torch.tensor(batch)
 
@@ -91,6 +117,14 @@ class HeteroNeighborSampler(torch.utils.data.DataLoader):
 
 class NeighborSampler(Sampler):
     def __init__(self, neighbor_sizes, edge_index_dict, num_nodes_dict, node_types, head_node_type):
+        """
+        Args:
+            neighbor_sizes:
+            edge_index_dict:
+            num_nodes_dict:
+            node_types:
+            head_node_type:
+        """
         self.head_node_type = head_node_type
 
         # Ensure head_node_type is first item in num_nodes_dict, since NeighborSampler.sample() function takes in index only the first
@@ -110,6 +144,10 @@ class NeighborSampler(Sampler):
                                                       shuffle=True)
 
     def sample(self, node_ids: dict):
+        """
+        Args:
+            node_ids (dict):
+        """
         local_node_idx = self.get_global_nidx(node_ids)
 
         batch_size, n_id, adjs = self.neighbor_sampler.sample(batch=local_node_idx)
@@ -118,6 +156,10 @@ class NeighborSampler(Sampler):
         return batch_size, n_id, adjs
 
     def get_global_nidx(self, node_ids):
+        """
+        Args:
+            node_ids:
+        """
         if isinstance(node_ids, dict):
             n_idx_to_sample = torch.cat([self.local2global[ntype][nid] for ntype, nid in node_ids.items()], dim=0)
         else:
@@ -126,6 +168,11 @@ class NeighborSampler(Sampler):
         return n_idx_to_sample
 
     def get_nodes_dict(self, adjs, n_id):
+        """
+        Args:
+            adjs:
+            n_id:
+        """
         sampled_nodes = {}
         for adj in adjs:
             for i in [0, 1]:
@@ -141,15 +188,15 @@ class NeighborSampler(Sampler):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def get_edge_index_dict(self, adjs, n_id, sampled_local_nodes: dict, filter_nodes: bool):
-        """ Conbine all edge_index's and convert local node id to "batch node index" that aligns with `x_dict` and
-        `global_node_index`
+    def get_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict, filter_nodes: bool):
+        """Conbine all edge_index's and convert local node id to "batch node
+        index" that aligns with `x_dict` and `global_node_index`
 
-        :param adjs:
-        :param n_id:
-        :param sampled_local_nodes:
-        :param filter_nodes:
-        :return:
+        Args:
+            adjs:
+            n_id:
+            sampled_local_nodes (dict):
+            filter_nodes (bool):
         """
         relabel_nodes = self.get_nid_relabel_dict(sampled_local_nodes)
 
@@ -167,36 +214,43 @@ class NeighborSampler(Sampler):
                 edge_index[0] = n_id[edge_index[0]]
                 edge_index[1] = n_id[edge_index[1]]
 
-                # Filter nodes for only head node type
-                if filter_nodes is True:
-                    allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
+                # Convert node global index -> local index -> batch index
+                if head_type == tail_type:
+                    edge_index = self.local_node_idx[edge_index].apply_(relabel_nodes[head_type].get)
+                else:
+                    edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
+                    edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
 
-                    # If node_type==self.head_node_type, then remove edge_index with any nodes not in allowed_nodes_idx
-                    if head_type == self.head_node_type and tail_type == self.head_node_type:
-                        mask = np.isin(edge_index, allowed_nodes_idx, assume_unique=True).all(0)
-                        edge_index = edge_index[:, mask]
-                    elif head_type == self.head_node_type:
-                        mask = np.isin(edge_index[0], allowed_nodes_idx, assume_unique=True)
-                        edge_index = edge_index[:, mask]
-                    elif tail_type == self.head_node_type:
-                        mask = np.isin(edge_index[1], allowed_nodes_idx, assume_unique=True)
-                        edge_index = edge_index[:, mask]
+                # Remove edges not in sampled_local_nodes
+                mask = np.isin(edge_index, [-1], assume_unique=True, invert=True).all(0)
+                edge_index = edge_index[:, mask]
 
-                # Filter nodes from all node types
-                elif filter_nodes == 2:
-                    if head_type not in relabel_nodes or tail_type not in relabel_nodes: continue
-
-                    allowed_nodes_idx = torch.cat([self.local2global[ntype][n_ids] \
-                                                   for ntype, n_ids in sampled_local_nodes.items()], dim=0)
-
-                    mask = np.isin(edge_index, allowed_nodes_idx, assume_unique=True).all(0)
-                    edge_index = edge_index[:, mask]
+                # # Filter nodes for only head node type
+                # if filter_nodes is True:
+                #     allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
+                #
+                #     # If node_type==self.head_node_type, then remove edge_index with any nodes not in allowed_nodes_idx
+                #     if head_type == self.head_node_type and tail_type == self.head_node_type:
+                #         mask = np.isin(edge_index, allowed_nodes_idx, assume_unique=True).all(0)
+                #         edge_index = edge_index[:, mask]
+                #     elif head_type == self.head_node_type:
+                #         mask = np.isin(edge_index[0], allowed_nodes_idx, assume_unique=True)
+                #         edge_index = edge_index[:, mask]
+                #     elif tail_type == self.head_node_type:
+                #         mask = np.isin(edge_index[1], allowed_nodes_idx, assume_unique=True)
+                #         edge_index = edge_index[:, mask]
+                #
+                # # Filter nodes from all node types
+                # elif filter_nodes == 2:
+                #     if head_type not in relabel_nodes or tail_type not in relabel_nodes: continue
+                #
+                #     allowed_nodes_idx = torch.cat([self.local2global[ntype][n_ids] \
+                #                                    for ntype, n_ids in sampled_local_nodes.items()], dim=0)
+                #
+                #     mask = np.isin(edge_index, allowed_nodes_idx, assume_unique=True).all(0)
+                #     edge_index = edge_index[:, mask]
 
                 if edge_index.size(1) == 0: continue
-
-                # Convert node global index -> local index -> batch index
-                edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
-                edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
 
                 edge_index_dict.setdefault(metapath, []).append(edge_index)
 
@@ -214,6 +268,10 @@ class NeighborSampler(Sampler):
         return edge_index_dict
 
     def get_nid_relabel_dict(self, node_ids_dict):
+        """
+        Args:
+            node_ids_dict:
+        """
         relabel_nodes = {node_type: defaultdict(lambda: -1, dict(zip(node_ids_dict[node_type].numpy(),
                                                                      range(node_ids_dict[node_type].size(0))))) \
                          for node_type in node_ids_dict}
