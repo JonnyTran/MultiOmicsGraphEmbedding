@@ -315,6 +315,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
             if edge_index is None: continue
+
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
