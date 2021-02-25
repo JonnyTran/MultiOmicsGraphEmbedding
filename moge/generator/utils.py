@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 
 
-def edge_sizes(edge_index_dict):
+def edge_dict_sizes(edge_index_dict):
     return {k: v.shape[1] for k, v in edge_index_dict.items()}
 
 
