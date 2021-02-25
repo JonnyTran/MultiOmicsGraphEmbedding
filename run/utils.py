@@ -11,7 +11,7 @@ from torch_geometric.datasets import AMiner
 
 import moge
 import moge.generator.PyG.triplet_generator
-from moge.generator.PyG.graphsaint_sampler import HeteroNeighborSampler
+from moge.generator.sampler.neighbor_sampler import HeteroNeighborSampler
 from moge.module.utils import preprocess_input
 
 

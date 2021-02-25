@@ -8,9 +8,9 @@ import torch
 from tensorflow import keras
 
 from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
+from moge.network.hetero import HeteroNetwork
 # import moge
 from moge.network.multi_digraph import MultiDigraphNetwork
-from moge.network.hetero import HeteroNetwork
 
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):

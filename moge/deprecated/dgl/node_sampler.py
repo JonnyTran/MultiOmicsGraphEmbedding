@@ -1,12 +1,10 @@
+import dgl
 import numpy as np
 import torch
+from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
 
-import dgl
-
-from ogb.nodeproppred import DglNodePropPredDataset
 from moge.generator.network import HeteroNetDataset
-from ...module.utils import tensor_sizes
 
 
 class DGLNodeSampler(HeteroNetDataset):

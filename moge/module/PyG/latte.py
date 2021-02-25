@@ -160,7 +160,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  use_proximity=False, neg_sampling_ratio=1.0, first=True, cpu_embeddings=False,
                  disable_alpha=False, disable_beta=False) -> None:
-        super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
+        super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
@@ -318,8 +318,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(r_dict[tail], l_dict[head]),
-                alpha=(alpha_r[metapath], alpha_l[metapath]),
+                x=(l_dict[tail], r_dict[head]),
+                alpha=(alpha_l[metapath], alpha_r[metapath]),
                 size=(num_node_tail, num_node_head),
                 metapath_idx=self.metapaths.index(metapath))
             emb_relations[:, i] = out
