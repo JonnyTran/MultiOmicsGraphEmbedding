@@ -182,7 +182,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             {node_type: torch.nn.Conv1d(
                 in_channels=in_channels_dict[
                     node_type] if first and node_type in in_channels_dict else embedding_dim,
-                out_channels=self.num_tail_relations(node_type),
+                out_channels=self.num_head_relations(node_type),
                 kernel_size=1) \
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
@@ -305,23 +305,22 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
             size=(global_node_idx[node_type].size(0),
-                  self.num_tail_relations(node_type),
+                  self.num_head_relations(node_type),
                   self.embedding_dim)).type_as(self.conv[node_type].weight)
 
-        for i, metapath in enumerate(self.get_tail_relations(node_type)):
+        for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
+            num_node_head, num_node_tail = len(global_node_idx[head]), len(global_node_idx[tail])
 
             edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
             if edge_index is None: continue
-
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
                 x=(l_dict[head], r_dict[tail]),
                 alpha=(alpha_l[metapath], alpha_r[metapath]),
-                size=(num_node_head, num_node_tail),
+                size=(num_node_tail, num_node_head),
                 metapath_idx=self.metapaths.index(metapath))
             emb_relations[:, i] = out
 
@@ -460,19 +459,19 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             return alpha
 
-    def get_tail_relations(self, head_node_type, to_str=False) -> list:
+    def get_head_relations(self, head_node_type, to_str=False) -> list:
         relations = [".".join(metapath) if to_str and isinstance(metapath, tuple) else metapath for metapath in
                      self.metapaths if
-                     metapath[-1] == head_node_type]
+                     metapath[0] == head_node_type]
         return relations
 
-    def num_tail_relations(self, node_type) -> int:
+    def num_head_relations(self, node_type) -> int:
         """
         Return the number of metapaths with head node type equals to :param node_type: and plus one for none-selection.
         :param node_type (str):
         :return:
         """
-        relations = self.get_tail_relations(node_type)
+        relations = self.get_head_relations(node_type)
         return len(relations) + 1
 
     def save_relation_weights(self, beta, global_node_idx):
@@ -485,15 +484,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for node_type in beta:
             with torch.no_grad():
                 self._betas[node_type] = pd.DataFrame(beta[node_type].squeeze(-1).cpu().numpy(),
-                                                      columns=self.get_tail_relations(node_type, True) + [node_type, ],
+                                                      columns=self.get_head_relations(node_type, True) + [node_type, ],
                                                       index=global_node_idx[node_type].cpu().numpy())
 
                 _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
                 _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
                 self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                             enumerate(self.get_tail_relations(node_type, True) + [node_type])}
+                                             enumerate(self.get_head_relations(node_type, True) + [node_type])}
                 self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                             enumerate(self.get_tail_relations(node_type, True) + [node_type])}
+                                             enumerate(self.get_head_relations(node_type, True) + [node_type])}
 
     def save_attn_weights(self, node_type, attn_weights, node_idx):
         if not hasattr(self, "_betas"):
@@ -506,15 +505,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         betas = attn_weights.sum(1)
         with torch.no_grad():
             self._betas[node_type] = pd.DataFrame(betas.cpu().numpy(),
-                                                  columns=self.get_tail_relations(node_type, True) + [node_type, ],
+                                                  columns=self.get_head_relations(node_type, True) + [node_type, ],
                                                   index=node_idx.cpu().numpy())
 
             _beta_avg = np.around(betas.mean(dim=0).cpu().numpy(), decimals=3)
             _beta_std = np.around(betas.std(dim=0).cpu().numpy(), decimals=2)
             self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                         enumerate(self.get_tail_relations(node_type, True) + [node_type])}
+                                         enumerate(self.get_head_relations(node_type, True) + [node_type])}
             self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                         enumerate(self.get_tail_relations(node_type, True) + [node_type])}
+                                         enumerate(self.get_head_relations(node_type, True) + [node_type])}
 
     def get_relation_weights(self):
         """
