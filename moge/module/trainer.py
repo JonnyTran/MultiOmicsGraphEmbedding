@@ -183,6 +183,8 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
         super(LinkPredTrainer, self).__init__(hparams, dataset, metrics, *args, **kwargs)
 
+        self.test_batch_size = 2048
+
     def reshape_e_pos_neg(self, edge_pred_dict, edge_weights_dict=None):
         e_pos = []
         e_neg = []
@@ -190,7 +192,10 @@ class LinkPredTrainer(NodeClfTrainer):
 
         for metapath, edge_pred in edge_pred_dict["edge_pos"].items():
             num_edges = edge_pred.shape[0]
+
+            # Positive edges
             e_pos.append(edge_pred)
+
             if edge_weights_dict:
                 e_weights.append(edge_weights_dict[metapath])
 
@@ -225,17 +230,17 @@ class LinkPredTrainer(NodeClfTrainer):
                                                 batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        # if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
-        #     batch_size = self.hparams.batch_size // 10
-        # else:
-        #     batch_size = self.hparams.batch_size
+        if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
+            batch_size = self.test_batch_size
+        else:
+            batch_size = self.hparams.batch_size
         return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size)
+                                             batch_size=batch_size)
 
     def test_dataloader(self):
-        # if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
-        #     batch_size = self.hparams.batch_size // 10
-        # else:
-        #     batch_size = self.hparams.batch_size
+        if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
+            batch_size = self.test_batch_size
+        else:
+            batch_size = self.hparams.batch_size
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size)
+                                            batch_size=batch_size)

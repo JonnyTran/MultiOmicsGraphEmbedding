@@ -148,12 +148,11 @@ class TripletDataset(HeteroNetDataset):
 
         relation_ids_all = triples["relation"].unique()
 
-        global_node_index = self.gather_node_set(triples, relation_ids_all, metapaths=self.metapaths)
-
-        edge_index_dict = self.get_relabled_edge_index(triples=triples,
-                                                       global_node_index=global_node_index,
-                                                       relation_ids_all=relation_ids_all,
-                                                       metapaths=self.metapaths)
+        global_node_index = TripletDataset.gather_node_set(triples, relation_ids_all, metapaths=self.metapaths)
+        edge_index_dict = TripletDataset.get_relabled_edge_index(triples=triples,
+                                                                 global_node_index=global_node_index,
+                                                                 relation_ids_all=relation_ids_all,
+                                                                 metapaths=self.metapaths)
         if self.use_reverse:
             self.add_reverse_edge_index(edge_index_dict)
 
@@ -165,11 +164,12 @@ class TripletDataset(HeteroNetDataset):
             node_feats = None
 
         X = {"edge_index_dict": edge_index_dict,
-             "edge_pred_dict": edge_index_dict,
              "global_node_index": global_node_index,
              "x_dict": node_feats}
 
-        return X, None, None
+        y = {"edge_pos": edge_index_dict}
+
+        return X, y, None
 
     @staticmethod
     def gather_node_set(triples, relation_ids, metapaths):
@@ -280,11 +280,12 @@ class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
             negative_sampling_size = self.neg_sampling_size
         negative_sampling_size = int(negative_sampling_size)
 
+        # Positive Edges
         triples = {k: v[e_idx] for k, v in self.triples.items() if not is_negative(k)}
+
         # Add true neg edges if on valid or test triplet indices
         if e_idx.max() < self.start_idx["train"] and not self.force_neg_sampling:
-            triples.update({k: v[e_idx] \
-                            for k, v in self.triples.items() \
+            triples.update({k: v[e_idx] for k, v in self.triples.items() \
                             if is_negative(k)})
 
         relation_ids_all = triples["relation"].unique()
@@ -298,7 +299,7 @@ class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
                                                                       relation_ids_all=relation_ids_all,
                                                                       metapaths=self.metapaths)
 
-        # Whether to negative sampling
+        # Run negative sampling if no true negative edges
         if not edges_neg:
             head_batch = {}
             tail_batch = {}
