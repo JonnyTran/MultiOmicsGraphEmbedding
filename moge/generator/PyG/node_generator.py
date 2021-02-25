@@ -334,8 +334,6 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
 
-        # assert y.size(0) == X["global_node_index"][self.head_node_type].size(0)
-        # assert y.size(0) == weights.size(0)
         return X, y, weights
 
 
