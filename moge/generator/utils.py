@@ -34,7 +34,7 @@ def nonduplicate_indices(edge_index):
 
 
 def merge_node_index(old_node_index, new_node_index):
-    merged = {}
+    merged = {k: [v] for k, v in old_node_index.items()}
     for ntype, new_nodes in new_node_index.items():
         if ntype not in old_node_index:
             merged.setdefault(ntype, []).append(new_nodes)
@@ -42,5 +42,6 @@ def merge_node_index(old_node_index, new_node_index):
             merged.setdefault(ntype, []).append(old_node_index[ntype])
             new_nodes_mask = np.isin(new_nodes, old_node_index[ntype], invert=True)
             merged[ntype].append(new_nodes[new_nodes_mask])
-        merged[ntype] = torch.cat(merged[ntype], 0)
+
+        merged[ntype] = torch.cat(merged[ntype], dim=0)
     return merged

@@ -7,7 +7,6 @@ from ogb.nodeproppred import PygNodePropPredDataset
 from torch_geometric.utils.hetero import group_hetero_graph
 
 from moge.generator.network import HeteroNetDataset
-from moge.generator.utils import nonduplicate_indices
 
 
 class NeighborSampler():
@@ -92,7 +91,7 @@ class NeighborSampler():
                 edge_index[1] = n_id[edge_index[1]]
 
                 # Filter nodes for only head node type
-                if filter_nodes < 2:
+                if filter_nodes is True:
                     # If node_type==self.head_node_type, then remove edge_index with nodes not in allowed_nodes_idx
                     allowed_nodes_idx = self.local2global[self.head_node_type][sampled_local_nodes[self.head_node_type]]
 
@@ -107,11 +106,11 @@ class NeighborSampler():
                         edge_index = edge_index[:, mask]
 
                 # Filter nodes from all node types
-                else:
+                elif filter_nodes == 2:
                     if head_type not in relabel_nodes or tail_type not in relabel_nodes: continue
 
-                    allowed_nodes_idx = torch.cat([self.local2global[ntype][list(local_global.keys())] \
-                                                   for ntype, local_global in relabel_nodes.items()], dim=0)
+                    allowed_nodes_idx = torch.cat([self.local2global[ntype][n_ids] \
+                                                   for ntype, n_ids in sampled_local_nodes.items()], dim=0)
 
                     mask = np.isin(edge_index[0], allowed_nodes_idx) & np.isin(edge_index[1], allowed_nodes_idx)
                     edge_index = edge_index[:, mask]
@@ -125,12 +124,12 @@ class NeighborSampler():
                 edge_index_dict.setdefault(metapath, []).append(edge_index)
 
         # Join edges from the adjs (from iterative layer-wise sampling)
-        edge_index_dict = {metapath: torch.cat(edge_index, dim=1) \
-                           for metapath, edge_index in edge_index_dict.items()}
+        edge_index_dict = {metapath: torch.cat(e_index_list, dim=1) \
+                           for metapath, e_index_list in edge_index_dict.items()}
 
-        # Ensure no duplicate edges in each metapath
-        edge_index_dict = {metapath: edge_index[:, nonduplicate_indices(edge_index)] \
-                           for metapath, edge_index in edge_index_dict.items()}
+        # # Ensure no duplicate edges in each metapath
+        # edge_index_dict = {metapath: edge_index[:, nonduplicate_indices(edge_index)] \
+        #                    for metapath, edge_index in edge_index_dict.items()}
         return edge_index_dict
 
 
