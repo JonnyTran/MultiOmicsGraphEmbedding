@@ -214,7 +214,7 @@ class BidirectionalGenerator(EdgeDataset, HeteroNeighborGenerator):
         # Get dict to convert from global node index to batch node index
         edge_index_dict = self.graph_sampler.get_edge_index_dict(adjs=adjs, n_id=n_id,
                                                                  sampled_local_nodes=global_node_index,
-                                                                 filter_nodes=2)
+                                                                 filter_nodes=False)
 
         if self.use_reverse:
             self.add_reverse_edge_index(edge_index_dict)
