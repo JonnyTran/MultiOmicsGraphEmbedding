@@ -311,7 +311,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = len(global_node_idx[head]), len(global_node_idx[tail])
+            num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
             edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
             if edge_index is None: continue
@@ -322,7 +322,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             out = self.propagate(
                 edge_index=edge_index,
-                x=(l_dict[tail], r_dict[head]),
+                x=(l_dict[head], r_dict[tail]),
                 alpha=(alpha_l[metapath], alpha_r[metapath]),
                 size=(num_node_head, num_node_tail),
                 metapath_idx=self.metapaths.index(metapath))
@@ -330,7 +330,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return emb_relations
 
-    def message(self, x_j, alpha_i, alpha_j, index, ptr, size_i, metapath_idx):
+    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
         if self.disable_alpha:
             same_alpha = torch.ones((x_j.shape[0], 1)).type_as(x_j)
             return x_j * same_alpha / same_alpha.sum(0)
