@@ -35,6 +35,7 @@ def nonduplicate_indices(edge_index):
 
 def merge_node_index(old_node_index, new_node_index):
     merged = {k: [v] for k, v in old_node_index.items()}
+
     for ntype, new_nodes in new_node_index.items():
         if ntype not in old_node_index:
             merged.setdefault(ntype, []).append(new_nodes)

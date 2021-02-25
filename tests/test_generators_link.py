@@ -72,7 +72,7 @@ def test_sampled_edges_exists_hetero(generator_hetero):
     edge_index = generator_hetero.graph_sampler.get_edge_index_dict(adjs, n_id, global_node_index,
                                                                     filter_nodes=False)
 
-    edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], axis=0) \
+    edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], dim=0) \
                   for k, v in edge_index.items()}
 
     edge_counts = edge_sizes(edge_index)
@@ -88,7 +88,7 @@ def test_sampled_edges_exists_homo(generator_homo):
     edge_index = generator_homo.graph_sampler.get_edge_index_dict(adjs, n_id, global_node_index,
                                                                   filter_nodes=False)
 
-    edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], axis=0) \
+    edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], dim=0) \
                   for k, v in edge_index.items()}
 
     edge_counts = edge_sizes(edge_index)

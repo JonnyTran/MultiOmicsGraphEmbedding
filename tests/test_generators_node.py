@@ -51,7 +51,7 @@ def test_generator_hetero(generator_hetero):
     assert X is not None
     assert y is not None
 
-    assert y.size(0) == X["global_node_index"][generator_homo.head_node_type].size(0)
+    assert y.size(0) == X["global_node_index"][generator_hetero.head_node_type].size(0)
     assert y.size(0) == weights.size(0)
 
     X, y, weights = generator_hetero.sample(random.sample(generator_hetero.validation_idx.numpy().tolist(), 50),
