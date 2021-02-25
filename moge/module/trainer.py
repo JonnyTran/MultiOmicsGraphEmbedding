@@ -230,7 +230,7 @@ class LinkPredTrainer(NodeClfTrainer):
         # else:
         #     batch_size = self.hparams.batch_size
         return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size // 12)
+                                             batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
         # if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
@@ -238,4 +238,4 @@ class LinkPredTrainer(NodeClfTrainer):
         # else:
         #     batch_size = self.hparams.batch_size
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size // 12)
+                                            batch_size=self.hparams.batch_size)
