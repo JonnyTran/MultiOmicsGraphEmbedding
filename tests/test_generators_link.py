@@ -8,6 +8,7 @@ import moge
 import moge.generator.PyG.edge_generator
 import moge.generator.PyG.triplet_generator
 from moge.generator.utils import edge_dict_intersection, edge_sizes
+from moge.generator.utils import nonduplicate_indices
 from moge.module.utils import tensor_sizes
 
 cohort_folder_path = "datasets"
@@ -75,7 +76,7 @@ def test_sampled_edges_exists_hetero(generator_hetero):
     edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], dim=0) \
                   for k, v in edge_index.items()}
 
-    edge_counts = edge_sizes(edge_index)
+    edge_counts = edge_sizes(edge_index[:, nonduplicate_indices(edge_index)])
     intersection_counts = edge_sizes(edge_dict_intersection(edge_index, generator_hetero.edge_index_dict))
 
     assert edge_counts == intersection_counts
@@ -91,7 +92,7 @@ def test_sampled_edges_exists_homo(generator_homo):
     edge_index = {k: torch.stack([global_node_index[k[0]][v[0]], global_node_index[k[-1]][v[1]]], dim=0) \
                   for k, v in edge_index.items()}
 
-    edge_counts = edge_sizes(edge_index)
+    edge_counts = edge_sizes(edge_index[:, nonduplicate_indices(edge_index)])
     intersection_counts = edge_sizes(edge_dict_intersection(edge_index, generator_homo.edge_index_dict))
 
     assert edge_counts == intersection_counts
