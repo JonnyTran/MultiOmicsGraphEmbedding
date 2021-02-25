@@ -19,7 +19,7 @@ class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True, cpu_embeddings=False,
-                 disable_alpha=False, disable_beta=False, disable_concat=False):
+                 disable_concat=False):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -29,8 +29,6 @@ class LATTE(nn.Module):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.edge_sampling = edge_sampling
 
-        self.disable_beta = disable_beta
-        self.disable_alpha = disable_alpha
         self.disable_concat = disable_concat
 
         layers = []
@@ -40,9 +38,8 @@ class LATTE(nn.Module):
                 LATTEConv(embedding_dim=embedding_dim, in_channels_dict=in_channels_dict, num_nodes_dict=num_nodes_dict,
                           metapaths=t_order_metapaths, activation=activation, attn_heads=attn_heads,
                           attn_activation=attn_activation, attn_dropout=attn_dropout, use_proximity=use_proximity,
-                          neg_sampling_ratio=neg_sampling_ratio,
-                          first=True if t == 0 else False,
-                          cpu_embeddings=cpu_embeddings, disable_alpha=disable_alpha, disable_beta=disable_beta))
+                          neg_sampling_ratio=neg_sampling_ratio, first=True if t == 0 else False,
+                          cpu_embeddings=cpu_embeddings))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
 
         self.layers = nn.ModuleList(layers)
@@ -158,8 +155,7 @@ class LATTE(nn.Module):
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, in_channels_dict: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
-                 use_proximity=False, neg_sampling_ratio=1.0, first=True, cpu_embeddings=False,
-                 disable_alpha=False, disable_beta=False) -> None:
+                 use_proximity=False, neg_sampling_ratio=1.0, first=True, cpu_embeddings=False) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
@@ -170,9 +166,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
-
-        self.disable_beta = disable_beta
-        self.disable_alpha = disable_alpha
 
         self.activation = activation.lower()
         if self.activation not in ["sigmoid", "tanh", "relu"]:
@@ -285,10 +278,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out[node_type][:, -1] = l_dict[node_type]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            if not self.disable_beta:
-                out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
-            else:
-                out[node_type] = out[node_type].mean(1)
+            out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
 
             # Apply \sigma activation to all embeddings
             out[node_type] = self.embedding_activation(out[node_type])
@@ -328,10 +318,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return emb_relations
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        if self.disable_alpha:
-            same_alpha = torch.ones((x_j.shape[0], 1)).type_as(x_j)
-            return x_j * same_alpha / same_alpha.sum(0)
-
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
