@@ -315,7 +315,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
             if edge_index is None: continue
+
             # Propapate flows from target nodes to source nodes
+            print("edge_index", edge_index.max(1).values)
+            print("num_node_head, num_node_tail", num_node_head, num_node_tail)
+
             out = self.propagate(
                 edge_index=edge_index,
                 x=(l_dict[tail], r_dict[head]),
@@ -326,7 +330,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return emb_relations
 
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
+    def message(self, x_j, alpha_i, alpha_j, index, ptr, size_i, metapath_idx):
         if self.disable_alpha:
             same_alpha = torch.ones((x_j.shape[0], 1)).type_as(x_j)
             return x_j * same_alpha / same_alpha.sum(0)
