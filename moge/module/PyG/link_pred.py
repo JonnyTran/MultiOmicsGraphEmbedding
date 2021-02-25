@@ -1,18 +1,13 @@
-import multiprocessing
-from typing import Callable
-import logging
-
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch.utils.hooks import RemovableHandle
 
 from moge.generator import HeteroNetDataset
-from moge.module.PyG.latte import LATTE, untag_negative, is_negative
-from moge.module.utils import tensor_sizes
+from moge.module.PyG.latte import LATTE
+from moge.module.losses import LinkPredLoss
 from ..trainer import LinkPredTrainer
-from moge.module.losses import LinkPredLoss, ClassificationLoss
+
 
 class DistMulti(torch.nn.Module):
     def __init__(self, embedding_dim, metapaths):
@@ -139,9 +134,7 @@ class LATTELinkPred(LinkPredTrainer):
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
-
-        logs = self.train_metrics.compute_metrics()
-        outputs = {'loss': loss, 'progress_bar': logs}
+        outputs = {'loss': loss}
         return outputs
 
     def validation_step(self, batch, batch_nb):

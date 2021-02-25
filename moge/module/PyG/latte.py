@@ -1,20 +1,19 @@
-import copy, logging
+import copy
+
 import numpy as np
 import pandas as pd
+import pytorch_lightning as pl
 import torch
-from torch import nn as nn
-
 import torch.nn.functional as F
+import torch_sparse
+from torch import nn as nn
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.inits import glorot
 from torch_geometric.utils import softmax
-import torch_sparse
 from torch_sparse.tensor import SparseTensor
-from torch_sparse.matmul import matmul
-import pytorch_lightning as pl
 
-from moge.module.sampling import negative_sample, negative_sample_head_tail
-from moge.module.utils import preprocess_input, tensor_sizes
+from moge.module.sampling import negative_sample
+
 
 class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
@@ -223,13 +222,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         if first and len(non_attr_node_types) > 0:
-            if cpu_embeddings or embedding_dim >= 256 or sum([v for k, v in self.num_nodes_dict.items()]) > 1000000:
-                logging.info("Embedding.device = 'cpu'")
+            if cpu_embeddings:
+                print("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                                            embedding_dim=embedding_dim,
                                                            sparse=True).cpu() for node_type in non_attr_node_types}
             else:
-                logging.info("Embedding.device = 'gpu'")
+                print("Embedding.device = 'gpu'")
                 self.embeddings = nn.ModuleDict(
                     {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
                                              embedding_dim=embedding_dim,
