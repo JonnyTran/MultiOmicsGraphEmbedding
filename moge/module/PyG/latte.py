@@ -321,9 +321,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(l_dict[head], r_dict[tail]),
+                x=(l_dict[tail], r_dict[head]),
                 alpha=(alpha_l[metapath], alpha_r[metapath]),
-                size=(global_node_idx[head].size(0), global_node_idx[tail].size(0)),
+                size=(global_node_idx[tail].size(0), global_node_idx[head].size(0)),
                 metapath_idx=self.metapaths.index(metapath))
             print("out", out.shape)
             emb_relations[:, i] = out
