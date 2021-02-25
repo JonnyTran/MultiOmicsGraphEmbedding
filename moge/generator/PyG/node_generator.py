@@ -134,12 +134,12 @@ class NeighborSampler():
         return edge_index_dict
 
 
-class HeteroNeighborSampler(HeteroNetDataset):
+class HeteroNeighborGenerator(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True, inductive=False):
         self.neighbor_sizes = neighbor_sizes
-        super(HeteroNeighborSampler, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
-                                                    resample_train, add_reverse_metapaths, inductive)
+        super(HeteroNeighborGenerator, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
+                                                      resample_train, add_reverse_metapaths, inductive)
 
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)

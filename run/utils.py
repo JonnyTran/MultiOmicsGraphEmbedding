@@ -10,7 +10,7 @@ from ogb.nodeproppred import PygNodePropPredDataset
 from torch_geometric.datasets import AMiner
 
 import moge
-import moge.generator.PyG.triplet_sampler
+import moge.generator.PyG.triplet_generator
 from moge.generator.PyG.graphsaint_sampler import HeteroNeighborSampler
 from moge.module.utils import preprocess_input
 
@@ -89,21 +89,21 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
         if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
                 and not hasattr(ogbl[0], "edge_reltype"):
 
-            dataset = moge.generator.PyG.triplet_sampler.BidirectionalSampler(ogbl,
-                                                                              neighbor_sizes=[20, 15],
-                                                                              directed=False,
-                                                                              add_reverse_metapaths=hparams.use_reverse)
+            dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl,
+                                                                                  neighbor_sizes=[20, 15],
+                                                                                  directed=False,
+                                                                                  add_reverse_metapaths=hparams.use_reverse)
 
         else:
-            from moge.generator import BidirectionalSampler
+            from moge.generator import BidirectionalGenerator
 
-            dataset = moge.generator.PyG.triplet_sampler.BidirectionalSampler(ogbl, directed=True,
-                                                                              neighbor_sizes=[
-                                                                                  hparams.n_neighbors_1],
-                                                                              negative_sampling_size=hparams.neg_sampling_ratio,
-                                                                              test_negative_sampling_size=500,
-                                                                              head_node_type=None,
-                                                                              add_reverse_metapaths=hparams.use_reverse)
+            dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl, directed=True,
+                                                                                  neighbor_sizes=[
+                                                                                      hparams.n_neighbors_1],
+                                                                                  negative_sampling_size=hparams.neg_sampling_ratio,
+                                                                                  test_negative_sampling_size=500,
+                                                                                  head_node_type=None,
+                                                                                  add_reverse_metapaths=hparams.use_reverse)
 
         logging.info(f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
 

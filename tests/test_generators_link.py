@@ -5,8 +5,8 @@ import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
 import moge
-import moge.generator.PyG.edge_sampler
-import moge.generator.PyG.triplet_sampler
+import moge.generator.PyG.edge_generator
+import moge.generator.PyG.triplet_generator
 from moge.generator.utils import edge_dict_intersection, edge_sizes
 from moge.module.utils import tensor_sizes
 
@@ -27,20 +27,21 @@ def generate_dataset_homo():
 
 @pytest.fixture
 def generator_hetero(generate_dataset_hetero):
-    dataset = moge.generator.PyG.triplet_sampler.BidirectionalSampler(generate_dataset_hetero, neighbor_sizes=[10, 5],
-                                                                      directed=True,
-                                                                      node_types=['protein', 'drug', 'function',
-                                                                                  'disease', 'sideeffect'],
-                                                                      head_node_type="protein",
-                                                                      add_reverse_metapaths=False)
+    dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(generate_dataset_hetero,
+                                                                          neighbor_sizes=[10, 5],
+                                                                          directed=True,
+                                                                          node_types=['protein', 'drug', 'function',
+                                                                                      'disease', 'sideeffect'],
+                                                                          head_node_type="protein",
+                                                                          add_reverse_metapaths=False)
     return dataset
 
 
 @pytest.fixture
 def generator_homo(generate_dataset_homo):
-    dataset = moge.generator.PyG.edge_sampler.BidirectionalSampler(generate_dataset_homo, neighbor_sizes=[10, 5],
-                                                                   directed=True,
-                                                                   add_reverse_metapaths=False)
+    dataset = moge.generator.PyG.edge_generator.BidirectionalGenerator(generate_dataset_homo, neighbor_sizes=[10, 5],
+                                                                       directed=True,
+                                                                       add_reverse_metapaths=False)
     return dataset
 
 
@@ -55,11 +56,11 @@ def test_generator_hetero(generator_hetero):
 
 
 def test_generator_homo(generator_homo):
-    X, y, z = generator_homo.sample(generator_homo.training_idx[:50])
+    X, y, z = generator_homo.sample(generator_homo.training_idx[:50], mode="train")
     print(tensor_sizes({"X": X, "y": y, "z": z}))
     assert len(X) + len(y) + len(z) >= 3
 
-    X, y, z = generator_homo.sample(generator_homo.validation_idx[:50])
+    X, y, z = generator_homo.sample(generator_homo.validation_idx[:50], mode="valid")
     print(tensor_sizes({"X": X, "y": y, "z": z}))
     assert len(X) + len(y) + len(z) >= 3
 

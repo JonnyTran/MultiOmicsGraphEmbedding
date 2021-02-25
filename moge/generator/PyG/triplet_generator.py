@@ -3,17 +3,17 @@ import pandas as pd
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
-from moge.generator.PyG.node_sampler import HeteroNeighborSampler
+from moge.generator.PyG.node_generator import HeteroNeighborGenerator
 from moge.generator.network import HeteroNetDataset
 from moge.generator.utils import merge_node_index
 from moge.module.PyG.latte import is_negative
 
 
-class TripletSampler(HeteroNetDataset):
+class TripletDataset(HeteroNetDataset):
     def __init__(self, dataset: PygLinkPropPredDataset, node_types=None, metapaths=None, head_node_type=None,
                  directed=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
-        super(TripletSampler, self).__init__(dataset, node_types=node_types, metapaths=metapaths,
+        super(TripletDataset, self).__init__(dataset, node_types=node_types, metapaths=metapaths,
                                              head_node_type=head_node_type,
                                              directed=directed, resample_train=resample_train,
                                              add_reverse_metapaths=add_reverse_metapaths, **kwargs)
@@ -148,7 +148,7 @@ class TripletSampler(HeteroNetDataset):
 
         relation_ids_all = triples["relation"].unique()
 
-        global_node_index = self.get_nodes(triples, relation_ids_all, metapaths=self.metapaths)
+        global_node_index = self.gather_node_set(triples, relation_ids_all, metapaths=self.metapaths)
 
         edge_index_dict = self.get_relabled_edge_index(triples=triples,
                                                        global_node_index=global_node_index,
@@ -170,6 +170,28 @@ class TripletSampler(HeteroNetDataset):
              "x_dict": node_feats}
 
         return X, None, None
+
+    @staticmethod
+    def gather_node_set(triples, relation_ids, metapaths):
+        # Gather all nodes sampled
+        node_index_dict = {}
+
+        for relation_id in relation_ids:
+            metapath = metapaths[relation_id]
+            head_type, tail_type = metapath[0], metapath[-1]
+
+            mask = triples["relation"] == relation_id
+            node_index_dict.setdefault(head_type, []).append(triples["head"][mask])
+            node_index_dict.setdefault(tail_type, []).append(triples["tail"][mask])
+
+            if any(["neg" in k for k in triples.keys()]):
+                node_index_dict.setdefault(head_type, []).append(triples["head_neg"][mask].view(-1))
+                node_index_dict.setdefault(tail_type, []).append(triples["tail_neg"][mask].view(-1))
+
+        # Find union of nodes from all relations
+        node_index_dict = {node_type: torch.cat(node_sets, dim=0).unique() \
+                           for node_type, node_sets in node_index_dict.items()}
+        return node_index_dict
 
     @staticmethod
     def get_relabled_edge_index(triples, global_node_index, relation_ids_all, metapaths, local2batch=None):
@@ -204,41 +226,19 @@ class TripletSampler(HeteroNetDataset):
 
         return edges_pos, edges_neg
 
-    @staticmethod
-    def get_nodes(triples, relation_ids, metapaths):
-        # Gather all nodes sampled
-        node_index_dict = {}
 
-        for relation_id in relation_ids:
-            metapath = metapaths[relation_id]
-            head_type, tail_type = metapath[0], metapath[-1]
-
-            mask = triples["relation"] == relation_id
-            node_index_dict.setdefault(head_type, []).append(triples["head"][mask])
-            node_index_dict.setdefault(tail_type, []).append(triples["tail"][mask])
-
-            if any(["neg" in k for k in triples.keys()]):
-                node_index_dict.setdefault(head_type, []).append(triples["head_neg"][mask].view(-1))
-                node_index_dict.setdefault(tail_type, []).append(triples["tail_neg"][mask].view(-1))
-
-        # Find union of nodes from all relations
-        node_index_dict = {node_type: torch.cat(node_sets, dim=0).unique() \
-                           for node_type, node_sets in node_index_dict.items()}
-        return node_index_dict
-
-
-class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
+class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
 
     def __init__(self, dataset: PygLinkPropPredDataset, neighbor_sizes,
-                 negative_sampling_size=128, test_negative_sampling_size=500,
+                 negative_sampling_size=10, test_negative_sampling_size=500,
                  force_negative_sampling=False,
                  node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
-        super(BidirectionalSampler, self).__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
-                                                   metapaths=metapaths,
-                                                   head_node_type=head_node_type, directed=directed,
-                                                   resample_train=resample_train,
-                                                   add_reverse_metapaths=add_reverse_metapaths, **kwargs)
+        super(BidirectionalGenerator, self).__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
+                                                     metapaths=metapaths,
+                                                     head_node_type=head_node_type, directed=directed,
+                                                     resample_train=resample_train,
+                                                     add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.neg_sampling_size = negative_sampling_size
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
@@ -290,13 +290,13 @@ class BidirectionalSampler(TripletSampler, HeteroNeighborSampler):
         relation_ids_all = triples["relation"].unique()
 
         # Set of all nodes from sampled triples
-        triplets_node_index = self.get_nodes(triples, relation_ids_all, metapaths=self.metapaths)
+        triplets_node_index = TripletDataset.gather_node_set(triples, relation_ids_all, metapaths=self.metapaths)
 
         # Get true edges from triples
-        edges_pos, edges_neg = self.get_relabled_edge_index(triples=triples,
-                                                            global_node_index=triplets_node_index,
-                                                            relation_ids_all=relation_ids_all,
-                                                            metapaths=self.metapaths)
+        edges_pos, edges_neg = TripletDataset.get_relabled_edge_index(triples=triples,
+                                                                      global_node_index=triplets_node_index,
+                                                                      relation_ids_all=relation_ids_all,
+                                                                      metapaths=self.metapaths)
 
         # Whether to negative sampling
         if not edges_neg:

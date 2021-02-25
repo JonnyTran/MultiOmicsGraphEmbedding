@@ -3,24 +3,24 @@ import pandas as pd
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
-from moge.generator.PyG.node_sampler import HeteroNeighborSampler
+from moge.generator.PyG.node_generator import HeteroNeighborGenerator
 from moge.generator.network import HeteroNetDataset
 from moge.generator.utils import merge_node_index
 from moge.module.PyG.latte import is_negative
 
 
-class EdgeSampler(HeteroNetDataset):
+class EdgeDataset(HeteroNetDataset):
     DEFAULT_NODE_TYPE = "self"
     DEFAULT_METAPATH = (DEFAULT_NODE_TYPE, "edge", DEFAULT_NODE_TYPE)
 
     def __init__(self, *args, **kwargs):
-        super(EdgeSampler, self).__init__(*args, **kwargs)
+        super(EdgeDataset, self).__init__(*args, **kwargs)
 
     def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
         self._name = dataset.name
-        self.edge_index_dict = {EdgeSampler.DEFAULT_METAPATH: data.edge_index}
-        self.head_node_type = EdgeSampler.DEFAULT_NODE_TYPE
+        self.edge_index_dict = {EdgeDataset.DEFAULT_METAPATH: data.edge_index}
+        self.head_node_type = EdgeDataset.DEFAULT_NODE_TYPE
 
         if hasattr(data, "num_nodes_dict"):
             self.num_nodes_dict = data.num_nodes_dict
@@ -49,11 +49,11 @@ class EdgeSampler(HeteroNetDataset):
                 # True edges
                 if valid_triples[key].dim() == 2 and min(valid_triples[key].shape) == 2:
                     if valid_triples[key].shape[1] == 2:
-                        self.triples[EdgeSampler.DEFAULT_METAPATH] = torch.cat(
+                        self.triples[EdgeDataset.DEFAULT_METAPATH] = torch.cat(
                             [valid_triples[key], test_triples[key], train_triples[key]],
                             dim=0).permute(1, 0)
                     else:
-                        self.triples[EdgeSampler.DEFAULT_METAPATH] = torch.cat(
+                        self.triples[EdgeDataset.DEFAULT_METAPATH] = torch.cat(
                             [valid_triples[key], test_triples[key], train_triples[key]],
                             dim=0)
 
@@ -64,7 +64,7 @@ class EdgeSampler(HeteroNetDataset):
                         dim=0)
             else:
                 # Edge attribuets
-                self.triples[EdgeSampler.DEFAULT_METAPATH] = np.array(
+                self.triples[EdgeDataset.DEFAULT_METAPATH] = np.array(
                     valid_triples[key] + test_triples[key] + train_triples[key])
 
         # Concat neg edges
@@ -89,13 +89,13 @@ class EdgeSampler(HeteroNetDataset):
         assert self.testing_idx.max() < self.training_idx.min()
 
     @staticmethod
-    def get_nodes(triples):
+    def gather_node_set(triples):
         # Gather all unique nodes from sampled triples
         global_node_index = {}
 
         for metapath in triples:
-            global_node_index.setdefault(EdgeSampler.DEFAULT_NODE_TYPE, []).append(triples[metapath][0])
-            global_node_index.setdefault(EdgeSampler.DEFAULT_NODE_TYPE, []).append(triples[metapath][1])
+            global_node_index.setdefault(EdgeDataset.DEFAULT_NODE_TYPE, []).append(triples[metapath][0])
+            global_node_index.setdefault(EdgeDataset.DEFAULT_NODE_TYPE, []).append(triples[metapath][1])
 
         # Find union of nodes from all relations
         global_node_index = {node_type: torch.cat(node_sets, dim=0).unique() \
@@ -116,14 +116,14 @@ class EdgeSampler(HeteroNetDataset):
         # Get edge_index with batch id
         for metapath in triples:
             if not is_negative(metapath):  # ("self", "edge", "self")
-                sources = triples[metapath][0].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
-                targets = triples[metapath][1].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
-                edges_pos[EdgeSampler.DEFAULT_METAPATH] = torch.stack([sources, targets], dim=0)
+                sources = triples[metapath][0].apply_(local2batch[EdgeDataset.DEFAULT_NODE_TYPE].get)
+                targets = triples[metapath][1].apply_(local2batch[EdgeDataset.DEFAULT_NODE_TYPE].get)
+                edges_pos[EdgeDataset.DEFAULT_METAPATH] = torch.stack([sources, targets], dim=0)
 
             elif is_negative(metapath):  # "edge_neg"
-                sources = triples[metapath][0].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
-                targets = triples[metapath][1].apply_(local2batch[EdgeSampler.DEFAULT_NODE_TYPE].get)
-                edges_neg[EdgeSampler.DEFAULT_METAPATH] = torch.stack([sources, targets], dim=0)
+                sources = triples[metapath][0].apply_(local2batch[EdgeDataset.DEFAULT_NODE_TYPE].get)
+                targets = triples[metapath][1].apply_(local2batch[EdgeDataset.DEFAULT_NODE_TYPE].get)
+                edges_neg[EdgeDataset.DEFAULT_METAPATH] = torch.stack([sources, targets], dim=0)
 
             else:
                 raise Exception(f"something wrong with metapath {metapath}")
@@ -134,22 +134,22 @@ class EdgeSampler(HeteroNetDataset):
         return self.sample
 
 
-class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
+class BidirectionalGenerator(EdgeDataset, HeteroNeighborGenerator):
     def __init__(self, dataset: PygLinkPropPredDataset, neighbor_sizes,
                  negative_sampling_size=128, test_negative_sampling_size=500,
                  force_negative_sampling=False,
                  node_types=None, metapaths=None, head_node_type=None, directed=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
-        super(BidirectionalSampler, self).__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
-                                                   metapaths=metapaths,
-                                                   head_node_type=head_node_type, directed=directed,
-                                                   resample_train=resample_train,
-                                                   add_reverse_metapaths=add_reverse_metapaths, **kwargs)
+        super(BidirectionalGenerator, self).__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
+                                                     metapaths=metapaths,
+                                                     head_node_type=head_node_type, directed=directed,
+                                                     resample_train=resample_train,
+                                                     add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.neg_sampling_size = negative_sampling_size
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
 
-        df = pd.DataFrame(self.triples[EdgeSampler.DEFAULT_METAPATH].numpy().T)
+        df = pd.DataFrame(self.triples[EdgeDataset.DEFAULT_METAPATH].numpy().T)
         self.degree_counts = df.groupby(0)[1].count().add(df.groupby(1)[0].count(),
                                                           fill_value=0)  # <node_id: in_degree + out_degree>
 
@@ -184,10 +184,10 @@ class BidirectionalSampler(EdgeSampler, HeteroNeighborSampler):
                             if is_negative(key)})
 
         # Set of all nodes from sampled triples
-        triplets_node_index = EdgeSampler.get_nodes(triples)
+        triplets_node_index = EdgeDataset.gather_node_set(triples)
 
         # Get true edges from triples
-        edges_pos, edges_neg = EdgeSampler.get_relabled_edge_index(triples=triples,
+        edges_pos, edges_neg = EdgeDataset.get_relabled_edge_index(triples=triples,
                                                                    global_node_index=triplets_node_index)
 
         # Whether to negative sampling

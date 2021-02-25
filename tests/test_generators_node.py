@@ -5,7 +5,7 @@ import torch
 from cogdl.datasets.han_data import DBLP_HANDataset
 from ogb.nodeproppred import PygNodePropPredDataset
 
-from moge.generator import HeteroNeighborSampler
+from moge.generator import HeteroNeighborGenerator
 from moge.generator.utils import edge_dict_intersection, edge_sizes
 from moge.module.utils import tensor_sizes
 
@@ -25,19 +25,19 @@ def generate_dataset_homo():
 
 @pytest.fixture
 def generator_hetero(generate_dataset_hetero):
-    dataset = HeteroNeighborSampler(generate_dataset_hetero, neighbor_sizes=[20, 10],
-                                    head_node_type="paper",
-                                    directed=True,
-                                    add_reverse_metapaths=True)
+    dataset = HeteroNeighborGenerator(generate_dataset_hetero, neighbor_sizes=[20, 10],
+                                      head_node_type="paper",
+                                      directed=True,
+                                      add_reverse_metapaths=True)
     return dataset
 
 
 @pytest.fixture
 def generator_homo(generate_dataset_homo):
-    dataset = HeteroNeighborSampler(DBLP_HANDataset(), neighbor_sizes=[25, 20],
-                                    node_types=["A", "P", "C", "T"], head_node_type="A",
-                                    metapaths=["AC", "AP", "AT"],
-                                    add_reverse_metapaths=True, inductive=True)
+    dataset = HeteroNeighborGenerator(DBLP_HANDataset(), neighbor_sizes=[25, 20],
+                                      node_types=["A", "P", "C", "T"], head_node_type="A",
+                                      metapaths=["AC", "AP", "AT"],
+                                      add_reverse_metapaths=True, inductive=True)
     dataset.x_dict["P"] = dataset.x_dict["A"]
     dataset.x_dict["C"] = dataset.x_dict["A"]
     dataset.x_dict["T"] = dataset.x_dict["A"]

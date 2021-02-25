@@ -1,5 +1,3 @@
-import itertools
-
 import numpy as np
 import torch
 
@@ -28,7 +26,7 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
 
 def tensor_sizes(input):
     if isinstance(input, dict):
-        return {k: tensor_sizes(v) for k, v in input.items()}
+        return {k if not isinstance(k, tuple) else k[-2]: tensor_sizes(v) for k, v in input.items()}
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)
     elif isinstance(input, list):
