@@ -183,7 +183,7 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
         super(LinkPredTrainer, self).__init__(hparams, dataset, metrics, *args, **kwargs)
 
-        self.test_batch_size = 2048
+        self.test_batch_size = 1024
 
     def reshape_e_pos_neg(self, edge_pred_dict, edge_weights_dict=None):
         e_pos = []

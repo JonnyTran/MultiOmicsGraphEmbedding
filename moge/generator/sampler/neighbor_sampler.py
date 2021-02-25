@@ -167,7 +167,7 @@ class NeighborSampler(Sampler):
 
         return n_idx_to_sample
 
-    def get_nodes_dict(self, adjs, n_id):
+    def get_nodes_dict(self, adjs: List[EdgeIndex], n_id):
         """
         Args:
             adjs:
