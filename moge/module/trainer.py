@@ -139,10 +139,12 @@ class NodeClfTrainer(ClusteringEvaluator):
         return None
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=self.hparams.batch_size)
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=self.hparams.batch_size)
 
     def valtrain_dataloader(self):
         return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
