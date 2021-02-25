@@ -1,9 +1,7 @@
 import itertools
 import logging
-from abc import ABCMeta
 
 import pandas as pd
-import pytorch_lightning as pl
 import torch
 from pytorch_lightning import LightningModule
 
@@ -232,7 +230,7 @@ class LinkPredTrainer(NodeClfTrainer):
         # else:
         #     batch_size = self.hparams.batch_size
         return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size // 10)
+                                             batch_size=self.hparams.batch_size // 12)
 
     def test_dataloader(self):
         # if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
@@ -240,4 +238,4 @@ class LinkPredTrainer(NodeClfTrainer):
         # else:
         #     batch_size = self.hparams.batch_size
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size // 10)
+                                            batch_size=self.hparams.batch_size // 12)
