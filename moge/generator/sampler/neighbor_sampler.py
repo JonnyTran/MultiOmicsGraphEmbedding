@@ -5,9 +5,8 @@ from typing import Union, List, Optional
 
 import numpy as np
 import torch
-import torch_geometric
 from torch import Tensor
-from torch_geometric.data.sampler import Adj, EdgeIndex
+from torch_geometric.data.sampler import Adj, EdgeIndex, maybe_num_nodes
 from torch_geometric.utils.hetero import group_hetero_graph
 from torch_sparse import coalesce, SparseTensor
 
@@ -26,12 +25,42 @@ class Sampler(metaclass=ABCMeta):
         pass
 
 
-class HeteroNeighborSampler(torch_geometric.data.NeighborSampler):
-    def __init__(self, edge_index: Union[Tensor, SparseTensor], sizes: List[int], node_idx: Optional[Tensor] = None,
-                 num_nodes: Optional[int] = None, return_e_id: bool = True, **kwargs):
-        super().__init__(edge_index, sizes, node_idx, num_nodes, return_e_id, **kwargs)
+class HeteroNeighborSampler(torch.utils.data.DataLoader):
+    def __init__(self, edge_index: Union[Tensor, SparseTensor],
+                 sizes: List[int], node_idx: Optional[Tensor] = None,
+                 num_nodes: Optional[int] = None, return_e_id: bool = True,
+                 **kwargs):
 
-        self.adj_t.storage.colptr()
+        self.sizes = sizes
+        self.return_e_id = return_e_id
+        self.is_sparse_tensor = isinstance(edge_index, SparseTensor)
+        self.__val__ = None
+
+        # Obtain a *transposed* `SparseTensor` instance.
+        edge_index = edge_index.to('cpu')
+        if not self.is_sparse_tensor:
+            num_nodes = maybe_num_nodes(edge_index, num_nodes)
+            value = torch.arange(edge_index.size(1)) if return_e_id else None
+            self.adj_t = SparseTensor(row=edge_index[1], col=edge_index[0],
+                                      value=value,
+                                      sparse_sizes=(num_nodes, num_nodes)).t()
+        else:
+            adj_t = edge_index
+            if return_e_id:
+                self.__val__ = adj_t.storage.value()
+                value = torch.arange(adj_t.nnz())
+                adj_t = adj_t.set_value(value, layout='coo')
+            self.adj_t = adj_t
+
+        self.adj_t.storage.rowptr()
+
+        if node_idx is None:
+            node_idx = torch.arange(self.adj_t.sparse_size(0))
+        elif node_idx.dtype == torch.bool:
+            node_idx = node_idx.nonzero(as_tuple=False).view(-1)
+
+        super(HeteroNeighborSampler, self).__init__(
+            node_idx.view(-1).tolist(), collate_fn=self.sample, **kwargs)
 
     def sample(self, batch):
         if not isinstance(batch, Tensor):
@@ -52,7 +81,7 @@ class HeteroNeighborSampler(torch_geometric.data.NeighborSampler):
                 adjs.append(Adj(adj_t, e_id, size))
             else:
                 row, col, _ = adj_t.coo()
-                edge_index = torch.stack([row, col], dim=0)
+                edge_index = torch.stack([col, row], dim=0)
                 adjs.append(EdgeIndex(edge_index, e_id, size))
 
         return batch_size, n_id, adjs
@@ -168,6 +197,9 @@ class NeighborSampler(Sampler):
             if edge_index.shape[1] == 0: continue
 
             # Convert node global index -> local index -> batch index
+            print("edge_index", edge_index.shape)
+            print("relabel_nodes", relabel_nodes.keys())
+            print("head_tail", head_type, tail_type)
             edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
             edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
 
@@ -180,7 +212,8 @@ class NeighborSampler(Sampler):
         # Ensure no duplicate edges in each metapath
         edge_index_dict = {metapath: coalesce(index=edge_index, value=torch.ones_like(edge_index[0], dtype=torch.float),
                                               m=sampled_local_nodes[metapath[0]].size(0),
-                                              n=sampled_local_nodes[metapath[-1]].size(0))[0] \
+                                              n=sampled_local_nodes[metapath[-1]].size(0),
+                                              op="max")[0] \
                            for metapath, edge_index in edge_index_dict.items()}
 
         return edge_index_dict
