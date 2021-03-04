@@ -3,8 +3,6 @@
 /data/
 .idea/
 .ipynb_checkpoints/
-.idea/
-.ipynb_checkpoints/
 /multiplex-rna-embedding/
 /wandb/
 /result/
@@ -16,4 +14,6 @@
 /archive_ipynbs/
 /datasets/
 /LATTE/anon-demo/*
-/LATTE/anon-demo/*
+/tests/datasets/
+/log/
+/dataset/
