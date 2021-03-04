@@ -45,7 +45,7 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
 
-    def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
+    def process_DglLinkDataset_hetero(self, dataset: DglLinkPropPredDataset):
         graph, labels = dataset[0]
         self._name = dataset.name
 

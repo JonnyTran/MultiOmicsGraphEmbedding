@@ -6,7 +6,7 @@ import torch
 import torch_sparse
 from cogdl.datasets.gtn_data import GTNDataset
 from cogdl.datasets.han_data import HANDataset
-from ogb.linkproppred import PygLinkPropPredDataset
+from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 from scipy.io import loadmat
 from torch.utils import data
@@ -159,6 +159,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         elif isinstance(dataset, DglNodePropPredDataset):
             print("DGLNodePropPredDataset Hetero")
             self.process_DglNodeDataset_hetero(dataset)
+        elif isinstance(dataset, DglLinkPropPredDataset):
+            print("DGLLinkPropPredDataset Hetero")
+            self.process_DglLinkDataset_hetero(dataset)
 
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
                 not hasattr(dataset[0], "edge_index_dict"):
