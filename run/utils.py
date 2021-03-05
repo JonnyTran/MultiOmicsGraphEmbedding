@@ -91,13 +91,13 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
 
             dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl,
                                                                                   neighbor_sizes=[20, 15],
-                                                                                  directed=False,
+                                                                                  edge_dir=False,
                                                                                   add_reverse_metapaths=hparams.use_reverse)
 
         else:
             from moge.generator import BidirectionalGenerator
 
-            dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl, directed=True,
+            dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl, edge_dir=True,
                                                                                   neighbor_sizes=[
                                                                                       hparams.n_neighbors_1],
                                                                                   negative_sampling_size=hparams.neg_sampling_ratio,

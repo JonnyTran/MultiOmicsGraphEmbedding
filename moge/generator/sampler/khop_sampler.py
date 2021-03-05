@@ -35,14 +35,14 @@ class KHopHeteroSampler():
 
 
 class KHopGenerator(HeteroNetDataset):
-    def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, directed=True,
+    def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, edge_dir=True,
                  resample_train: float = None, add_reverse_metapaths=True, inductive=True):
-        super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
+        super().__init__(dataset, node_types, metapaths, head_node_type, edge_dir, resample_train,
                          add_reverse_metapaths, inductive)
 
         self.neighbor_sizes = neighbor_sizes
-        super(KHopGenerator, self).__init__(dataset, node_types, metapaths, head_node_type, directed,
-                                            resample_train, add_reverse_metapaths, inductive)
+        super(KHopGenerator, self).__init__(dataset, node_types, metapaths, head_node_type, edge_dir, resample_train,
+                                            add_reverse_metapaths, inductive)
 
         if self.use_reverse:
             self.add_reverse_edge_index(self.edge_index_dict)

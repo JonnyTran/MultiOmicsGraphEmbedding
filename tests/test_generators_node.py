@@ -28,7 +28,7 @@ def generate_dataset_homo():
 def generator_hetero(generate_dataset_hetero):
     dataset = HeteroNeighborGenerator(generate_dataset_hetero, neighbor_sizes=[20, 10],
                                       head_node_type="paper",
-                                      directed=True,
+                                      edge_dir=True,
                                       add_reverse_metapaths=True)
     return dataset
 

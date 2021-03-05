@@ -30,7 +30,7 @@ def generate_dataset_homo():
 def generator_hetero(generate_dataset_hetero):
     dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(generate_dataset_hetero,
                                                                           neighbor_sizes=[10, 5],
-                                                                          directed=True,
+                                                                          edge_dir=True,
                                                                           node_types=['protein', 'drug', 'function',
                                                                                       'disease', 'sideeffect'],
                                                                           head_node_type="protein",
@@ -41,7 +41,7 @@ def generator_hetero(generate_dataset_hetero):
 @pytest.fixture
 def generator_homo(generate_dataset_homo):
     dataset = moge.generator.PyG.edge_generator.BidirectionalGenerator(generate_dataset_homo, neighbor_sizes=[10, 5],
-                                                                       directed=True,
+                                                                       edge_dir=True,
                                                                        add_reverse_metapaths=False)
     return dataset
 

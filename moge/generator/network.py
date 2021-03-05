@@ -1,3 +1,5 @@
+from typing import Union, Dict, List, Tuple
+from abc import abstractmethod
 import logging
 import networkx as nx
 import numpy as np
@@ -10,7 +12,7 @@ from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 from scipy.io import loadmat
 from torch.utils import data
-from torch_geometric.data import InMemoryDataset
+from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 
 from sklearn.cluster import KMeans
 
@@ -129,27 +131,19 @@ class Network:
 
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):
-    def __init__(self, dataset, node_types=None, metapaths=None, head_node_type=None, directed=True,
-                 resample_train: float = None, add_reverse_metapaths=True, inductive=True):
-        """
-        This class handles processing of the data & train/test spliting.
-        :param dataset:
-        :param node_types:
-        :param metapaths:
-        :param head_node_type:
-        :param directed:
-        :param resample_train:
-        :param add_reverse_metapaths:
-        """
+    def __init__(self, dataset: Union[
+        PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset, DglNodePropPredDataset, DglLinkPropPredDataset],
+                 node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
+                 edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
+                 inductive: bool = True):
         self.dataset = dataset
-        self.directed = directed
+        self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
         self.node_types = node_types
         self.head_node_type = head_node_type
         self.inductive = inductive
 
-        # PyTorchGeometric Dataset
-
+        # OGB Datasets
         if isinstance(dataset, PygNodePropPredDataset) and not hasattr(dataset[0], "edge_index_dict"):
             print("PygNodePropPredDataset Homogenous (use HeteroNeighborSampler class)")
             self.process_PygNodeDataset_homo(dataset)
@@ -163,6 +157,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             print("DGLLinkPropPredDataset Hetero")
             self.process_DglLinkDataset_hetero(dataset)
 
+        # DGL datasets
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
                 not hasattr(dataset[0], "edge_index_dict"):
             print("PygLink_edge_reltype_dataset Hetero (use TripletSampler class)")
@@ -175,12 +170,13 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             print("PygLinkDataset Homo (use EdgeSampler class)")
             self.process_PygLinkDataset_homo(dataset)
 
-        elif isinstance(dataset, InMemoryDataset):
+        # Pytorch Geometric Datasets
+        elif isinstance(dataset, PyGInMemoryDataset):
             print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio=0.5)
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             print(f"{dataset.__class__.__name__}")
-            self.process_COGDLdataset(dataset, metapaths, node_types, resample_train)
+            self.process_COGDLdataset(dataset, metapaths, node_types, reshuffle_train)
         elif "blogcatalog6k" in dataset:
             self.process_BlogCatalog6k(dataset, train_ratio=0.5)
         else:
@@ -219,8 +215,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if not hasattr(self, "x_dict") or len(self.x_dict) == 0:
             self.x_dict = {}
 
-        if resample_train is not None and resample_train > 0:
-            self.resample_training_idx(resample_train)
+        if reshuffle_train is not None and reshuffle_train > 0:
+            self.resample_training_idx(reshuffle_train)
         else:
             print("train_ratio", self.get_train_ratio())
         self.train_ratio = self.get_train_ratio()
@@ -230,6 +226,10 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             return self.dataset.__class__.__name__
         else:
             return self._name
+
+    @abstractmethod
+    def compute_node_degrees(self, *args, **kwargs):
+        raise NotImplementedError
 
     @property
     def node_attr_shape(self):
@@ -419,7 +419,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                 edge_index_dict.items()}
         self.training_node, self.validation_node, self.testing_node = self.split_train_val_test(train_ratio)
 
-    def process_inmemorydataset(self, dataset: InMemoryDataset, train_ratio):
+    def process_inmemorydataset(self, dataset: PyGInMemoryDataset, train_ratio):
         data = dataset[0]
         self.edge_index_dict = data.edge_index_dict
         self.num_nodes_dict = data.num_nodes_dict

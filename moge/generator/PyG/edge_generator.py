@@ -14,7 +14,7 @@ class EdgeDataset(HeteroNetDataset):
     DEFAULT_METAPATH = (DEFAULT_NODE_TYPE, "edge", DEFAULT_NODE_TYPE)
 
     def __init__(self, *args, **kwargs):
-        super(EdgeDataset, self).__init__(*args, **kwargs)
+        super(EdgeDataset, self).__init__(**kwargs)
 
     def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
@@ -138,11 +138,11 @@ class BidirectionalGenerator(EdgeDataset, HeteroNeighborGenerator):
     def __init__(self, dataset: PygLinkPropPredDataset, neighbor_sizes,
                  negative_sampling_size=128, test_negative_sampling_size=500,
                  force_negative_sampling=False,
-                 node_types=None, metapaths=None, head_node_type=None, directed=True,
+                 node_types=None, metapaths=None, head_node_type=None, edge_dir=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
         super(BidirectionalGenerator, self).__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
                                                      metapaths=metapaths,
-                                                     head_node_type=head_node_type, directed=directed,
+                                                     head_node_type=head_node_type, edge_dir=edge_dir,
                                                      resample_train=resample_train,
                                                      add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.neg_sampling_size = negative_sampling_size

@@ -10,10 +10,10 @@ from moge.generator.network import HeteroNetDataset
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglLinkPropPredDataset, neighbor_sizes, full_neighbor=False, node_types=None,
                  metapaths=None,
-                 head_node_type=None, directed=True, resample_train: float = None, add_reverse_metapaths=True,
+                 head_node_type=None, edge_dir=True, resample_train: float = None, add_reverse_metapaths=True,
                  inductive=True):
         self.neighbor_sizes = neighbor_sizes
-        super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
+        super().__init__(dataset, node_types, metapaths, head_node_type, edge_dir, resample_train,
                          add_reverse_metapaths, inductive)
         assert isinstance(self.G, (dgl.DGLGraph, dgl.DGLHeteroGraph))
 

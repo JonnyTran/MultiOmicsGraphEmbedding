@@ -1,20 +1,29 @@
 import dgl
 import numpy as np
+import pandas as pd
 import torch
 from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
 
+from dgl.dataloading import BlockSampler
 from moge.generator.network import HeteroNetDataset
+from .samplers import ImportanceSampler, MultiLayerNeighborSampler
 
 
 class DGLNodeSampler(HeteroNetDataset):
-    def __init__(self, dataset: DglNodePropPredDataset, neighbor_sizes, full_neighbor=False, node_types=None,
+    def __init__(self, dataset: DglNodePropPredDataset, neighbor_sizes,
+                 sampler: BlockSampler,
+                 node_types=None,
                  metapaths=None,
-                 head_node_type=None, directed=True, resample_train: float = None, add_reverse_metapaths=True,
+                 head_node_type=None,
+                 edge_dir=True,
+                 reshuffle_train: float = None,
+                 add_reverse_metapaths=True,
                  inductive=True):
         self.neighbor_sizes = neighbor_sizes
-        super().__init__(dataset, node_types, metapaths, head_node_type, directed, resample_train,
-                         add_reverse_metapaths, inductive)
+        super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
+                         edge_dir=edge_dir, reshuffle_train=reshuffle_train,
+                         add_reverse_metapaths=add_reverse_metapaths, inductive=inductive)
         assert isinstance(self.G, (dgl.DGLGraph, dgl.DGLHeteroGraph))
 
         if add_reverse_metapaths:
@@ -35,15 +44,48 @@ class DGLNodeSampler(HeteroNetDataset):
                     new_g.nodes[ntype].data[k] = v
 
             self.G = new_g
-
-        # elif directed is False:
         #     self.G = dgl.to_bidirected(self.G, copy_ndata=True)
 
-        if not full_neighbor:
-            self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False,
-                                                                              return_eids=False)
-        else:
+        self.degree_counts = self.compute_node_degrees()
+
+        if sampler is None:
+            print("Using Full Multilayer sampler")
             self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
+        elif sampler == "ImportanceSampler":
+            self.neighbor_sampler = ImportanceSampler(fanouts=neighbor_sizes,
+                                                      metapaths=self.get_metapaths(),
+                                                      degree_counts=self.degree_counts,
+                                                      edge_dir=edge_dir)
+        else:
+            raise Exception
+
+    def compute_node_degrees(self):
+        dfs = []
+        for metapath in self.G.canonical_etypes:
+            head_type, tail_type = metapath[0], metapath[-1]
+            relation = self.get_metapaths().index(metapath)
+
+            src, dst = self.G.all_edges(etype=metapath)
+
+            df = pd.DataFrame()
+            df["head"] = src.numpy()
+            df["tail"] = dst.numpy()
+            df["head_type"] = head_type
+            df["relation"] = relation
+            df["tail_type"] = tail_type
+
+            dfs.append(df)
+
+        df = pd.concat(dfs)
+
+        head_counts = df.groupby(["head", "relation", "head_type"])["tail"].count()
+        tail_counts = df.groupby(["tail", "relation", "tail_type"])["head"].count()
+        tail_counts.index = tail_counts.index.set_levels(levels=-tail_counts.index.get_level_values(1) - 1,
+                                                         level=1,
+                                                         verify_integrity=False, )
+        head_counts.index = head_counts.index.set_names(["nid", "relation", "ntype"])
+        tail_counts.index = tail_counts.index.set_names(["nid", "relation", "ntype"])
+        return head_counts.append(tail_counts).to_dict()  # (node_id, relation, ntype): count
 
     def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]

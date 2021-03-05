@@ -11,11 +11,11 @@ from moge.module.PyG.latte import is_negative
 
 class TripletDataset(HeteroNetDataset):
     def __init__(self, dataset: PygLinkPropPredDataset, node_types=None, metapaths=None, head_node_type=None,
-                 directed=True,
+                 edge_dir=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
         super(TripletDataset, self).__init__(dataset, node_types=node_types, metapaths=metapaths,
-                                             head_node_type=head_node_type,
-                                             directed=directed, resample_train=resample_train,
+                                             head_node_type=head_node_type, edge_dir=edge_dir,
+                                             reshuffle_train=resample_train,
                                              add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.n_classes = None
         self.classes = None
@@ -232,11 +232,11 @@ class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
     def __init__(self, dataset: PygLinkPropPredDataset, neighbor_sizes,
                  negative_sampling_size=10, test_negative_sampling_size=500,
                  force_negative_sampling=False,
-                 node_types=None, metapaths=None, head_node_type=None, directed=True,
+                 node_types=None, metapaths=None, head_node_type=None, edge_dir=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):
         super(BidirectionalGenerator, self).__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
                                                      metapaths=metapaths,
-                                                     head_node_type=head_node_type, directed=directed,
+                                                     head_node_type=head_node_type, edge_dir=edge_dir,
                                                      resample_train=resample_train,
                                                      add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.neg_sampling_size = negative_sampling_size
@@ -244,20 +244,20 @@ class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
         self.force_neg_sampling = force_negative_sampling
 
         # Count degrees for (node_id, relation_id, node_type)
-        df = pd.DataFrame(
-            {key: self.triples[key].numpy() if isinstance(self.triples[key], torch.Tensor) else self.triples[key] \
-             for key in ["head", "head_type", "relation", "tail", "tail_type"]})
+        self.degree_counts = self.compute_node_degrees(self.triples)
 
+    def compute_node_degrees(self, hetero_triples):
+        df = pd.DataFrame(
+            {key: hetero_triples[key].numpy() if isinstance(hetero_triples[key], torch.Tensor) else self.triples[key] \
+             for key in ["head", "head_type", "relation", "tail", "tail_type"]})
         head_counts = df.groupby(["head", "relation", "head_type"])["tail"].count()
         tail_counts = df.groupby(["tail", "relation", "tail_type"])["head"].count()
         tail_counts.index = tail_counts.index.set_levels(levels=-tail_counts.index.get_level_values(1) - 1,
                                                          level=1,
                                                          verify_integrity=False, )
-
         head_counts.index = head_counts.index.set_names(["nid", "relation", "ntype"])
         tail_counts.index = tail_counts.index.set_names(["nid", "relation", "ntype"])
-
-        self.degree_counts = head_counts.append(tail_counts).to_dict()  # (node_id, relation, ntype): count
+        return head_counts.append(tail_counts).to_dict()  # (node_id, relation, ntype): count
 
     def get_collate_fn(self, collate_fn: str, mode=None):
         assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
