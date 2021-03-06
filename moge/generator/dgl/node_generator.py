@@ -151,15 +151,15 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
-        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
-                                                block_sampler=self.neighbor_sampler)
-        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+        # collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
+        #                                         block_sampler=self.neighbor_sampler)
+        # dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+        #                         batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
-        # dataloader = dgl.dataloading.NodeDataLoader(
-        #     graph, nids={self.head_node_type: self.training_idx},
-        #     block_sampler=self.neighbor_sampler,
-        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        dataloader = dgl.dataloading.NodeDataLoader(
+            graph, nids={self.head_node_type: self.training_idx},
+            block_sampler=self.neighbor_sampler,
+            batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
         return dataloader
 
@@ -171,29 +171,29 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
-        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
-                                                block_sampler=self.neighbor_sampler)
-        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
+        # collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
+        #                                         block_sampler=self.neighbor_sampler)
+        # dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+        #                         batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
         #
-        # dataloader = dgl.dataloading.NodeDataLoader(
-        #     graph, nids={self.head_node_type: self.validation_idx},
-        #     block_sampler=self.neighbor_sampler,
-        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        dataloader = dgl.dataloading.NodeDataLoader(
+            graph, nids={self.head_node_type: self.validation_idx},
+            block_sampler=self.neighbor_sampler,
+            batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         graph = self.G
 
-        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
-                                                block_sampler=self.neighbor_sampler)
-        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
+        # collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
+        #                                         block_sampler=self.neighbor_sampler)
+        # dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+        #                         batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
 
-        # dataloader = dgl.dataloading.NodeDataLoader(
-        #     graph, nids={self.head_node_type: self.testing_idx},
-        #     block_sampler=self.neighbor_sampler,
-        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        dataloader = dgl.dataloading.NodeDataLoader(
+            graph, nids={self.head_node_type: self.testing_idx},
+            block_sampler=self.neighbor_sampler,
+            batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
 
 
