@@ -3,9 +3,10 @@ import random
 import pytest
 import torch
 from cogdl.datasets.han_data import DBLP_HANDataset
-from ogb.nodeproppred import PygNodePropPredDataset
+from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 
 from moge.generator import HeteroNeighborGenerator
+from moge.generator.dgl.node_generator import DGLNodeSampler
 from moge.generator.utils import edge_dict_intersection, edge_dict_sizes
 from moge.generator.utils import nonduplicate_indices
 from moge.module.utils import tensor_sizes
@@ -19,6 +20,10 @@ def generate_dataset_hetero():
     return ogbn
 
 
+def generate_dataset_hetero_DGL():
+    ogbn = DglNodePropPredDataset(name="ogbn-mag", root=dataset_path)
+    return ogbn
+
 @pytest.fixture
 def generate_dataset_homo():
     return DBLP_HANDataset()
@@ -30,6 +35,14 @@ def generator_hetero(generate_dataset_hetero):
                                       head_node_type="paper",
                                       edge_dir=True,
                                       add_reverse_metapaths=True)
+    return dataset
+
+
+@pytest.fixture
+def generator_hetero_DGL(generate_dataset_hetero_DGL):
+    dataset = DGLNodeSampler(generate_dataset_hetero_DGL, sampler="ImportanceSampler", neighbor_sizes=[20, 10],
+                             head_node_type="paper", edge_dir="in",
+                             add_reverse_metapaths=True, inductive=False)
     return dataset
 
 
@@ -60,6 +73,16 @@ def test_generator_hetero(generator_hetero):
     print(tensor_sizes({"X": X, "y": y}))
     assert X is not None
     assert y is not None
+
+
+def test_generator_hetero_DGL(generator_hetero_DGL):
+    input_nodes, seeds, blocks = next(iter(generator_hetero_DGL.train_dataloader(num_workers=0)))
+    for b in blocks:
+        assert b.num_edges() > 0
+
+    input_nodes, seeds, blocks = next(iter(generator_hetero_DGL.valid_dataloader(num_workers=0)))
+    for b in blocks:
+        assert b.num_edges() > 0
 
 
 def test_generator_homo(generator_homo):

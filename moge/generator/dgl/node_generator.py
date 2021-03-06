@@ -14,7 +14,7 @@ from .samplers import ImportanceSampler, MultiLayerNeighborSampler
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
-                 sampler: BlockSampler,
+                 sampler: str,
                  neighbor_sizes=None,
                  node_types=None,
                  metapaths=None,

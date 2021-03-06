@@ -43,6 +43,7 @@ class ImportanceSampler(BlockSampler):
             sg = dgl.out_subgraph(g, seed_nodes)
 
         self.assign_prob(sg, seed_nodes)
+        print(sg)
         # for metapath in sg.canonical_etypes:
         #     sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
 
@@ -84,19 +85,28 @@ class ImportanceSampler(BlockSampler):
             subgraph (dgl.DGLHeteroGraph):
             seed_nodes:
         """
+        print("gothere")
         for metapath in subgraph.canonical_etypes:
             head_type, tail_type = metapath[0], metapath[-1]
             relation_id = self.metapaths.index(metapath)
+            print(metapath)
 
             src, dst = subgraph.all_edges(etype=metapath)
-            if src.size(0) == 0: continue
+            if src.size(0) == 0:
+                subgraph.edges[metapath].data["prob"] = torch.tensor([])
+                continue
 
-            subsampling_weight = src.apply_(lambda nid: self.degree_counts.get((nid, relation_id, head_type), 1)).type(
-                torch.float)
+            print("src", src)
+            print("nid, relation_id, head_type", relation_id, head_type)
+
+            # subsampling_weight = src.apply_(lambda nid: self.degree_counts.get((nid, relation_id, head_type), 1)).type(
+            #     torch.float)
+            # print(subsampling_weight.shape)
+
             # if (self.degree_counts.index.get_level_values(1) < 0).any():
             #     subsampling_weight += dst.apply_(
             #         lambda nid: self.degree_counts.get((nid, -relation_id - 1, tail_type), 1)).type(
             #         torch.float)
 
-            subsampling_weight = torch.sqrt(1.0 / subsampling_weight)
-            subgraph.edges[metapath].data["prob"] = subsampling_weight
+            # subsampling_weight = torch.sqrt(1.0 / subsampling_weight)
+            # subgraph.edges[metapath].data["prob"] = subsampling_weight
