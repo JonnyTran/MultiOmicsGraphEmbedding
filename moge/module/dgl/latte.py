@@ -101,7 +101,7 @@ class LATTE(nn.Module):
 
         return output_dict
 
-    def forward(self, blocks, feat, save_betas=False):
+    def forward(self, blocks, save_betas=False):
         """
         This
         :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
@@ -113,23 +113,26 @@ class LATTE(nn.Module):
         # device = global_node_idx[list(global_node_idx.keys())[0]].device
         proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
 
-        h_layers = {node_type: [] for node_type in self.node_typz}
+        # h_layers = {node_type: [] for node_type in self.node_typz}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(blocks[t], inputs=feat, save_betas=save_betas)
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(blocks[t],
+                                                                        inputs=blocks[t].srcdata["feat"],
+                                                                        save_betas=save_betas)
             else:
-                h_dict, t_loss, _ = self.layers[t].forward(blocks[t], inputs=h_dict, save_betas=save_betas)
+                h_dict, t_loss, _ = self.layers[t].forward(blocks[t], inputs=blocks[t].srcdata["feat"],
+                                                           save_betas=save_betas)
 
-            for node_type in feat:
-                h_layers[node_type].append(h_dict[node_type])
+            # for node_type in h_dict:
+            #     h_layers[node_type].append(h_dict[node_type])
 
             if self.use_proximity:
                 proximity_loss += t_loss
 
-        concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                      if len(h_list) > 0}
+        # concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+        #               if len(h_list) > 0}
 
-        return concat_out, proximity_loss
+        return h_dict, proximity_loss
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -213,7 +216,7 @@ class LATTEConv(nn.Module):
             for node_type in self.embeddings:
                 self.embeddings[node_type].reset_parameters()
 
-    def forward(self, G: DGLBlock, input, save_betas=False):
+    def forward(self, G: DGLBlock, input: dict, save_betas=False):
         """
 
         :param x_l: a dict of node attributes indexed node_type
@@ -222,13 +225,12 @@ class LATTEConv(nn.Module):
         :param x_r: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
         :return: output_emb, loss
         """
-        G.adj()
         # H_t = W_t * x
         features = {ntype: self.linear[ntype].forward(input[ntype]) for ntype in input}
         feat_src, feat_dst = expand_as_pair(input_=features, g=G)
 
         # Predict relations attention coefficients
-        beta = self.get_beta_weights(x_dict=x_l, h_dict=l_dict, h_prev=l_dict, global_node_idx=global_node_idx)
+        # beta = self.get_beta_weights(x_dict=x_l, h_dict=l_dict, h_prev=l_dict, global_node_idx=global_node_idx)
         # Save beta weights from testing samples
         if not self.training: self.save_relation_weights(beta, global_node_idx)
 

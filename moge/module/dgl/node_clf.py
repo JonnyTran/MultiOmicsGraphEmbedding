@@ -21,7 +21,7 @@ from ..trainer import NodeClfTrainer
 
 from moge.module.dgl.latte import LATTE
 from ...module.utils import tensor_sizes
-from .hgt import HGT, HGTLayer, HGTNodeClassifier
+from .hgt import HGT, HGTLayer, HGTNodeClf
 
 class SemanticAttention(nn.Module):
     def __init__(self, in_size, hidden_size=128):

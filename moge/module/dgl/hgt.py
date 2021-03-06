@@ -189,30 +189,29 @@ class HGT(nn.Module):
         return h
 
 
-class HGTNodeClassifier(NodeClfTrainer):
+class HGTNodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
-        super(HGTNodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        super(HGTNodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        # self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
-        #                    in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-        #                    metapaths=dataset.get_metapaths(), activation=hparams.activation,
-        #                    attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-        #                    attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
-        #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
-        # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        if "fanouts" in hparams:
+            self.dataset.neighbor_sizes = hparams.fanouts
+            self.dataset.neighbor_sampler.fanouts = hparams.fanouts
+            self.dataset.neighbor_sampler.num_layers = len(hparams.fanouts)
+
+        self.n_layers = len(self.dataset.neighbor_sizes)
 
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                             edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
                             n_inp=self.dataset.node_attr_shape[self.head_node_type],
                             n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-                            n_layers=len(self.dataset.neighbor_sizes),
-                            n_heads=hparams.attn_heads)
+                            n_layers=self.n_layers,
+                            n_heads=hparams.attn_heads,
+                            use_norm=hparams.use_norm)
 
         self.classifier = DenseClassification(hparams)
 
@@ -221,12 +220,14 @@ class HGTNodeClassifier(NodeClfTrainer):
                                                                                  hparams.use_class_weights else None,
                                             loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
+
+        self._name = f"HGT-{self.n_layers}"
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, blocks, batch_inputs: dict, **kwargs):
-        embeddings = self.embedder.forward(blocks, batch_inputs)
+        embeddings = self.embedder(blocks, batch_inputs)
 
-        y_hat = self.classifier.forward(embeddings[self.head_node_type])
+        y_hat = self.classifier(embeddings[self.head_node_type])
         return y_hat
 
     def training_step(self, batch, batch_nb):
