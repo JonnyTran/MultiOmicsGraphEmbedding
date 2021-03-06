@@ -205,7 +205,7 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
         else:
             items = _prepare_tensor(self.g, items, 'items', self._is_distributed)
 
-        blocks = self.block_sampler.sample_blocqks(self.g, items)
+        blocks = self.block_sampler.sample_blocks(self.g, items)
         output_nodes = blocks[-1].dstdata[dgl.NID]
         input_nodes = blocks[0].srcdata[dgl.NID]
 

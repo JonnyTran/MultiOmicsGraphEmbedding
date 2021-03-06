@@ -14,7 +14,7 @@ class EdgeDataset(HeteroNetDataset):
     DEFAULT_METAPATH = (DEFAULT_NODE_TYPE, "edge", DEFAULT_NODE_TYPE)
 
     def __init__(self, *args, **kwargs):
-        super(EdgeDataset, self).__init__(**kwargs)
+        super(EdgeDataset, self).__init__(*args, **kwargs)
 
     def process_PygLinkDataset_homo(self, dataset: PygLinkPropPredDataset):
         data = dataset[0]
