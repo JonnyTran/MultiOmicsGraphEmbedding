@@ -151,7 +151,8 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
-        collator = LATTEPyGCollator(graph, {self.head_node_type: self.training_idx}, self.neighbor_sampler)
+        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
+                                                block_sampler=self.neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
@@ -170,8 +171,8 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
-        collator = LATTEPyGCollator(graph, {self.head_node_type: self.validation_idx},
-                                    self.neighbor_sampler)
+        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
+                                                block_sampler=self.neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
         #
@@ -184,8 +185,8 @@ class DGLNodeSampler(HeteroNetDataset):
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         graph = self.G
 
-        collator = LATTEPyGCollator(graph, {self.head_node_type: self.testing_idx},
-                                    self.neighbor_sampler)
+        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
+                                                block_sampler=self.neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
 
