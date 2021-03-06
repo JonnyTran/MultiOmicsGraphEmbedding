@@ -25,7 +25,7 @@ class ImportanceSampler(BlockSampler):
 
         self.fanouts = fanouts
         self.edge_dir = edge_dir
-        self.degree_counts = degree_counts
+        self.degree_counts = degree_counts.to_dict()
         self.metapaths = metapaths
 
     def sample_frontier(self, block_id, g: dgl.DGLGraph, seed_nodes: Dict[str, torch.Tensor]):
@@ -42,12 +42,28 @@ class ImportanceSampler(BlockSampler):
         elif self.edge_dir == "out":
             sg = dgl.out_subgraph(g, seed_nodes)
 
-        self.assign_prob(sg, seed_nodes)
-        print(sg)
-        # for metapath in sg.canonical_etypes:
-        #     sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
+        # self.assign_prob(sg, seed_nodes)
+        for metapath in sg.canonical_etypes:
+            head_type, tail_type = metapath[0], metapath[-1]
+            relation_id = self.metapaths.index(metapath)
+            src, dst = sg.edges(etype=metapath)
 
-        frontier = sample_neighbors(sg, nodes=seed_nodes, fanout=fanouts, edge_dir=self.edge_dir)
+            subsampling_weight = src.apply_(lambda nid: self.degree_counts.get((nid, relation_id, head_type), 1))
+            subsampling_weight = torch.sqrt(1.0 / subsampling_weight)
+
+            sg.edges[metapath].data["prob"] = subsampling_weight
+            # sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
+
+        frontier = sample_neighbors(g=sg,
+                                    nodes=seed_nodes,
+                                    prob="prob",
+                                    fanout=fanouts,
+                                    edge_dir=self.edge_dir)
+
+        print("fanouts", fanouts,
+              "n_nodes", sum([k.size(0) for k in seed_nodes.values()]),
+              "edges", frontier.num_edges(),
+              "pruned", sg.num_edges() - frontier.num_edges())
 
         return frontier
 
@@ -85,22 +101,18 @@ class ImportanceSampler(BlockSampler):
             subgraph (dgl.DGLHeteroGraph):
             seed_nodes:
         """
-        print("gothere")
         for metapath in subgraph.canonical_etypes:
             head_type, tail_type = metapath[0], metapath[-1]
             relation_id = self.metapaths.index(metapath)
-            print(metapath)
 
-            src, dst = subgraph.all_edges(etype=metapath)
+            src, dst = subgraph.edges(etype=metapath)
             if src.size(0) == 0:
-                subgraph.edges[metapath].data["prob"] = torch.tensor([])
                 continue
 
-            print("src", src)
-            print("nid, relation_id, head_type", relation_id, head_type)
+            print("\t", metapath, "src", src.shape)
+            print("\trelation_id, -relation_id - 1", relation_id, -relation_id - 1)
 
-            # subsampling_weight = src.apply_(lambda nid: self.degree_counts.get((nid, relation_id, head_type), 1)).type(
-            #     torch.float)
+            # subsampling_weight = src.apply_(lambda nid: self.degree_counts.get((nid, relation_id, head_type), 1))
             # print(subsampling_weight.shape)
 
             # if (self.degree_counts.index.get_level_values(1) < 0).any():
