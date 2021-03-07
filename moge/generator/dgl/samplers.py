@@ -25,7 +25,7 @@ class ImportanceSampler(BlockSampler):
 
         self.fanouts = fanouts
         self.edge_dir = edge_dir
-        self.degree_counts = degree_counts.to_dict()
+        self.degree_counts = degree_counts
         self.metapaths = metapaths
 
     def sample_frontier(self, block_id, g: dgl.DGLGraph, seed_nodes: Dict[str, torch.Tensor]):
@@ -42,17 +42,9 @@ class ImportanceSampler(BlockSampler):
         elif self.edge_dir == "out":
             sg = dgl.out_subgraph(g, seed_nodes)
 
-        # self.assign_prob(sg, seed_nodes)
-        for metapath in sg.canonical_etypes:
-            head_type, tail_type = metapath[0], metapath[-1]
-            relation_id = self.metapaths.index(metapath)
-            src, dst = sg.edges(etype=metapath)
-
-            subsampling_weight = src.apply_(lambda nid: self.degree_counts.get((nid, relation_id, head_type), 1))
-            subsampling_weight = torch.sqrt(1.0 / subsampling_weight)
-
-            sg.edges[metapath].data["prob"] = subsampling_weight
-            # sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
+        self.assign_prob(sg, seed_nodes)
+        # for metapath in sg.canonical_etypes:
+        # sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
 
         frontier = sample_neighbors(g=sg,
                                     nodes=seed_nodes,
@@ -109,16 +101,17 @@ class ImportanceSampler(BlockSampler):
             if src.size(0) == 0:
                 continue
 
-            print("\t", metapath, "src", src.shape)
-            print("\trelation_id, -relation_id - 1", relation_id, -relation_id - 1)
+            subsampling_weight = self.get_edge_weights(src, relation_id, head_type)
+            print(subsampling_weight.shape)
 
-            # subsampling_weight = src.apply_(lambda nid: self.degree_counts.get((nid, relation_id, head_type), 1))
-            # print(subsampling_weight.shape)
+            if (self.degree_counts.index.get_level_values(1) < 0).any():
+                subsampling_weight += self.get_edge_weights(dst, -relation_id - 1, tail_type)
 
-            # if (self.degree_counts.index.get_level_values(1) < 0).any():
-            #     subsampling_weight += dst.apply_(
-            #         lambda nid: self.degree_counts.get((nid, -relation_id - 1, tail_type), 1)).type(
-            #         torch.float)
+            subsampling_weight = torch.sqrt(1.0 / subsampling_weight)
+            subgraph.edges[metapath].data["prob"] = subsampling_weight
 
-            # subsampling_weight = torch.sqrt(1.0 / subsampling_weight)
-            # subgraph.edges[metapath].data["prob"] = subsampling_weight
+    def get_edge_weights(self, nids, relation_id, ntype):
+        keys = pd.Index(nids.numpy())
+        edge_weights = torch.tensor(keys.map(lambda nid: self.degree_counts.get((nid, relation_id, ntype), 1)),
+                                    dtype=torch.float)
+        return edge_weights
