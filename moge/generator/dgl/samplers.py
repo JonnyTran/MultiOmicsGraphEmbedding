@@ -52,10 +52,10 @@ class ImportanceSampler(BlockSampler):
                                     fanout=fanouts,
                                     edge_dir=self.edge_dir)
 
-        print("n_nodes", sum([k.size(0) for k in seed_nodes.values()]),
-              "fanouts", fanouts,
-              "edges", frontier.num_edges(),
-              "pruned", sg.num_edges() - frontier.num_edges())
+        # print("n_nodes", sum([k.size(0) for k in seed_nodes.values()]),
+        #       "fanouts", fanouts,
+        #       "edges", frontier.num_edges(),
+        #       "pruned", sg.num_edges() - frontier.num_edges())
 
         return frontier
 
@@ -109,7 +109,7 @@ class ImportanceSampler(BlockSampler):
             subsampling_weight = torch.sqrt(1.0 / subsampling_weight)
             subgraph.edges[metapath].data["prob"] = subsampling_weight
 
-    def get_edge_weights(self, nids, relation_id, ntype):
+    def get_edge_weights(self, nids: torch.Tensor, relation_id: int, ntype: str):
         # keys = nids.numpy()
         # lookup = lambda nid: self.degree_counts.get((nid, relation_id, ntype), 1.0)
         # vfunc = np.vectorize(lookup)

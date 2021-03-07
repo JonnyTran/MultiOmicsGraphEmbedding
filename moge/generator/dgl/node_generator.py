@@ -29,59 +29,60 @@ class DGLNodeSampler(HeteroNetDataset):
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
                          edge_dir=edge_dir, reshuffle_train=reshuffle_train,
                          add_reverse_metapaths=add_reverse_metapaths, inductive=inductive)
-        assert isinstance(self.G, (dgl.DGLGraph, dgl.DGLHeteroGraph))
-
         assert isinstance(self.G, dgl.DGLHeteroGraph)
+
         if add_reverse_metapaths:
-            relations = {}
-            num_nodes_dict = {ntype: self.G.number_of_nodes(ntype) for ntype in self.G.ntypes}
-
-            for etype in self.G.etypes:
-                rel_g = self.G.edge_type_subgraph([etype, ])
-                relations[self.G.to_canonical_etype(etype)] = rel_g.all_edges()
-
-                rel_reverse_name = self.get_reverse_metapath_name(self.G.to_canonical_etype(etype), None)
-                # rel_reverse = dgl.heterograph({rel_reverse_name: rel_g.reverse().all_edges()})
-                relations[rel_reverse_name] = rel_g.reverse().all_edges()  # rel_reverse.all_edges()
-
-            new_g = convert.heterograph(relations, num_nodes_dict=num_nodes_dict)
-
-            # copy_ndata:
-            node_frames = utils.extract_node_subframes(g, None)
-            utils.set_new_frames(new_g, node_frames=node_frames)
-
-            # copy_edata:
-            eids = []
-            for c_etype in new_g.canonical_etypes:
-                eid = F.copy_to(F.arange(0, g.number_of_edges(c_etype)), new_g.device)
-                if c_etype[0] != c_etype[2]:
-                    eids.append(eid)
-                else:
-                    eids.append(F.cat([eid, eid], 0))
-
-                edge_frames = utils.extract_edge_subframes(g, eids)
-                utils.set_new_frames(new_g, edge_frames=edge_frames)
-
-            for ntype in self.G.ntypes:
-                for k, v in self.G.nodes[ntype].data.items():
-                    print(k, v.shape)
-                    new_g.nodes[ntype].data[k] = v
-
-            self.G = new_g.clone()
-            # self.G = dgl.to_bidirected(self.G, copy_ndata=True)
+            self.G = self.create_reverse_heterograph(self.G)
 
         self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
 
         if sampler is None:
             print("Using Full Multilayer sampler")
             self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
+
         elif sampler == "ImportanceSampler":
             self.neighbor_sampler = ImportanceSampler(fanouts=neighbor_sizes,
                                                       metapaths=self.get_metapaths(),
                                                       degree_counts=self.degree_counts,
                                                       edge_dir=edge_dir)
         else:
-            raise Exception
+            raise Exception("Use one of", ["ImportanceSampler"])
+
+    def create_reverse_heterograph(self, g: dgl.DGLHeteroGraph):
+        relations = {}
+        for metapath in g.canonical_etypes:
+            # metapath = old_g.to_canonical_etype(metapath)
+
+            # Original edges
+            src, dst = g.edges(etype=metapath)
+            relations[metapath] = (src.clone(), dst.clone())
+
+            # Reverse edges
+            reverse_metapath = self.get_reverse_metapath_name(metapath)
+            assert reverse_metapath not in relations
+            relations[reverse_metapath] = (dst.clone(), src.clone())
+
+        new_g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict, idtype=None)
+
+        # copy_ndata:
+        for ntype in g.ntypes:
+            for k, v in g.nodes[ntype].data.items():
+                new_g.nodes[ntype].data[k] = v
+        # node_frames = utils.extract_node_subframes(old_g, None)
+        # print("node_frames", len(node_frames), [frame for frame in node_frames])
+        # utils.set_new_frames(new_g, node_frames=node_frames)
+
+        # copy_edata:
+        # eids = []
+        # for metapath in new_g.canonical_etypes:
+        #     eid = F.copy_to(F.arange(0, new_g.number_of_edges(metapath)), new_g.device)
+        #     eids.append(eid)
+        # print(len(eids), [len(eid) for eid in eids])
+        # edge_frames = utils.extract_edge_subframes(new_g, eids)
+        # print("edge_frames", len(edge_frames))
+        # utils.set_new_frames(new_g, edge_frames=edge_frames)
+
+        return new_g
 
     def compute_node_degrees(self, add_reverse_metapaths):
         dfs = []
