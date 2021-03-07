@@ -44,7 +44,7 @@ class ImportanceSampler(BlockSampler):
 
         self.assign_prob(sg, seed_nodes)
         # for metapath in sg.canonical_etypes:
-        # sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
+        #     sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
 
         frontier = sample_neighbors(g=sg,
                                     nodes=seed_nodes,
@@ -52,8 +52,8 @@ class ImportanceSampler(BlockSampler):
                                     fanout=fanouts,
                                     edge_dir=self.edge_dir)
 
-        print("fanouts", fanouts,
-              "n_nodes", sum([k.size(0) for k in seed_nodes.values()]),
+        print("n_nodes", sum([k.size(0) for k in seed_nodes.values()]),
+              "fanouts", fanouts,
               "edges", frontier.num_edges(),
               "pruned", sg.num_edges() - frontier.num_edges())
 
@@ -102,16 +102,19 @@ class ImportanceSampler(BlockSampler):
                 continue
 
             subsampling_weight = self.get_edge_weights(src, relation_id, head_type)
-            print(subsampling_weight.shape)
 
-            if (self.degree_counts.index.get_level_values(1) < 0).any():
-                subsampling_weight += self.get_edge_weights(dst, -relation_id - 1, tail_type)
+            # if isinstance(self.degree_counts, pd.Series) and (self.degree_counts.index.get_level_values(1) < 0).any():
+            #     subsampling_weight += self.get_edge_weights(dst, -relation_id - 1, tail_type)
 
             subsampling_weight = torch.sqrt(1.0 / subsampling_weight)
             subgraph.edges[metapath].data["prob"] = subsampling_weight
 
     def get_edge_weights(self, nids, relation_id, ntype):
-        keys = pd.Index(nids.numpy())
-        edge_weights = torch.tensor(keys.map(lambda nid: self.degree_counts.get((nid, relation_id, ntype), 1)),
-                                    dtype=torch.float)
+        # keys = nids.numpy()
+        # lookup = lambda nid: self.degree_counts.get((nid, relation_id, ntype), 1.0)
+        # vfunc = np.vectorize(lookup)
+        #
+        # edge_weights = torch.tensor(vfunc(keys), dtype=torch.float)
+
+        edge_weights = nids.apply_(lambda nid: self.degree_counts.get((nid, relation_id, ntype), 1.0)).to(torch.float)
         return edge_weights

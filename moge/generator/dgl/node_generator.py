@@ -6,6 +6,8 @@ from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
 
 from dgl.dataloading import BlockSampler, NodeCollator
+from dgl import convert, utils, batch
+from dgl import backend as F
 from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
 from dgl import utils as dglutils
 from moge.generator.network import HeteroNetDataset
@@ -29,8 +31,10 @@ class DGLNodeSampler(HeteroNetDataset):
                          add_reverse_metapaths=add_reverse_metapaths, inductive=inductive)
         assert isinstance(self.G, (dgl.DGLGraph, dgl.DGLHeteroGraph))
 
+        assert isinstance(self.G, dgl.DGLHeteroGraph)
         if add_reverse_metapaths:
             relations = {}
+            num_nodes_dict = {ntype: self.G.number_of_nodes(ntype) for ntype in self.G.ntypes}
 
             for etype in self.G.etypes:
                 rel_g = self.G.edge_type_subgraph([etype, ])
@@ -40,14 +44,31 @@ class DGLNodeSampler(HeteroNetDataset):
                 # rel_reverse = dgl.heterograph({rel_reverse_name: rel_g.reverse().all_edges()})
                 relations[rel_reverse_name] = rel_g.reverse().all_edges()  # rel_reverse.all_edges()
 
-            new_g = dgl.heterograph(relations)
+            new_g = convert.heterograph(relations, num_nodes_dict=num_nodes_dict)
+
+            # copy_ndata:
+            node_frames = utils.extract_node_subframes(g, None)
+            utils.set_new_frames(new_g, node_frames=node_frames)
+
+            # copy_edata:
+            eids = []
+            for c_etype in new_g.canonical_etypes:
+                eid = F.copy_to(F.arange(0, g.number_of_edges(c_etype)), new_g.device)
+                if c_etype[0] != c_etype[2]:
+                    eids.append(eid)
+                else:
+                    eids.append(F.cat([eid, eid], 0))
+
+                edge_frames = utils.extract_edge_subframes(g, eids)
+                utils.set_new_frames(new_g, edge_frames=edge_frames)
 
             for ntype in self.G.ntypes:
                 for k, v in self.G.nodes[ntype].data.items():
+                    print(k, v.shape)
                     new_g.nodes[ntype].data[k] = v
 
-            self.G = new_g
-        #     self.G = dgl.to_bidirected(self.G, copy_ndata=True)
+            self.G = new_g.clone()
+            # self.G = dgl.to_bidirected(self.G, copy_ndata=True)
 
         self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
 
@@ -81,7 +102,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
         df = pd.concat(dfs)
 
-        head_counts = df.groupby(["head", "relation", "head_type"])["tail"].count()
+        head_counts = df.groupby(["head", "relation", "head_type"])["tail"].count().astype(float)
 
         if add_reverse_metapaths:
             head_counts.index = head_counts.index.set_names(["nid", "relation", "ntype"])
@@ -89,7 +110,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
         # For directed graphs, use both
         else:
-            tail_counts = df.groupby(["tail", "relation", "tail_type"])["head"].count()
+            tail_counts = df.groupby(["tail", "relation", "tail_type"])["head"].count().astype(float)
             tail_counts.index = tail_counts.index.set_levels(levels=-tail_counts.index.get_level_values(1) - 1,
                                                              level=1,
                                                              verify_integrity=False, )
