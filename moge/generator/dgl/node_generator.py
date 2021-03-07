@@ -32,7 +32,7 @@ class DGLNodeSampler(HeteroNetDataset):
         assert isinstance(self.G, dgl.DGLHeteroGraph)
 
         if add_reverse_metapaths:
-            self.G = self.create_reverse_heterograph(self.G)
+            self.G = self.create_heterograph(self.G, add_reverse=add_reverse_metapaths)
 
         self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
 
@@ -42,13 +42,13 @@ class DGLNodeSampler(HeteroNetDataset):
 
         elif sampler == "ImportanceSampler":
             self.neighbor_sampler = ImportanceSampler(fanouts=neighbor_sizes,
-                                                      metapaths=self.get_metapaths(),
+                                                      metapaths=self.get_metapaths(),  # Original metapaths only
                                                       degree_counts=self.degree_counts,
                                                       edge_dir=edge_dir)
         else:
             raise Exception("Use one of", ["ImportanceSampler"])
 
-    def create_reverse_heterograph(self, g: dgl.DGLHeteroGraph):
+    def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False):
         relations = {}
         for metapath in g.canonical_etypes:
             # metapath = old_g.to_canonical_etype(metapath)
@@ -58,9 +58,10 @@ class DGLNodeSampler(HeteroNetDataset):
             relations[metapath] = (src.clone(), dst.clone())
 
             # Reverse edges
-            reverse_metapath = self.get_reverse_metapath_name(metapath)
-            assert reverse_metapath not in relations
-            relations[reverse_metapath] = (dst.clone(), src.clone())
+            if add_reverse:
+                reverse_metapath = self.get_reverse_metapath_name(metapath)
+                assert reverse_metapath not in relations
+                relations[reverse_metapath] = (dst.clone(), src.clone())
 
         new_g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict, idtype=None)
 
@@ -68,19 +69,20 @@ class DGLNodeSampler(HeteroNetDataset):
         for ntype in g.ntypes:
             for k, v in g.nodes[ntype].data.items():
                 new_g.nodes[ntype].data[k] = v
-        # node_frames = utils.extract_node_subframes(old_g, None)
-        # print("node_frames", len(node_frames), [frame for frame in node_frames])
-        # utils.set_new_frames(new_g, node_frames=node_frames)
+
+        node_frames = utils.extract_node_subframes(new_g,
+                                                   nodes=[new_g.nodes(ntype) for ntype in new_g.ntypes],
+                                                   store_ids=False)
+        utils.set_new_frames(new_g, node_frames=node_frames)
 
         # copy_edata:
-        # eids = []
-        # for metapath in new_g.canonical_etypes:
-        #     eid = F.copy_to(F.arange(0, new_g.number_of_edges(metapath)), new_g.device)
-        #     eids.append(eid)
-        # print(len(eids), [len(eid) for eid in eids])
-        # edge_frames = utils.extract_edge_subframes(new_g, eids)
-        # print("edge_frames", len(edge_frames))
-        # utils.set_new_frames(new_g, edge_frames=edge_frames)
+        eids = []
+        for metapath in new_g.canonical_etypes:
+            eid = F.copy_to(F.arange(0, new_g.number_of_edges(metapath)), new_g.device)
+            eids.append(eid)
+
+        edge_frames = utils.extract_edge_subframes(new_g, eids, store_ids=True)
+        utils.set_new_frames(new_g, edge_frames=edge_frames)
 
         return new_g
 
@@ -151,6 +153,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
         self.G = graph
 
+
     def get_metapaths(self):
         return self.G.canonical_etypes
 
@@ -173,15 +176,15 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
-        # collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
-        #                                         block_sampler=self.neighbor_sampler)
-        # dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-        #                         batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
+                                                block_sampler=self.neighbor_sampler)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
-        dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.training_idx},
-            block_sampler=self.neighbor_sampler,
-            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        # dataloader = dgl.dataloading.NodeDataLoader(
+        #     graph, nids={self.head_node_type: self.training_idx},
+        #     block_sampler=self.neighbor_sampler,
+        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
         return dataloader
 
@@ -193,29 +196,29 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
-        # collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
-        #                                         block_sampler=self.neighbor_sampler)
-        # dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-        #                         batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
-        #
-        dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.validation_idx},
-            block_sampler=self.neighbor_sampler,
-            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
+                                                block_sampler=self.neighbor_sampler)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
+
+        # dataloader = dgl.dataloading.NodeDataLoader(
+        #     graph, nids={self.head_node_type: self.validation_idx},
+        #     block_sampler=self.neighbor_sampler,
+        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         graph = self.G
 
-        # collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
-        #                                         block_sampler=self.neighbor_sampler)
-        # dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-        #                         batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
+        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
+                                                block_sampler=self.neighbor_sampler)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
 
-        dataloader = dgl.dataloading.NodeDataLoader(
-            graph, nids={self.head_node_type: self.testing_idx},
-            block_sampler=self.neighbor_sampler,
-            batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        # dataloader = dgl.dataloading.NodeDataLoader(
+        #     graph, nids={self.head_node_type: self.testing_idx},
+        #     block_sampler=self.neighbor_sampler,
+        #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
 
 

@@ -12,8 +12,8 @@
 /lightning_logs/
 /logs/
 /archive_ipynbs/
-/datasets/
 /LATTE/anon-demo/*
 /tests/datasets/
 /log/
+/datasets/
 /dataset/

@@ -37,11 +37,11 @@ class LATTE(nn.Module):
         for t in range(t_order):
             layers.append(
                 LATTEConv(embedding_dim=embedding_dim, in_channels_dict=in_channels_dict, num_nodes_dict=num_nodes_dict,
-                          metapaths=t_order_metapaths, activation=activation, attn_heads=attn_heads,
+                          metapaths=metapaths, activation=activation, attn_heads=attn_heads,
                           attn_activation=attn_activation, attn_dropout=attn_dropout, use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio,
                           first=True if t == 0 else False,
-                          embeddings=layers[0].embeddings if t > 0 else None))
+                          embeddings=None))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
         self.layers = nn.ModuleList(layers)
 
@@ -149,6 +149,7 @@ class LATTEConv(nn.Module):
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
+        print(self.metapaths)
         self.metapath_id = {etype: i for i, (srctype, etype, dsttype) in enumerate(self.metapaths)}
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = embedding_dim
@@ -216,7 +217,7 @@ class LATTEConv(nn.Module):
             for node_type in self.embeddings:
                 self.embeddings[node_type].reset_parameters()
 
-    def forward(self, G: DGLBlock, input: dict, save_betas=False):
+    def forward(self, G: DGLBlock, inputs: dict, save_betas=False):
         """
 
         :param x_l: a dict of node attributes indexed node_type
@@ -226,22 +227,28 @@ class LATTEConv(nn.Module):
         :return: output_emb, loss
         """
         # H_t = W_t * x
-        features = {ntype: self.linear[ntype].forward(input[ntype]) for ntype in input}
-        feat_src, feat_dst = expand_as_pair(input_=features, g=G)
+        # features = {ntype: self.linear[ntype].forward(inputs[ntype]) for ntype in inputs}
+        feat_src, feat_dst = expand_as_pair(input_=inputs, g=G)
 
         # Predict relations attention coefficients
         # beta = self.get_beta_weights(x_dict=x_l, h_dict=l_dict, h_prev=l_dict, global_node_idx=global_node_idx)
         # Save beta weights from testing samples
-        if not self.training: self.save_relation_weights(beta, global_node_idx)
+        # if not self.training: self.save_relation_weights(beta, global_node_idx)
 
         # Compute node-level attention coefficients
-        alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
+        # alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
 
         with G.local_scope():
             funcs = {}
+            for srctype in set(srctype for srctype, etype, dsttype in G.canonical_etypes):
+                G.srcnodes[srctype].data['h'] = self.linear[srctype](feat_src[srctype])
+                # G.srcnodes[srctype].data['v'] = v_linear(feat_src[srctype]).view(-1, self.n_heads, self.d_k)
+
+            for dsttype in set(dsttype for srctype, etype, dsttype in G.canonical_etypes):
+                q_linear = self.q_linears[self.node_dict[dsttype]]
+                G.dstnodes[dsttype].data['q'] = q_linear(feat_dst[dsttype]).view(-1, self.n_heads, self.d_k)
+
             for srctype, etype, dsttype in G.canonical_etypes:
-                G.srcnodes[srctype].data['alpha'] = self.attn_l[self.metapath_id[etype]].forward(feat_src[srctype])
-                G.dstnodes[dsttype].data['alpha'] = self.attn_l[self.metapath_id[etype]].forward(feat_dst[dsttype])
 
                 G.apply_edges(func=self.edge_attention, etype=etype)
 
@@ -301,9 +308,11 @@ class LATTEConv(nn.Module):
         att = self.attn_l[self.metapath_id[etype]].forward(edges.src["h"]) + \
               self.attn_r[self.metapath_id[etype]].forward(edges.dst["h"])
 
+        return {'alpha': att}
+
     def message_func(self, edges: EdgeBatch):
-        # print("edges msg", edges.canonical_etype, edges.data['v'].device, edges.data['a'].device)
-        return {'v': edges.data['v'], 'a': edges.data['a']}
+        print("edges msg", edges.canonical_etype, edges.data['alpha'].device)
+        return {'alpha': edges.data['alpha']}
 
     def reduce_func(self, nodes: NodeBatch):
         '''

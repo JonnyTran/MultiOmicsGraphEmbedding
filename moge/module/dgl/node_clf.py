@@ -163,20 +163,20 @@ class LATTENodeClassifier(NodeClfTrainer):
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
         #
-        # self.latte = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
-        #                    in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-        #                    metapaths=dataset.get_metapaths(), activation=hparams.activation,
-        #                    attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-        #                    attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
-        #                    neg_sampling_ratio=hparams.neg_sampling_ratio)
-        # hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+                              in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
+                              metapaths=dataset.get_metapaths(), activation=hparams.activation,
+                              attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
+                              attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
+                              neg_sampling_ratio=hparams.neg_sampling_ratio)
+        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
 
-        self.embedder = GAT(in_dim=self.dataset.node_attr_shape[self.head_node_type],
-                            hid_dim=hparams.embedding_dim,
-                            out_dim=hparams.embedding_dim,
-                            n_layers=len(self.dataset.neighbor_sizes),
-                            ntypes=dataset.node_types,
-                            etypes=[metapath[1] for metapath in dataset.get_metapaths()])
+        # self.embedder = GAT(in_dim=self.dataset.node_attr_shape[self.head_node_type],
+        #                     hid_dim=hparams.embedding_dim,
+        #                     out_dim=hparams.embedding_dim,
+        #                     n_layers=len(self.dataset.neighbor_sizes),
+        #                     ntypes=dataset.node_types,
+        #                     etypes=[metapath[1] for metapath in dataset.get_metapaths()])
 
         self.classifier = DenseClassification(hparams)
 
