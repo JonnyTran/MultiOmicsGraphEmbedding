@@ -5,8 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ClassificationLoss(nn.Module):
-    def __init__(self, n_classes: int, class_weight: torch.Tensor = None, multilabel=True, use_hierar=False,
-                 loss_type="SOFTMAX_CROSS_ENTROPY", hierar_penalty=1e-6, hierar_relations=None):
+    def __init__(self, n_classes: int, loss_type="SOFTMAX_CROSS_ENTROPY", class_weight: torch.Tensor = None,
+                 multilabel=True, reduction="mean", use_hierar=False, hierar_penalty=1e-6, hierar_relations=None):
         super(ClassificationLoss, self).__init__()
         self.n_classes = n_classes
         self.loss_type = loss_type
@@ -14,38 +14,52 @@ class ClassificationLoss(nn.Module):
         self.hierar_relations = hierar_relations
         self.multilabel = multilabel
         self.use_hierar = use_hierar
+
+        self.reduction = reduction
+
         print(f"INFO: Using {loss_type}")
         print(f"class_weight for {class_weight.shape} classes") if class_weight is not None else None
 
         if loss_type == "SOFTMAX_CROSS_ENTROPY":
-            self.criterion = torch.nn.CrossEntropyLoss(weight=class_weight)
+            self.criterion = torch.nn.CrossEntropyLoss(weight=class_weight, reduction=reduction)
         elif loss_type == "NEGATIVE_LOG_LIKELIHOOD":
-            self.criterion = torch.nn.NLLLoss(class_weight)
+            self.criterion = torch.nn.NLLLoss(class_weight, reduction=reduction)
         elif loss_type == "SOFTMAX_FOCAL_CROSS_ENTROPY":
             self.criterion = FocalLoss(n_classes, "SOFTMAX")
         elif loss_type == "SIGMOID_FOCAL_CROSS_ENTROPY":
             self.criterion = FocalLoss(n_classes, "SIGMOID")
         elif loss_type == "BCE_WITH_LOGITS":
-            self.criterion = torch.nn.BCEWithLogitsLoss(weight=class_weight)
+            self.criterion = torch.nn.BCEWithLogitsLoss(weight=class_weight, reduction=reduction)
         elif loss_type == "BCE":
-            self.criterion = torch.nn.BCELoss(weight=class_weight)
+            self.criterion = torch.nn.BCELoss(weight=class_weight, reduction=reduction)
         elif loss_type == "MULTI_LABEL_MARGIN":
-            self.criterion = torch.nn.MultiLabelMarginLoss(weight=class_weight)
+            self.criterion = torch.nn.MultiLabelMarginLoss(weight=class_weight, reduction=reduction)
         elif loss_type == "KL_DIVERGENCE":
-            self.criterion = torch.nn.KLDivLoss()
+            self.criterion = torch.nn.KLDivLoss(reduction=reduction)
         else:
             raise TypeError(f"Unsupported loss type:{loss_type}")
 
-    def forward(self, logits, target, linear_weight: torch.Tensor = None):
+    def forward(self, logits, target, weights=None, dense_weight: torch.Tensor = None):
+        """
+
+        Args:
+            logits (torch.Tensor): y_pred
+            target (torch.Tensor): y_true
+            weights (): Sample weights.
+            dense_weight (torch.Tensor): A tensor of the Dense layer's weights, only used when using recursive regularization.
+
+        Returns:
+
+        """
         if self.use_hierar:
             assert self.loss_type in ["BCE_WITH_LOGITS",
                                       "SIGMOID_FOCAL_CROSS_ENTROPY"]
-            assert linear_weight is not None
+            assert dense_weight is not None
             if not self.multilabel:
                 target = torch.eye(self.n_classes)[target]
 
-            return self.criterion(logits, target.type_as(logits)) + \
-                   self.hierar_penalty * self.recursive_regularize(linear_weight, self.hierar_relations)
+            loss = self.criterion(logits, target.type_as(logits)) + \
+                   self.hierar_penalty * self.recursive_regularize(dense_weight, self.hierar_relations)
         else:
             if self.multilabel:
                 assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
@@ -55,7 +69,12 @@ class ClassificationLoss(nn.Module):
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
                     target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
-            return self.criterion.forward(logits, target)
+            loss = self.criterion.forward(logits, target)
+
+        if self.reduction == None and weights is not None:
+            loss = (weights * loss).sum() / weights.sum()
+
+        return loss
 
     def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):
         """ Only support hierarchical text classification with BCELoss
@@ -90,7 +109,7 @@ class LinkPredLoss(nn.Module):
             loss = (pos_loss + neg_loss) / 2
         else:
             pos_loss = - (pos_weights * F.logsigmoid(pos_pred)).sum() / pos_weights.sum()
-            neg_loss = -torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
+            neg_loss = - torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
             loss = (pos_loss + neg_loss) / 2
 
         # preds = torch.cat([pos_pred, neg_pred.view(-1)])

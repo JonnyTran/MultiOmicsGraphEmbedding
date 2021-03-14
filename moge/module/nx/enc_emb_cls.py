@@ -102,12 +102,9 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
             hierar_relations = get_hierar_relations(hparams.hierar_taxonomy_file,
                                                     label_map=label_map)
 
-        self.criterion = ClassificationLoss(
-            n_classes=hparams.n_classes,
-            loss_type=hparams.loss_type,
-            hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
-            hierar_relations=hierar_relations if hparams.use_hierar else None
-        )
+        self.criterion = ClassificationLoss(n_classes=hparams.n_classes, loss_type=hparams.loss_type,
+                                            hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
+                                            hierar_relations=hierar_relations if hparams.use_hierar else None)
         self.hparams = hparams
 
     def forward(self, X):
@@ -124,9 +121,7 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
 
         return self.criterion.forward(Y_hat, Y,
-                                      use_hierar=self.hparams.use_hierar,
-                                      multiclass=False if "SOFTMAX" in self.hparams.loss_type else True,
-                                      linear_weight=self._classifier.fc_classifier.linear_l.att_weight if self.hparams.use_hierar else None, )
+                                      dense_weight=self._classifier.fc_classifier.linear_l.att_weight if self.hparams.use_hierar else None)
 
     def get_embeddings(self, X, batch_size=None):
         """

@@ -47,10 +47,11 @@ class LATTENodeClf(NodeClfTrainer):
         #                                            num_class=hparams.n_classes,
         #                                            loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
+                                            loss_type=hparams.loss_type,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
-                                            loss_type=hparams.loss_type,
-                                            multilabel=dataset.multilabel)
+                                            multilabel=dataset.multilabel,
+                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, inputs: dict, **kwargs):
@@ -71,8 +72,8 @@ class LATTENodeClf(NodeClfTrainer):
         if isinstance(y, dict) and len(y) > 1:
             y = y[self.head_node_type]
 
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.criterion.forward(y_hat, y)
+        # y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.criterion.forward(y_hat, y, weights=weights)
 
         self.train_metrics.update_metrics(y_hat, y, weights=None)
 
@@ -93,8 +94,8 @@ class LATTENodeClf(NodeClfTrainer):
         if isinstance(y, dict) and len(y) > 1:
             y = y[self.head_node_type]
 
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        val_loss = self.criterion.forward(y_hat, y)
+        # y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        val_loss = self.criterion.forward(y_hat, y, weights=weights)
         # if batch_nb == 0:
         #     self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
@@ -110,8 +111,8 @@ class LATTENodeClf(NodeClfTrainer):
         y_hat, proximity_loss = self.forward(X, save_betas=True)
         if isinstance(y, dict) and len(y) > 1:
             y = y[self.head_node_type]
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        test_loss = self.criterion(y_hat, y)
+        # y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        test_loss = self.criterion(y_hat, y, weights=weights)
 
         if batch_nb == 0:
             self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
@@ -157,10 +158,9 @@ class HGT(HGTModel, NodeClfTrainer):
             use_RTE=False, hparams=hparams, dataset=dataset, metrics=metrics)
 
         self.classifier = DenseClassification(hparams)
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
-                                            loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
 
         self.collate_fn = hparams.collate_fn

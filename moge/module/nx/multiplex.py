@@ -102,13 +102,11 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
             hierar_relations = get_hierar_relations(hparams.hierar_taxonomy_file,
                                                     label_map=label_map)
 
-        self.criterion = ClassificationLoss(
-            n_classes=hparams.n_classes,
-            class_weight=None if not hasattr(hparams, "class_weight") else torch.tensor(hparams.class_weight),
-            loss_type=hparams.loss_type,
-            hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
-            hierar_relations=hierar_relations if hparams.use_hierar else None
-        )
+        self.criterion = ClassificationLoss(n_classes=hparams.n_classes, loss_type=hparams.loss_type,
+                                            class_weight=None if not hasattr(hparams, "class_weight") else torch.tensor(
+                                                hparams.class_weight),
+                                            hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
+                                            hierar_relations=hierar_relations if hparams.use_hierar else None)
 
     def forward(self, X):
         if X[self.node_types[0]].dim() > 2:
@@ -134,11 +132,7 @@ class MultiplexEmbedder(EncoderEmbedderClassifier):
     def loss(self, Y_hat: torch.Tensor, Y, weights=None):
         Y_hat, Y = filter_samples(Y_hat, Y, weights)
 
-        return self.criterion.forward(
-            Y_hat, Y,
-            use_hierar=self.hparams.use_hierar, multiclass=True,
-            classifier_weight=self._classifier.fc_classifier.linear.att_weight if self.hparams.use_hierar else None,
-        )
+        return self.criterion.forward(Y_hat, Y)
 
     def get_embeddings(self, X, batch_size=100, return_multi_emb=False):
         """
@@ -240,13 +234,11 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             hierar_relations = get_hierar_relations(hparams.hierar_taxonomy_file,
                                                     label_map=label_map)
 
-        self.criterion = ClassificationLoss(
-            n_classes=hparams.n_classes,
-            class_weight=None if not hasattr(hparams, "class_weight") else torch.tensor(hparams.class_weight),
-            loss_type=hparams.loss_type,
-            hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
-            hierar_relations=hierar_relations if hparams.use_hierar else None
-        )
+        self.criterion = ClassificationLoss(n_classes=hparams.n_classes, loss_type=hparams.loss_type,
+                                            class_weight=None if not hasattr(hparams, "class_weight") else torch.tensor(
+                                                hparams.class_weight),
+                                            hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
+                                            hierar_relations=hierar_relations if hparams.use_hierar else None)
 
     def forward(self, X):
         X = {key: X[key].squeeze(0) if X[key].dim() > 2 else X[key] for key in X}
@@ -266,10 +258,10 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             sample_idx_by_type[node_type] = index
             index += encodings[node_type].size(0)
 
-        embeddings = self._embedder.forward(, None,
-                     # print("embeddings", embeddings.shape)
+        embeddings = self._embedder.forward(,, , , None,
+                                                   # print("embeddings", embeddings.shape)
 
-                     merge_embeddings = []
+                                                   merge_embeddings = []
         for i, node_type in enumerate(self.node_types):
             merge_embeddings.append(
                 embeddings[sample_idx_by_type[node_type]: sample_idx_by_type[node_type] + batch_size])
@@ -300,10 +292,10 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
             sample_idx_by_type[node_type] = index
             index += encodings[node_type].size(0)
 
-        embeddings = self._embedder.forward(, None,
-                     # print("embeddings", embeddings.shape)
+        embeddings = self._embedder.forward(,, , , None,
+                                                   # print("embeddings", embeddings.shape)
 
-                     merge_embeddings = []
+                                                   merge_embeddings = []
         for i, node_type in enumerate(self.node_types):
             merge_embeddings.append(
                 embeddings[sample_idx_by_type[node_type]: sample_idx_by_type[node_type] + batch_size])

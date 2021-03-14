@@ -180,10 +180,9 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         self.classifier = DenseClassification(hparams)
 
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
-                                            loss_type=hparams.loss_type,
                                             multilabel=dataset.multilabel)
         self.hparams.n_params = self.get_n_params()
 

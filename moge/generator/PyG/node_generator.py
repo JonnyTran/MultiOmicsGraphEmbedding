@@ -204,12 +204,11 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         weights = (y != -1) & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
         weights = torch.tensor(weights, dtype=torch.float)
 
+        # Higher weights for sampled `n_idx` nodes
+        seed_node_idx = np.isin(X["global_node_index"][self.head_node_type], n_idx, invert=True)
+        weights[seed_node_idx] = 0.2 * weights[seed_node_idx]
+
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
 
         return X, y, weights
-
-
-
-
-
