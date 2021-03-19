@@ -189,7 +189,7 @@ class NeighborSampler(Sampler):
         return sampled_nodes
 
     def get_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict, filter_nodes: bool):
-        """Conbine all edge_index's and convert local node id to "batch node
+        """Conbine all edge_index's across multiple layers and convert local node id to "batch node
         index" that aligns with `x_dict` and `global_node_index`
 
         Args:
@@ -262,7 +262,7 @@ class NeighborSampler(Sampler):
         edge_index_dict = {metapath: coalesce(index=edge_index, value=torch.ones_like(edge_index[0], dtype=torch.float),
                                               m=sampled_local_nodes[metapath[0]].size(0),
                                               n=sampled_local_nodes[metapath[-1]].size(0),
-                                              op="max")[0] \
+                                              op="add")[0] \
                            for metapath, edge_index in edge_index_dict.items()}
 
         return edge_index_dict

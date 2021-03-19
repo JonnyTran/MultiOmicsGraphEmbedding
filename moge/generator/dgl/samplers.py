@@ -35,8 +35,8 @@ class ImportanceSampler(BlockSampler):
             g (dgl.DGLGraph):
             seed_nodes:
         """
-        # fanouts = self.fanouts[block_id]
-        fanouts = self.get_fanout(self.fanouts[block_id], seed_nodes)
+        fanouts = self.fanouts[block_id]
+        # fanouts = self.get_fanout(self.fanouts[block_id], seed_nodes)
 
         if self.edge_dir == "in":
             sg = dgl.in_subgraph(g, seed_nodes)
@@ -84,7 +84,8 @@ class ImportanceSampler(BlockSampler):
         etype_counts = etype_counts / etype_counts.sum()
 
         new_fanouts = {
-            etype: np.ceil((etype_counts[etype_id]) * fanout).astype(int) if etype_id in etype_counts.index else 1
+            etype: np.ceil((etype_counts[etype_id]) * fanout).astype(int) \
+                if etype_id in etype_counts.index else 1
             for etype_id, etype in enumerate(self.metapaths)}
         return new_fanouts
 

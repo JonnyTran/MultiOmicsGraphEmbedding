@@ -1,3 +1,4 @@
+from collections import defaultdict
 import dgl
 import numpy as np
 import pandas as pd
@@ -49,33 +50,33 @@ class DGLNodeSampler(HeteroNetDataset):
             raise Exception("Use one of", ["ImportanceSampler"])
 
     def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False):
+        reversed_g = g.reverse(copy_edata=True, share_edata=True)
+
         relations = {}
         for metapath in g.canonical_etypes:
-            # metapath = old_g.to_canonical_etype(metapath)
-
             # Original edges
-            src, dst = g.edges(etype=metapath)
-            relations[metapath] = (src.clone(), dst.clone())
+            src, dst = g.all_edges(etype=metapath[1])
+            relations[metapath] = (src, dst)
 
             # Reverse edges
             if add_reverse:
                 reverse_metapath = self.get_reverse_metapath_name(metapath)
                 assert reverse_metapath not in relations
-                relations[reverse_metapath] = (dst.clone(), src.clone())
+                src, dst = reversed_g.all_edges(etype=metapath[1])
+                relations[reverse_metapath] = (src, dst)
 
-        new_g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict, idtype=None)
+        new_g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict, idtype=torch.int64)
 
         # copy_ndata:
         for ntype in g.ntypes:
             for k, v in g.nodes[ntype].data.items():
-                new_g.nodes[ntype].data[k] = v
+                new_g.nodes[ntype].data[k] = v.detach().clone()
 
         node_frames = utils.extract_node_subframes(new_g,
                                                    nodes=[new_g.nodes(ntype) for ntype in new_g.ntypes],
-                                                   store_ids=False)
+                                                   store_ids=True)
         utils.set_new_frames(new_g, node_frames=node_frames)
 
-        # copy_edata:
         eids = []
         for metapath in new_g.canonical_etypes:
             eid = F.copy_to(F.arange(0, new_g.number_of_edges(metapath)), new_g.device)
@@ -232,7 +233,21 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
             items = _prepare_tensor(self.g, items, 'items', self._is_distributed)
 
         blocks = self.block_sampler.sample_blocks(self.g, items)
-        output_nodes = blocks[-1].dstdata[dgl.NID]
-        input_nodes = blocks[0].srcdata[dgl.NID]
+        # output_nodes = blocks[-1].dstdata[dgl.NID]
+        # input_nodes = blocks[0].srcdata[dgl.NID]
 
-        return input_nodes, output_nodes, blocks
+        layer_dicts = []
+        for b in blocks:
+            X = {}
+            X["edge_index_dict"] = {}
+            for metapath in b.canonical_etypes:
+                if b.num_edges(etype=metapath) == 0:
+                    continue
+                X["edge_index_dict"][metapath] = torch.stack(b.all_edges(etype=b.canonical_etypes[1]), dim=0)
+
+            X["x_dict"] = {k: v for k, v in b.ndata["feat"].items() if v.size(0) != 0}
+            X["global_node_index"] = {ntype: b.nodes(ntype) for ntype in b.ntypes}
+
+            layer_dicts.append(X)
+
+        return layer_dicts
