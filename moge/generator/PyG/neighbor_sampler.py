@@ -9,7 +9,7 @@ from torch import Tensor
 from torch_geometric.data.sampler import Adj, EdgeIndex, maybe_num_nodes
 from torch_geometric.utils.hetero import group_hetero_graph
 from torch_sparse import coalesce, SparseTensor
-
+from torch_geometric.data import NeighborSampler
 
 class Sampler(metaclass=ABCMeta):
     @abstractmethod
