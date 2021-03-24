@@ -33,7 +33,7 @@ class DGLNodeSampler(HeteroNetDataset):
         assert isinstance(self.G, dgl.DGLHeteroGraph)
 
         if add_reverse_metapaths:
-            self.G = self.create_heterograph(self.G, add_reverse=add_reverse_metapaths)
+            self.G = self.create_heterograph(self.G, add_reverse=True)
 
         self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
 

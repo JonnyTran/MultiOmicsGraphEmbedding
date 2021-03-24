@@ -3,7 +3,7 @@ import torch
 from ogb.nodeproppred import PygNodePropPredDataset
 
 from moge.generator.network import HeteroNetDataset
-from moge.generator.PyG.sampler import NeighborSampler
+from moge.generator.PyG.neighbor_sampler import NeighborSampler
 
 
 class HeteroNeighborGenerator(HeteroNetDataset):
