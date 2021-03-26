@@ -1,5 +1,6 @@
 from typing import Dict, Tuple
 import logging
+from collections import defaultdict
 import numpy as np
 import pandas as pd
 import torch
@@ -25,7 +26,8 @@ class ImportanceSampler(BlockSampler):
 
         self.fanouts = fanouts
         self.edge_dir = edge_dir
-        self.degree_counts = degree_counts
+        # self.degree_counts = degree_counts.to_dict()
+        self.degree_counts = defaultdict(lambda: 1.0, degree_counts.to_dict())
         self.metapaths = metapaths
 
     def sample_frontier(self, block_id, g: dgl.DGLGraph, seed_nodes: Dict[str, torch.Tensor]):
@@ -45,7 +47,7 @@ class ImportanceSampler(BlockSampler):
 
         self.assign_prob(sg, seed_nodes)
         # for metapath in sg.canonical_etypes:
-        #     sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
+        # sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
 
         frontier = sample_neighbors(g=sg,
                                     nodes=seed_nodes,
@@ -104,7 +106,6 @@ class ImportanceSampler(BlockSampler):
                 continue
 
             subsampling_weight = self.get_edge_weights(src, relation_id, head_type)
-
             # if isinstance(self.degree_counts, pd.Series) and (self.degree_counts.index.get_level_values(1) < 0).any():
             #     subsampling_weight += self.get_edge_weights(dst, -relation_id - 1, tail_type)
 
@@ -112,11 +113,11 @@ class ImportanceSampler(BlockSampler):
             subgraph.edges[metapath].data["prob"] = subsampling_weight
 
     def get_edge_weights(self, nids: torch.Tensor, relation_id: int, ntype: str):
-        # keys = nids.numpy()
-        # lookup = lambda nid: self.degree_counts.get((nid, relation_id, ntype), 1.0)
-        # vfunc = np.vectorize(lookup)
-        #
-        # edge_weights = torch.tensor(vfunc(keys), dtype=torch.float)
+        keys = nids.numpy()
+        lookup = lambda nid: self.degree_counts[nid, relation_id, ntype]
+        vfunc = np.vectorize(lookup)
 
-        edge_weights = nids.apply_(lambda nid: self.degree_counts.get((nid, relation_id, ntype), 1.0)).to(torch.float)
+        edge_weights = torch.tensor(vfunc(keys), dtype=torch.float)
+
+        # edge_weights = nids.clone().apply_(lambda nid: self.degree_counts[(nid, relation_id, ntype)]).to(torch.float)
         return edge_weights
