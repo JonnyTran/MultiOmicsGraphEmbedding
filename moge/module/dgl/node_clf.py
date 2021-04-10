@@ -169,14 +169,6 @@ class LATTENodeClassifier(NodeClfTrainer):
                               attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
                               neg_sampling_ratio=hparams.neg_sampling_ratio)
-        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-
-        # self.embedder = GAT(in_dim=self.dataset.node_attr_shape[self.head_node_type],
-        #                     hid_dim=hparams.embedding_dim,
-        #                     out_dim=hparams.embedding_dim,
-        #                     n_layers=len(self.dataset.neighbor_sizes),
-        #                     ntypes=dataset.node_types,
-        #                     etypes=[metapath[1] for metapath in dataset.get_metapaths()])
 
         self.classifier = DenseClassification(hparams)
 
@@ -186,14 +178,18 @@ class LATTENodeClassifier(NodeClfTrainer):
                                             multilabel=dataset.multilabel)
         self.hparams.n_params = self.get_n_params()
 
-    def forward(self, blocks, batch_inputs: dict, **kwargs):
-        embeddings = self.embedder.forward(blocks, batch_inputs)
+    def forward(self, blocks, feat, **kwargs):
+        embeddings = self.embedder.forward(blocks, feat, **kwargs)
 
         y_hat = self.classifier.forward(embeddings[self.head_node_type])
         return y_hat
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
         batch_inputs = blocks[0].srcdata['feat']
         batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
@@ -202,8 +198,7 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         self.train_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
-        logs = None
-
+        logs = self.train_metrics.compute_metrics()
         outputs = {'loss': loss}
         if logs is not None:
             outputs.update({'progress_bar': logs, "logs": logs})
@@ -211,23 +206,30 @@ class LATTENodeClassifier(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
         batch_inputs = blocks[0].srcdata['feat']
         batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
         y_hat = self.forward(blocks, batch_inputs)
 
         val_loss = self.criterion.forward(y_hat, batch_labels)
-
         self.valid_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
         return {"val_loss": val_loss}
 
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
         batch_inputs = blocks[0].srcdata['feat']
         batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
-        y_hat = self.forward(blocks, batch_inputs, save_betas=True)
+        y_hat = self.forward(blocks, batch_inputs)
 
         test_loss = self.criterion.forward(y_hat, batch_labels)
 

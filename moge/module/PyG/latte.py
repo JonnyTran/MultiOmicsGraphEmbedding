@@ -13,13 +13,13 @@ from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
 
 from moge.module.sampling import negative_sample
-
+from moge.module.utils import tensor_sizes
 
 class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True, cpu_embeddings=False,
-                 disable_concat=False):
+                 layer_pooling=False):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -29,7 +29,7 @@ class LATTE(nn.Module):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.edge_sampling = edge_sampling
 
-        self.disable_concat = disable_concat
+        self.layer_pooling = layer_pooling
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -78,13 +78,22 @@ class LATTE(nn.Module):
             if self.use_proximity:
                 proximity_loss += t_loss
 
-        if self.disable_concat:
-            return h_dict, proximity_loss, edge_pred_dict
+        if self.layer_pooling == "last" or self.t_order == 1:
+            out = h_dict
 
-        concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                      if len(h_list) > 0}
+        elif self.layer_pooling == "max":
+            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                   if len(h_list) > 0}
+            out = {ntype: h_s.max(1)[0] for ntype, h_s in out.items()}
 
-        return concat_out, proximity_loss, edge_pred_dict
+        else:
+            out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                   if len(h_list) > 0}
+            out = {ntype: h_s.max(1)[0] for ntype, h_s in out.items()}
+
+        print(tensor_sizes(out))
+
+        return out, proximity_loss, edge_pred_dict
 
     @staticmethod
     def join_metapaths(metapath_A, metapath_B):
@@ -106,7 +115,8 @@ class LATTE(nn.Module):
                 edge_values = edge_values.to(torch.float)
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
-            edge_values = torch.ones_like(edge_index_tup[0], dtype=torch.float)
+            print("edge_index_tup", edge_index_tup.shape)
+            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float)
         else:
             return None, None
 

@@ -17,7 +17,7 @@ from dgl.udf import EdgeBatch, NodeBatch
 from dgl.heterograph import DGLHeteroGraph, DGLBlock
 
 from moge.module.sampling import negative_sample, negative_sample_head_tail
-from moge.module.utils import preprocess_input
+from moge.module.utils import preprocess_input, tensor_sizes
 
 
 class LATTE(nn.Module):
@@ -37,7 +37,9 @@ class LATTE(nn.Module):
         t_order_metapaths = copy.deepcopy(metapaths)
         for t in range(t_order):
             layers.append(
-                LATTEConv(embedding_dim=embedding_dim, in_channels_dict=in_channels_dict, num_nodes_dict=num_nodes_dict,
+                LATTEConv(embedding_dim=embedding_dim,
+                          in_channels_dict=in_channels_dict,
+                          num_nodes_dict=num_nodes_dict,
                           metapaths=metapaths, edge_dir=edge_dir, activation=activation, attn_heads=attn_heads,
                           attn_activation=attn_activation, attn_dropout=attn_dropout, use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio, first=True if t == 0 else False, cpu_embeddings=None))
@@ -100,7 +102,7 @@ class LATTE(nn.Module):
 
         return output_dict
 
-    def forward(self, blocks, save_betas=False):
+    def forward(self, blocks, feat, **kwargs):
         """
         This
         :param X: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
@@ -109,29 +111,25 @@ class LATTE(nn.Module):
         :param save_betas: whether to save _beta values for batch
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
-        # device = global_node_idx[list(global_node_idx.keys())[0]].device
-        proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
+        # proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
 
-        # h_layers = {node_type: [] for node_type in self.node_typz}
+        # h_layers = {node_type: [] for node_type in self.node_types}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(blocks[t],
-                                                                        inputs=blocks[t].srcdata["feat"],
-                                                                        save_betas=save_betas)
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(blocks[t], feat, **kwargs)
             else:
-                h_dict, t_loss, _ = self.layers[t].forward(blocks[t], inputs=blocks[t].srcdata["feat"],
-                                                           save_betas=save_betas)
+                h_dict, t_loss, _ = self.layers[t].forward(blocks[t], h_dict, **kwargs)
 
             # for node_type in h_dict:
             #     h_layers[node_type].append(h_dict[node_type])
 
-            if self.use_proximity:
-                proximity_loss += t_loss
+            # if self.use_proximity:
+            #     proximity_loss += t_loss
 
         # concat_out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-        #               if len(h_list) > 0}
+        #               if len(h_list) > 0 and h_list[0].size(0) != 0}
 
-        return h_dict, proximity_loss
+        return h_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -199,7 +197,7 @@ class LATTEConv(nn.Module):
         # If some node type are not attributed, instantiate embeddings for them
         non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         if first and len(non_attr_node_types) > 0:
-            print(f"embeddings needed for {non_attr_node_types.keys()}")
+            print(f"embeddings needed for {non_attr_node_types}")
 
     def reset_parameters(self):
         for i, metapath in enumerate(self.metapaths):
@@ -220,116 +218,83 @@ class LATTEConv(nn.Module):
         att = self.attn_l[self.metapath_id[etype]].forward(edges.src["h"]) + \
               self.attn_r[self.metapath_id[etype]].forward(edges.dst["h"])
 
-        return {'alpha': att}
+        return {etype: att,
+                "h": edges.dst["h"]}
 
     def message_func(self, edges: EdgeBatch):
-        print("edges msg", edges.canonical_etype, edges.data['alpha'].device)
-        return {'alpha': edges.data['alpha']}
+        srctype, etype, dsttype = edges.canonical_etype
+        # print("message_func", edges.canonical_etype,
+        #       "alpha", edges.data.keys())
+
+        return {etype: edges.data[etype],
+                "h": edges.data["h"]}
 
     def reduce_func(self, nodes: NodeBatch):
         '''
             Softmax based on target node's id (edge_index_i).
-            NOTE: Using DGL's API, there is a minor difference with this softmax with the original one.
-                  This implementation will do softmax only on edges belong to the same relation type, instead of for all of the edges.
         '''
         # print(nodes.ntype, nodes.data.keys(), nodes.mailbox)
-        att = F.softmax(nodes.mailbox['a'], dim=1)
-        h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['v'], dim=1)
-        return {'t': h.view(-1, self.out_dim)}
+        # print("reduce_func", nodes.ntype, nodes.data.keys(),
+        #       "mailbox", tensor_sizes(nodes.mailbox))
 
-    def forward(self, G: DGLBlock):
-        # H_t = W_t * x
-        # features = {ntype: self.linear[ntype].forward(inputs[ntype]) for ntype in inputs}
-        # feat_src, feat_dst = expand_as_pair(input_=inputs, g=G)
+        output = {}
+        for srctype, etype, dsttype in self.metapaths:
+            if etype not in nodes.mailbox: continue
 
-        # Predict relations attention coefficients
-        # beta = self.get_beta_weights(x_dict=x_l, h_dict=l_dict, h_prev=l_dict, global_node_idx=global_node_idx)
+            att = F.softmax(nodes.mailbox[etype], dim=1)
+            h = torch.sum(att * nodes.mailbox['h'], dim=1)
+            output[etype] = h.view(-1, self.embedding_dim)
 
-        # Compute node-level attention coefficients
-        # alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
+        # print("output", tensor_sizes(output))
+        return output
 
-        with G.local_scope():
+    def forward(self, g: DGLBlock, feat: dict):
+        feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
+
+        with g.local_scope():
             funcs = {}
-            for srctype in set(srctype for srctype, etype, dsttype in G.canonical_etypes):
-                src_input = G.srcnodes[srctype].data["feat"]
-                G.srcnodes[srctype].data['h'] = self.linear[srctype](src_input)
+            for srctype in set(srctype for srctype, etype, dsttype in g.canonical_etypes):
+                g.srcnodes[srctype].data['h'] = self.linear[srctype](feat_src[srctype])
                 # G.srcnodes[srctype].data['v'] = v_linear(feat_src[srctype]).view(-1, self.n_heads, self.d_k)
 
-            for dsttype in set(dsttype for srctype, etype, dsttype in G.canonical_etypes):
-                q_linear = self.q_linears[self.node_dict[dsttype]]
-                dst_input = G.dstnodes[dsttype].data["feat"]
+            for dsttype in set(dsttype for srctype, etype, dsttype in g.canonical_etypes):
+                g.dstnodes[dsttype].data['h'] = self.linear[dsttype](feat_dst[dsttype])
 
-                G.dstnodes[dsttype].data['q'] = q_linear(dst_input).view(-1, self.n_heads, self.d_k)
+            for srctype, etype, dsttype in g.canonical_etypes:
+                # Compute node-level attention coefficients
+                g.apply_edges(func=self.edge_attention, etype=etype)
 
-            for srctype, etype, dsttype in G.canonical_etypes:
-                G.apply_edges(func=self.edge_attention, etype=etype)
-
-                if G.batch_num_edges(etype=etype).item() > 0:
+                if g.batch_num_edges(etype=etype).item() > 0:
                     funcs[etype] = (self.message_func, self.reduce_func)
 
-            # print("funcs", funcs.keys())
-            G.multi_update_all(funcs, cross_reducer='mean')
+            g.multi_update_all(funcs, cross_reducer='mean')
 
-        # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
-        out = {}
-        for ntype in G.ntypes:
-            # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
+            # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
+            out = {}
+            for ntype in set(g.ntypes):
+                etypes = [etype for etype in self.get_head_relations(ntype, etype_only=True) \
+                          if etype in g.dstnodes[ntype].data]
 
-            # Apply \sigma activation to all embeddings
-            out[ntype] = self.embedding_activation(out[ntype])
+                if len(etypes) == 0:
+                    out[ntype] = feat_dst[ntype][:, :self.embedding_dim]
+                    continue
+
+                # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
+                out[ntype] = torch.stack(
+                    [g.dstnodes[ntype].data[etype] for etype in etypes] + [g.dstnodes[ntype].data["h"], ], dim=1)
+                out[ntype] = torch.mean(out[ntype], dim=1)
+                # out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
+
+                # Apply \sigma activation to all embeddings
+                out[ntype] = self.embedding_activation(out[ntype])
 
         proximity_loss, edge_pred_dict = None, None
-        if self.use_proximity:
-            proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
-                                                                 alpha_l=alpha_l, alpha_r=alpha_r,
-                                                                 global_node_idx=global_node_idx)
+        # if self.use_proximity:
+        #     proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
+        #                                                          alpha_l=alpha_l, alpha_r=alpha_r,
+        #                                                          global_node_idx=global_node_idx)
         return out, proximity_loss, edge_pred_dict
 
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        # alpha = self.attn_q[metapath_idx].forward(torch.cat([alpha_i, alpha_j], dim=1))
-        alpha = self.attn_activation(alpha, metapath_idx)
-        alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
-        return x_j * alpha
-
-    def get_h_dict(self, input, global_node_idx):
-        h_dict = {}
-        for node_type in global_node_idx:
-            if node_type in input:
-                h_dict[node_type] = self.linear[node_type].forward(input[node_type])
-            else:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]] \
-                    .to(self.conv[node_type].weight.device)
-        return h_dict
-
-    def get_alphas(self, edge_index_dict, l_dict, r_dict):
-        alpha_l, alpha_r = {}, {}
-
-        for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
-                continue
-            head_type, tail_type = metapath[0], metapath[-1]
-            alpha_l[metapath] = self.attn_l[i].forward(l_dict[head_type])
-            alpha_r[metapath] = self.attn_r[i].forward(r_dict[tail_type])
-        return alpha_l, alpha_r
-
-    def get_beta_weights(self, x_dict, h_dict, h_prev, global_node_idx):
-        beta = {}
-        for node_type in global_node_idx:
-            # beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            if self.first:
-                if node_type in x_dict:
-                    beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-                else:
-                    # node_type is not attributed, use h_dict contains self.embeddings in first layer
-                    beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            else:
-                beta[node_type] = self.conv[node_type].forward(h_prev[node_type].unsqueeze(-1))
-
-            beta[node_type] = torch.softmax(beta[node_type], dim=1)
-        return beta
 
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
         assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
@@ -410,10 +375,23 @@ class LATTEConv(nn.Module):
         else:
             return alpha
 
-    def get_head_relations(self, head_node_type, to_str=False) -> list:
-        relations = [".".join(metapath) if to_str and isinstance(metapath, tuple) else metapath for metapath in
-                     self.metapaths if
-                     metapath[0] == head_node_type]
+    def get_head_relations(self, head_node_type, to_str=False, etype_only=False) -> list:
+        if self.edge_dir == "out":
+            relations = [metapath \
+                         for metapath in self.metapaths \
+                         if metapath[0] == head_node_type]
+        elif self.edge_dir == "in":
+            relations = [metapath \
+                         for metapath in self.metapaths \
+                         if metapath[-1] == head_node_type]
+
+        if to_str:
+            relations = [".".join(metapath) if isinstance(metapath, tuple) else metapath \
+                         for metapath in relations]
+        if etype_only:
+            relations = [metapath[1] if isinstance(metapath, tuple) else metapath \
+                         for metapath in relations]
+
         return relations
 
     def num_head_relations(self, node_type) -> int:

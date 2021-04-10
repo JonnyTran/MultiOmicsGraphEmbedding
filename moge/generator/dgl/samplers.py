@@ -27,6 +27,7 @@ class ImportanceSampler(BlockSampler):
         self.fanouts = fanouts
         self.edge_dir = edge_dir
         # self.degree_counts = degree_counts.to_dict()
+        self.degree_counts_df = degree_counts
         self.degree_counts = defaultdict(lambda: 1.0, degree_counts.to_dict())
         self.metapaths = metapaths
 
@@ -37,17 +38,17 @@ class ImportanceSampler(BlockSampler):
             g (dgl.DGLGraph):
             seed_nodes:
         """
-        fanouts = self.fanouts[block_id]
-        # fanouts = self.get_fanout(self.fanouts[block_id], seed_nodes)
+        # fanouts = self.fanouts[block_id]
+        fanouts = self.get_fanout(self.fanouts[block_id], seed_nodes)
 
         if self.edge_dir == "in":
             sg = dgl.in_subgraph(g, seed_nodes)
         elif self.edge_dir == "out":
             sg = dgl.out_subgraph(g, seed_nodes)
 
-        self.assign_prob(sg, seed_nodes)
-        # for metapath in sg.canonical_etypes:
-        # sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
+        # self.assign_prob(sg, seed_nodes)
+        for metapath in sg.canonical_etypes:
+            sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
 
         frontier = sample_neighbors(g=sg,
                                     nodes=seed_nodes,
@@ -55,10 +56,10 @@ class ImportanceSampler(BlockSampler):
                                     fanout=fanouts,
                                     edge_dir=self.edge_dir)
 
-        print("n_nodes", sum([k.size(0) for k in seed_nodes.values()]),
-              "fanouts", {k[1]: v for k, v in fanouts.items()} if isinstance(fanouts, dict) else fanouts,
-              "edges", frontier.num_edges(),
-              "pruned", sg.num_edges() - frontier.num_edges())
+        # print("n_nodes", sum([k.size(0) for k in seed_nodes.values()]),
+        #       "fanouts", {k[1]: v for k, v in fanouts.items()} if isinstance(fanouts, dict) else fanouts,
+        #       "edges", frontier.num_edges(),
+        #       "pruned", sg.num_edges() - frontier.num_edges())
 
         return frontier
 
@@ -77,10 +78,10 @@ class ImportanceSampler(BlockSampler):
             fanout:
             seed_nodes:
         """
-        edge_counts = pd.Series(data=1, index=self.degree_counts.head(n=1).index)
+        edge_counts = pd.Series(data=1, index=self.degree_counts_df.head(n=1).index)
         for ntype, nids in seed_nodes.items():
             if nids.size(0) == 0: continue
-            edge_counts = edge_counts.add(self.degree_counts.loc[nids.numpy(), :, ntype], fill_value=1)
+            edge_counts = edge_counts.add(self.degree_counts_df.loc[nids.numpy(), :, ntype], fill_value=1)
 
         etype_counts = edge_counts.groupby("relation").mean()
         etype_counts = etype_counts / etype_counts.sum()
