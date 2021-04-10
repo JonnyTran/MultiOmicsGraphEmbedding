@@ -86,7 +86,7 @@ class LATTE(nn.Module):
                    if len(h_list) > 0}
             out = {ntype: h_s.max(1)[0] for ntype, h_s in out.items()}
 
-        else:
+        elif self.layer_pooling == "concat":
             out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
                    if len(h_list) > 0}
             out = {ntype: h_s.max(1)[0] for ntype, h_s in out.items()}
@@ -115,7 +115,6 @@ class LATTE(nn.Module):
                 edge_values = edge_values.to(torch.float)
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
-            print("edge_index_tup", edge_index_tup.shape)
             edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float)
         else:
             return None, None
