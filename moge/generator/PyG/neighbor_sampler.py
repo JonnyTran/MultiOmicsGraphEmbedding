@@ -40,8 +40,10 @@ class Sampler(metaclass=ABCMeta):
 
 class HeteroNeighborSampler(torch.utils.data.DataLoader):
     def __init__(self, edge_index: Union[Tensor, SparseTensor],
-                 sizes: List[int], node_idx: Optional[Tensor] = None,
-                 num_nodes: Optional[int] = None, return_e_id: bool = True,
+                 sizes: List[int],
+                 node_idx: Optional[Tensor] = None,
+                 num_nodes: Optional[int] = None,
+                 return_e_id: bool = True,
                  **kwargs):
 
         """
@@ -219,6 +221,7 @@ class NeighborSampler(Sampler):
                     edge_index = self.local_node_idx[edge_index].apply_(relabel_nodes[head_type].get)
                 else:
                     edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
+                    print(relabel_nodes.keys())
                     edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
 
                 # Remove edges not in sampled_local_nodes
@@ -259,7 +262,8 @@ class NeighborSampler(Sampler):
                            for metapath, e_index_list in edge_index_dict.items()}
 
         # Ensure no duplicate edges in each metapath
-        edge_index_dict = {metapath: coalesce(index=edge_index, value=torch.ones_like(edge_index[0], dtype=torch.float),
+        edge_index_dict = {metapath: coalesce(index=edge_index,
+                                              value=torch.ones_like(edge_index[0], dtype=torch.float),
                                               m=sampled_local_nodes[metapath[0]].size(0),
                                               n=sampled_local_nodes[metapath[-1]].size(0),
                                               op="add")[0] \

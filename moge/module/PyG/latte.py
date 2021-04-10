@@ -91,8 +91,6 @@ class LATTE(nn.Module):
                    if len(h_list) > 0}
             out = {ntype: h_s.max(1)[0] for ntype, h_s in out.items()}
 
-        print(tensor_sizes(out))
-
         return out, proximity_loss, edge_pred_dict
 
     @staticmethod
@@ -115,7 +113,7 @@ class LATTE(nn.Module):
                 edge_values = edge_values.to(torch.float)
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
-            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float)
+            edge_values = torch.ones_like(edge_index_tup[1], dtype=torch.float)
         else:
             return None, None
 
@@ -123,11 +121,13 @@ class LATTE(nn.Module):
 
     @staticmethod
     def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False):
-        output_dict = {}
+        output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
             edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a)
             if edge_index_a is None: continue
+
+            print("metapath_a", metapath_a, edge_index_a[:, :5], values_a.shape)
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
@@ -135,23 +135,30 @@ class LATTE(nn.Module):
                 new_metapath = metapath_a + metapath_b[1:]
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                 if edge_index_b is None: continue
+
+                print("metapath_b", metapath_b, edge_index_b[:, :5], values_b.shape)
+
                 try:
-                    new_edge_index = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
-                                                         indexB=edge_index_b, valueB=values_b,
-                                                         m=global_node_idx[metapath_a[0]].size(0),
-                                                         k=global_node_idx[metapath_a[-1]].size(0),
-                                                         n=global_node_idx[metapath_b[-1]].size(0),
-                                                         coalesced=True,
-                                                         # sampling=edge_sampling
-                                                         )
-                    if new_edge_index[0].size(1) == 0: continue
-                    output_dict[new_metapath] = new_edge_index
+                    new_edge_index, new_values = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                                     indexB=edge_index_b, valueB=values_b,
+                                                                     m=global_node_idx[metapath_a[0]].size(0),
+                                                                     k=global_node_idx[metapath_a[-1]].size(0),
+                                                                     n=global_node_idx[metapath_b[-1]].size(0),
+                                                                     coalesced=True,
+                                                                     # sampling=edge_sampling
+                                                                     )
+                    print(new_metapath, new_edge_index.shape)
+                    if new_edge_index.size(1) == 0: continue
+                    output_edge_index[new_metapath] = (new_edge_index, new_values)
 
                 except Exception as e:
                     print(f"{str(e)} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
+                    print({"m": global_node_idx[metapath_a[0]].size(0),
+                           "k": global_node_idx[metapath_a[-1]].size(0),
+                           "n": global_node_idx[metapath_b[-1]].size(0), })
                     continue
 
-        return output_dict
+        return output_edge_index
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
