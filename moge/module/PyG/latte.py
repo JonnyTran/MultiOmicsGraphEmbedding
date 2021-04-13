@@ -109,13 +109,14 @@ class LATTE(nn.Module):
             edge_index = edge_index_tup[0]
             edge_values = edge_index[1]
 
-            if edge_values.dtype != torch.float:
-                edge_values = edge_values.to(torch.float)
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
-            edge_values = torch.ones_like(edge_index_tup[1], dtype=torch.float)
+            edge_values = torch.ones(edge_index_tup.detach().size(1), dtype=torch.float, device=edge_index_tup.device)
         else:
             return None, None
+
+        if edge_values.dtype != torch.float:
+            edge_values = edge_values.to(torch.float)
 
         return edge_index, edge_values
 
@@ -127,7 +128,7 @@ class LATTE(nn.Module):
             edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a)
             if edge_index_a is None: continue
 
-            print("metapath_a", metapath_a, edge_index_a[:, :5], values_a.shape)
+            print("metapath_a", metapath_a, edge_index_a.shape, values_a.shape)
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
@@ -136,27 +137,26 @@ class LATTE(nn.Module):
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                 if edge_index_b is None: continue
 
-                print("metapath_b", metapath_b, edge_index_b[:, :5], values_b.shape)
+                print("metapath_b", metapath_b, edge_index_b.shape, values_b.shape)
+                # try:
+                new_edge_index, new_values = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                                 indexB=edge_index_b, valueB=values_b,
+                                                                 m=global_node_idx[metapath_a[0]].size(0),
+                                                                 k=global_node_idx[metapath_b[0]].size(0),
+                                                                 n=global_node_idx[metapath_b[-1]].size(0),
+                                                                 coalesced=True,
+                                                                 # sampling=edge_sampling
+                                                                 )
+                print(new_metapath, new_edge_index.shape)
+                if new_edge_index.size(1) == 0: continue
+                output_edge_index[new_metapath] = (new_edge_index, new_values)
 
-                try:
-                    new_edge_index, new_values = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
-                                                                     indexB=edge_index_b, valueB=values_b,
-                                                                     m=global_node_idx[metapath_a[0]].size(0),
-                                                                     k=global_node_idx[metapath_a[-1]].size(0),
-                                                                     n=global_node_idx[metapath_b[-1]].size(0),
-                                                                     coalesced=True,
-                                                                     # sampling=edge_sampling
-                                                                     )
-                    print(new_metapath, new_edge_index.shape)
-                    if new_edge_index.size(1) == 0: continue
-                    output_edge_index[new_metapath] = (new_edge_index, new_values)
-
-                except Exception as e:
-                    print(f"{str(e)} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
-                    print({"m": global_node_idx[metapath_a[0]].size(0),
-                           "k": global_node_idx[metapath_a[-1]].size(0),
-                           "n": global_node_idx[metapath_b[-1]].size(0), })
-                    continue
+                # except Exception as e:
+                #     print(f"{str(e)} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
+                #     print({"m": global_node_idx[metapath_a[0]].size(0),
+                #            "k": global_node_idx[metapath_a[-1]].size(0),
+                #            "n": global_node_idx[metapath_b[-1]].size(0), })
+                #     continue
 
         return output_edge_index
 

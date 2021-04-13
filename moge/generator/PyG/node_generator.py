@@ -136,18 +136,8 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
 
     def sample(self, n_idx, mode):
-        """
-
-        Args:
-            n_idx: A tensor of a batch of node indices in training_idx, validation_idx, or testing_idx
-            mode:
-
-        Returns:
-
-        """
         if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):
             n_idx = torch.tensor(n_idx)
-
 
         # Sample subgraph
         batch_size, n_id, adjs = self.graph_sampler.sample(n_idx)
@@ -183,7 +173,8 @@ class HeteroNeighborGenerator(HeteroNetDataset):
              "global_node_index": sampled_local_nodes,
              "x_dict": {}}
 
-        X["edge_index_dict"] = self.graph_sampler.get_edge_index_dict(adjs=adjs, n_id=n_id,
+        X["edge_index_dict"] = self.graph_sampler.get_edge_index_dict(adjs=adjs,
+                                                                      n_id=n_id,
                                                                       sampled_local_nodes=sampled_local_nodes,
                                                                       filter_nodes=filter)
 
@@ -194,7 +185,8 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         # y_dict
         if hasattr(self, "y_dict") and len(self.y_dict) > 1:
-            y = {node_type: y_true[X["global_node_index"][node_type]] for node_type, y_true in self.y_dict.items()}
+            y = {node_type: y_true[X["global_node_index"][node_type]] \
+                 for node_type, y_true in self.y_dict.items()}
         elif hasattr(self, "y_dict"):
             y = self.y_dict[self.head_node_type][X["global_node_index"][self.head_node_type]].squeeze(-1)
         else:
@@ -206,7 +198,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         # Higher weights for sampled `n_idx` nodes
         seed_node_idx = np.isin(X["global_node_index"][self.head_node_type], n_idx, invert=True)
-        weights[seed_node_idx] = 0.2 * weights[seed_node_idx]
+        weights[seed_node_idx] = weights[seed_node_idx] * 0.2
 
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)

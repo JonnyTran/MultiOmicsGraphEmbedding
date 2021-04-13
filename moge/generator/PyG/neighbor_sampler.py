@@ -6,10 +6,12 @@ from typing import Union, List, Optional
 import numpy as np
 import torch
 from torch import Tensor
-from torch_geometric.data.sampler import Adj, EdgeIndex, maybe_num_nodes
+from torch_geometric.data.sampler import Adj, EdgeIndex
+from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_geometric.utils.hetero import group_hetero_graph
 from torch_sparse import coalesce, SparseTensor
 from torch_geometric.data import NeighborSampler
+
 
 class Sampler(metaclass=ABCMeta):
     @abstractmethod
@@ -221,7 +223,6 @@ class NeighborSampler(Sampler):
                     edge_index = self.local_node_idx[edge_index].apply_(relabel_nodes[head_type].get)
                 else:
                     edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
-                    print(relabel_nodes.keys())
                     edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
 
                 # Remove edges not in sampled_local_nodes
