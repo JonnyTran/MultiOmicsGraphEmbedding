@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -41,6 +42,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         if hparams.layer_pooling == "concat":
             hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+            logging.info("embedding_dim {}".format(hparams.embedding_dim))
 
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
@@ -77,10 +79,10 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.train_metrics.update_metrics(y_hat, y, weights=None)
 
-        logs = None
+        logs = self.train_metrics.compute_metrics()
         if self.hparams.use_proximity:
             loss = loss + proximity_loss
-            logs = {"proximity_loss": proximity_loss}
+            logs.update({"proximity_loss": proximity_loss})
 
         outputs = {'loss': loss}
         if logs is not None:
@@ -129,7 +131,7 @@ class LATTENodeClf(NodeClfTrainer):
         no_decay = ['bias', 'alpha_activation', 'embedding']
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
-             'weight_decay': 0.01},
+             'weight_decay': self.hparams.weight_decay},
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
@@ -137,7 +139,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters,
                                      lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=self.hparams.weight_decay)
+                                     weight_decay=self.hparams.weight_decay if "weight_decay" in self.hparams else 0.0)
         scheduler = ReduceLROnPlateau(optimizer)
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}

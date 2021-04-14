@@ -14,6 +14,7 @@ from torch_sparse.tensor import SparseTensor
 
 from moge.module.sampling import negative_sample
 from moge.module.utils import tensor_sizes
+from moge.generator.utils import nonduplicate_indices
 
 class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
@@ -84,12 +85,18 @@ class LATTE(nn.Module):
         elif self.layer_pooling == "max":
             out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
                    if len(h_list) > 0}
-            out = {ntype: h_s.max(1)[0] for ntype, h_s in out.items()}
+            out = {ntype: h_s.max(1).values for ntype, h_s in out.items()}
+
+        elif self.layer_pooling == "mean":
+            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                   if len(h_list) > 0}
+            out = {ntype: torch.mean(h_s, dim=1) for ntype, h_s in out.items()}
 
         elif self.layer_pooling == "concat":
             out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
                    if len(h_list) > 0}
-            out = {ntype: h_s.max(1)[0] for ntype, h_s in out.items()}
+        else:
+            raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
 
         return out, proximity_loss, edge_pred_dict
 
@@ -111,7 +118,7 @@ class LATTE(nn.Module):
 
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
-            edge_values = torch.ones(edge_index_tup.detach().size(1), dtype=torch.float, device=edge_index_tup.device)
+            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float64, device=edge_index_tup.device)
         else:
             return None, None
 
@@ -128,8 +135,6 @@ class LATTE(nn.Module):
             edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a)
             if edge_index_a is None: continue
 
-            print("metapath_a", metapath_a, edge_index_a.shape, values_a.shape)
-
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
 
@@ -137,26 +142,25 @@ class LATTE(nn.Module):
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
                 if edge_index_b is None: continue
 
-                print("metapath_b", metapath_b, edge_index_b.shape, values_b.shape)
-                # try:
-                new_edge_index, new_values = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
-                                                                 indexB=edge_index_b, valueB=values_b,
-                                                                 m=global_node_idx[metapath_a[0]].size(0),
-                                                                 k=global_node_idx[metapath_b[0]].size(0),
-                                                                 n=global_node_idx[metapath_b[-1]].size(0),
-                                                                 coalesced=True,
-                                                                 # sampling=edge_sampling
-                                                                 )
-                print(new_metapath, new_edge_index.shape)
-                if new_edge_index.size(1) == 0: continue
-                output_edge_index[new_metapath] = (new_edge_index, new_values)
+                try:
+                    new_edge_index, new_values = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                                     indexB=edge_index_b, valueB=values_b,
+                                                                     m=global_node_idx[metapath_a[0]].size(0),
+                                                                     k=global_node_idx[metapath_b[0]].size(0),
+                                                                     n=global_node_idx[metapath_b[-1]].size(0),
+                                                                     coalesced=True,
+                                                                     # sampling=edge_sampling
+                                                                     )
+                    # print(new_metapath, new_edge_index.shape)
+                    if new_edge_index.size(1) == 0: continue
+                    output_edge_index[new_metapath] = (new_edge_index, new_values)
 
-                # except Exception as e:
-                #     print(f"{str(e)} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
-                #     print({"m": global_node_idx[metapath_a[0]].size(0),
-                #            "k": global_node_idx[metapath_a[-1]].size(0),
-                #            "n": global_node_idx[metapath_b[-1]].size(0), })
-                #     continue
+                except Exception as e:
+                    print(f"{e} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
+                    print("\t", {"m": global_node_idx[metapath_a[0]].size(0),
+                                 "k": global_node_idx[metapath_a[-1]].size(0),
+                                 "n": global_node_idx[metapath_b[-1]].size(0), })
+                    continue
 
         return output_edge_index
 
