@@ -7,9 +7,10 @@ from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
+from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError
 
+import torchmetrics
 from .utils import filter_samples
-
 
 class Metrics(torch.nn.Module):
     def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
@@ -23,7 +24,6 @@ class Metrics(torch.nn.Module):
         self.multilabel = multilabel
         self.top_ks = top_k
         self.prefix = prefix
-        add_f1_metric = False
 
         if n_classes:
             top_k = [k for k in top_k if k < n_classes]
@@ -32,24 +32,30 @@ class Metrics(torch.nn.Module):
         for metric in metrics:
             if "precision" == metric:
                 self.metrics[metric] = Precision(average=False, is_multilabel=multilabel, output_transform=None)
-                if "micro_f1" in metrics:
-                    self.metrics["precision_avg"] = Precision(average=True, is_multilabel=multilabel,
-                                                              output_transform=None)
             elif "recall" == metric:
                 self.metrics[metric] = Recall(average=False, is_multilabel=multilabel, output_transform=None)
-                if "micro_f1" in metrics:
-                    self.metrics["recall_avg"] = Recall(average=True, is_multilabel=multilabel, output_transform=None)
             elif "top_k" in metric:
                 if multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
-            elif "f1" in metric:
-                add_f1_metric = True
-                continue
+
+            elif "macro_f1" in metric:
+                self.metrics[metric] = F1(num_classes=n_classes, average="macro", multilabel=multilabel)
+            elif "micro_f1" in metric:
+                self.metrics[metric] = F1(num_classes=n_classes, average="micro", multilabel=multilabel)
+            elif "mse" in metric:
+                self.metrics[metric] = MeanSquaredError()
+            elif "auroc" in metric:
+                self.metrics[metric] = AUROC(num_classes=n_classes)
+            elif "avg_precision" in metric:
+                self.metrics[metric] = AveragePrecision(num_classes=n_classes, )
+
+
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(is_multilabel=multilabel, output_transform=None)
+
             elif "ogbn" in metric:
                 self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric))
             elif "ogbg" in metric:
@@ -59,20 +65,9 @@ class Metrics(torch.nn.Module):
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
 
-        if add_f1_metric:
-            assert "precision" in self.metrics and "recall" in self.metrics
-
-            def macro_f1(precision, recall):
-                return (precision * recall * 2 / (precision + recall + 1e-12)).mean()
-
-            self.metrics["macro_f1"] = MetricsLambda(macro_f1, self.metrics["precision"], self.metrics["recall"])
-
-            if "micro_f1" in metrics:
-                def micro_f1(precision, recall):
-                    return (precision * recall * 2 / (precision + recall + 1e-12))
-
-                self.metrics["micro_f1"] = MetricsLambda(micro_f1, self.metrics["precision_avg"],
-                                                         self.metrics["recall_avg"])
+            # Needed to add the PytorchGeometric methods as Modules, so they'll be on the correct CUDA device during training
+            if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
+                setattr(self, metric, self.metrics[metric])
 
         self.reset_metrics()
 
@@ -96,19 +91,23 @@ class Metrics(torch.nn.Module):
             y_pred = torch.softmax(y_pred, dim=1)
 
         for metric in self.metrics:
-            if "precision" in metric or "recall" in metric or "f1" in metric or "accuracy" in metric:
+            # torchmetrics metrics
+            if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
+                self.metrics[metric](y_pred, y_true)
+
+            # Torch ignite metrics
+            elif "precision" in metric or "recall" in metric or "accuracy" in metric:
                 if not self.multilabel and y_true.dim() == 1:
                     self.metrics[metric].update((self.hot_encode(y_pred.argmax(1, keepdim=False), type_as=y_true),
                                                  self.hot_encode(y_true, type_as=y_pred)))
-                    # self.metrics[metric].update(
-                    # ((y_pred > self.threshold).type_as(y_true),
-                    #  self.hot_encode(y_true, y_pred)))
                 else:
                     self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
 
+            # Torch ignite metrics
             elif metric == "top_k":
                 self.metrics[metric].update((y_pred, y_true))
 
+            # OGB metrics
             elif "ogb" in metric:
                 if metric in ["ogbl-ddi", "ogbl-collab"]:
                     y_true = y_true[:, 0]
@@ -128,12 +127,17 @@ class Metrics(torch.nn.Module):
         logs = {}
         for metric in self.metrics:
             try:
-                if "ogb" in metric or (metric == "top_k" and isinstance(self.metrics[metric], TopKMultilabelAccuracy)):
+                if "ogb" in metric:
                     logs.update(self.metrics[metric].compute(prefix=self.prefix))
+
+                elif metric == "top_k" and isinstance(self.metrics[metric], TopKMultilabelAccuracy):
+                    logs.update(self.metrics[metric].compute(prefix=self.prefix))
+
                 elif metric == "top_k" and isinstance(self.metrics[metric], TopKCategoricalAccuracy):
-                    metric_name = (
-                                      metric if self.prefix is None else self.prefix + metric) + f"@{self.metrics[metric]._k}"
+                    metric_name = (metric if self.prefix is None else \
+                                       self.prefix + metric) + f"@{self.metrics[metric]._k}"
                     logs[metric_name] = self.metrics[metric].compute()
+
                 else:
                     metric_name = metric if self.prefix is None else self.prefix + metric
                     logs[metric_name] = self.metrics[metric].compute()
