@@ -42,14 +42,14 @@ def train(hparams: Namespace):
 
     trainer = Trainer(
         gpus=NUM_GPUS,
-        distributed_backend='horovod' if NUM_GPUS > 1 else None,
+        accelerator=hparams.accelerator,
         gradient_clip_val=hparams.gradient_clip_val,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False)],
         logger=logger,
-        amp_level='O1' if USE_AMP else None,
-        precision=16 if USE_AMP else 32
+        # amp_level='O1' if USE_AMP else None,
+        # precision=16 if USE_AMP else 32
     )
 
     trainer.fit(model)
@@ -57,37 +57,43 @@ def train(hparams: Namespace):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument('-g', '--num_gpus', type=int, default=1)
-    # parametrize the network
+
+    # Dataset
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
     parser.add_argument('--dir_path', type=str, default="datasets/")
     parser.add_argument('--inductive', type=bool, default=False)
+    parser.add_argument('--use_reverse', type=bool, default=True)
 
+    # parametrize the network
+    parser.add_argument('-g', '--num_gpus', type=int, default=1)
     parser.add_argument("-d", '--embedding_dim', type=int, default=128)
-    parser.add_argument("-t", '--t_order', type=int, default=2)
     parser.add_argument('-n', '--batch_size', type=int, default=2000)
     parser.add_argument('--n_neighbors', type=int, default=20)
+    parser.add_argument("-t", '--t_order', type=int, default=2)
+
     parser.add_argument('--activation', type=str, default="relu")
-    parser.add_argument('--attn_heads', type=int, default=64)
+    parser.add_argument('--layer_pooling', type=str, default="max")
+
+    parser.add_argument('--attn_heads', type=int, default=4)
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
-    parser.add_argument('--attn_dropout', type=float, default=0.2)
-    parser.add_argument('--layer_pooling', type=str, default="concat")
+    parser.add_argument('--attn_dropout', type=float, default=0.5)
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
-    parser.add_argument('--nb_cls_dropout', type=float, default=0.3)
+    parser.add_argument('--nb_cls_dropout', type=float, default=0.4)
 
     parser.add_argument('--disable_alpha', type=bool, default=False)
     parser.add_argument('--disable_beta', type=bool, default=False)
 
     parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
-    parser.add_argument('--use_class_weights', type=bool, default=False)
-    parser.add_argument('--use_reverse', type=bool, default=True)
 
+    # Optimizer parameters
+    parser.add_argument('-a', '--accelerator', type=str, default="ddp|horovod")
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
     parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--weight_decay', type=float, default=1e-2)
-    parser.add_argument('--gradient_clip_val', type=float, default=1.0)
+    parser.add_argument('--use_class_weights', type=bool, default=False)
+    parser.add_argument('--weight_decay', type=float, default=1e-4)
+    parser.add_argument('--gradient_clip_val', type=float, default=0.0)
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
 

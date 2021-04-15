@@ -1,13 +1,13 @@
 import numpy as np
 import torch
 from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, Accuracy, TopKCategoricalAccuracy, MetricsLambda
+from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy, MetricsLambda
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
-from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError
+from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
 
 import torchmetrics
 from .utils import filter_samples
@@ -54,7 +54,7 @@ class Metrics(torch.nn.Module):
 
 
             elif "accuracy" in metric:
-                self.metrics[metric] = Accuracy(is_multilabel=multilabel, output_transform=None)
+                self.metrics[metric] = Accuracy()
 
             elif "ogbn" in metric:
                 self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric))
@@ -169,7 +169,8 @@ class OGBNodeClfMetrics(Metric):
         y_pred, y_true = outputs
         if isinstance(self.evaluator, NodeEvaluator):
             assert y_pred.dim() == 2
-            y_pred = y_pred.argmax(axis=1)
+            if y_true.dim() == 1 or y_true.size(1) == 1:
+                y_pred = y_pred.argmax(axis=1)
 
         if y_pred.dim() <= 1:
             y_pred = y_pred.unsqueeze(-1)
@@ -183,6 +184,7 @@ class OGBNodeClfMetrics(Metric):
         if isinstance(self.evaluator, NodeEvaluator):
             output = self.evaluator.eval({"y_pred": torch.cat(self.y_pred, dim=0),
                                           "y_true": torch.cat(self.y_true, dim=0)})
+
         elif isinstance(self.evaluator, LinkEvaluator):
             y_pred_pos = torch.cat(self.y_pred, dim=0).squeeze(-1)
             y_pred_neg = torch.cat(self.y_true, dim=0)
@@ -246,7 +248,7 @@ class TopKMultilabelAccuracy(Metric):
 
     def __init__(self, k_s=[5, 10, 50, 100, 200], output_transform=None, device=None):
         self.k_s = k_s
-        super(TopKMultilabelAccuracy, self).__init__(output_transform, device=device)
+        super(TopKMultilabelAccuracy, self).__init__(output_transform)
 
     @reinit__is_reduced
     def reset(self):

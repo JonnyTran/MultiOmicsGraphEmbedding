@@ -65,7 +65,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         self._name = dataset.name
         self.head_node_type = "entity"
 
-        if not hasattr(data, "edge_reltype") and not hasattr(data, "edge_attr"):
+        if not hasattr(data, "edge_reltype") and (not hasattr(data, "edge_attr") or data.edge_attr is None):
             self.metapaths = [(self.head_node_type, "default", self.head_node_type)]
             self.edge_index_dict = {self.metapaths[0]: data.edge_index}
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
@@ -193,7 +193,8 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             y = None
 
         # Weights
-        weights = (y != -1) & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
+        weights = (y != -1) if y.dim() == 1 else (y != -1).all(1)
+        weights = weights & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
         weights = torch.tensor(weights, dtype=torch.float)
 
         # Higher weights for sampled `n_idx` nodes

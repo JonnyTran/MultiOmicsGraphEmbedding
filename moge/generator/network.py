@@ -201,7 +201,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 self.class_counts = pd.Series(labels).value_counts(sort=False)
 
             self.n_classes = self.classes.size(0)
-            self.class_weight = torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float))
+            self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
 
             assert -1 not in self.classes
             assert self.class_weight.numel() == self.n_classes, f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"

@@ -136,14 +136,14 @@ class LATTENodeClf(NodeClfTrainer):
         ]
 
         # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
-
         optimizer = torch.optim.Adam(optimizer_grouped_parameters,
                                      lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=self.hparams.weight_decay if "weight_decay" in self.hparams else 0.0)
-        # scheduler = ReduceLROnPlateau(optimizer)
+                                     weight_decay=self.hparams.weight_decay \
+                                         if "weight_decay" in self.hparams else 0.0)
+        scheduler = ReduceLROnPlateau(optimizer)
 
         return {"optimizer": optimizer,
-                # "lr_scheduler": scheduler, "monitor": "val_loss"
+                "lr_scheduler": scheduler, "monitor": "val_loss"
                 }
 
 
