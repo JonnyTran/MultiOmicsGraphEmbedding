@@ -1,6 +1,7 @@
 import copy
 import numpy as np
 import pandas as pd
+from collections.abc import Iterable
 
 import torch
 from torch import nn as nn
@@ -116,9 +117,12 @@ class LATTE(nn.Module):
         # h_layers = {node_type: [] for node_type in self.node_types}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(blocks[t], feat, **kwargs)
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(
+                    blocks[t] if isinstance(blocks, Iterable) else blocks,
+                    feat, **kwargs)
             else:
-                h_dict, t_loss, _ = self.layers[t].forward(blocks[t], h_dict, **kwargs)
+                h_dict, t_loss, _ = self.layers[t].forward(blocks[t] if isinstance(blocks, Iterable) else blocks,
+                                                           h_dict, **kwargs)
 
             # for node_type in h_dict:
             #     h_layers[node_type].append(h_dict[node_type])
@@ -263,7 +267,7 @@ class LATTEConv(nn.Module):
                 # Compute node-level attention coefficients
                 g.apply_edges(func=self.edge_attention, etype=etype)
 
-                if g.batch_num_edges(etype=etype).item() > 0:
+                if g.batch_num_edges(etype=etype).nelement() > 1 or g.batch_num_edges(etype=etype).item() > 0:
                     funcs[etype] = (self.message_func, self.reduce_func)
 
             g.multi_update_all(funcs, cross_reducer='mean')

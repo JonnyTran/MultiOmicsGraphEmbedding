@@ -168,7 +168,10 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.process_DglLinkDataset_hetero(dataset)
         elif isinstance(dataset, DglGraphPropPredDataset):
             print("DGLGraphPropPredDataset Homo")
-            self.process_DglGraphDataset_homo(dataset)
+            if len(dataset[0][0].ntypes) + len(dataset[0][0].etypes) > 2:
+                self.process_DglGraphDataset_hetero(dataset)
+            else:
+                self.process_DglGraphDataset_homo(dataset)
 
         # PyG datasets
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
@@ -195,7 +198,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
-        if hasattr(self, "y_dict"):
+        # Node classifications
+        if hasattr(self, "y_dict") and self.y_dict:
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
                 self.multilabel = True
                 self.classes = torch.arange(self.y_dict[self.head_node_type].size(1))
@@ -214,18 +218,35 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 self.class_counts = pd.Series(labels).value_counts(sort=False)
 
             self.n_classes = self.classes.size(0)
-            self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
 
             assert -1 not in self.classes
-            assert self.class_weight.numel() == self.n_classes, f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
+
+        # Graph classification
+        elif hasattr(self, "labels") and self.labels is not None:
+            if self.labels.dim() > 1 and self.labels.size(1) != 1:
+                self.multilabel = True
+                self.n_classes = self.labels.size(1)
+                self.classes = torch.arange(self.labels.size(1))
+                self.class_counts = self.labels.sum(0)
+            else:
+                self.multilabel = False
+                self.classes = self.labels.unique()
+                self.n_classes = self.classes.size(0)
+
+                self.class_counts = pd.Series(self.labels.numpy()).value_counts(sort=False)
+
         else:
             self.multilabel = False
             self.n_classes = None
             print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
+        if hasattr(self, "class_counts"):
+            self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
+            assert self.class_weight.numel() == self.n_classes, f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
+
         assert hasattr(self, "num_nodes_dict")
 
-        if not hasattr(self, "x_dict") or len(self.x_dict) == 0:
+        if not hasattr(self, "x_dict") or self.x_dict is None or len(self.x_dict) == 0:
             self.x_dict = {}
 
         if reshuffle_train is not None and reshuffle_train > 0:

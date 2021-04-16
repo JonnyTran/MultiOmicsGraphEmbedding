@@ -245,3 +245,80 @@ class LinkPredTrainer(NodeClfTrainer):
             batch_size = self.hparams.batch_size
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
                                             batch_size=batch_size)
+
+
+class GraphClfTrainer(LightningModule):
+    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                     multilabel=dataset.multilabel, metrics=metrics)
+        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                    multilabel=dataset.multilabel, metrics=metrics)
+        hparams.name = self.name()
+        hparams.inductive = dataset.inductive
+        self.hparams = hparams
+
+    def name(self):
+        if hasattr(self, "_name"):
+            return self._name
+        else:
+            return self.__class__.__name__
+
+    def get_n_params(self):
+        size = 0
+        for name, param in dict(self.named_parameters()).items():
+            nn = 1
+            for s in list(param.size()):
+                nn = nn * s
+            size += nn
+        return size
+
+    def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
+        logs = self.train_metrics.compute_metrics()
+
+        logs.update({"loss": avg_loss})
+        self.train_metrics.reset_metrics()
+        self.log_dict(logs)
+        return None
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
+        logs = self.valid_metrics.compute_metrics()
+        # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
+
+        logs.update({"val_loss": avg_loss})
+        self.valid_metrics.reset_metrics()
+        self.log_dict(logs, prog_bar=logs)
+        return None
+
+    def test_epoch_end(self, outputs):
+        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
+        if hasattr(self, "test_metrics"):
+            logs = self.test_metrics.compute_metrics()
+            self.test_metrics.reset_metrics()
+        else:
+            logs = {}
+        logs.update({"test_loss": avg_loss})
+
+        self.log_dict(logs, prog_bar=logs)
+        return None
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=self.hparams.batch_size)
+
+    def val_dataloader(self):
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=self.hparams.batch_size)
+
+    def valtrain_dataloader(self):
+        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size)
+
+    def test_dataloader(self):
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
+                                            batch_size=self.hparams.batch_size)
