@@ -52,10 +52,9 @@ class LATTEGraphClassifier(GraphClfTrainer):
 
     def forward(self, multigraph: DGLHeteroGraph, feat, **kwargs):
         embeddings = self.embedder.forward(multigraph, feat, **kwargs)
-        multigraph.ndata["h"] = embeddings
+        multigraph.ndata["h"] = embeddings[self.dataset.head_node_type]
 
         graph_emb = dgl.readout_nodes(multigraph, 'h', op="max")
-        print("graph_emb", graph_emb.shape)
 
         if hasattr(self, "batchnorm"):
             graph_emb = self.batchnorm(graph_emb)

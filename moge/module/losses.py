@@ -69,6 +69,7 @@ class ClassificationLoss(nn.Module):
                 if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
                                           "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
                     target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
+
             loss = self.criterion.forward(logits, target)
 
         if self.reduction == None and weights is not None:

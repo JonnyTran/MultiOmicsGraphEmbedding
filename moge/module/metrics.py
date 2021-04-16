@@ -10,7 +10,7 @@ from ogb.nodeproppred import Evaluator as NodeEvaluator
 from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy, Precision, Recall
 
 import torchmetrics
-from .utils import filter_samples
+from .utils import filter_samples, tensor_sizes
 
 class Metrics(torch.nn.Module):
     def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
@@ -166,7 +166,7 @@ class OGBNodeClfMetrics(Metric):
 
     def update(self, outputs):
         y_pred, y_true = outputs
-        if isinstance(self.evaluator, NodeEvaluator):
+        if isinstance(self.evaluator, (NodeEvaluator, GraphEvaluator)):
             assert y_pred.dim() == 2
             if y_true.dim() == 1 or y_true.size(1) == 1:
                 y_pred = y_pred.argmax(axis=1)
@@ -191,6 +191,11 @@ class OGBNodeClfMetrics(Metric):
             output = self.evaluator.eval({"y_pred_pos": y_pred_pos,
                                           "y_pred_neg": y_pred_neg})
             output = {k.strip("_list"): v.mean().item() for k, v in output.items()}
+
+        elif isinstance(self.evaluator, GraphEvaluator):
+            input_shape = {"y_true": torch.cat(self.y_pred, dim=0),
+                           "y_pred": torch.cat(self.y_true, dim=0)}
+            output = self.evaluator.eval(input_shape)
         else:
             raise Exception(f"implement eval for {self.evaluator}")
 

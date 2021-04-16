@@ -1,4 +1,5 @@
 import dgl
+import tqdm
 import numpy as np
 import torch
 from ogb.graphproppred import DglGraphPropPredDataset
@@ -30,16 +31,15 @@ class DGLGraphSampler(HeteroNetDataset):
             self.head_node_type = self.node_types[0]
 
         if "feat" not in a_graph.ndata:
-            for g in dataset.graphs:
-                num_nodes = g.num_nodes()
-                embed = torch.nn.Embedding(num_nodes, self.embedding_dim)  # 34 nodes with embedding dim equal to 5
+            for g in tqdm.tqdm(dataset.graphs, desc="Instantiating embeddings for graphs"):
+                embed = torch.nn.Embedding(g.num_nodes(), self.embedding_dim)
                 g.ndata["feat"] = embed.weight
 
         self.dataset = dataset
-        self.labels = dataset.labels
 
-        if self.labels.dim() == 2 and self.labels.size(1) == 1:
-            self.labels = self.labels.squeeze(1)
+        if dataset.labels.dim() == 2 and dataset.labels.size(1) == 1:
+            dataset.labels = dataset.labels.squeeze(1)
+        self.labels = dataset.labels
 
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
@@ -66,17 +66,17 @@ class DGLGraphSampler(HeteroNetDataset):
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         collator = dgl.dataloading.GraphCollator()
         dataloader = DataLoader(self.dataset[self.training_idx], collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
+                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=0)
         return dataloader
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         collator = dgl.dataloading.GraphCollator()
         dataloader = DataLoader(self.dataset[self.validation_idx], collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
+                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0)
         return dataloader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         collator = dgl.dataloading.GraphCollator()
         dataloader = DataLoader(self.dataset[self.testing_idx], collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
+                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=0)
         return dataloader
