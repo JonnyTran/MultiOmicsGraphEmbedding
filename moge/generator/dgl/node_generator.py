@@ -154,6 +154,32 @@ class DGLNodeSampler(HeteroNetDataset):
 
         self.G = graph
 
+    def process_DglNodeDataset_homo(self, dataset: DglNodePropPredDataset):
+        graph, labels = dataset[0]
+        self._name = dataset.name
+
+        if self.node_types is None:
+            self.node_types = graph.ntypes
+
+        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
+
+        if self.head_node_type is None:
+            self.head_node_type = self.node_types[0]
+
+        if labels.dim() == 2 and labels.size(1) == 1:
+            labels = labels.squeeze(1)
+
+        graph.nodes[self.head_node_type].data["labels"] = labels
+        self.y_dict = {self.head_node_type: labels}
+        self.x_dict = {self.head_node_type: graph.ndata["feat"]}
+
+        self.metapaths = graph.canonical_etypes
+
+        split_idx = dataset.get_idx_split()
+        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
+            "test"]
+
+        self.G = graph
 
     def get_metapaths(self):
         return self.G.canonical_etypes

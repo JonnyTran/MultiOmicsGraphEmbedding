@@ -55,6 +55,7 @@ class LATTENodeClf(NodeClfTrainer):
                                             multilabel=dataset.multilabel,
                                             reduction="mean" if "reduction" not in hparams else hparams.reduction)
         self.hparams.n_params = self.get_n_params()
+        self.lr = self.hparams.lr
 
     def forward(self, inputs: dict, **kwargs):
         if not self.training:
@@ -137,7 +138,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
         optimizer = torch.optim.Adam(optimizer_grouped_parameters,
-                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
+                                     lr=self.lr,  # momentum=self.hparams.momentum,
                                      weight_decay=self.hparams.weight_decay \
                                          if "weight_decay" in self.hparams else 0.0)
         scheduler = ReduceLROnPlateau(optimizer)

@@ -1,6 +1,8 @@
 from typing import Union, Dict, List, Tuple
 from abc import abstractmethod
 import logging
+
+import dgl.heterograph
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -150,9 +152,14 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
             print("PygNodePropPredDataset Hetero (use HeteroNeighborSampler class)")
             self.process_PygNodeDataset_hetero(dataset)
+
         elif isinstance(dataset, DglNodePropPredDataset):
-            print("DGLNodePropPredDataset Hetero")
-            self.process_DglNodeDataset_hetero(dataset)
+            if len(dataset[0][0].ntypes) + len(dataset[0][0].etypes) > 2:
+                print("DGLNodePropPredDataset Hetero")
+                self.process_DglNodeDataset_hetero(dataset)
+            else:
+                print("DGLNodePropPredDataset Homo")
+                self.process_DglNodeDataset_homo(dataset)
         elif isinstance(dataset, DglLinkPropPredDataset):
             print("DGLLinkPropPredDataset Hetero")
             self.process_DglLinkDataset_hetero(dataset)

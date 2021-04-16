@@ -32,8 +32,8 @@ def train(hparams: Namespace):
     dataset = load_node_dataset(hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
                                 dir_path=hparams.dir_path)
 
-    METRICS = ["precision", "recall", "macro_f1", "micro_f1",
-               "accuracy" if dataset.multilabel else hparams.dataset, "top_k"]
+    METRICS = ["precision", "recall", "micro_f1", "macro_f1",
+               dataset.name() if "ogb" in dataset.name() else "accuracy"]
     hparams.loss_type = "BCE" if dataset.multilabel else hparams.loss_type
     hparams.n_classes = dataset.n_classes
     model = LATTENodeClf(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)

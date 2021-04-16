@@ -38,17 +38,17 @@ class ImportanceSampler(BlockSampler):
             g (dgl.DGLGraph):
             seed_nodes:
         """
-        # fanouts = self.fanouts[block_id]
-        fanouts = self.get_fanout(self.fanouts[block_id], seed_nodes)
+        fanouts = self.fanouts[block_id]
+        # fanouts = self.get_fanout(self.fanouts[block_id], seed_nodes)
 
         if self.edge_dir == "in":
             sg = dgl.in_subgraph(g, seed_nodes)
         elif self.edge_dir == "out":
             sg = dgl.out_subgraph(g, seed_nodes)
 
-        # self.assign_prob(sg, seed_nodes)
-        for metapath in sg.canonical_etypes:
-            sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
+        self.assign_prob(sg, seed_nodes)
+        # for metapath in sg.canonical_etypes:
+        #     sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
 
         frontier = sample_neighbors(g=sg,
                                     nodes=seed_nodes,

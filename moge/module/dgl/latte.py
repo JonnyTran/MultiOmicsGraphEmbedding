@@ -170,19 +170,25 @@ class LATTEConv(nn.Module):
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
         if first:
-            self.linear = nn.ModuleDict(
+            self.linear_l = nn.ModuleDict(
+                {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
+                 for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
+            self.linear_r = nn.ModuleDict(
                 {node_type: nn.Linear(in_channels, embedding_dim, bias=True) \
                  for node_type, in_channels in in_channels_dict.items()})  # W.shape (F x D_m)
         else:
-            self.linear = nn.ModuleDict(
+            self.linear_l = nn.ModuleDict(
                 {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (F x F)
+            self.linear_r = nn.ModuleDict(
+                {node_type: nn.Linear(embedding_dim, embedding_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.ModuleList(
-            [nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
+            [nn.Linear(self.out_channels, attn_heads, bias=True) for metapath in self.metapaths])
         self.attn_r = nn.ModuleList(
-            [nn.Linear(embedding_dim, 1, bias=True) for metapath in self.metapaths])
+            [nn.Linear(self.out_channels, attn_heads, bias=True) for metapath in self.metapaths])
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -254,11 +260,13 @@ class LATTEConv(nn.Module):
         with g.local_scope():
             funcs = {}
             for srctype in set(srctype for srctype, etype, dsttype in g.canonical_etypes):
-                g.srcnodes[srctype].data['h'] = self.linear[srctype](feat_src[srctype])
+                g.srcnodes[srctype].data['k'] = self.linear_l[srctype](feat_src[srctype]).view(-1, self.attn_heads,
+                                                                                               self.out_channels)
                 # G.srcnodes[srctype].data['v'] = v_linear(feat_src[srctype]).view(-1, self.n_heads, self.d_k)
 
             for dsttype in set(dsttype for srctype, etype, dsttype in g.canonical_etypes):
-                g.dstnodes[dsttype].data['h'] = self.linear[dsttype](feat_dst[dsttype])
+                g.dstnodes[dsttype].data['v'] = self.linear_r[dsttype](feat_dst[dsttype]).view(-1, self.attn_heads,
+                                                                                               self.out_channels)
 
             for srctype, etype, dsttype in g.canonical_etypes:
                 # Compute node-level attention coefficients

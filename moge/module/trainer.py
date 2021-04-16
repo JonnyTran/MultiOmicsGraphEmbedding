@@ -151,7 +151,8 @@ class NodeClfTrainer(ClusteringEvaluator):
                                                 batch_size=self.hparams.batch_size)
 
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn, batch_size=self.hparams.batch_size)
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
+                                            batch_size=self.hparams.batch_size)
 
     def print_pred_class_counts(self, y_hat, y, multilabel, n_top_class=8):
         if multilabel:

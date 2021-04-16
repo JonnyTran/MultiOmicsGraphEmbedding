@@ -1,21 +1,20 @@
 import numpy as np
 import torch
 from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy, MetricsLambda
+from ignite.metrics import TopKCategoricalAccuracy, MetricsLambda
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
-from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
+from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy, Precision, Recall
 
 import torchmetrics
 from .utils import filter_samples
 
 class Metrics(torch.nn.Module):
     def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
-                 multilabel: bool = None,
-                 metrics=["precision", "recall", "top_k", "accuracy"]):
+                 multilabel: bool = None, metrics=["precision", "recall", "top_k", "accuracy"]):
         super().__init__()
 
         self.loss_type = loss_type.upper()
@@ -25,22 +24,22 @@ class Metrics(torch.nn.Module):
         self.top_ks = top_k
         self.prefix = prefix
 
-        if n_classes:
-            top_k = [k for k in top_k if k < n_classes]
 
         self.metrics = {}
         for metric in metrics:
-            if "precision" == metric:
-                self.metrics[metric] = Precision(average=False, is_multilabel=multilabel, output_transform=None)
-            elif "recall" == metric:
-                self.metrics[metric] = Recall(average=False, is_multilabel=multilabel, output_transform=None)
-            elif "top_k" in metric:
+            if "top_k" in metric:
+                if n_classes:
+                    top_k = [k for k in top_k if k < n_classes]
+
                 if multilabel:
                     self.metrics[metric] = TopKMultilabelAccuracy(k_s=top_k)
                 else:
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
-
+            if "precision" == metric:
+                self.metrics[metric] = Precision(num_classes=n_classes, average="micro", multilabel=multilabel)
+            elif "recall" == metric:
+                self.metrics[metric] = Recall(num_classes=n_classes, average="micro", multilabel=multilabel)
             elif "macro_f1" in metric:
                 self.metrics[metric] = F1(num_classes=n_classes, average="macro", multilabel=multilabel)
             elif "micro_f1" in metric:

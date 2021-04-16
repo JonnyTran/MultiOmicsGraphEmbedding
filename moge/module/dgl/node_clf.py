@@ -191,7 +191,11 @@ class LATTENodeClassifier(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         batch_inputs = blocks[0].srcdata['feat']
-        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
+        if not isinstance(batch_inputs, dict):
+            batch_inputs = {self.head_node_type: batch_inputs}
+        batch_labels = blocks[-1].dstdata['labels']
+        if isinstance(batch_labels, dict):
+            batch_labels = batch_labels[self.head_node_type]
 
         y_hat = self.forward(blocks, batch_inputs)
         loss = self.criterion.forward(y_hat, batch_labels)
@@ -211,10 +215,13 @@ class LATTENodeClassifier(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         batch_inputs = blocks[0].srcdata['feat']
-        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
+        if not isinstance(batch_inputs, dict):
+            batch_inputs = {self.head_node_type: batch_inputs}
+        batch_labels = blocks[-1].dstdata['labels']
+        if isinstance(batch_labels, dict):
+            batch_labels = batch_labels[self.head_node_type]
 
         y_hat = self.forward(blocks, batch_inputs)
-
         val_loss = self.criterion.forward(y_hat, batch_labels)
         self.valid_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
@@ -227,7 +234,11 @@ class LATTENodeClassifier(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         batch_inputs = blocks[0].srcdata['feat']
-        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
+        if not isinstance(batch_inputs, dict):
+            batch_inputs = {self.head_node_type: batch_inputs}
+        batch_labels = blocks[-1].dstdata['labels']
+        if isinstance(batch_labels, dict):
+            batch_labels = batch_labels[self.head_node_type]
 
         y_hat = self.forward(blocks, batch_inputs)
 
