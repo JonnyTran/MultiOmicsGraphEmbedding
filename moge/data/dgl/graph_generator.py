@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from ogb.graphproppred import DglGraphPropPredDataset
 from torch.utils.data import DataLoader
+from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 
 from moge.data.network import HeteroNetDataset
 
@@ -34,6 +35,17 @@ class DGLGraphSampler(HeteroNetDataset):
             for g in tqdm.tqdm(dataset.graphs, desc="Instantiating embeddings for graphs"):
                 embed = torch.nn.Embedding(g.num_nodes(), self.embedding_dim)
                 g.ndata["feat"] = embed.weight
+
+        elif "ogbg-mol" in dataset.name:
+            self.atom_encoder = AtomEncoder(emb_dim=self.embedding_dim)
+            self.bond_encoder = BondEncoder(emb_dim=self.embedding_dim)
+
+            for g in tqdm.tqdm(dataset.graphs, desc="Instantiating molecular embeddings for graphs"):
+                atom_emb = self.atom_encoder(g.ndata["feat"])  # x is input atom feature
+                edge_emb = self.bond_encoder(g.edata["feat"])  # edge_attr is input edge feature
+
+                g.ndata["feat"] = atom_emb
+                g.edata["feat"] = edge_emb
 
         self.dataset = dataset
 

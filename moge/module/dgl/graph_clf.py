@@ -17,7 +17,7 @@ from moge.data import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.utils import filter_samples
-from ..trainer import GraphClfTrainer
+from ..trainer import GraphClfTrainer, print_pred_class_counts
 
 from moge.module.dgl.latte import LATTE
 from ...module.utils import tensor_sizes
@@ -72,7 +72,11 @@ class LATTEGraphClassifier(GraphClfTrainer):
 
         self.train_metrics.update_metrics(y_hat, labels, weights=None)
 
-        logs = self.train_metrics.compute_metrics()
+        if batch_nb % 50 == 0:
+            logs = self.train_metrics.compute_metrics()
+        else:
+            logs = {}
+
         outputs = {'loss': loss}
         if logs is not None:
             outputs.update({'progress_bar': logs, "logs": logs})
@@ -99,7 +103,7 @@ class LATTEGraphClassifier(GraphClfTrainer):
         test_loss = self.criterion.forward(y_hat, labels)
 
         if batch_nb == 0:
-            self.print_pred_class_counts(y_hat, labels, multilabel=self.dataset.multilabel)
+            print_pred_class_counts(y_hat, labels, multilabel=self.dataset.multilabel)
 
         self.test_metrics.update_metrics(y_hat, labels, weights=None)
 

@@ -17,7 +17,7 @@ from moge.module.classifier import DenseClassification
 from moge.module.cogdl.conv import GTN as Gtn
 from moge.module.cogdl.conv import HAN as Han
 from moge.module.losses import ClassificationLoss
-from moge.module.trainer import NodeClfTrainer
+from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.module.utils import filter_samples
 
 
@@ -89,7 +89,10 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.train_metrics.update_metrics(y_hat, y, weights=None)
 
-        logs = self.train_metrics.compute_metrics()
+        if batch_nb % 50 == 0:
+            logs = self.train_metrics.compute_metrics()
+        else:
+            logs = {}
         if self.hparams.use_proximity:
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
@@ -109,7 +112,7 @@ class LATTENodeClf(NodeClfTrainer):
         # y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
         val_loss = self.criterion.forward(y_hat, y, weights=weights)
         # if batch_nb == 0:
-        #     self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
+        #     print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
         self.valid_metrics.update_metrics(y_hat, y, weights=None)
 
@@ -127,7 +130,7 @@ class LATTENodeClf(NodeClfTrainer):
         test_loss = self.criterion(y_hat, y, weights=weights)
 
         if batch_nb == 0:
-            self.print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
+            print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
         self.test_metrics.update_metrics(y_hat, y, weights=None)
 
