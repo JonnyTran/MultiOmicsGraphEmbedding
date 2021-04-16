@@ -44,6 +44,11 @@ class LATTENodeClf(NodeClfTrainer):
             hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
             logging.info("embedding_dim {}".format(hparams.embedding_dim))
 
+        if "batchnorm" in hparams and hparams.batchnorm:
+            self.batchnorm = torch.nn.ModuleDict(
+                {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) for node_type in
+                 self.dataset.node_types})
+
         self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
         #                                            num_class=hparams.n_classes,
@@ -64,6 +69,10 @@ class LATTENodeClf(NodeClfTrainer):
         embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],
                                                       inputs["edge_index_dict"],
                                                       inputs["global_node_index"], **kwargs)
+
+        if hasattr(self, "batchnorm"):
+            embeddings = {ntype: self.batchnorm[ntype](emb) \
+                          for ntype, emb, in embeddings.items()}
 
         y_hat = self.classifier(embeddings[self.head_node_type])
         return y_hat, proximity_loss
@@ -129,7 +138,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'embedding']
+        no_decay = ['bias', 'alpha_activation', 'embedding', 'batchnorm']
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
              'weight_decay': self.hparams.weight_decay},

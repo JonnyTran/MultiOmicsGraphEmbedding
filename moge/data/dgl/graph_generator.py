@@ -1,7 +1,7 @@
 import dgl
 import numpy as np
 import torch
-from ogb.linkproppred import DglLinkPropPredDataset
+from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
 
@@ -9,29 +9,29 @@ from moge.data.network import HeteroNetDataset
 from .node_generator import DGLNodeSampler
 
 
-class DGLLinkSampler(DGLNodeSampler):
-    def __init__(self, dataset: DglLinkPropPredDataset, sampler: str, neighbor_sizes=None, node_types=None,
+class DGLGraphSampler(DGLNodeSampler):
+    def __init__(self, dataset: DglGraphPropPredDataset, sampler: str, neighbor_sizes=None, node_types=None,
                  metapaths=None, head_node_type=None, edge_dir=True, reshuffle_train: float = None,
                  add_reverse_metapaths=True, inductive=True):
         super().__init__(dataset, sampler, neighbor_sizes, node_types, metapaths, head_node_type, edge_dir,
                          reshuffle_train, add_reverse_metapaths, inductive)
 
-    def process_DglLinkDataset_hetero(self, dataset: DglLinkPropPredDataset):
-        graph, labels = dataset[0]
+    def process_DglGraphDataset_homo(self, dataset: DglGraphPropPredDataset):
+        graphs, labels = dataset
         self._name = dataset.name
 
         if self.node_types is None:
-            self.node_types = graph.ntypes
+            self.node_types = graphs.ntypes
 
-        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
+        self.num_nodes_dict = {ntype: graphs.num_nodes(ntype) for ntype in self.node_types}
         self.y_dict = labels
 
-        self.x_dict = graph.ndata["feat"]
+        self.x_dict = graphs.ndata["feat"]
 
         for ntype, labels in self.y_dict.items():
             if labels.dim() == 2 and labels.shape[1] == 1:
                 labels = labels.squeeze(1)
-            graph.nodes[ntype].data["labels"] = labels
+            graphs.nodes[ntype].data["labels"] = labels
 
         if self.head_node_type is None:
             if self.y_dict is not None:
@@ -39,14 +39,14 @@ class DGLLinkSampler(DGLNodeSampler):
             else:
                 self.head_node_type = self.node_types[0]
 
-        self.metapaths = graph.canonical_etypes
+        self.metapaths = graphs.canonical_etypes
 
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
                                                                    split_idx["valid"][self.head_node_type], \
                                                                    split_idx["test"][self.head_node_type]
 
-        self.G = graph
+        self.G = graphs
 
     def get_metapaths(self):
         return self.G.canonical_etypes

@@ -12,6 +12,7 @@ from cogdl.datasets.gtn_data import GTNDataset
 from cogdl.datasets.han_data import HANDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
+from ogb.graphproppred import PygGraphPropPredDataset, DglGraphPropPredDataset
 from scipy.io import loadmat
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
@@ -154,6 +155,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             print("PygNodePropPredDataset Hetero (use HeteroNeighborSampler class)")
             self.process_PygNodeDataset_hetero(dataset)
 
+        # DGL Datasets
         elif isinstance(dataset, DglNodePropPredDataset):
             if len(dataset[0][0].ntypes) + len(dataset[0][0].etypes) > 2:
                 print("DGLNodePropPredDataset Hetero")
@@ -164,8 +166,11 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         elif isinstance(dataset, DglLinkPropPredDataset):
             print("DGLLinkPropPredDataset Hetero")
             self.process_DglLinkDataset_hetero(dataset)
+        elif isinstance(dataset, DglGraphPropPredDataset):
+            print("DGLGraphPropPredDataset Homo")
+            self.process_DglGraphDataset_homo(dataset)
 
-        # DGL datasets
+        # PyG datasets
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
                 not hasattr(dataset[0], "edge_index_dict"):
             print("PygLink_edge_reltype_dataset Hetero (use TripletSampler class)")
