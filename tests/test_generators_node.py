@@ -5,10 +5,10 @@ import torch
 from cogdl.datasets.han_data import DBLP_HANDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 
-from moge.generator import HeteroNeighborGenerator
-from moge.generator.dgl.node_generator import DGLNodeSampler
-from moge.generator.utils import edge_dict_intersection, edge_dict_sizes
-from moge.generator.utils import nonduplicate_indices
+from moge.data import HeteroNeighborGenerator
+from moge.data.dgl.node_generator import DGLNodeSampler
+from moge.data.utils import edge_dict_intersection, edge_dict_sizes
+from moge.data.utils import nonduplicate_indices
 from moge.module.utils import tensor_sizes
 
 dataset_path = "/home/jonny/Bioinformatics_ExternalData/OGB/"

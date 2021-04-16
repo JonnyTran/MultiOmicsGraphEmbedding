@@ -13,7 +13,7 @@ import dgl.nn.pytorch as dglnn
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
 
-from moge.generator import DGLNodeSampler
+from moge.data import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.utils import filter_samples

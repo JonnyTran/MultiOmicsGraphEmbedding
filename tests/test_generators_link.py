@@ -5,10 +5,10 @@ import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
 import moge
-import moge.generator.PyG.edge_generator
-import moge.generator.PyG.triplet_generator
-from moge.generator.utils import edge_dict_intersection, edge_dict_sizes
-from moge.generator.utils import nonduplicate_indices
+import moge.data.PyG.edge_generator
+import moge.data.PyG.triplet_generator
+from moge.data.utils import edge_dict_intersection, edge_dict_sizes
+from moge.data.utils import nonduplicate_indices
 from moge.module.utils import tensor_sizes
 
 cohort_folder_path = "datasets"

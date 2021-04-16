@@ -9,7 +9,7 @@ from keras.utils import multi_gpu_model
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
-from moge.generator import SampledTripletDataGenerator
+from moge.data import SampledTripletDataGenerator
 from moge.model.siamese.siamese_graph_embedding import SiameseGraphEmbedding, sigmoid, softmax
 from moge.network.multi_digraph import MultiDigraphNetwork
 

@@ -12,7 +12,7 @@ from dgl.utils import expand_as_pair
 
 from dgl.heterograph import DGLHeteroGraph, DGLBlock
 
-from moge.generator import DGLNodeSampler
+from moge.data import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from ...module.utils import tensor_sizes

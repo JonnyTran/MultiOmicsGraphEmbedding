@@ -94,7 +94,7 @@ class TrainTestSplit():
         kwargs['network'] = self
         kwargs['node_list'] = node_list
 
-        # A feature to ensure the test generator has the same tokenizer as the train generator
+        # A feature to ensure the test data has the same tokenizer as the train data
         if hasattr(self, "tokenizer"):
             kwargs["tokenizer"] = self.tokenizer
         gen_inst = generator(**kwargs)

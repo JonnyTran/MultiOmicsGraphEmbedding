@@ -2,48 +2,19 @@ import dgl
 import numpy as np
 import torch
 from ogb.linkproppred import DglLinkPropPredDataset
+from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
 
-from moge.generator.network import HeteroNetDataset
+from moge.data.network import HeteroNetDataset
+from .node_generator import DGLNodeSampler
 
 
-class DGLNodeSampler(HeteroNetDataset):
-    def __init__(self, dataset: DglLinkPropPredDataset, neighbor_sizes, full_neighbor=False, node_types=None,
-                 metapaths=None,
-                 head_node_type=None, edge_dir=True, resample_train: float = None, add_reverse_metapaths=True,
-                 inductive=True):
-        self.neighbor_sizes = neighbor_sizes
-        super().__init__(dataset, node_types, metapaths, head_node_type, edge_dir, resample_train,
-                         add_reverse_metapaths, inductive)
-        assert isinstance(self.G, (dgl.DGLGraph, dgl.DGLHeteroGraph))
-
-        if add_reverse_metapaths:
-            relations = {}
-
-            for etype in self.G.etypes:
-                rel_g = self.G.edge_type_subgraph([etype, ])
-                relations[self.G.to_canonical_etype(etype)] = rel_g.all_edges()
-
-                rel_reverse_name = self.get_reverse_metapath_name(self.G.to_canonical_etype(etype), None)
-                # rel_reverse = dgl.heterograph({rel_reverse_name: rel_g.reverse().all_edges()})
-                relations[rel_reverse_name] = rel_g.reverse().all_edges()  # rel_reverse.all_edges()
-
-            new_g = dgl.heterograph(relations)
-
-            for ntype in self.G.ntypes:
-                for k, v in self.G.nodes[ntype].data.items():
-                    new_g.nodes[ntype].data[k] = v
-
-            self.G = new_g
-
-        # elif directed is False:
-        #     self.G = dgl.to_bidirected(self.G, copy_ndata=True)
-
-        if not full_neighbor:
-            self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(self.neighbor_sizes, replace=False,
-                                                                              return_eids=False)
-        else:
-            self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
+class DGLLinkSampler(DGLNodeSampler):
+    def __init__(self, dataset: DglLinkPropPredDataset, sampler: str, neighbor_sizes=None, node_types=None,
+                 metapaths=None, head_node_type=None, edge_dir=True, reshuffle_train: float = None,
+                 add_reverse_metapaths=True, inductive=True):
+        super().__init__(dataset, sampler, neighbor_sizes, node_types, metapaths, head_node_type, edge_dir,
+                         reshuffle_train, add_reverse_metapaths, inductive)
 
     def process_DglLinkDataset_hetero(self, dataset: DglLinkPropPredDataset):
         graph, labels = dataset[0]

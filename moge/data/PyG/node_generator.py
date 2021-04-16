@@ -2,8 +2,8 @@ import numpy as np
 import torch
 from ogb.nodeproppred import PygNodePropPredDataset
 
-from moge.generator.network import HeteroNetDataset
-from moge.generator.PyG.neighbor_sampler import NeighborSampler
+from moge.data.network import HeteroNetDataset
+from moge.data.PyG.neighbor_sampler import NeighborSampler
 
 
 class HeteroNeighborGenerator(HeteroNetDataset):
@@ -18,7 +18,6 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         self.graph_sampler = NeighborSampler(neighbor_sizes, self.edge_index_dict, self.num_nodes_dict,
                                              self.node_types, self.head_node_type)
-
 
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
@@ -133,7 +132,6 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             return collate_wrapper
         else:
             return super().get_collate_fn(collate_fn, mode=mode)
-
 
     def sample(self, n_idx, mode):
         if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):

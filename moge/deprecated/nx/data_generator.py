@@ -7,7 +7,7 @@ import tensorflow as tf
 import torch
 from tensorflow import keras
 
-from moge.generator.sequences import SequenceTokenizer, SEQUENCE_COL
+from moge.data.sequences import SequenceTokenizer, SEQUENCE_COL
 from moge.network.hetero import HeteroNetwork
 # import moge
 from moge.network.multi_digraph import MultiDigraphNetwork
@@ -18,7 +18,7 @@ class DataGenerator(keras.utils.Sequence, SequenceTokenizer):
                  weighted=False, batch_size=1, replace=True, seed=0,
                  verbose=True, **kwargs):
         """
-        This class is a data generator for Siamese net Keras models. It generates a sample batch for SGD solvers, where
+        This class is a data data for Siamese net Keras models. It generates a sample batch for SGD solvers, where
         each sample in the batch is a uniformly sampled edge of all edge types (negative & positive). The label (y) of
         positive edges have an edge of 1.0, and negative have edge weight of 0.0. The features (x) of each sample is a
         pair of nodes' RNA sequence input.
@@ -225,13 +225,13 @@ class GeneratorDataset(torch.utils.data.Dataset):
 class TFDataset(tf.data.Dataset):
     def __new__(cls, generator, output_types=None, output_shapes=None):
         """
-        A tf.data wrapper for keras.utils.Sequence generator
-        >>> generator = DataGenerator()
-        >>> dataset = GeneratorDataset(generator)
+        A tf.data wrapper for keras.utils.Sequence data
+        >>> data = DataGenerator()
+        >>> dataset = GeneratorDataset(data)
         >>> strategy = tf.distribute.MirroredStrategy()
         >>> train_dist_dataset = strategy.experimental_distribute_dataset(dataset)
 
-        :param generator: a keras.utils.Sequence generator.
+        :param generator: a keras.utils.Sequence data.
         """
 
         def generate():

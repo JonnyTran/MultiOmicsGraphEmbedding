@@ -12,8 +12,8 @@ from keras.models import Model
 from keras.models import load_model
 from keras.optimizers import RMSprop
 from keras.utils import multi_gpu_model
-from moge.generator.networkx.data_generator import DataGenerator
-from moge.generator.networkx.sampled_generator import SampledDataGenerator
+from moge.data.networkx.data_generator import DataGenerator
+from moge.data.networkx.sampled_generator import SampledDataGenerator
 from moge.model.metrics import precision_d, recall_d, precision, recall
 from moge.model.static_graph_embedding import ImportedGraphEmbedding
 from sklearn.base import BaseEstimator

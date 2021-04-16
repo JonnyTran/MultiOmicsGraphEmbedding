@@ -10,8 +10,8 @@ from ogb.nodeproppred import PygNodePropPredDataset
 from torch_geometric.datasets import AMiner
 
 import moge
-import moge.generator.PyG.triplet_generator
-from moge.generator import HeteroNeighborGenerator
+import moge.data.PyG.triplet_generator
+from moge.data import HeteroNeighborGenerator
 from moge.module.utils import preprocess_input
 
 
@@ -99,7 +99,7 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
                                                                                   add_reverse_metapaths=hparams.use_reverse)
 
         else:
-            from moge.generator import BidirectionalGenerator
+            from moge.data import BidirectionalGenerator
 
             dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl, edge_dir=True,
                                                                                   neighbor_sizes=[

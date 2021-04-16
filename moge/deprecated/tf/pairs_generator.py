@@ -3,7 +3,7 @@ from typing import Generator
 
 import networkx as nx
 import numpy as np
-from moge.generator.networkx.data_generator import DataGenerator
+from moge.data.networkx.data_generator import DataGenerator
 from scipy.sparse import triu
 
 IS_DIRECTED = 1

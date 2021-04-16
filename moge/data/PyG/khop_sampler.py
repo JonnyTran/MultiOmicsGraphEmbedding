@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 from torch_geometric.utils.hetero import group_hetero_graph
 
-from moge.generator import HeteroNetDataset
+from moge.data import HeteroNetDataset
 
 
 class KHopHeteroSampler():

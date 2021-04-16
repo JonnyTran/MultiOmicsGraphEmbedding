@@ -20,6 +20,7 @@ from sklearn.cluster import KMeans
 
 from moge.module.PyG.latte import is_negative, LATTE
 
+
 class Network:
     def get_networkx(self):
         if not hasattr(self, "G"):
@@ -274,7 +275,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         self.training_idx, self.validation_idx, self.testing_idx = \
             self.split_train_val_test(train_ratio=train_ratio, sample_indices=all_idx)
         print(f"Resampled training set at {self.get_train_ratio()}%")
-
 
     def get_metapaths(self):
         """

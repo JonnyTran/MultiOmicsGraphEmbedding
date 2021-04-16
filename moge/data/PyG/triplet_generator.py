@@ -3,9 +3,9 @@ import pandas as pd
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
-from moge.generator.PyG.node_generator import HeteroNeighborGenerator
-from moge.generator.network import HeteroNetDataset
-from moge.generator.utils import merge_node_index
+from moge.data.PyG.node_generator import HeteroNeighborGenerator
+from moge.data.network import HeteroNetDataset
+from moge.data.utils import merge_node_index
 from moge.module.PyG.latte import is_negative
 
 

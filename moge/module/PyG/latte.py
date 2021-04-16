@@ -14,7 +14,7 @@ from torch_sparse.tensor import SparseTensor
 
 from moge.module.sampling import negative_sample
 from moge.module.utils import tensor_sizes
-from moge.generator.utils import nonduplicate_indices
+from moge.data.utils import nonduplicate_indices
 
 class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,

@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from moge.generator import HeteroNetDataset
+from moge.data import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
 from moge.module.losses import LinkPredLoss
 from ..trainer import LinkPredTrainer

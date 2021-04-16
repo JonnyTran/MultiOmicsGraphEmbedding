@@ -12,6 +12,7 @@ from dgl.sampling import sample_neighbors, select_topk, random_walk
 
 from moge.module.utils import tensor_sizes
 
+
 class ImportanceSampler(BlockSampler):
     def __init__(self, fanouts, metapaths, degree_counts: pd.Series, edge_dir="in", return_eids=False):
         """

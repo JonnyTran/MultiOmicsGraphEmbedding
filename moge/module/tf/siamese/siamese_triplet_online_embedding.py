@@ -2,7 +2,7 @@ from keras.layers import Layer
 from keras.losses import binary_crossentropy
 from keras.optimizers import Adadelta
 
-from moge.generator.siamese.triplet_generator import OnlineTripletGenerator
+from moge.data.siamese.triplet_generator import OnlineTripletGenerator
 from moge.model.siamese.siamese_graph_embedding import *
 from moge.model.siamese.siamese_triplet_embedding import SiameseTripletGraphEmbedding
 from moge.network.multi_digraph import MultiDigraphNetwork

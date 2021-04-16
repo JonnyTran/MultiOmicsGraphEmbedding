@@ -11,7 +11,7 @@ from dgl import convert, utils, batch
 from dgl import backend as F
 from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
 from dgl import utils as dglutils
-from moge.generator.network import HeteroNetDataset
+from moge.data.network import HeteroNetDataset
 from .samplers import ImportanceSampler, MultiLayerNeighborSampler
 
 

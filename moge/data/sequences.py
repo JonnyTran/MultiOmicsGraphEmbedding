@@ -8,6 +8,7 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 SEQ_DTYPE = "long"
 SEQUENCE_COL = "sequence"
 
+
 class SequenceTokenizer():
     def __init__(self, annotations, node_list, padding='post', maxlen=2000, truncating='post', agg_mode=None,
                  tokenizer=None, verbose=False) -> None:

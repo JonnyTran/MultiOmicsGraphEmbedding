@@ -10,7 +10,7 @@ from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
-from moge.generator import HeteroNetDataset
+from moge.data import HeteroNetDataset
 from moge.module.PyG.hgt import HGTModel
 from moge.module.PyG.latte import LATTE
 from moge.module.classifier import DenseClassification
