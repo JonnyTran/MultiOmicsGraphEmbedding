@@ -185,10 +185,8 @@ class LATTEConv(nn.Module):
                  for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
-        self.attn_l = nn.ModuleList(
-            [nn.Linear(self.out_channels, attn_heads, bias=True) for metapath in self.metapaths])
-        self.attn_r = nn.ModuleList(
-            [nn.Linear(self.out_channels, attn_heads, bias=True) for metapath in self.metapaths])
+        self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
+        self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -207,8 +205,8 @@ class LATTEConv(nn.Module):
 
     def reset_parameters(self):
         for i, metapath in enumerate(self.metapaths):
-            nn.init.xavier_uniform_(self.attn_l[i].weight)
-            nn.init.xavier_uniform_(self.attn_r[i].weight)
+            nn.init.xavier_uniform_(self.attn_l[i])
+            nn.init.xavier_uniform_(self.attn_r[i])
 
         for node_type in self.linear_l:
             nn.init.xavier_uniform_(self.linear[node_type].weight)
@@ -221,16 +219,14 @@ class LATTEConv(nn.Module):
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
-        att = self.attn_l[self.metapath_id[etype]].forward(edges.src["h"]) + \
-              self.attn_r[self.metapath_id[etype]].forward(edges.dst["h"])
+        att_l = (edges.src["k"] * self.attn_l[self.metapath_id[etype]]).sum(dim=-1)
+        att_r = (edges.dst["v"] * self.attn_r[self.metapath_id[etype]]).sum(dim=-1)
+        att = att_l + att_r
 
-        return {etype: att,
-                "h": edges.dst["h"]}
+        return {etype: att, "h": edges.dst["v"]}
 
     def message_func(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
-        # print("message_func", edges.canonical_etype,
-        #       "alpha", edges.data.keys())
 
         return {etype: edges.data[etype],
                 "h": edges.data["h"]}
@@ -239,19 +235,14 @@ class LATTEConv(nn.Module):
         '''
             Softmax based on target node's id (edge_index_i).
         '''
-        # print(nodes.ntype, nodes.data.keys(), nodes.mailbox)
-        # print("reduce_func", nodes.ntype, nodes.data.keys(),
-        #       "mailbox", tensor_sizes(nodes.mailbox))
-
         output = {}
         for srctype, etype, dsttype in self.metapaths:
             if etype not in nodes.mailbox: continue
 
             att = F.softmax(nodes.mailbox[etype], dim=1)
-            h = torch.sum(att * nodes.mailbox['h'], dim=1)
+            h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['h'], dim=1)
             output[etype] = h.view(-1, self.embedding_dim)
 
-        # print("output", tensor_sizes(output))
         return output
 
     def forward(self, g: DGLBlock, feat: dict):
@@ -289,7 +280,8 @@ class LATTEConv(nn.Module):
 
                 # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
                 out[ntype] = torch.stack(
-                    [g.dstnodes[ntype].data[etype] for etype in etypes] + [g.dstnodes[ntype].data["h"], ], dim=1)
+                    [g.dstnodes[ntype].data[etype] for etype in etypes] + [
+                        g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
                 out[ntype] = torch.mean(out[ntype], dim=1)
                 # out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
 
