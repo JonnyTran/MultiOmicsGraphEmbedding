@@ -263,7 +263,7 @@ class LATTENodeClassifier(NodeClfTrainer):
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=None,
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=int(0.4 * multiprocessing.cpu_count()))
+                                             num_workers=int(0.8 * multiprocessing.cpu_count()))
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.valid_dataloader(collate_fn=None,

@@ -189,3 +189,12 @@ def get_hierar_relations(hierar_taxonomy_file, label_map):
                                   for child_label in children_label if child_label in label_map]
             hierar_relations[parent_label_id] = children_label_ids
     return hierar_relations
+
+
+class EntropyLoss(nn.Module):
+    # Return Scalar
+    def forward(self, adj, anext, s_l):
+        entropy = (torch.distributions.Categorical(
+            probs=s_l).entropy()).sum(-1).mean(-1)
+        assert not torch.isnan(entropy)
+        return entropy

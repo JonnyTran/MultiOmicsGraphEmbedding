@@ -1,13 +1,13 @@
 import numpy as np
 import torch
 from ignite.exceptions import NotComputableError
-from ignite.metrics import TopKCategoricalAccuracy, MetricsLambda
+from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy, MetricsLambda
 from ignite.metrics.metric import Metric
 from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
-from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy, Precision, Recall
+from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
 
 import torchmetrics
 from .utils import filter_samples, tensor_sizes
@@ -27,7 +27,12 @@ class Metrics(torch.nn.Module):
 
         self.metrics = {}
         for metric in metrics:
-            if "top_k" in metric:
+            if "precision" == metric:
+                self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)
+            elif "recall" == metric:
+                self.metrics[metric] = Recall(average=True, is_multilabel=multilabel)
+
+            elif "top_k" in metric:
                 if n_classes:
                     top_k = [k for k in top_k if k < n_classes]
 
@@ -36,10 +41,6 @@ class Metrics(torch.nn.Module):
                 else:
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
-            if "precision" == metric:
-                self.metrics[metric] = Precision(num_classes=n_classes, average="micro", multilabel=multilabel)
-            elif "recall" == metric:
-                self.metrics[metric] = Recall(num_classes=n_classes, average="micro", multilabel=multilabel)
             elif "macro_f1" in metric:
                 self.metrics[metric] = F1(num_classes=n_classes, average="macro", multilabel=multilabel)
             elif "micro_f1" in metric:

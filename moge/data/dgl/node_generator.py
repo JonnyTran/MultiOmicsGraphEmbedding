@@ -18,6 +18,7 @@ from .samplers import ImportanceSampler, MultiLayerNeighborSampler
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
                  sampler: str,
+                 embedding_dim=None,
                  neighbor_sizes=None,
                  node_types=None,
                  metapaths=None,
@@ -27,6 +28,7 @@ class DGLNodeSampler(HeteroNetDataset):
                  add_reverse_metapaths=True,
                  inductive=True):
         self.neighbor_sizes = neighbor_sizes
+        self.embedding_dim = embedding_dim
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
                          edge_dir=edge_dir, reshuffle_train=reshuffle_train,
                          add_reverse_metapaths=add_reverse_metapaths, inductive=inductive)
@@ -125,6 +127,7 @@ class DGLNodeSampler(HeteroNetDataset):
     def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]
         self._name = dataset.name
+        self.G = graph
 
         if self.node_types is None:
             self.node_types = graph.ntypes
@@ -132,18 +135,35 @@ class DGLNodeSampler(HeteroNetDataset):
         self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
         self.y_dict = labels
 
-        self.x_dict = graph.ndata["feat"]
-
+        # Process labels
         for ntype, labels in self.y_dict.items():
             if labels.dim() == 2 and labels.shape[1] == 1:
                 labels = labels.squeeze(1)
             graph.nodes[ntype].data["labels"] = labels
 
+        # Process head_node_type for classification
         if self.head_node_type is None:
             if self.y_dict is not None:
                 self.head_node_type = list(self.y_dict.keys())[0]
             else:
                 self.head_node_type = self.node_types[0]
+
+        # Process node data
+        if "year" in graph.ndata:
+            for ntype in graph.ntypes:
+                if "year" in graph.nodes[ntype].data:
+                    graph.nodes[ntype].data["feat"] = torch.cat([graph.nodes[ntype].data["feat"],
+                                                                 graph.nodes[ntype].data["year"]], dim=1)
+
+        for ntype in graph.ntypes:
+            if "feat" not in graph.nodes[ntype].data:
+                if self.node_attr_size:
+                    embedding_dim = self.node_attr_size
+                else:
+                    embedding_dim = self.embedding_dim
+
+                embed = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
+                graph.nodes[ntype].data["feat"] = embed.weight
 
         self.metapaths = graph.canonical_etypes
 
@@ -152,7 +172,6 @@ class DGLNodeSampler(HeteroNetDataset):
                                                                    split_idx["valid"][self.head_node_type], \
                                                                    split_idx["test"][self.head_node_type]
 
-        self.G = graph
 
     def process_DglNodeDataset_homo(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]
@@ -180,6 +199,23 @@ class DGLNodeSampler(HeteroNetDataset):
             "test"]
 
         self.G = graph
+
+    @property
+    def node_attr_shape(self):
+        if "feat" not in self.G.ndata:
+            node_attr_shape = {}
+        else:
+            node_attr_shape = {ntype: self.G.nodes[ntype].data["feat"].size(1) \
+                               for ntype in self.G.ntypes if "feat" in self.G.nodes[ntype].data}
+        return node_attr_shape
+
+    @property
+    def edge_attr_shape(self):
+        if "feat" not in self.G.edata:
+            edge_attr_shape = {}
+        else:
+            edge_attr_shape = {etype: self.G.edata["feat"].size(1) for etype in self.G.etypes}
+        return edge_attr_shape
 
     def get_metapaths(self):
         return self.G.canonical_etypes
