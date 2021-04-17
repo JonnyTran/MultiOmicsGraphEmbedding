@@ -66,6 +66,15 @@ class DGLGraphSampler(HeteroNetDataset):
                                for ntype in self.dataset.graphs[0].ntypes}
         return node_attr_shape
 
+    @property
+    def edge_attr_shape(self):
+        if "feat" not in self.dataset.graphs[0].edata:
+            edge_attr_shape = {}
+        else:
+            edge_attr_shape = {etype: self.dataset.graphs[0].edata["feat"].size(1) \
+                               for etype in self.dataset.graphs[0].etypes}
+        return edge_attr_shape
+
     def get_metapaths(self):
         return self.metapaths
 

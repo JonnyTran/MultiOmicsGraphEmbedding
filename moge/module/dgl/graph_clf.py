@@ -31,7 +31,7 @@ class LATTEGraphClassifier(GraphClfTrainer):
         self.multilabel = dataset.multilabel
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = None
-        #
+
         self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(), activation=hparams.activation,
@@ -42,9 +42,10 @@ class LATTEGraphClassifier(GraphClfTrainer):
         if "batchnorm" in hparams and hparams.batchnorm:
             self.batchnorm = torch.nn.BatchNorm1d(hparams.embedding_dim)
 
+        self.readout = hparams.readout
         self.classifier = DenseClassification(hparams)
-
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
+                                            loss_type=hparams.loss_type,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel)
@@ -54,7 +55,7 @@ class LATTEGraphClassifier(GraphClfTrainer):
         embeddings = self.embedder.forward(multigraph, feat, **kwargs)
         multigraph.ndata["h"] = embeddings[self.dataset.head_node_type]
 
-        graph_emb = dgl.readout_nodes(multigraph, 'h', op="max")
+        graph_emb = dgl.readout_nodes(multigraph, 'h', op=self.readout)
 
         if hasattr(self, "batchnorm"):
             graph_emb = self.batchnorm(graph_emb)
@@ -69,14 +70,9 @@ class LATTEGraphClassifier(GraphClfTrainer):
 
         y_hat = self.forward(graphs, input_feat)
         loss = self.criterion.forward(y_hat, labels)
-
         self.train_metrics.update_metrics(y_hat, labels, weights=None)
 
-        if batch_nb % 50 == 0:
-            logs = self.train_metrics.compute_metrics()
-        else:
-            logs = {}
-
+        logs = self.train_metrics.compute_metrics() if batch_nb % 50 == 0 else {}
         outputs = {'loss': loss}
         if logs is not None:
             outputs.update({'progress_bar': logs, "logs": logs})
@@ -99,12 +95,10 @@ class LATTEGraphClassifier(GraphClfTrainer):
         input_feat = {self.dataset.head_node_type: graphs.ndata["feat"]}
 
         y_hat = self.forward(graphs, input_feat)
-
         test_loss = self.criterion.forward(y_hat, labels)
 
         if batch_nb == 0:
             print_pred_class_counts(y_hat, labels, multilabel=self.dataset.multilabel)
-
         self.test_metrics.update_metrics(y_hat, labels, weights=None)
 
         return {"test_loss": test_loss}
@@ -139,7 +133,6 @@ class LATTEGraphClassifier(GraphClfTrainer):
         ]
 
         # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
-
         optimizer = torch.optim.Adam(optimizer_grouped_parameters,
                                      lr=self.hparams.lr,  # momentum=self.hparams.momentum,
                                      weight_decay=self.hparams.weight_decay)
