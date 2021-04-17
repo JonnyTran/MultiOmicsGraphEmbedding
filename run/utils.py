@@ -5,12 +5,14 @@ import dill
 import torch
 from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
-from ogb.linkproppred import PygLinkPropPredDataset
-from ogb.nodeproppred import PygNodePropPredDataset
+from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
+from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
+from ogb.graphproppred import PygGraphPropPredDataset, DglGraphPropPredDataset
 from torch_geometric.datasets import AMiner
 
 import moge
 import moge.data.PyG.triplet_generator
+from moge.data.dgl.graph_generator import DGLGraphSampler
 from moge.data import HeteroNeighborGenerator
 from moge.module.utils import preprocess_input
 
@@ -109,7 +111,26 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
                                                                                   head_node_type=None,
                                                                                   add_reverse_metapaths=hparams.use_reverse)
 
-        logging.info(f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
+        logging.info(
+            f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
+
+    else:
+        raise Exception(f"dataset {name} not found")
+
+
+def load_graph_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
+    if "ogbg" in name:
+        ogbg = DglGraphPropPredDataset(name=name, root=path)
+
+        dataset = DGLGraphSampler(ogbg,
+                                  embedding_dim=hparams.embeddings_dim,
+                                  add_self_loop=True if "add_self_loop" in hparams and hparams.add_self_loop else False,
+                                  edge_dir="in",
+                                  add_reverse_metapaths=hparams.use_reverse,
+                                  inductive=hparams.inductive)
+
+        logging.info(
+            f"n_graphs: {len(ogbg.graphs)}, ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
 
     else:
         raise Exception(f"dataset {name} not found")

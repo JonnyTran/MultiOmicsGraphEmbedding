@@ -16,6 +16,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from run.utils import load_node_dataset
 
+
 def train(hparams):
     EMBEDDING_DIM = 128
     USE_AMP = None

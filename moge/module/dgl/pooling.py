@@ -17,11 +17,11 @@ class SAGPool(torch.nn.Module):
             (default: :obj:`torch.tanh`)
     """
 
-    def __init__(self, in_dim: int, ratio=0.5, conv_op=GraphConv, non_linearity=torch.tanh):
+    def __init__(self, in_dim: int, ratio=0.5, conv_layer=GraphConv, non_linearity=torch.tanh):
         super(SAGPool, self).__init__()
         self.in_dim = in_dim
         self.ratio = ratio
-        self.score_layer = conv_op
+        self.score_layer = conv_layer
         self.non_linearity = non_linearity
 
     def forward(self, graph: dgl.DGLGraph, feature: torch.Tensor):

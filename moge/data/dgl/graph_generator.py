@@ -10,10 +10,11 @@ from moge.data.network import HeteroNetDataset
 
 
 class DGLGraphSampler(HeteroNetDataset):
-    def __init__(self, dataset: DglGraphPropPredDataset, embedding_dim=None, node_types=None,
+    def __init__(self, dataset: DglGraphPropPredDataset, embedding_dim=None, add_self_loop=False, node_types=None,
                  metapaths=None, head_node_type=None, edge_dir=True, reshuffle_train: float = None,
                  add_reverse_metapaths=True, inductive=True):
         self.embedding_dim = embedding_dim
+        self.add_self_loop = add_self_loop
 
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
                          edge_dir=edge_dir, reshuffle_train=reshuffle_train,
@@ -46,6 +47,10 @@ class DGLGraphSampler(HeteroNetDataset):
 
                 g.ndata["feat"] = atom_emb
                 g.edata["feat"] = edge_emb
+
+        if self.add_self_loop:
+            for g in tqdm.tqdm(dataset.graphs, desc="Adding self-loop for graphs"):
+                g = dgl.transform.add_self_loop(g)
 
         self.dataset = dataset
 

@@ -226,17 +226,18 @@ class LATTEConv(nn.Module):
                 etypes = [etype for etype in self.get_head_relations(ntype, etype_only=True) \
                           if etype in g.dstnodes[ntype].data]
 
+                # If node type doesn't have any messages
                 if len(etypes) == 0:
                     out[ntype] = feat_dst[ntype][:, :self.embedding_dim]
                     continue
 
                 # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-                out[ntype] = torch.stack(
-                    [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                        g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
-
-                out[ntype] = torch.mean(out[ntype], dim=1)
+                # out[ntype] = torch.stack(
+                #     [g.dstnodes[ntype].data[etype] for etype in etypes] + [
+                #         g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
                 # out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
+                # out[ntype] = torch.mean(out[ntype], dim=1)
+                out[ntype] = g.dstnodes[ntype].data["_E"]
 
                 # Apply \sigma activation to all embeddings
                 out[ntype] = self.embedding_activation(out[ntype])
