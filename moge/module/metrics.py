@@ -111,7 +111,8 @@ class Metrics(torch.nn.Module):
                 if metric in ["ogbl-ddi", "ogbl-collab"]:
                     y_true = y_true[:, 0]
                 elif "ogbg-mol" in metric:
-                    print(tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
+                    # print(tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
+                    pass
 
                 self.metrics[metric].update((y_pred, y_true))
             else:

@@ -87,7 +87,7 @@ class DGLGraphSampler(HeteroNetDataset):
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         collator = dgl.dataloading.GraphCollator()
         dataloader = DataLoader(self.dataset[self.training_idx], collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=0)
+                                batch_size=batch_size, shuffle=True, drop_last=True, num_workers=0)
         return dataloader
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):

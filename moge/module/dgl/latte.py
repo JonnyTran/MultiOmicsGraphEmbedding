@@ -172,7 +172,8 @@ class LATTEConv(nn.Module):
         att_r = (edges.dst["v"] * self.attn_r[self.metapath_id[etype]]).sum(dim=-1)
         att = att_l + att_r
 
-        if "feat" in edges.data and edges.data["feat"].size(1) == self.attn_heads:
+        if "feat" in edges.data and (edges.data["feat"].size(1) == self.attn_heads):
+            # Scale each attn channel by the coefficient in edge data
             att = att * edges.data["feat"]
 
         return {etype: att, "h": edges.dst["v"]}
