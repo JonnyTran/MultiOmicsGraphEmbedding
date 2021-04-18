@@ -1,10 +1,11 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 import dgl
 
 from dgl.nn.pytorch import GraphConv, AvgPooling, MaxPooling, SAGEConv
 
-from ..losses import EntropyLoss
+from ..losses import EntropyLoss, LinkPredLoss
 
 
 class DiffPoolBatchedGraphLayer(torch.nn.Module):
@@ -47,12 +48,12 @@ class DiffPoolBatchedGraphLayer(torch.nn.Module):
 
         if self.link_pred:
             current_lp_loss = torch.norm(adj.to_dense() -
-                                         torch.mm(assign_tensor, torch.t(assign_tensor))) / np.power(
-                g.number_of_nodes(), 2)
+                                         torch.mm(assign_tensor, torch.t(assign_tensor))) / g.number_of_nodes() ** 2
             self.loss_log['LinkPredLoss'] = current_lp_loss
 
         for loss_layer in self.reg_loss:
             loss_name = str(type(loss_layer).__name__)
+            print("assign_tensor", assign_tensor.shape, assign_tensor)
             self.loss_log[loss_name] = loss_layer(adj, adj_new, assign_tensor)
 
         return adj_new, h
