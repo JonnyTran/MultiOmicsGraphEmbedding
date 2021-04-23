@@ -33,16 +33,15 @@ class DiffPoolBatchedGraphLayer(torch.nn.Module):
         self.loss_log = {}
         self.reg_loss.append(EntropyLoss())
 
-    def forward(self, g, h):
+    def forward(self, g: dgl.DGLGraph, h: torch.Tensor):
         feat = self.feat_gc(g, h)  # size = (sum_N, F_out), sum_N is num of nodes in this batch
-        device = feat.device
         assign_tensor = self.pool_gc(g, h)  # size = (sum_N, N_a), N_a is num of nodes in pooled graph.
         assign_tensor = F.softmax(assign_tensor, dim=1)
         assign_tensor = torch.split(assign_tensor, g.batch_num_nodes().tolist())
         assign_tensor = torch.block_diag(*assign_tensor)  # size = (sum_N, batch_size * N_a)
 
         h = torch.matmul(torch.t(assign_tensor), feat)
-        adj = g.adjacency_matrix(transpose=False, ctx=device)
+        adj = g.adjacency_matrix(transpose=False, ctx=feat.device)
         adj_new = torch.sparse.mm(adj, assign_tensor)
         adj_new = torch.mm(torch.t(assign_tensor), adj_new)
 
@@ -53,7 +52,7 @@ class DiffPoolBatchedGraphLayer(torch.nn.Module):
 
         for loss_layer in self.reg_loss:
             loss_name = str(type(loss_layer).__name__)
-            print("assign_tensor", assign_tensor.shape, assign_tensor)
+            # print("assign_tensor", assign_tensor.shape, assign_tensor.sum(1))
             self.loss_log[loss_name] = loss_layer(adj, adj_new, assign_tensor)
 
         return adj_new, h

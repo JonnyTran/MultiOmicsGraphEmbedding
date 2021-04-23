@@ -39,26 +39,24 @@ class LATTEGraphClassifier(GraphClfTrainer):
                               attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
                               neg_sampling_ratio=hparams.neg_sampling_ratio)
 
-        if "batchnorm" in hparams and hparams.batchnorm:
-            self.batchnorm = torch.nn.BatchNorm1d(hparams.embedding_dim)
+        self.pooling = SAGPool(in_dim=hparams.embedding_dim,
+                               conv_layer=dglnn.GraphConv(in_feats=hparams.embedding_dim,
+                                                          out_feats=1,
+                                                          allow_zero_in_degree=True),
+                               ratio=0.5,
+                               non_linearity=torch.relu)
 
+        # self.pooling = DiffPoolBatchedGraphLayer(input_dim=hparams.embedding_dim,
+        #                                          assign_dim=32,
+        #                                          output_feat_dim=hparams.embedding_dim,
+        #                                          activation=torch.relu,
+        #                                          dropout=hparams.attn_dropout,
+        #                                          aggregator_type="mean",
+        #                                          link_pred=False)
         self.readout = hparams.readout
 
-        # self.conv = dglnn.GraphConv(in_feats=hparams.embedding_dim,
-        #                             out_feats=1,
-        #                             allow_zero_in_degree=True)
-        # self.pooling = SAGPool(in_dim=hparams.embedding_dim,
-        #                        conv_layer=self.conv,
-        #                        ratio=0.5,
-        #                        non_linearity=torch.relu)
-
-        self.pooling = DiffPoolBatchedGraphLayer(input_dim=hparams.embedding_dim,
-                                                 assign_dim=32,
-                                                 output_feat_dim=hparams.embedding_dim,
-                                                 activation=torch.relu,
-                                                 dropout=hparams.attn_dropout,
-                                                 aggregator_type="mean",
-                                                 link_pred=False)
+        if "batchnorm" in hparams and hparams.batchnorm:
+            self.batchnorm = torch.nn.BatchNorm1d(hparams.embedding_dim)
 
         self.classifier = DenseClassification(hparams)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
@@ -71,11 +69,11 @@ class LATTEGraphClassifier(GraphClfTrainer):
     def forward(self, multigraph: DGLHeteroGraph, feat, **kwargs):
         embeddings = self.embedder.forward(multigraph, feat, **kwargs)
 
-        # multigraph, feature, perm = self.pooling(multigraph, embeddings[self.dataset.head_node_type])
-        # multigraph.ndata["feature"] = feature
-
-        multigraph, feature = self.pooling(multigraph, embeddings[self.dataset.head_node_type])
+        multigraph, feature, perm = self.pooling(multigraph, embeddings[self.dataset.head_node_type])
         multigraph.ndata["feature"] = feature
+
+        # adj_new, feature = self.pooling(multigraph, embeddings[self.dataset.head_node_type])
+        # multigraph.ndata["feature"] = feature
 
         graph_emb = dgl.readout_nodes(multigraph, 'feature', op=self.readout)
 
