@@ -45,9 +45,9 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = F1(num_classes=n_classes, average="macro", multilabel=multilabel)
             elif "micro_f1" in metric:
                 self.metrics[metric] = F1(num_classes=n_classes, average="micro", multilabel=multilabel)
-            elif "mse" in metric:
+            elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
-            elif "auroc" in metric:
+            elif "auroc" == metric:
                 self.metrics[metric] = AUROC(num_classes=n_classes)
             elif "avg_precision" in metric:
                 self.metrics[metric] = AveragePrecision(num_classes=n_classes, )
