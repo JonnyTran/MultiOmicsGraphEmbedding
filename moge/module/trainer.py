@@ -108,7 +108,7 @@ class NodeClfTrainer(ClusteringEvaluator):
             return self.__class__.__name__
 
     def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
+        avg_loss = torch.vstack([x["loss"] for x in outputs]).mean().item()
         logs = self.train_metrics.compute_metrics()
 
         logs.update({"loss": avg_loss})
@@ -117,7 +117,7 @@ class NodeClfTrainer(ClusteringEvaluator):
         return None
 
     def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
+        avg_loss = torch.vstack([x["val_loss"] for x in outputs]).mean().item()
         logs = self.valid_metrics.compute_metrics()
         # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
 
@@ -127,7 +127,7 @@ class NodeClfTrainer(ClusteringEvaluator):
         return None
 
     def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
+        avg_loss = torch.vstack([x["test_loss"] for x in outputs]).mean().item()
         if hasattr(self, "test_metrics"):
             logs = self.test_metrics.compute_metrics()
             self.test_metrics.reset_metrics()
