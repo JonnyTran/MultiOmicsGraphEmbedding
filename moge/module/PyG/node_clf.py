@@ -55,9 +55,6 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
 
-        # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
-        #                                            num_class=hparams.n_classes,
-        #                                            loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             loss_type=hparams.loss_type,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
@@ -75,23 +72,22 @@ class LATTENodeClf(NodeClfTrainer):
                                                       inputs["edge_index_dict"],
                                                       inputs["global_node_index"], **kwargs)
 
-
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
 
         return y_hat, proximity_loss
 
     def training_step(self, batch, batch_nb):
-        X, y, weights = batch
-        y_hat, proximity_loss = self.forward(X)
+        X, y_true, weights = batch
+        y_pred, proximity_loss = self.forward(X)
 
-        if isinstance(y, dict) and len(y) > 1:
-            y = y[self.head_node_type]
+        if isinstance(y_true, dict) and len(y_true) > 1:
+            y_true = y_true[self.head_node_type]
 
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.criterion.forward(y_hat, y)
+        y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        loss = self.criterion.forward(y_pred, y_true)
 
-        self.train_metrics.update_metrics(y_hat, y, weights=None)
+        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
         if batch_nb % 50 == 0:
             logs = self.train_metrics.compute_metrics()
@@ -107,18 +103,18 @@ class LATTENodeClf(NodeClfTrainer):
         return outputs
 
     def validation_step(self, batch, batch_nb):
-        X, y, weights = batch
-        y_hat, proximity_loss = self.forward(X)
+        X, y_true, weights = batch
+        y_pred, proximity_loss = self.forward(X)
 
-        if isinstance(y, dict) and len(y) > 1:
-            y = y[self.head_node_type]
+        if isinstance(y_true, dict) and len(y_true) > 1:
+            y_true = y_true[self.head_node_type]
 
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        val_loss = self.criterion.forward(y_hat, y)
-        # if batch_nb == 0:
-        #     print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
+        y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        val_loss = self.criterion.forward(y_pred, y_true)
+        if batch_nb == 0:
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.valid_metrics.update_metrics(y_hat, y, weights=None)
+        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
 
         if self.hparams.use_proximity:
             val_loss = val_loss + proximity_loss
@@ -126,17 +122,17 @@ class LATTENodeClf(NodeClfTrainer):
         return {"val_loss": val_loss}
 
     def test_step(self, batch, batch_nb):
-        X, y, weights = batch
-        y_hat, proximity_loss = self.forward(X, save_betas=True)
-        if isinstance(y, dict) and len(y) > 1:
-            y = y[self.head_node_type]
-        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        test_loss = self.criterion(y_hat, y)
+        X, y_true, weights = batch
+        y_pred, proximity_loss = self.forward(X, save_betas=True)
+        if isinstance(y_true, dict) and len(y_true) > 1:
+            y_true = y_true[self.head_node_type]
+        y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        test_loss = self.criterion(y_pred, y_true)
 
         if batch_nb == 0:
-            print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_hat, y, weights=None)
+        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
 
         if self.hparams.use_proximity:
             test_loss = test_loss + proximity_loss
