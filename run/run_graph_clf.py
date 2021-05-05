@@ -32,7 +32,7 @@ def train(hparams):
 
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "t_order": 1,
+            "n_layers": 1,
             "batchnorm": True,
             "readout": "sum",
             "activation": "relu",

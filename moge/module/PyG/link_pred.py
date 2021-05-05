@@ -106,7 +106,7 @@ class LATTELinkPred(LinkPredTrainer):
         self._name = f"LATTE-{hparams.t_order}{' Link' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+        self.embedder = LATTE(n_layers=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(), attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,

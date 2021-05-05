@@ -109,7 +109,7 @@ def train(hparams):
 
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "t_order": t_order,
+            "n_layers": t_order,
             "batch_size": 2 ** batch_order * max(num_gpus, 1),
             "nb_cls_dense_size": 0,
             "nb_cls_dropout": 0.4,

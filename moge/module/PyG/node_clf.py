@@ -31,25 +31,30 @@ class LATTENodeClf(NodeClfTrainer):
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
-                              in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(), activation=hparams.activation,
-                              attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-                              attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
+        self.embedder = LATTE(n_layers=hparams.t_order,
+                              embedding_dim=hparams.embedding_dim,
+                              in_channels_dict=dataset.node_attr_shape,
+                              num_nodes_dict=dataset.num_nodes_dict,
+                              metapaths=dataset.get_metapaths(),
+                              activation=hparams.activation,
+                              attn_heads=hparams.attn_heads,
+                              attn_activation=hparams.attn_activation,
+                              attn_dropout=hparams.attn_dropout,
+                              use_proximity=hparams.use_proximity,
                               neg_sampling_ratio=hparams.neg_sampling_ratio,
                               cpu_embeddings=True if "cpu_embedding" in hparams else False,
-                              layer_pooling=hparams.layer_pooling)
+                              layer_pooling=hparams.layer_pooling,
+                              hparams=hparams)
 
-        if hparams.layer_pooling == "concat":
-            hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-            logging.info("embedding_dim {}".format(hparams.embedding_dim))
+        if hparams.nb_cls_dense_size >= 0:
+            if hparams.layer_pooling == "concat":
+                hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+                logging.info("embedding_dim {}".format(hparams.embedding_dim))
 
-        if "batchnorm" in hparams and hparams.batchnorm:
-            self.batchnorm = torch.nn.ModuleDict(
-                {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) for node_type in
-                 self.dataset.node_types})
+            self.classifier = DenseClassification(hparams)
+        else:
+            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
 
-        self.classifier = DenseClassification(hparams)
         # self.classifier = MulticlassClassification(num_feature=hparams.embedding_dim,
         #                                            num_class=hparams.n_classes,
         #                                            loss_type=hparams.loss_type)
@@ -70,9 +75,6 @@ class LATTENodeClf(NodeClfTrainer):
                                                       inputs["edge_index_dict"],
                                                       inputs["global_node_index"], **kwargs)
 
-        if hasattr(self, "batchnorm") and hasattr(self, "classifier"):
-            embeddings = {ntype: self.batchnorm[ntype](emb) \
-                          for ntype, emb, in embeddings.items()}
 
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]

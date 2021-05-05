@@ -17,16 +17,16 @@ from moge.module.utils import tensor_sizes
 from moge.data.utils import nonduplicate_indices
 
 class LATTE(nn.Module):
-    def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
+    def __init__(self, n_layers: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True, cpu_embeddings=False,
-                 layer_pooling=False):
+                 layer_pooling=False, hparams=None):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
-        self.embedding_dim = embedding_dim * t_order
+        self.embedding_dim = embedding_dim * n_layers
         self.use_proximity = use_proximity
-        self.t_order = t_order
+        self.t_order = n_layers
         self.neg_sampling_ratio = neg_sampling_ratio
         self.edge_sampling = edge_sampling
 
@@ -34,12 +34,25 @@ class LATTE(nn.Module):
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
-        for t in range(t_order):
+        for t in range(n_layers):
             layers.append(
-                LATTEConv(embedding_dim=embedding_dim, in_channels_dict=in_channels_dict, num_nodes_dict=num_nodes_dict,
-                          metapaths=t_order_metapaths, activation=activation, attn_heads=attn_heads,
-                          attn_activation=attn_activation, attn_dropout=attn_dropout, use_proximity=use_proximity,
-                          neg_sampling_ratio=neg_sampling_ratio, first=True if t == 0 else False,
+                LATTEConv(embedding_dim=embedding_dim if t + 1 != n_layers else hparams.n_classes,
+                          in_channels_dict=in_channels_dict,
+                          num_nodes_dict=num_nodes_dict,
+                          metapaths=t_order_metapaths,
+                          activation=None \
+                              if t + 1 == n_layers and hparams.nb_cls_dense_size < 0 \
+                              else activation,
+                          batchnorm=False \
+                              if not hasattr(hparams, "batchnorm") \
+                                 or (t + 1 == n_layers and hparams.nb_cls_dense_size < 0) \
+                              else hparams.batchnorm,
+                          attn_heads=attn_heads,
+                          attn_activation=attn_activation,
+                          attn_dropout=attn_dropout,
+                          use_proximity=use_proximity,
+                          neg_sampling_ratio=neg_sampling_ratio,
+                          first=True if t == 0 else False,
                           cpu_embeddings=cpu_embeddings))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
 
@@ -173,7 +186,8 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, embedding_dim: int, in_channels_dict: {str: int}, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
+                 activation: str = "relu", batchnorm=False, attn_heads=4, attn_activation="sharpening",
+                 attn_dropout=0.2,
                  use_proximity=False, neg_sampling_ratio=1.0, first=True, cpu_embeddings=False) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.first = first
@@ -186,9 +200,19 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
 
-        self.activation = activation.lower()
-        if self.activation not in ["sigmoid", "tanh", "relu"]:
-            print(f"Embedding activation arg `{self.activation}` did not match, so uses linear activation.")
+        if activation == "sigmoid":
+            self.activation = F.sigmoid
+        elif activation == "tanh":
+            self.activation = F.tanh
+        elif activation == "relu":
+            self.activation = F.relu
+        else:
+            print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
+
+        if batchnorm:
+            self.batchnorm = torch.nn.ModuleDict({
+                node_type: nn.BatchNorm1d(embedding_dim) \
+                for node_type in self.node_types})
 
         self.conv = torch.nn.ModuleDict(
             {node_type: torch.nn.Conv1d(
@@ -290,17 +314,21 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
-        for node_type in global_node_idx:
-            out[node_type] = self.agg_relation_neighbors(node_type=node_type, alpha_l=alpha_l, alpha_r=alpha_r,
-                                                         l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
-                                                         global_node_idx=global_node_idx)
-            out[node_type][:, -1] = l_dict[node_type]
+        for ntype in global_node_idx:
+            out[ntype] = self.agg_relation_neighbors(node_type=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
+                                                     l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
+                                                     global_node_idx=global_node_idx)
+            out[ntype][:, -1] = l_dict[ntype]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[node_type] = torch.bmm(out[node_type].permute(0, 2, 1), beta[node_type]).squeeze(-1)
+            out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
 
-            # Apply \sigma activation to all embeddings
-            out[node_type] = self.embedding_activation(out[node_type])
+            if hasattr(self, "batchnorm"):
+                print("batchnorm", ntype, out[ntype].shape)
+                out[ntype] = self.batchnorm[ntype](out[ntype])
+
+            if hasattr(self, "activation"):
+                out[ntype] = self.activation(out[ntype])
 
 
         proximity_loss, edge_pred_dict = None, None
@@ -447,15 +475,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         loss = torch.true_divide(loss, max(len(edge_index_dict) * 2, 1))
         return loss, edge_pred_dict
 
-    def embedding_activation(self, embeddings):
-        if self.activation == "sigmoid":
-            return F.sigmoid(embeddings)
-        elif self.activation == "tanh":
-            return F.tanh(embeddings)
-        elif self.activation == "relu":
-            return F.relu(embeddings)
-        else:
-            return embeddings
 
     def attn_activation(self, alpha, metapath_id):
         if isinstance(self.alpha_activation, torch.Tensor):

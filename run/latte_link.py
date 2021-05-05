@@ -53,7 +53,7 @@ if __name__ == "__main__":
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
-    parser.add_argument('-t', '--t_order', type=int, default=1)
+    parser.add_argument('-t', '--n_layers', type=int, default=1)
     parser.add_argument('-b', '--batch_size', type=int, default=12000)
     parser.add_argument('--activation', type=str, default="relu")
     parser.add_argument('--attn_heads', type=int, default=1)
