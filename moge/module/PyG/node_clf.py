@@ -70,11 +70,13 @@ class LATTENodeClf(NodeClfTrainer):
                                                       inputs["edge_index_dict"],
                                                       inputs["global_node_index"], **kwargs)
 
-        if hasattr(self, "batchnorm"):
+        if hasattr(self, "batchnorm") and hasattr(self, "classifier"):
             embeddings = {ntype: self.batchnorm[ntype](emb) \
                           for ntype, emb, in embeddings.items()}
 
-        y_hat = self.classifier(embeddings[self.head_node_type])
+        y_hat = self.classifier(embeddings[self.head_node_type]) \
+            if hasattr(self, "classifier") else embeddings[self.head_node_type]
+
         return y_hat, proximity_loss
 
     def training_step(self, batch, batch_nb):
@@ -84,8 +86,8 @@ class LATTENodeClf(NodeClfTrainer):
         if isinstance(y, dict) and len(y) > 1:
             y = y[self.head_node_type]
 
-        # y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        loss = self.criterion.forward(y_hat, y, weights=weights)
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        loss = self.criterion.forward(y_hat, y)
 
         self.train_metrics.update_metrics(y_hat, y, weights=None)
 
@@ -109,8 +111,8 @@ class LATTENodeClf(NodeClfTrainer):
         if isinstance(y, dict) and len(y) > 1:
             y = y[self.head_node_type]
 
-        # y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        val_loss = self.criterion.forward(y_hat, y, weights=weights)
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        val_loss = self.criterion.forward(y_hat, y)
         # if batch_nb == 0:
         #     print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
 
@@ -126,8 +128,8 @@ class LATTENodeClf(NodeClfTrainer):
         y_hat, proximity_loss = self.forward(X, save_betas=True)
         if isinstance(y, dict) and len(y) > 1:
             y = y[self.head_node_type]
-        # y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
-        test_loss = self.criterion(y_hat, y, weights=weights)
+        y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
+        test_loss = self.criterion(y_hat, y)
 
         if batch_nb == 0:
             print_pred_class_counts(y_hat, y, multilabel=self.dataset.multilabel)
