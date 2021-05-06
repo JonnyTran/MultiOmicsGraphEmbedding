@@ -108,34 +108,22 @@ class NodeClfTrainer(ClusteringEvaluator):
             return self.__class__.__name__
 
     def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).mean().item()
         logs = self.train_metrics.compute_metrics()
-
-        logs.update({"loss": avg_loss})
+        self.log_dict(logs, prog_bar=True)
         self.train_metrics.reset_metrics()
-        self.log_dict(logs)
         return None
 
     def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean().item()
         logs = self.valid_metrics.compute_metrics()
-        # print({k: np.around(v.item(), decimals=3) for k, v in logs.items()})
+        self.log_dict(logs, prog_bar=True)
 
-        logs.update({"val_loss": avg_loss})
         self.valid_metrics.reset_metrics()
-        self.log_dict(logs, prog_bar=logs)
         return None
 
     def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).mean().item()
-        if hasattr(self, "test_metrics"):
-            logs = self.test_metrics.compute_metrics()
-            self.test_metrics.reset_metrics()
-        else:
-            logs = {}
-        logs.update({"test_loss": avg_loss})
-
-        self.log_dict(logs, prog_bar=logs)
+        logs = self.test_metrics.compute_metrics()
+        self.log_dict(logs, prog_bar=True)
+        self.test_metrics.reset_metrics()
         return None
 
     def train_dataloader(self):

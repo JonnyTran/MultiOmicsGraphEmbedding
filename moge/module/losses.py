@@ -72,7 +72,7 @@ class ClassificationLoss(nn.Module):
 
             loss = self.criterion.forward(logits, target)
 
-        if self.reduction == None and weights is not None:
+        if (self.reduction == None or self.reduction == "none") and weights is not None:
             loss = (weights * loss).sum() / weights.sum()
 
         return loss

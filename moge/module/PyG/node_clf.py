@@ -61,6 +61,7 @@ class LATTENodeClf(NodeClfTrainer):
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel,
                                             reduction="mean" if "reduction" not in hparams else hparams.reduction)
+
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
 
@@ -81,51 +82,45 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
 
-        if isinstance(y_true, dict) and len(y_true) > 1:
-            y_true = y_true[self.head_node_type]
-
         y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
-        if batch_nb % 50 == 0:
+        if batch_nb % 25 == 0:
             logs = self.train_metrics.compute_metrics()
+            self.log("loss", loss, logger=True, on_step=True)
         else:
             logs = {}
+
         if self.hparams.use_proximity:
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
 
-        outputs = {'loss': loss}
-        if logs is not None:
-            outputs.update({'progress_bar': logs, "logs": logs})
-        return outputs
+        self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+
+        return loss
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
 
-        if isinstance(y_true, dict) and len(y_true) > 1:
-            y_true = y_true[self.head_node_type]
-
         y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred, y_true)
-        # if batch_nb == 0:
-        #     print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
 
         if self.hparams.use_proximity:
             val_loss = val_loss + proximity_loss
 
-        return {"val_loss": val_loss}
+        self.log("val_loss", val_loss)
+
+        return val_loss
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X, save_betas=True)
-        if isinstance(y_true, dict) and len(y_true) > 1:
-            y_true = y_true[self.head_node_type]
+
         y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
         test_loss = self.criterion(y_pred, y_true)
 
@@ -137,7 +132,9 @@ class LATTENodeClf(NodeClfTrainer):
         if self.hparams.use_proximity:
             test_loss = test_loss + proximity_loss
 
-        return {"test_loss": test_loss}
+        self.log("test_loss", test_loss)
+
+        return test_loss
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())

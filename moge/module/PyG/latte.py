@@ -315,7 +315,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out[ntype] = self.agg_relation_neighbors(node_type=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
                                                      l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
                                                      global_node_idx=global_node_idx)
-            out[ntype][:, -1] = l_dict[ntype]
+            if self.first:
+                out[ntype][:, -1] = l_dict[ntype]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
@@ -477,7 +478,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if isinstance(self.alpha_activation, torch.Tensor):
             return self.alpha_activation[metapath_id] * alpha
         elif isinstance(self.alpha_activation, nn.Module):
-            return self.alpha_activation.forward(alpha)
+            return self.alpha_activation(alpha)
         else:
             return alpha
 
@@ -494,7 +495,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         :return:
         """
         relations = self.get_head_relations(node_type)
-        return len(relations) + 1
+        if self.first:
+            return len(relations) + 1
+        else:
+            return len(relations)
 
     def save_relation_weights(self, beta, global_node_idx):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
@@ -504,17 +508,22 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self._beta_avg = {}
         self._beta_std = {}
         for node_type in beta:
+            if self.first:
+                relations = self.get_head_relations(node_type, True) + [node_type, ]
+            else:
+                relations = self.get_head_relations(node_type, True)
+
             with torch.no_grad():
                 self._betas[node_type] = pd.DataFrame(beta[node_type].squeeze(-1).cpu().numpy(),
-                                                      columns=self.get_head_relations(node_type, True) + [node_type, ],
+                                                      columns=relations,
                                                       index=global_node_idx[node_type].cpu().numpy())
 
                 _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
                 _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
                 self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type, True) + [node_type])}
+                                             enumerate(relations)}
                 self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                             enumerate(self.get_head_relations(node_type, True) + [node_type])}
+                                             enumerate(relations)}
 
     def save_attn_weights(self, node_type, attn_weights, node_idx):
         if not hasattr(self, "_betas"):
@@ -525,17 +534,23 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self._beta_std = {}
 
         betas = attn_weights.sum(1)
+
+        if self.first:
+            relations = self.get_head_relations(node_type, True) + [node_type, ]
+        else:
+            relations = self.get_head_relations(node_type, True)
+
         with torch.no_grad():
             self._betas[node_type] = pd.DataFrame(betas.cpu().numpy(),
-                                                  columns=self.get_head_relations(node_type, True) + [node_type, ],
+                                                  columns=relations,
                                                   index=node_idx.cpu().numpy())
 
             _beta_avg = np.around(betas.mean(dim=0).cpu().numpy(), decimals=3)
             _beta_std = np.around(betas.std(dim=0).cpu().numpy(), decimals=2)
             self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type, True) + [node_type])}
+                                         enumerate(relations)}
             self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                         enumerate(self.get_head_relations(node_type, True) + [node_type])}
+                                         enumerate(relations)}
 
     def get_relation_weights(self):
         """

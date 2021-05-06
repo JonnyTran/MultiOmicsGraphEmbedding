@@ -475,7 +475,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
-                                 shuffle=True, num_workers=num_workers,
+                                 shuffle=True, num_workers=num_workers, pin_memory=True,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         mode="train",
                                                                                                         **kwargs))
@@ -500,7 +500,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
-                                 shuffle=False, num_workers=num_workers,
+                                 shuffle=False, num_workers=num_workers, pin_memory=True,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         mode="validation",
                                                                                                         **kwargs))
@@ -508,7 +508,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
-                                 shuffle=False, num_workers=num_workers,
+                                 shuffle=False, num_workers=num_workers, pin_memory=True,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
                                                                                                         mode="testing",
                                                                                                         **kwargs))
