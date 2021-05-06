@@ -4,6 +4,7 @@ from collections import defaultdict, OrderedDict
 from typing import Union, List, Optional
 
 import numpy as np
+import pandas as pd
 import torch
 from torch import Tensor
 from torch_geometric.data.sampler import Adj, EdgeIndex
@@ -209,7 +210,7 @@ class NeighborSampler(Sampler):
         for adj in adjs:
             for edge_type_id in self.edge_type[adj.e_id].unique():
                 metapath = self.int2edge_type[edge_type_id.item()]
-                head_type, tail_type = metapath[0], metapath[-1]
+                head, tail = metapath[0], metapath[-1]
 
                 # Filter edges to correct edge_type_id
                 edge_mask = self.edge_type[adj.e_id] == edge_type_id
@@ -219,13 +220,15 @@ class NeighborSampler(Sampler):
                 edge_index[0] = n_id[edge_index[0]]
                 edge_index[1] = n_id[edge_index[1]]
 
+                old_local_node_idx = self.local_node_idx.clone()
                 # Convert node global index -> local index -> batch index
-                if head_type == tail_type:
-                    edge_index = self.local_node_idx[edge_index].apply_(relabel_nodes[head_type].get)
+                if head == tail:
+                    edge_index = self.local_node_idx[edge_index].apply_(relabel_nodes[head].get)
                 else:
-                    edge_index[0] = self.local_node_idx[edge_index[0]].apply_(relabel_nodes[head_type].get)
-                    edge_index[1] = self.local_node_idx[edge_index[1]].apply_(relabel_nodes[tail_type].get)
+                    edge_index[0] = self.local_node_idx[edge_index[0]].apply_(lambda x: relabel_nodes[head].get(x, -1))
+                    edge_index[1] = self.local_node_idx[edge_index[1]].apply_(lambda x: relabel_nodes[tail].get(x, -1))
 
+                assert torch.isclose(old_local_node_idx.sum(), self.local_node_idx.sum())
                 # Remove edges labeled as -1, which contain nodes not in sampled_local_nodes
                 mask = np.isin(edge_index, [-1], assume_unique=False, invert=True).all(axis=0)
                 edge_index = edge_index[:, mask]
@@ -252,7 +255,12 @@ class NeighborSampler(Sampler):
         Args:
             node_ids_dict:
         """
-        relabel_nodes = {node_type: defaultdict(lambda: -1, dict(zip(node_ids_dict[node_type].numpy(),
-                                                                     range(node_ids_dict[node_type].size(0))))) \
+        relabel_nodes = {node_type: defaultdict(lambda: -1,
+                                                dict(zip(node_ids_dict[node_type].numpy(),
+                                                         range(node_ids_dict[node_type].size(0))))) \
                          for node_type in node_ids_dict}
+
+        # relabel_nodes = {ntype: pd.Series(data=np.arange(node_ids_dict[ntype].size(0)),
+        #                                   index=node_ids_dict[ntype].numpy()) \
+        #                  for ntype in node_ids_dict}
         return relabel_nodes

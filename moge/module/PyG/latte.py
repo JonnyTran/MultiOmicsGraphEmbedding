@@ -35,6 +35,7 @@ class LATTE(nn.Module):
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
         for t in range(n_layers):
+            print(t, t_order_metapaths)
             layers.append(
                 LATTEConv(input_dim=in_channels_dict if t == 0 else embedding_dim,
                           output_dim=hparams.n_classes if t + 1 == n_layers and hparams.nb_cls_dense_size < 0 else embedding_dim,
@@ -217,13 +218,19 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 for node_type in self.node_types})  # W_phi.shape (D x F)
 
         if isinstance(input_dim, dict):
-            self.linear = nn.ModuleDict(
+            self.linear_l = nn.ModuleDict(
+                {node_type: nn.Linear(in_channels, output_dim, bias=True) \
+                 for node_type, in_channels in input_dim.items()})  # W.shape (F x D_m)
+            self.linear_r = nn.ModuleDict(
                 {node_type: nn.Linear(in_channels, output_dim, bias=True) \
                  for node_type, in_channels in input_dim.items()})  # W.shape (F x D_m)
         else:
-            self.linear = nn.ModuleDict(
+            self.linear_l = nn.ModuleDict(
                 {node_type: nn.Linear(input_dim, output_dim, bias=True) \
                  for node_type in self.node_types})  # W.shape (F x F)
+            self.linear_r = nn.ModuleDict(
+                {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+                 for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.ModuleList(
@@ -271,10 +278,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             glorot(self.attn_r[i].weight)
         # glorot(self.attn_q[-1].weight)
 
-        for node_type in self.linear:
-            glorot(self.linear[node_type].weight)
-        # for node_type in self.linear_r:
-        #     glorot(self.linear_r[node_type].weight)
+        for node_type in self.linear_l:
+            glorot(self.linear_l[node_type].weight)
+        for node_type in self.linear_r:
+            glorot(self.linear_r[node_type].weight)
         for node_type in self.conv:
             glorot(self.conv[node_type].weight)
 
@@ -292,7 +299,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         :return: output_emb, loss
         """
         l_dict = self.get_h_dict(x_l, global_node_idx, left_right="left")
-        # r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
+        r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
 
         # Predict relations attention coefficients
         beta = self.get_beta_weights(x_l, global_node_idx=global_node_idx)
@@ -300,13 +307,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if not self.training: self.save_relation_weights(beta, global_node_idx)
 
         # Compute node-level attention coefficients
-        alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, l_dict)
+        alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
         for ntype in global_node_idx:
             out[ntype] = self.agg_relation_neighbors(node_type=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
-                                                     l_dict=l_dict, r_dict=l_dict, edge_index_dict=edge_index_dict,
+                                                     l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
                                                      global_node_idx=global_node_idx)
             out[ntype][:, -1] = l_dict[ntype]
 
@@ -369,7 +376,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     self.conv[node_type].weight.device)
                 continue
 
-            h_dict[node_type] = self.linear[node_type].forward(input[node_type])
+            if left_right == "left":
+                h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
+            elif left_right == "right":
+                h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
 
         return h_dict
 

@@ -308,7 +308,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         :return:
         """
         if self.use_reverse:
-            return self.metapaths + self.get_reverse_metapath(self.metapaths, self.edge_index_dict)
+            return self.metapaths + self.get_reverse_metapaths(self.metapaths, self.edge_index_dict)
         else:
             return self.metapaths
 
@@ -335,37 +335,37 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         return node_ids_dict
 
-    @staticmethod
-    def add_reverse_edge_index(edge_index_dict) -> None:
+    def add_reverse_edge_index(self, edge_index_dict) -> None:
         reverse_edge_index_dict = {}
         for metapath in edge_index_dict:
             if is_negative(metapath) or edge_index_dict[metapath] == None: continue
-            reverse_metapath = HeteroNetDataset.get_reverse_metapath_name(metapath, edge_index_dict)
+            reverse_metapath = self.reverse_metapath_name(metapath, edge_index_dict)
 
             reverse_edge_index_dict[reverse_metapath] = edge_index_dict[metapath][[1, 0], :]
         edge_index_dict.update(reverse_edge_index_dict)
 
-    @staticmethod
-    def get_reverse_metapath_name(metapath: Tuple[str, str, str], edge_index_dict: dict = None):
+    def get_reverse_metapaths(self, metapaths, edge_index_dict) -> list:
+        reverse_metapaths = []
+        for metapath in metapaths:
+            reverse = self.reverse_metapath_name(metapath, edge_index_dict)
+            reverse_metapaths.append(reverse)
+        return reverse_metapaths
+
+    def reverse_metapath_name(self, metapath: Tuple[str, str, str], edge_index_dict: dict = None):
         if isinstance(metapath, tuple):
-            reverse_metapath = tuple(a + "_by" if i == 1 else a for i, a in enumerate(reversed(metapath)))
+            reverse_metapath = tuple(etype + "_by" if i == 1 else etype \
+                                     for i, etype in enumerate(reversed(metapath)))
         elif isinstance(metapath, str):
             reverse_metapath = "".join(reversed(metapath))
-            if reverse_metapath in edge_index_dict:
-                reverse_metapath = reverse_metapath[:2] + "_" + reverse_metapath[2:]
+            if reverse_metapath in self.edge_index_dict:
+                logging.info(f"Reversed metapath {reverse_metapath} already exists in {self.edge_index_dict.keys()}")
+                # reverse_metapath = reverse_metapath[:1] + "_" + reverse_metapath[1:]
+
         elif isinstance(metapath, (int, np.int)):
             reverse_metapath = str(metapath) + "_"
         else:
             raise NotImplementedError(f"{metapath} not supported")
         return reverse_metapath
-
-    @staticmethod
-    def get_reverse_metapath(metapaths, edge_index_dict) -> list:
-        reverse_metapaths = []
-        for metapath in metapaths:
-            reverse = HeteroNetDataset.get_reverse_metapath_name(metapath, edge_index_dict)
-            reverse_metapaths.append(reverse)
-        return reverse_metapaths
 
     @staticmethod
     def sps_adj_to_edgeindex(adj):

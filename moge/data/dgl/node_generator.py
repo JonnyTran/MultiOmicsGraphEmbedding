@@ -62,7 +62,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
             # Reverse edges
             if add_reverse:
-                reverse_metapath = self.get_reverse_metapath_name(metapath)
+                reverse_metapath = self.reverse_metapath_name(metapath)
                 assert reverse_metapath not in relations
                 src, dst = reversed_g.all_edges(etype=metapath[1])
                 relations[reverse_metapath] = (src, dst)
