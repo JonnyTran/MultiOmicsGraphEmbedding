@@ -99,7 +99,7 @@ class NodeClfTrainer(ClusteringEvaluator):
                                     multilabel=dataset.multilabel, metrics=metrics)
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
-        self.hparams = hparams
+        self._set_hparams(hparams)
 
     def name(self):
         if hasattr(self, "_name"):
