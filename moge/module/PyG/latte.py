@@ -309,7 +309,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha_r = rel_embs * self.rel_attn_r[ntype]
 
         alpha = alpha_l[:, None, :, :] + alpha_r
-        beta = torch.softmax(alpha.sum(-1).sum(-1), dim=1)
+        alpha = F.leaky_relu(alpha)
+        beta = F.softmax(alpha.sum(-1).sum(-1), dim=1)
         return beta
 
     def forward(self, x_l, edge_index_dict, global_node_idx, save_betas=False):
