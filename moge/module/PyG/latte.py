@@ -35,7 +35,7 @@ class LATTE(nn.Module):
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
         for t in range(n_layers):
-            print(t, t_order_metapaths)
+            print(t, [".".join(m) for m in t_order_metapaths])
             layers.append(
                 LATTEConv(input_dim=in_channels_dict if t == 0 else embedding_dim,
                           output_dim=hparams.n_classes if t + 1 == n_layers and hparams.nb_cls_dense_size < 0 else embedding_dim,
@@ -43,7 +43,7 @@ class LATTE(nn.Module):
                           metapaths=t_order_metapaths,
                           activation=None if t + 1 == n_layers and hparams.nb_cls_dense_size < 0 else activation,
                           batchnorm=False if not hasattr(hparams, "batchnorm") or (
-                                      t + 1 == n_layers and hparams.nb_cls_dense_size < 0) else hparams.batchnorm,
+                                  t + 1 == n_layers and hparams.nb_cls_dense_size < 0) else hparams.batchnorm,
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout, use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,

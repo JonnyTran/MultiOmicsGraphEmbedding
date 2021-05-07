@@ -65,6 +65,8 @@ class LATTENodeClf(NodeClfTrainer):
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
 
+        self.val_moving_loss = torch.tensor([1e2, ] * 5, dtype=torch.float)
+
     def forward(self, inputs: dict, **kwargs):
         if not self.training:
             self._node_ids = inputs["global_node_index"]

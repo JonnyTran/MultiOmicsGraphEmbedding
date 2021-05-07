@@ -47,14 +47,6 @@ class DenseClassification(nn.Module):
             print("INFO: [Else Case] Output of `_classifier` is logits")
         self.reset_parameters()
 
-    @staticmethod
-    def add_model_specific_args(parent_parser):
-        parser = ArgumentParser(parents=[parent_parser])
-        parser.add_argument('--nb_cls_dense_size', type=int, default=512)
-        parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
-        parser.add_argument('--n_classes', type=int, default=128)
-        return parser
-
     def forward(self, embeddings):
         return self.fc_classifier(embeddings)
 

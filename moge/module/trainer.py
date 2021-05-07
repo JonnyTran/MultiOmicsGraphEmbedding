@@ -115,6 +115,13 @@ class NodeClfTrainer(ClusteringEvaluator):
 
     def validation_epoch_end(self, outputs):
         logs = self.valid_metrics.compute_metrics()
+
+        if hasattr(self, "val_moving_loss"):
+            val_loss = torch.stack([l for l in outputs]).mean()
+            self.val_moving_loss[self.current_epoch % self.val_moving_loss.numel()] = val_loss
+            self.log("val_moving_loss", self.val_moving_loss.mean(),
+                     logger=True, prog_bar=False, on_epoch=True)
+
         self.log_dict(logs, prog_bar=True)
 
         self.valid_metrics.reset_metrics()
