@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 import torch_sparse
 from torch import nn as nn
-from torch_geometric.nn import MessagePassing
+from torch_geometric.nn import MessagePassing, GATConv
 from torch_geometric.nn.inits import glorot
 from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
@@ -42,8 +42,8 @@ class LATTE(nn.Module):
                           num_nodes_dict=num_nodes_dict,
                           metapaths=t_order_metapaths,
                           activation=None if t + 1 == n_layers and hparams.nb_cls_dense_size < 0 else activation,
-                          batchnorm=False if not hasattr(hparams, "batchnorm") or (
-                                  t + 1 == n_layers and hparams.nb_cls_dense_size < 0) else hparams.batchnorm,
+                          layernorm=False if not hasattr(hparams, "layernorm") or (
+                                  t + 1 == n_layers and hparams.nb_cls_dense_size < 0) else hparams.layernorm,
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout, use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
@@ -180,7 +180,7 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: {str: int}, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", batchnorm=False, attn_heads=4, attn_activation="sharpening",
+                 activation: str = "relu", layernorm=False, attn_heads=4, attn_activation="sharpening",
                  attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0, first=True,
                  cpu_embeddings=False) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
@@ -203,9 +203,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
-        if batchnorm:
-            self.batchnorm = torch.nn.ModuleDict({
-                node_type: nn.BatchNorm1d(output_dim) \
+        if layernorm:
+            self.layernorm = torch.nn.ModuleDict({
+                node_type: nn.LayerNorm(output_dim) \
                 for node_type in self.node_types})
 
         self.conv = torch.nn.ModuleDict(
@@ -271,10 +271,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.reset_parameters()
 
     def reset_parameters(self):
+        gain = nn.init.calculate_gain('leaky_relu', 0.2)
         for i, metapath in enumerate(self.metapaths):
-            glorot(self.attn_l[i])
-            glorot(self.attn_r[i])
-        # glorot(self.attn_q[-1].weight)
+            nn.init.xavier_normal_(self.attn_l[i], gain=gain)
+            nn.init.xavier_normal_(self.attn_r[i], gain=gain)
 
         for node_type in self.linear_l:
             glorot(self.linear_l[node_type].weight)
@@ -313,14 +313,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out[ntype] = self.agg_relation_neighbors(node_type=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
                                                      l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
                                                      global_node_idx=global_node_idx)
-            if self.first:
-                out[ntype][:, -1] = l_dict[ntype].view(-1, self.embedding_dim)
+            out[ntype][:, -1] = l_dict[ntype].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
 
-            if hasattr(self, "batchnorm"):
-                out[ntype] = self.batchnorm[ntype](out[ntype])
+            if hasattr(self, "layernorm"):
+                out[ntype] = self.layernorm[ntype](out[ntype])
 
             if hasattr(self, "activation"):
                 out[ntype] = self.activation(out[ntype])
@@ -400,15 +399,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta = {}
         for node_type in global_node_idx:
             beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-
-            # if self.first:
-            #     if node_type in x_dict:
-            #         beta[node_type] = self.conv[node_type].forward(x_dict[node_type].unsqueeze(-1))
-            #     else:
-            #         # node_type is not attributed, use h_dict contains self.embeddings in first layer
-            #         beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            # else:
-            #     beta[node_type] = self.conv[node_type].forward(h_prev[node_type].unsqueeze(-1))
 
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
         return beta
@@ -495,10 +485,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         :return:
         """
         relations = self.get_head_relations(node_type)
-        if self.first:
-            return len(relations) + 1
-        else:
-            return len(relations)
+        return len(relations) + 1
 
     def save_relation_weights(self, beta, global_node_idx):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
@@ -508,10 +495,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self._beta_avg = {}
         self._beta_std = {}
         for node_type in beta:
-            if self.first:
-                relations = self.get_head_relations(node_type, True) + [node_type, ]
-            else:
-                relations = self.get_head_relations(node_type, True)
+            relations = self.get_head_relations(node_type, True) + [node_type, ]
 
             with torch.no_grad():
                 self._betas[node_type] = pd.DataFrame(beta[node_type].squeeze(-1).cpu().numpy(),
@@ -535,10 +519,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         betas = attn_weights.sum(1)
 
-        if self.first:
-            relations = self.get_head_relations(node_type, True) + [node_type, ]
-        else:
-            relations = self.get_head_relations(node_type, True)
+        relations = self.get_head_relations(node_type, True) + [node_type, ]
 
         with torch.no_grad():
             self._betas[node_type] = pd.DataFrame(betas.cpu().numpy(),
