@@ -33,7 +33,7 @@ class GAT(nn.Module):
     def forward(self, encodings, subnetwork):
         # print("subnetwork", subnetwork.shape)
         embeddings = self.embedder(encodings, subnetwork)
-        # embeddings = self.batchnorm(embeddings)
+        # embeddings = self.layernorm(embeddings)
         return embeddings
 
 

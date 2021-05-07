@@ -170,7 +170,7 @@ class LATTENodeClassifier(NodeClfTrainer):
                               attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
                               neg_sampling_ratio=hparams.neg_sampling_ratio)
 
-        if "batchnorm" in hparams and hparams.batchnorm:
+        if "layernorm" in hparams and hparams.layernorm:
             self.batchnorm = torch.nn.ModuleDict(
                 {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) for node_type in
                  self.dataset.node_types})
@@ -186,7 +186,7 @@ class LATTENodeClassifier(NodeClfTrainer):
     def forward(self, blocks, feat, **kwargs):
         embeddings = self.embedder.forward(blocks, feat, **kwargs)
 
-        if hasattr(self, "batchnorm"):
+        if hasattr(self, "layernorm"):
             embeddings = {ntype: self.batchnorm[ntype](emb) \
                           for ntype, emb, in embeddings.items()}
 

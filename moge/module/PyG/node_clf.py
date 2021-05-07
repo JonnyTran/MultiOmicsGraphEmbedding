@@ -65,7 +65,7 @@ class LATTENodeClf(NodeClfTrainer):
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
 
-        self.val_moving_loss = torch.tensor([1e2, ] * 5, dtype=torch.float)
+        self.val_moving_loss = torch.tensor([3.0, ] * 5, dtype=torch.float)
 
     def forward(self, inputs: dict, **kwargs):
         if not self.training:
@@ -140,7 +140,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'embedding', 'batchnorm']
+        no_decay = ['bias', 'alpha_activation', 'embedding', 'layernorm']
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
              'weight_decay': self.hparams.weight_decay},

@@ -42,12 +42,14 @@ def train(hparams: Namespace):
 
     trainer = Trainer(
         gpus=NUM_GPUS,
-        accelerator=hparams.accelerator,
+        # accelerator=hparams.accelerator,
         gradient_clip_val=hparams.gradient_clip_val,
         # auto_lr_find=True,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False)],
         logger=logger,
+        accelerator='ddp_spawn',
+        plugins='ddp_sharded',
         # amp_level='O1' if USE_AMP else None,
         # precision=16 if USE_AMP else 32
     )
