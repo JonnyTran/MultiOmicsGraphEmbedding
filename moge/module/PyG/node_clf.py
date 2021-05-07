@@ -89,7 +89,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
-        if batch_nb % 25 == 0:
+        if batch_nb % 100 == 0:
             logs = self.train_metrics.compute_metrics()
             self.log("loss", loss, logger=True, on_step=True)
         else:
