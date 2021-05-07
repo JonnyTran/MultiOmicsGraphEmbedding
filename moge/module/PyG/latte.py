@@ -276,12 +276,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             nn.init.xavier_normal_(self.attn_l[i], gain=gain)
             nn.init.xavier_normal_(self.attn_r[i], gain=gain)
 
+        gain = nn.init.calculate_gain('relu')
         for node_type in self.linear_l:
-            glorot(self.linear_l[node_type].weight)
+            nn.init.xavier_normal_(self.linear_l[node_type].weight, gain=gain)
         for node_type in self.linear_r:
-            glorot(self.linear_r[node_type].weight)
+            nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
+
         for node_type in self.conv:
-            glorot(self.conv[node_type].weight)
+            nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
         if self.embeddings is not None and len(self.embeddings.keys()) > 0:
             for node_type in self.embeddings:
