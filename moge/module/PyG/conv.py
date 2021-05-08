@@ -7,7 +7,7 @@ from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.module.PyG.latte import LATTE, is_negative, untag_negative, tag_negative
+from .latte import LATTE, is_negative, untag_negative, tag_negative
 from moge.module.sampling import negative_sample
 
 
