@@ -3,6 +3,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from cogdl.models.emb.hin2vec import Hin2vec, Hin2vec_layer, RWgraph, tqdm
+from parmed.utils.fortranformat._edit_descriptors import T
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
@@ -147,9 +148,12 @@ class LATTENodeClf(NodeClfTrainer):
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
-        # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
-        scheduler = ReduceLROnPlateau(optimizer)
+
+        steps_per_epoch = self.dataset.training_idx.numel() // self.hparams["batch_size"]
+        epochs = 25
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=steps_per_epoch * epochs,
+                                                               eta_min=self.lr / 100)
 
         return {"optimizer": optimizer,
                 "lr_scheduler": scheduler,
