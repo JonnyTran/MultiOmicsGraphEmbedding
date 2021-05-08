@@ -35,7 +35,7 @@ class LATTENodeClf(NodeClfTrainer):
                               embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape,
                               num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(khop=True if "khop" in collate_fn else None),
+                              metapaths=dataset.get_metapaths(khop=False),
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
