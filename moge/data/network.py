@@ -1,8 +1,7 @@
-from typing import Union, Dict, List, Tuple
-from abc import abstractmethod
 import logging
+from abc import abstractmethod
+from typing import Union, List, Tuple
 
-import dgl.heterograph
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -10,16 +9,15 @@ import torch
 import torch_sparse
 from cogdl.datasets.gtn_data import GTNDataset
 from cogdl.datasets.han_data import HANDataset
+from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
-from ogb.graphproppred import PygGraphPropPredDataset, DglGraphPropPredDataset
 from scipy.io import loadmat
+from sklearn.cluster import KMeans
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 
-from sklearn.cluster import KMeans
-
-from moge.module.PyG.latte import is_negative, LATTE
+from moge.module.PyG import LATTE, is_negative
 
 
 class Network:
