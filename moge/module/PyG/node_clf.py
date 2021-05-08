@@ -149,14 +149,29 @@ class LATTENodeClf(NodeClfTrainer):
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        steps_per_epoch = min(self.dataset.training_idx.numel() / self.hparams["batch_size"], 1.0)
-        epochs = 25
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=steps_per_epoch * epochs,
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
                                                                eta_min=self.lr / 100)
 
         return {"optimizer": optimizer,
                 "lr_scheduler": scheduler,
                 "monitor": "val_loss"}
+
+    @property
+    def num_training_steps(self) -> int:
+        """Total training steps inferred from datamodule and devices."""
+        if self.trainer.max_steps:
+            return self.trainer.max_steps
+
+        limit_batches = self.trainer.limit_train_batches
+        batches = len(self.train_dataloader())
+        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
+
+        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+        if self.trainer.tpu_cores:
+            num_devices = max(num_devices, self.trainer.tpu_cores)
+
+        effective_accum = self.trainer.accumulate_grad_batches * num_devices
+        return (batches // effective_accum) * self.trainer.max_epochs
 
 
 class HGT(HGTModel, NodeClfTrainer):
