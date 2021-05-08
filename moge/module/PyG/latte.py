@@ -34,7 +34,7 @@ class LATTE(nn.Module):
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(in_channels_dict[ntype], embedding_dim) for ntype in in_channels_dict
         })
-        self.dropout = hparams.dropout
+        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -107,7 +107,7 @@ class LATTE(nn.Module):
             else:
                 h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
 
-        h_layers = {node_type: [] for node_type in global_node_idx}
+        h_layers = {ntype: [] for ntype in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
                 h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=h_dict, x_r=h_dict,
@@ -123,8 +123,8 @@ class LATTE(nn.Module):
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
 
-            for node_type in global_node_idx:
-                h_layers[node_type].append(h_dict[node_type])
+            for ntype in global_node_idx:
+                h_layers[ntype].append(h_dict[ntype])
 
             if self.use_proximity:
                 proximity_loss += t_loss
