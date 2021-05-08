@@ -256,7 +256,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict,
                                                            edge_index_dict,
                                                            sampled_local_nodes,
-                                                           edge_sampling=False)
+                                                           edge_sampling=True)
 
             X["edge_index_dict"].update(next_edge_index_dict)
 
