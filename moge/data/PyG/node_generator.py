@@ -260,10 +260,10 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
             X["edge_index_dict"].update(next_edge_index_dict)
 
-            # x_dict attributes
-            if hasattr(self, "x_dict") and len(self.x_dict) > 0:
-                X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
-                               for node_type in self.x_dict if node_type in X["global_node_index"]}
+        # x_dict attributes
+        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
+            X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
+                           for node_type in self.x_dict if node_type in X["global_node_index"]}
 
         # y_dict
         if hasattr(self, "y_dict") and len(self.y_dict) > 1:

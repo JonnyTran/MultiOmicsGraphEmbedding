@@ -39,12 +39,12 @@ class Network:
     def get_node_degrees(self, directed=True, order=1):
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
-        ntype_nid = pd.MultiIndex.from_frame(index, names=["ntype", "node"])
+        node_type_nid = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
 
         metapaths = list(self.edge_index_dict.keys())
         metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
                           metapaths]
-        self.node_degrees = pd.DataFrame(data=0, index=ntype_nid, columns=metapath_names)
+        self.node_degrees = pd.DataFrame(data=0, index=node_type_nid, columns=metapath_names)
 
         for metapath, name in zip(metapaths, metapath_names):
             edge_index = self.edge_index_dict[metapath]
@@ -91,23 +91,23 @@ class Network:
         return pos
 
     def get_embeddings_labels(self, h_dict: dict, global_node_index: dict, cache=True):
-        if hasattr(self, "embeddings") and hasattr(self, "ntypes") and hasattr(self, "labels") and cache:
-            return self.embeddings, self.ntypes, self.labels
+        if hasattr(self, "embeddings") and hasattr(self, "node_types") and hasattr(self, "labels") and cache:
+            return self.embeddings, self.node_types, self.labels
 
-        # Building a dataframe of embeddings, indexed by "{ntype}{node_id}"
+        # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
         emb_df_list = []
-        for ntype in self.node_types:
-            nid = global_node_index[ntype].cpu().numpy().astype(str)
-            n_type_id = np.core.defchararray.add(ntype[0], nid)
+        for node_type in self.node_types:
+            nid = global_node_index[node_type].cpu().numpy().astype(str)
+            n_type_id = np.core.defchararray.add(node_type[0], nid)
 
-            if isinstance(h_dict[ntype], torch.Tensor):
-                df = pd.DataFrame(h_dict[ntype].detach().cpu().numpy(), index=n_type_id)
+            if isinstance(h_dict[node_type], torch.Tensor):
+                df = pd.DataFrame(h_dict[node_type].detach().cpu().numpy(), index=n_type_id)
             else:
-                df = pd.DataFrame(h_dict[ntype], index=n_type_id)
+                df = pd.DataFrame(h_dict[node_type], index=n_type_id)
             emb_df_list.append(df)
 
         embeddings = pd.concat(emb_df_list, axis=0)
-        ntypes = embeddings.index.to_series().str.slice(0, 1)
+        node_types = embeddings.index.to_series().str.slice(0, 1)
 
         # Build vector of labels for all node types
         if hasattr(self, "y_dict") and len(self.y_dict) > 0:
@@ -119,9 +119,9 @@ class Network:
             labels = None
 
         # Save results
-        self.embeddings, self.ntypes, self.labels = embeddings, ntypes, labels
+        self.embeddings, self.node_types, self.labels = embeddings, node_types, labels
 
-        return embeddings, ntypes, labels
+        return embeddings, node_types, labels
 
     def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False, seed=None):
         kmeans = KMeans(n_clusters, n_jobs=n_jobs, random_state=seed)
@@ -157,7 +157,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         # DGL Datasets
         elif isinstance(dataset, DglNodePropPredDataset):
-            if len(dataset[0][0].ntypes) + len(dataset[0][0].etypes) > 2:
+            if len(dataset[0][0].node_types) + len(dataset[0][0].etypes) > 2:
                 print("DGLNodePropPredDataset Hetero")
                 self.process_DglNodeDataset_hetero(dataset)
             else:
@@ -168,7 +168,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.process_DglLinkDataset_hetero(dataset)
         elif isinstance(dataset, DglGraphPropPredDataset):
             print("DGLGraphPropPredDataset Homo")
-            if len(dataset[0][0].ntypes) + len(dataset[0][0].etypes) > 2:
+            if len(dataset[0][0].node_types) + len(dataset[0][0].etypes) > 2:
                 self.process_DglGraphDataset_hetero(dataset)
             else:
                 self.process_DglGraphDataset_homo(dataset)
@@ -337,8 +337,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             node_ids_dict.setdefault(metapath[0], []).append(edge_index[0])
             node_ids_dict.setdefault(metapath[-1], []).append(edge_index[1])
 
-        for ntype in node_ids_dict:
-            node_ids_dict[ntype] = torch.cat(node_ids_dict[ntype], 0).unique()
+        for node_type in node_ids_dict:
+            node_ids_dict[node_type] = torch.cat(node_ids_dict[node_type], 0).unique()
 
         return node_ids_dict
 
@@ -617,10 +617,10 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
 
         X = {}
-        X["node_inp"] = torch.vstack([X_batch["x_dict"][ntype] for ntype in self.node_types])
-        X["ntype"] = torch.hstack([nid * torch.ones((X_batch["x_dict"][ntype].shape[0],), dtype=int) \
-                                   for nid, ntype in enumerate(self.node_types)])
-        # assert X["node_inp"].shape[0] == X["ntype"].shape[0]
+        X["node_inp"] = torch.vstack([X_batch["x_dict"][node_type] for node_type in self.node_types])
+        X["node_type"] = torch.hstack([nid * torch.ones((X_batch["x_dict"][node_type].shape[0],), dtype=int) \
+                                       for nid, node_type in enumerate(self.node_types)])
+        # assert X["node_inp"].shape[0] == X["node_type"].shape[0]
 
         X["edge_index"] = torch.hstack([X_batch["edge_index_dict"][metapath] \
                                         for metapath in self.metapaths if metapath in X_batch["edge_index_dict"]])
