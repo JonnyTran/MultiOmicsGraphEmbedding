@@ -35,6 +35,10 @@ class LATTE(nn.Module):
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(in_channels_dict[ntype], embedding_dim) for ntype in in_channels_dict
         })
+        if hparams.batchnorm:
+            self.batchnorm = nn.ModuleDict({
+                ntype: nn.BatchNorm1d(in_channels_dict[ntype]) for ntype in in_channels_dict
+            })
         self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         layers = []
@@ -57,6 +61,37 @@ class LATTE(nn.Module):
 
         self.layers = nn.ModuleList(layers)
 
+        # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
+        if isinstance(in_channels_dict, dict):
+            non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
+        else:
+            non_attr_node_types = []
+        if len(non_attr_node_types) > 0:
+            if cpu_embeddings:
+                print("Embedding.device = 'cpu'")
+                self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
+                                                           embedding_dim=embedding_dim,
+                                                           sparse=True).cpu() for node_type in non_attr_node_types}
+            else:
+                print("Embedding.device = 'gpu'")
+                self.embeddings = nn.ModuleDict(
+                    {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
+                                             embedding_dim=embedding_dim,
+                                             sparse=False) for node_type in non_attr_node_types})
+        else:
+            self.embeddings = None
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        gain = nn.init.calculate_gain('relu')
+        for ntype in self.feature_projection:
+            nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
+
+        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
+            for ntype in self.embeddings:
+                self.embeddings[ntype].reset_parameters()
+
     def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
         """
         This
@@ -71,7 +106,11 @@ class LATTE(nn.Module):
         h_dict = {}
         for ntype in self.node_types:
             if ntype in node_feats:
-                h_dict[ntype] = F.relu(self.feature_projection[ntype](node_feats[ntype]))
+                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
+                if hasattr(self, "batchnorm"):
+                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+
+                h_dict[ntype] = F.relu(h_dict[ntype])
                 if self.dropout:
                     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
             else:
@@ -80,7 +119,7 @@ class LATTE(nn.Module):
         h_layers = {ntype: [] for ntype in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=node_feats,
+                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=h_dict,
                                                                         edge_index_dict=edge_index_dict,
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
@@ -215,14 +254,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 node_type: nn.LayerNorm(output_dim) \
                 for node_type in self.node_types})
 
-        if isinstance(input_dim, dict):
-            self.linear = nn.ModuleDict(
-                {node_type: nn.Linear(in_channels, output_dim, bias=True) \
-                 for node_type, in_channels in input_dim.items()})  # W.shape (F x D_m)
-        else:
-            self.linear = nn.ModuleDict(
-                {node_type: nn.Linear(input_dim, output_dim, bias=True) \
-                 for node_type in self.node_types})  # W.shape (F x F)
+        self.linear = nn.ModuleDict(
+            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+             for node_type in self.node_types})  # W.shape (F x F)
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
