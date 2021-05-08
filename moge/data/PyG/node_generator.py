@@ -250,14 +250,20 @@ class HeteroNeighborGenerator(HeteroNetDataset):
                                                                  filter_nodes=filter)
         X["edge_index_dict"] = edge_index_dict
 
+        # Get higher-order relations
         next_edge_index_dict = edge_index_dict
-        for t in range(len(self.neighbor_sizes)):
+        for t in range(len(self.neighbor_sizes) - 1):
             next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict,
                                                            edge_index_dict,
                                                            sampled_local_nodes,
-                                                           edge_sampling=False)
+                                                           edge_sampling=True)
 
             X["edge_index_dict"].update(next_edge_index_dict)
+
+        # x_dict attributes
+        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
+            X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
+                           for node_type in self.x_dict if node_type in X["global_node_index"]}
 
         # y_dict
         if hasattr(self, "y_dict") and len(self.y_dict) > 1:
