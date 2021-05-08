@@ -102,7 +102,8 @@ class LATTE(nn.Module):
         for ntype in self.node_types:
             if ntype in node_feats:
                 h_dict[ntype] = F.relu(self.feature_projection[ntype](node_feats[ntype]))
-                h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+                if self.dropout:
+                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
             else:
                 h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
 
@@ -217,60 +218,6 @@ class LATTE(nn.Module):
 
     def get_relation_weights(self, t):
         return self.layers[t].get_relation_weights()
-
-
-def tag_negative(metapath):
-    if isinstance(metapath, tuple):
-        return metapath + ("neg",)
-    elif isinstance(metapath, str):
-        return metapath + "_neg"
-    else:
-        return "neg"
-
-def untag_negative(metapath):
-    if isinstance(metapath, tuple) and metapath[-1] == "neg":
-        return metapath[:-1]
-    elif isinstance(metapath, str):
-        return metapath.strip("_neg")
-    else:
-        return metapath
-
-
-def is_negative(metapath):
-    if isinstance(metapath, tuple) and "neg" in metapath:
-        return True
-    elif isinstance(metapath, str) and "_neg" in metapath:
-        return True
-    else:
-        return False
-
-
-def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
-    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=not coalesced)
-    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=not coalesced)
-
-    deg_A = A.storage.colcount()
-    deg_B = B.storage.rowcount()
-    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
-    deg_normalized[deg_normalized == float('inf')] = 0.0
-
-    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     value=deg_normalized.type_as(valueA),
-                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
-
-    out = A @ D @ B
-    row, col, values = out.coo()
-
-    num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
-    if sampling and values.numel() > num_samples:
-        idx = torch.multinomial(values, num_samples=num_samples,
-                                replacement=False)
-        row, col, values = row[idx], col[idx], values[idx]
-
-    return torch.stack([row, col], dim=0), values
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
@@ -594,3 +541,58 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return {(metapath if "." in metapath or len(metapath) > 1 else node_type): (avg, std) \
                 for node_type in self._beta_avg for (metapath, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
+
+
+def tag_negative(metapath):
+    if isinstance(metapath, tuple):
+        return metapath + ("neg",)
+    elif isinstance(metapath, str):
+        return metapath + "_neg"
+    else:
+        return "neg"
+
+
+def untag_negative(metapath):
+    if isinstance(metapath, tuple) and metapath[-1] == "neg":
+        return metapath[:-1]
+    elif isinstance(metapath, str):
+        return metapath.strip("_neg")
+    else:
+        return metapath
+
+
+def is_negative(metapath):
+    if isinstance(metapath, tuple) and "neg" in metapath:
+        return True
+    elif isinstance(metapath, str) and "_neg" in metapath:
+        return True
+    else:
+        return False
+
+
+def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
+    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
+                     sparse_sizes=(m, k), is_sorted=not coalesced)
+    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
+                     sparse_sizes=(k, n), is_sorted=not coalesced)
+
+    deg_A = A.storage.colcount()
+    deg_B = B.storage.rowcount()
+    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
+    deg_normalized[deg_normalized == float('inf')] = 0.0
+
+    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
+                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
+                     value=deg_normalized.type_as(valueA),
+                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
+
+    out = A @ D @ B
+    row, col, values = out.coo()
+
+    num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
+    if sampling and values.numel() > num_samples:
+        idx = torch.multinomial(values, num_samples=num_samples,
+                                replacement=False)
+        row, col, values = row[idx], col[idx], values[idx]
+
+    return torch.stack([row, col], dim=0), values
