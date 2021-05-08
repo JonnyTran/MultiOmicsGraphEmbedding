@@ -312,9 +312,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             metapaths = metapaths + self.get_reverse_metapaths(self.metapaths, self.edge_index_dict)
 
         if khop:
-            k_order = len(self.neighbor_sizes)
             t_order_metapaths = metapaths
-            for k in range(k_order):
+            for k in range(len(self.neighbor_sizes) - 1):
                 t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
                 metapaths = metapaths + t_order_metapaths
 
