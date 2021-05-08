@@ -92,7 +92,11 @@ class LATTEGraphClassifier(GraphClfTrainer):
         loss = self.criterion.forward(y_hat, labels)
         self.train_metrics.update_metrics(y_hat, labels, weights=None)
 
-        logs = self.train_metrics.compute_metrics() if batch_nb % 50 == 0 else {}
+        if batch_nb % 50 == 0:
+            logs = self.train_metrics.compute_metrics()
+        else:
+            logs = {}
+
         outputs = {'loss': loss}
         if logs is not None:
             outputs.update({'progress_bar': logs, "logs": logs})
