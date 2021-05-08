@@ -243,7 +243,7 @@ class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
 
-        # Count degrees for (node_id, relation_id, node_type)
+        # Count degrees for (node_id, relation_id, ntype)
         self.degree_counts = self.compute_node_degrees(self.triples)
 
     def compute_node_degrees(self, hetero_triples):

@@ -67,7 +67,7 @@ class NodeIDEmbedding(nn.Module):
 
     def forward(self, node_type: str, batch=None):
         """Returns the embeddings for the nodes in :obj:`subset` of type
-        :obj:`node_type`."""
+        :obj:`ntype`."""
         emb = self.embedding.weight[self.start[node_type]:self.end[node_type]]
         return emb if batch is None else emb[batch]
 

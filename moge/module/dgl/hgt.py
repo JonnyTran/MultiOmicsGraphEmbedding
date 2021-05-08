@@ -141,7 +141,7 @@ class HGTLayer(nn.Module):
             for ntype in G.ntypes:
                 '''
                     Step 3: Target-specific Aggregation
-                    x = norm( W[node_type] * gelu( Agg(x) ) + x )
+                    x = norm( W[ntype] * gelu( Agg(x) ) + x )
                 '''
                 nty_id = self.node_dict[ntype]
                 alpha = torch.sigmoid(self.skip[nty_id])

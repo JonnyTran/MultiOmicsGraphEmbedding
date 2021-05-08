@@ -39,7 +39,7 @@ class Network:
     def get_node_degrees(self, directed=True, order=1):
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
-        ntype_nid = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
+        ntype_nid = pd.MultiIndex.from_frame(index, names=["ntype", "node"])
 
         metapaths = list(self.edge_index_dict.keys())
         metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
@@ -94,7 +94,7 @@ class Network:
         if hasattr(self, "embeddings") and hasattr(self, "ntypes") and hasattr(self, "labels") and cache:
             return self.embeddings, self.ntypes, self.labels
 
-        # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
+        # Building a dataframe of embeddings, indexed by "{ntype}{node_id}"
         emb_df_list = []
         for ntype in self.node_types:
             nid = global_node_index[ntype].cpu().numpy().astype(str)
@@ -302,15 +302,23 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.split_train_val_test(train_ratio=train_ratio, sample_indices=all_idx)
         print(f"Resampled training set at {self.get_train_ratio()}%")
 
-    def get_metapaths(self):
+    def get_metapaths(self, khop=False):
         """
         Returns original metapaths including reverse metapaths if use_reverse
         :return:
         """
+        metapaths = self.metapaths
         if self.use_reverse:
-            return self.metapaths + self.get_reverse_metapaths(self.metapaths, self.edge_index_dict)
-        else:
-            return self.metapaths
+            metapaths = metapaths + self.get_reverse_metapaths(self.metapaths, self.edge_index_dict)
+
+        if khop:
+            k_order = len(self.neighbor_sizes)
+            t_order_metapaths = metapaths
+            for k in range(k_order):
+                t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
+                metapaths = metapaths + t_order_metapaths
+
+        return metapaths
 
     def get_num_nodes_dict(self, edge_index_dict):
         num_nodes_dict = {}
@@ -611,9 +619,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         X = {}
         X["node_inp"] = torch.vstack([X_batch["x_dict"][ntype] for ntype in self.node_types])
-        X["node_type"] = torch.hstack([nid * torch.ones((X_batch["x_dict"][ntype].shape[0],), dtype=int) \
-                                       for nid, ntype in enumerate(self.node_types)])
-        # assert X["node_inp"].shape[0] == X["node_type"].shape[0]
+        X["ntype"] = torch.hstack([nid * torch.ones((X_batch["x_dict"][ntype].shape[0],), dtype=int) \
+                                   for nid, ntype in enumerate(self.node_types)])
+        # assert X["node_inp"].shape[0] == X["ntype"].shape[0]
 
         X["edge_index"] = torch.hstack([X_batch["edge_index_dict"][metapath] \
                                         for metapath in self.metapaths if metapath in X_batch["edge_index_dict"]])

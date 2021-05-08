@@ -184,7 +184,7 @@ class LATTEConv(nn.Module):
 
             g.multi_update_all(funcs, cross_reducer='mean')
 
-            # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
+            # For each metapath in a ntype, use GAT message passing to aggregate h_j neighbors
             out = {}
             for ntype in set(g.ntypes):
                 etypes = [etype for etype in self.get_head_relations(ntype, etype_only=True) \
@@ -198,7 +198,7 @@ class LATTEConv(nn.Module):
                 if len(g.etypes) == 1:
                     out[ntype] = g.dstnodes[ntype].data["_E"]
 
-                # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
+                # Soft-select the relation-specific embeddings by a weighted average with beta[ntype]
                 else:
                     out[ntype] = torch.stack(
                         [g.dstnodes[ntype].data[etype] for etype in etypes] + [
@@ -259,8 +259,8 @@ class LATTEConv(nn.Module):
 
     def num_head_relations(self, node_type) -> int:
         """
-        Return the number of metapaths with head node type equals to :param node_type: and plus one for none-selection.
-        :param node_type (str):
+        Return the number of metapaths with head node type equals to :param ntype: and plus one for none-selection.
+        :param ntype (str):
         :return:
         """
         relations = self.get_head_relations(node_type)

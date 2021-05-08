@@ -246,11 +246,11 @@ class HeterogeneousMultiplexEmbedder(MultiplexEmbedder):
 
         encodings = {}
         for node_type in self.node_types:
-            # nonzero_index = X[node_type].sum(1) > 0
+            # nonzero_index = X[ntype].sum(1) > 0
             # print("nonzero_index", nonzero_index)
-            # inputs = X[node_type][nonzero_index, :]
+            # inputs = X[ntype][nonzero_index, :]
             encodings[node_type] = self.get_encoder(node_type).forward(X[node_type], None)
-            # print(f"{node_type}, {encodings[node_type].shape}")
+            # print(f"{ntype}, {encodings[ntype].shape}")
 
         sample_idx_by_type = {}
         index = 0

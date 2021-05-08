@@ -231,7 +231,7 @@ def sample_subgraph(graph, time_range, sampled_depth=2, sampled_number=8, inp=No
 def to_torch(feature, time, edge_list, graph):
     '''
         Transform a sampled sub-graph into pytorch Tensor
-        node_dict: {node_type: <node_number, node_type_ID>} node_number is used to trace back the nodes in original graph.
+        node_dict: {ntype: <node_number, node_type_ID>} node_number is used to trace back the nodes in original graph.
         edge_dict: {edge_type: edge_type_ID}
     '''
     node_dict = {}

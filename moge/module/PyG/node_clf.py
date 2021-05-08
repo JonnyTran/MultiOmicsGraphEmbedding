@@ -35,7 +35,7 @@ class LATTENodeClf(NodeClfTrainer):
                               embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape,
                               num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(),
+                              metapaths=dataset.get_metapaths(khop=True if "khop" in collate_fn else None),
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
@@ -191,7 +191,7 @@ class HGT(HGTModel, NodeClfTrainer):
             self._node_ids = X["global_node_index"]
 
         return super().forward(node_feature=X["node_inp"],
-                               node_type=X["node_type"],
+                               node_type=X["ntype"],
                                edge_time=X["edge_time"],
                                edge_index=X["edge_index"],
                                edge_type=X["edge_type"])
@@ -200,7 +200,7 @@ class HGT(HGTModel, NodeClfTrainer):
         X, y, weights = batch
         embeddings = self.forward(X)
 
-        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        nids = (X["ntype"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
         y_hat = self.classifier.forward(embeddings[nids])
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
@@ -211,7 +211,7 @@ class HGT(HGTModel, NodeClfTrainer):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
         embeddings = self.forward(X)
-        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        nids = (X["ntype"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
         y_hat = self.classifier.forward(embeddings[nids])
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
@@ -224,7 +224,7 @@ class HGT(HGTModel, NodeClfTrainer):
         X, y, weights = batch
         embeddings = self.forward(X)
 
-        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        nids = (X["ntype"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
         y_hat = self.classifier.forward(embeddings[nids])
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
