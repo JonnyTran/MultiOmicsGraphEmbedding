@@ -37,7 +37,7 @@ class LATTE(nn.Module):
         })
         if hparams.batchnorm:
             self.batchnorm = nn.ModuleDict({
-                ntype: nn.BatchNorm1d(in_channels_dict[ntype]) for ntype in in_channels_dict
+                ntype: nn.BatchNorm1d(embedding_dim) for ntype in in_channels_dict
             })
         self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
