@@ -35,19 +35,22 @@ class LATTE(nn.Module):
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
         for t in range(n_layers):
-            print(t, [".".join(m) for m in t_order_metapaths])
+            is_first_layer = t == 0
+            is_last_layer = t + 1 == n_layers
+            is_output_layer = hparams.nb_cls_dense_size < 0
+
             layers.append(
-                LATTEConv(input_dim=in_channels_dict if t == 0 else embedding_dim,
-                          output_dim=hparams.n_classes if t + 1 == n_layers and hparams.nb_cls_dense_size < 0 else embedding_dim,
+                LATTEConv(input_dim=in_channels_dict if is_first_layer else embedding_dim,
+                          output_dim=hparams.n_classes if is_last_layer and is_output_layer else embedding_dim,
                           num_nodes_dict=num_nodes_dict,
                           metapaths=t_order_metapaths,
-                          activation=None if t + 1 == n_layers and hparams.nb_cls_dense_size < 0 else activation,
+                          activation=None if is_last_layer and is_output_layer else activation,
                           layernorm=False if not hasattr(hparams, "layernorm") or (
-                                  t + 1 == n_layers and hparams.nb_cls_dense_size < 0) else hparams.layernorm,
+                                  is_last_layer and is_output_layer) else hparams.layernorm,
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout, use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
-                          first=True if t == 0 else False, cpu_embeddings=cpu_embeddings))
+                          first=True if is_first_layer else False, cpu_embeddings=cpu_embeddings))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
 
         self.layers = nn.ModuleList(layers)
