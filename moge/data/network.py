@@ -17,7 +17,7 @@ from sklearn.cluster import KMeans
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 
-from moge.module.PyG import LATTE, is_negative
+from moge.module.PyG.latte import LATTE, is_negative
 
 
 class Network:
