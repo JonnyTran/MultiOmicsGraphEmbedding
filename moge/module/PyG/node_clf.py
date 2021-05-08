@@ -147,13 +147,31 @@ class LATTENodeClf(NodeClfTrainer):
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
-        # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
-        scheduler = ReduceLROnPlateau(optimizer)
+
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
+                                                               eta_min=self.lr / 100)
 
         return {"optimizer": optimizer,
                 "lr_scheduler": scheduler,
                 "monitor": "val_loss"}
+
+    @property
+    def num_training_steps(self) -> int:
+        """Total training steps inferred from datamodule and devices."""
+        if self.trainer.max_steps:
+            return self.trainer.max_steps
+
+        limit_batches = self.trainer.limit_train_batches
+        batches = len(self.train_dataloader())
+        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
+
+        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+        if self.trainer.tpu_cores:
+            num_devices = max(num_devices, self.trainer.tpu_cores)
+
+        effective_accum = self.trainer.accumulate_grad_batches * num_devices
+        return (batches // effective_accum) * self.trainer.max_epochs
 
 
 class HGT(HGTModel, NodeClfTrainer):
@@ -191,7 +209,7 @@ class HGT(HGTModel, NodeClfTrainer):
             self._node_ids = X["global_node_index"]
 
         return super().forward(node_feature=X["node_inp"],
-                               node_type=X["ntype"],
+                               node_type=X["node_type"],
                                edge_time=X["edge_time"],
                                edge_index=X["edge_index"],
                                edge_type=X["edge_type"])
@@ -200,7 +218,7 @@ class HGT(HGTModel, NodeClfTrainer):
         X, y, weights = batch
         embeddings = self.forward(X)
 
-        nids = (X["ntype"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
         y_hat = self.classifier.forward(embeddings[nids])
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
@@ -211,7 +229,7 @@ class HGT(HGTModel, NodeClfTrainer):
     def validation_step(self, batch, batch_nb):
         X, y, weights = batch
         embeddings = self.forward(X)
-        nids = (X["ntype"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
         y_hat = self.classifier.forward(embeddings[nids])
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
@@ -224,7 +242,7 @@ class HGT(HGTModel, NodeClfTrainer):
         X, y, weights = batch
         embeddings = self.forward(X)
 
-        nids = (X["ntype"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
+        nids = (X["node_type"] == int(self.dataset.node_types.index(self.dataset.head_node_type)))
         y_hat = self.classifier.forward(embeddings[nids])
 
         y_hat, y = filter_samples(Y_hat=y_hat, Y=y, weights=weights)
