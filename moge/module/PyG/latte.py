@@ -32,14 +32,19 @@ class LATTE(nn.Module):
 
         self.layer_pooling = layer_pooling
 
+        # align the dimension of different types of nodes
+        self.feature_projection = nn.ModuleDict({
+            ntype: nn.Linear(in_channels_dict[ntype], embedding_dim) for ntype in in_channels_dict
+        })
+        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+
         layers = []
         for t in range(n_layers):
-            is_first_layer = t == 0
             is_last_layer = t + 1 == n_layers
             is_output_layer = hparams.nb_cls_dense_size < 0
 
             layers.append(
-                LATTEConv(input_dim=in_channels_dict if is_first_layer else embedding_dim,
+                LATTEConv(input_dim=embedding_dim,
                           output_dim=hparams.n_classes if is_last_layer and is_output_layer else embedding_dim,
                           num_nodes_dict=num_nodes_dict,
                           metapaths=metapaths,
@@ -49,7 +54,7 @@ class LATTE(nn.Module):
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout, use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
-                          first=True if is_first_layer else False, cpu_embeddings=cpu_embeddings))
+                          ))
 
         self.layers = nn.ModuleList(layers)
 
@@ -62,11 +67,18 @@ class LATTE(nn.Module):
         :param save_betas: whether to save _beta values for batch
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
-        # device = global_node_idx[list(global_node_idx.keys())[0]].device
-        proximity_loss = torch.tensor(0.0, device=self.layers[0].device) if self.use_proximity else None
+        proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
 
-        h_layers = {node_type: [] for node_type in global_node_idx}
+        h_dict = {}
+        for ntype in self.node_types:
+            if ntype in node_feats:
+                h_dict[ntype] = F.relu(self.feature_projection[ntype](node_feats[ntype]))
+                if self.dropout:
+                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+            else:
+                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
 
+        h_layers = {ntype: [] for ntype in global_node_idx}
         for t in range(self.t_order):
             if t == 0:
                 h_dict, t_loss, edge_pred_dict = self.layers[t].forward(x_l=node_feats,
@@ -157,7 +169,6 @@ class LATTE(nn.Module):
                                                              coalesced=True,
                                                              sampling=edge_sampling
                                                              )
-                    # print(new_metapath, new_edge_index.shape)
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
 
@@ -180,10 +191,8 @@ class LATTE(nn.Module):
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: {str: int}, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", layernorm=False, attn_heads=4, attn_activation="sharpening",
-                 attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0, first=True,
-                 cpu_embeddings=False) -> None:
+                 attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
-        self.first = first
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
         self.num_nodes_dict = num_nodes_dict
@@ -237,26 +246,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             print(f"WARNING: alpha_activation `{attn_activation}` did not match, so used linear activation")
             self.alpha_activation = None
 
-        # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
-        if isinstance(input_dim, dict):
-            non_attr_node_types = (num_nodes_dict.keys() - input_dim.keys())
-        else:
-            non_attr_node_types = []
-        if first and len(non_attr_node_types) > 0:
-            if cpu_embeddings:
-                print("Embedding.device = 'cpu'")
-                self.embeddings = {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
-                                                           embedding_dim=output_dim,
-                                                           sparse=True).cpu() for node_type in non_attr_node_types}
-            else:
-                print("Embedding.device = 'gpu'")
-                self.embeddings = nn.ModuleDict(
-                    {node_type: nn.Embedding(num_embeddings=self.num_nodes_dict[node_type],
-                                             embedding_dim=output_dim,
-                                             sparse=False) for node_type in non_attr_node_types})
-        else:
-            self.embeddings = None
-
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -275,17 +264,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for ntype, rel_attn in self.rel_attn_r.items():
             nn.init.xavier_normal_(rel_attn, gain=gain)
 
-        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
-            for node_type in self.embeddings:
-                self.embeddings[node_type].reset_parameters()
-
     def get_h_dict(self, input, global_node_idx):
         h_dict = {}
         for node_type in global_node_idx:
-            if node_type not in input:
-                h_dict[node_type] = self.embeddings[node_type].weight[global_node_idx[node_type]].to(self.device)
-                continue
-
             h_dict[node_type] = self.linear[node_type].forward(input[node_type])
 
             h_dict[node_type] = h_dict[node_type].view(-1, self.attn_heads, self.out_channels)
