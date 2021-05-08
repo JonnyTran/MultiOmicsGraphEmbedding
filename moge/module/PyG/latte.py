@@ -305,19 +305,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return alpha_l, alpha_r
 
     def get_beta_weights(self, node_emb, rel_embs, ntype):
-        # print("self.rel_attn_l[ntype]", self.rel_attn_l[ntype].shape)
-        # print("node_emb", node_emb.shape)
-        # print("rel_embs", rel_embs.shape)
-
         alpha_l = (node_emb * self.rel_attn_l[ntype]).sum(dim=-1)
         alpha_r = (rel_embs * self.rel_attn_r[ntype][:, None, :]).sum(dim=-1)
-        # print("alpha_l", alpha_l.shape)
-        # print("alpha_r", alpha_r.shape)
 
-        alpha = alpha_l[:, :, None] + alpha_r
-        alpha = F.leaky_relu(alpha)
-        beta = F.softmax(alpha, dim=2)
-        # print('beta', beta.shape)
+        beta = alpha_l[:, :, None] + alpha_r
+        beta = F.leaky_relu(beta, negative_slope=0.2)
+        beta = F.softmax(beta, dim=2)
+        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
     def forward(self, x_l, edge_index_dict, global_node_idx, save_betas=False):
