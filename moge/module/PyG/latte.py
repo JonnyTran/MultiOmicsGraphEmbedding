@@ -34,6 +34,7 @@ class LATTE(nn.Module):
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(in_channels_dict[ntype], embedding_dim) for ntype in in_channels_dict
         })
+        self.dropout = hparams.dropout
 
         layers = []
         t_order_metapaths = copy.deepcopy(metapaths)
@@ -75,6 +76,17 @@ class LATTE(nn.Module):
         else:
             self.embeddings = None
 
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        gain = nn.init.calculate_gain('relu')
+        for ntype in self.feature_projection:
+            nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
+
+        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
+            for ntype in self.embeddings:
+                self.embeddings[ntype].reset_parameters()
+
     def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
         """
         This
@@ -89,7 +101,8 @@ class LATTE(nn.Module):
         h_dict = {}
         for ntype in self.node_types:
             if ntype in node_feats:
-                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
+                h_dict[ntype] = F.relu(self.feature_projection[ntype](node_feats[ntype]))
+                h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
             else:
                 h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
 
@@ -187,7 +200,6 @@ class LATTE(nn.Module):
                                                              coalesced=True,
                                                              sampling=edge_sampling
                                                              )
-                    # print(new_metapath, new_edge_index.shape)
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
 
@@ -334,10 +346,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for node_type in self.conv:
             nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
-        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
-            for node_type in self.embeddings:
-                self.embeddings[node_type].reset_parameters()
-
     def forward(self, x_l, edge_index_dict, global_node_idx, x_r=None, save_betas=False):
         """
 
@@ -414,17 +422,17 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
 
-        return x_j * alpha
+        return x_j * alpha.unsqueeze(-1)
 
     def get_h_dict(self, input, global_node_idx, left_right="left"):
         h_dict = {}
-        for node_type in global_node_idx:
+        for ntype in global_node_idx:
             if left_right == "left":
-                h_dict[node_type] = self.linear_l[node_type].forward(input[node_type])
+                h_dict[ntype] = self.linear_l[ntype].forward(input[ntype])
             elif left_right == "right":
-                h_dict[node_type] = self.linear_r[node_type].forward(input[node_type])
+                h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
-            h_dict[node_type] = h_dict[node_type].view(-1, self.attn_heads, self.out_channels)
+            h_dict[ntype] = h_dict[ntype].view(-1, self.attn_heads, self.out_channels)
 
         return h_dict
 
@@ -436,16 +444,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 continue
             head, tail = metapath[0], metapath[-1]
 
-            alpha_l[metapath] = l_dict[head] * self.attn_l[i]
-            alpha_r[metapath] = r_dict[tail] * self.attn_r[i]
+            alpha_l[metapath] = (l_dict[head] * self.attn_l[i]).sum(-1)
+            alpha_r[metapath] = (r_dict[tail] * self.attn_r[i]).sum(-1)
         return alpha_l, alpha_r
 
     def get_beta_weights(self, h_dict, global_node_idx):
         beta = {}
         for node_type in global_node_idx:
             beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
+
         return beta
 
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
