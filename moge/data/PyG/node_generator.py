@@ -4,7 +4,7 @@ from ogb.nodeproppred import PygNodePropPredDataset
 
 from moge.data.network import HeteroNetDataset
 from moge.data.PyG.neighbor_sampler import NeighborSampler
-
+from moge.module.PyG.latte import LATTE
 
 class HeteroNeighborGenerator(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, edge_dir=True,
@@ -125,11 +125,16 @@ class HeteroNeighborGenerator(HeteroNetDataset):
     def get_collate_fn(self, collate_fn: str, mode=None):
         assert mode is not None, "Must pass arg `mode` at get_collate_fn(). {'train', 'valid', 'test'}"
 
-        def collate_wrapper(iloc):
+        def default_sampler(iloc):
             return self.sample(iloc, mode=mode)
 
+        def khop_sampler(iloc):
+            return self.khop_sampler(iloc, mode=mode)
+
         if "neighbor_sampler" in collate_fn or collate_fn is None:
-            return collate_wrapper
+            return default_sampler
+        elif "khop_sampler" == collate_fn:
+            return khop_sampler
         else:
             return super().get_collate_fn(collate_fn, mode=mode)
 
@@ -195,11 +200,83 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         weights = weights & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
         weights = torch.tensor(weights, dtype=torch.float)
 
-        # Higher weights for sampled `n_idx` nodes
+        # Higher weights for sampled focal nodes in `n_idx`
         seed_node_idx = np.isin(X["global_node_index"][self.head_node_type], n_idx, invert=True)
         weights[seed_node_idx] = weights[seed_node_idx] * 0.2
 
-        if hasattr(self, "x_dict") and len(self.x_dict) > 0:
-            assert X["global_node_index"][self.head_node_type].size(0) == X["x_dict"][self.head_node_type].size(0)
+        return X, y, weights
+
+    def khop_sampler(self, n_idx, mode):
+        if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):
+            n_idx = torch.tensor(n_idx)
+
+        # Sample subgraph
+        batch_size, n_id, adjs = self.graph_sampler.sample(n_idx)
+
+        # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
+        sampled_local_nodes = self.graph_sampler.get_nodes_dict(adjs, n_id)
+
+        # Ensure the sampled nodes only either belongs to training, validation, or testing set
+        if "train" in mode:
+            filter = True if self.inductive else False
+            if self.inductive and hasattr(self, "training_subgraph_idx"):
+                allowed_nodes = self.training_subgraph_idx
+            else:
+                allowed_nodes = self.training_idx
+        elif "valid" in mode:
+            filter = True if self.inductive else False
+            if self.inductive and hasattr(self, "training_subgraph_idx"):
+                allowed_nodes = torch.cat([self.validation_idx, self.training_subgraph_idx])
+            else:
+                allowed_nodes = self.validation_idx
+        elif "test" in mode:
+            filter = False
+            allowed_nodes = self.testing_idx
+        else:
+            raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
+
+        if filter:
+            node_mask = np.isin(sampled_local_nodes[self.head_node_type], allowed_nodes)
+            sampled_local_nodes[self.head_node_type] = sampled_local_nodes[self.head_node_type][node_mask]
+
+        # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
+        X = {"edge_index_dict": {},
+             "global_node_index": sampled_local_nodes,
+             "x_dict": {}}
+
+        edge_index_dict = self.graph_sampler.get_edge_index_dict(adjs=adjs,
+                                                                 n_id=n_id,
+                                                                 sampled_local_nodes=sampled_local_nodes,
+                                                                 filter_nodes=filter)
+        X["edge_index_dict"] = edge_index_dict
+
+        next_edge_index_dict = edge_index_dict
+        for t in range(len(self.neighbor_sizes)):
+            next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict,
+                                                           edge_index_dict,
+                                                           sampled_local_nodes,
+                                                           edge_sampling=False)
+
+            X["edge_index_dict"].update(next_edge_index_dict)
+
+        # y_dict
+        if hasattr(self, "y_dict") and len(self.y_dict) > 1:
+            y = {node_type: y_true[X["global_node_index"][node_type]] \
+                 for node_type, y_true in self.y_dict.items()}
+        elif hasattr(self, "y_dict"):
+            y = self.y_dict[self.head_node_type][sampled_local_nodes[self.head_node_type]]
+        else:
+            y = None
+        if y.dim() == 2 and y.size(1) == 1:
+            y = y.squeeze(-1)
+
+        # Weights
+        weights = (y != -1) if y.dim() == 1 else (y != -1).all(1)
+        weights = weights & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
+        weights = torch.tensor(weights, dtype=torch.float)
+
+        # Higher weights for sampled focal nodes in `n_idx`
+        seed_node_idx = np.isin(X["global_node_index"][self.head_node_type], n_idx, invert=True)
+        weights[seed_node_idx] = weights[seed_node_idx] * 0.2
 
         return X, y, weights
