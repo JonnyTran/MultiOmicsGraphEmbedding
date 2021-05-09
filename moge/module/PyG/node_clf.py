@@ -84,8 +84,8 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
 
-        y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
-        loss = self.criterion.forward(y_pred, y_true)
+        # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
@@ -107,8 +107,8 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
 
-        y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
-        val_loss = self.criterion.forward(y_pred, y_true)
+        # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
 
@@ -123,8 +123,8 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X, save_betas=True)
 
-        y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
-        test_loss = self.criterion(y_pred, y_true)
+        # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        test_loss = self.criterion(y_pred, y_true, weights=weights)
 
         if batch_nb == 0:
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
