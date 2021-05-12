@@ -71,7 +71,7 @@ if __name__ == "__main__":
     parser.add_argument("-d", '--embedding_dim', type=int, default=128)
     parser.add_argument('-n', '--batch_size', type=int, default=2000)
     parser.add_argument('--n_neighbors', type=int, default=20)
-    parser.add_argument("-t", '--n_layers', type=int, default=2)
+    parser.add_argument("-l", '--t_order', type=int, default=2)
 
     parser.add_argument('--activation', type=str, default="relu")
     parser.add_argument('--layer_pooling', type=str, default="max")
