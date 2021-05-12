@@ -18,7 +18,7 @@ from moge.module.cogdl.conv import GTN as Gtn
 from moge.module.cogdl.conv import HAN as Han
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples
+from moge.module.utils import filter_samples, filter_samples_weights
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -84,7 +84,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
 
-        # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
@@ -107,9 +107,9 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
 
-        # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
+        self.valid_metrics.update_metrics(y_pred, y_true)
 
         if self.hparams.use_proximity:
             val_loss = val_loss + proximity_loss
@@ -122,7 +122,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X, save_betas=True)
 
-        # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 
         if batch_nb == 0:

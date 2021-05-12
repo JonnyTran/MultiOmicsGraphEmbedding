@@ -71,7 +71,7 @@ class Metrics(torch.nn.Module):
 
         self.reset_metrics()
 
-    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights):
+    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights=None):
         """
         :param y_pred:
         :param y_true:
