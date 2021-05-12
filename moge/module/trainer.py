@@ -134,20 +134,33 @@ class NodeClfTrainer(ClusteringEvaluator):
         return None
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size)
+        dataset = self.dataset.train_dataloader(collate_fn=self.collate_fn,
+                                                batch_size=self.hparams.batch_size)
+        if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
+            dataset = DistributedSampler(dataset, num_replicas=self.hparams.num_gpus, rank=self.local_rank)
+        return dataset
 
     def val_dataloader(self):
-        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+        dataset = self.dataset.valid_dataloader(collate_fn=self.collate_fn,
                                                 batch_size=self.hparams.batch_size)
 
+        if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
+            dataset = DistributedSampler(dataset, num_replicas=self.hparams.num_gpus, rank=self.local_rank)
+        return dataset
+
+    def valtrain_dataloader(self):
+        dataset = self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
+                                                   batch_size=self.hparams.batch_size)
+        if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
+            dataset = DistributedSampler(dataset, num_replicas=self.hparams.num_gpus, rank=self.local_rank)
+        return dataset
+
     def test_dataloader(self):
-        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=self.hparams.batch_size)
+        dataset = self.dataset.test_dataloader(collate_fn=self.collate_fn,
+                                               batch_size=self.hparams.batch_size)
+        if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
+            dataset = DistributedSampler(dataset, num_replicas=self.hparams.num_gpus, rank=self.local_rank)
+        return dataset
 
 
     def get_n_params(self):
