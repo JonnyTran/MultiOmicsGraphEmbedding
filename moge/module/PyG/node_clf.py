@@ -109,7 +109,6 @@ class LATTENodeClf(NodeClfTrainer):
 
         # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
-
         self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
 
         if self.hparams.use_proximity:

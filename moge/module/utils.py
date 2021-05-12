@@ -3,7 +3,7 @@ import torch
 
 
 def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
-    if weights is None:
+    if weights is None or weights.shape == None:
         return Y_hat, Y
 
     if isinstance(weights, torch.Tensor):

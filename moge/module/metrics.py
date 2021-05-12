@@ -79,6 +79,7 @@ class Metrics(torch.nn.Module):
         """
         y_pred = y_hat.detach()
         y_true = y.detach()
+
         y_pred, y_true = filter_samples(y_pred, y_true, weights)
 
         # Apply softmax/sigmoid activation if needed
