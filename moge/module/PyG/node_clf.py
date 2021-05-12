@@ -87,7 +87,7 @@ class LATTENodeClf(NodeClfTrainer):
         # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
-        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
 
         if batch_nb % 100 == 0:
             logs = self.train_metrics.compute_metrics()
@@ -110,7 +110,7 @@ class LATTENodeClf(NodeClfTrainer):
         # y_pred, y_true = filter_samples(Y_hat=y_pred, Y=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
-        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
 
         if self.hparams.use_proximity:
             val_loss = val_loss + proximity_loss
@@ -129,7 +129,7 @@ class LATTENodeClf(NodeClfTrainer):
         if batch_nb == 0:
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
 
         if self.hparams.use_proximity:
             test_loss = test_loss + proximity_loss
