@@ -42,17 +42,18 @@ def train(hparams: Namespace):
 
     trainer = Trainer(
         gpus=NUM_GPUS,
-        # accelerator=hparams.accelerator,
         gradient_clip_val=hparams.gradient_clip_val,
         # auto_lr_find=True,
+        auto_scale_batch_size=True,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False)],
         logger=logger,
-        accelerator='ddp_spawn',
-        plugins='ddp_sharded',
+        accelerator='ddp' if NUM_GPUS > 1 else None,
+        plugins='ddp_sharded' if NUM_GPUS > 1 else None,
         # amp_level='O1' if USE_AMP else None,
         # precision=16 if USE_AMP else 32
     )
+    trainer.tune(model)
 
     trainer.fit(model)
     trainer.test(model)
@@ -71,10 +72,12 @@ if __name__ == "__main__":
     parser.add_argument("-d", '--embedding_dim', type=int, default=128)
     parser.add_argument('-n', '--batch_size', type=int, default=2000)
     parser.add_argument('--n_neighbors', type=int, default=20)
-    parser.add_argument("-t", '--n_layers', type=int, default=2)
+    parser.add_argument("-t", '--t_order', type=int, default=2)
 
     parser.add_argument('--activation', type=str, default="relu")
-    parser.add_argument('--layer_pooling', type=str, default="max")
+    parser.add_argument('--batchnorm', type=str, default=False)
+    parser.add_argument('--layernorm', type=str, default=True)
+    parser.add_argument('--layer_pooling', type=str, default="last")
 
     parser.add_argument('--attn_heads', type=int, default=4)
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
@@ -89,11 +92,13 @@ if __name__ == "__main__":
     parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
 
+    parser.add_argument('--reduction', type=str, default="none")
+    parser.add_argument('--use_class_weights', type=bool, default=False)
+
     # Optimizer parameters
     parser.add_argument('-a', '--accelerator', type=str, default="ddp|horovod")
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
     parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--use_class_weights', type=bool, default=False)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--gradient_clip_val', type=float, default=0.0)
     # add all the available options to the trainer

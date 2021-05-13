@@ -129,8 +129,8 @@ class LATTE(nn.Module):
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
 
-            for node_type in global_node_idx:
-                h_layers[node_type].append(h_dict[node_type])
+            for ntype in global_node_idx:
+                h_layers[ntype].append(h_dict[ntype])
 
             if self.use_proximity:
                 proximity_loss += t_loss
