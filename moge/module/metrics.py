@@ -1,9 +1,9 @@
+from typing import Optional, Any, Callable
+
 import numpy as np
 import torch
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy, MetricsLambda
-from ignite.metrics.metric import Metric
-from ignite.metrics.metric import sync_all_reduce, reinit__is_reduced
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
@@ -71,7 +71,7 @@ class Metrics(torch.nn.Module):
 
         self.reset_metrics()
 
-    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights):
+    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights=None):
         """
         :param y_pred:
         :param y_true:
@@ -157,9 +157,10 @@ class Metrics(torch.nn.Module):
             self.metrics[metric].reset()
 
 
-class OGBNodeClfMetrics(Metric):
-    def __init__(self, evaluator: NodeEvaluator, output_transform=None, device=None):
-        super().__init__(output_transform)
+class OGBNodeClfMetrics(torchmetrics.Metric):
+    def __init__(self, evaluator, compute_on_step: bool = True, dist_sync_on_step: bool = False,
+                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
+        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
         self.evaluator = evaluator
         self.y_pred = []
         self.y_true = []
@@ -209,9 +210,10 @@ class OGBNodeClfMetrics(Metric):
             return {f"{prefix}{k}": v for k, v in output.items()}
 
 
-class OGBLinkPredMetrics(Metric):
-    def __init__(self, evaluator: LinkEvaluator, output_transform=None, device=None):
-        super(OGBLinkPredMetrics, self).__init__(output_transform)
+class OGBLinkPredMetrics(torchmetrics.Metric):
+    def __init__(self, evaluator: LinkEvaluator, compute_on_step: bool = True, dist_sync_on_step: bool = False,
+                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
+        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
         self.evaluator = evaluator
         self.outputs = {}
 
@@ -247,23 +249,22 @@ class OGBLinkPredMetrics(Metric):
             return {f"{prefix}{k}": v for k, v in output.items()}
 
 
-class TopKMultilabelAccuracy(Metric):
+class TopKMultilabelAccuracy(torchmetrics.Metric):
     """
     Calculates the top-k categorical accuracy.
 
     - `update` must receive output of the form `(y_pred, y)` or `{'y_pred': y_pred, 'y': y}` Tensors of size (batch_size, n_classes).
     """
 
-    def __init__(self, k_s=[5, 10, 50, 100, 200], output_transform=None, device=None):
+    def __init__(self, k_s=[5, 10, 50, 100, 200], compute_on_step: bool = True, dist_sync_on_step: bool = False,
+                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
+        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
         self.k_s = k_s
-        super(TopKMultilabelAccuracy, self).__init__(output_transform)
 
-    @reinit__is_reduced
     def reset(self):
         self._num_correct = {k: 0 for k in self.k_s}
         self._num_examples = 0
 
-    @reinit__is_reduced
     def update(self, outputs):
         y_pred, y_true = outputs
         batch_size, n_classes = y_true.size()
@@ -276,7 +277,6 @@ class TopKMultilabelAccuracy(Metric):
             self._num_correct[k] += corrects_in_k.item()
         self._num_examples += batch_size
 
-    @sync_all_reduce("_num_correct", "_num_examples")
     def compute(self, prefix=None) -> dict:
         if self._num_examples == 0:
             raise NotComputableError("TopKCategoricalAccuracy must have at"
