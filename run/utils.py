@@ -20,8 +20,8 @@ from moge.module.utils import preprocess_input
 def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bioinformatics_ExternalData/OGB/"):
     if "ogbn" in dataset:
         ogbn = PygNodePropPredDataset(name=dataset, root=dir_path)
-        dataset = HeteroNeighborGenerator(ogbn, neighbor_sizes=hparams.neighbor_sizes, edge_dir="in",
-                                          resample_train=None,
+        dataset = HeteroNeighborGenerator(ogbn, neighbor_sizes=hparams.neighbor_sizes,
+                                          edge_dir="in",
                                           add_reverse_metapaths=hparams.use_reverse, inductive=hparams.inductive)
         if os.path.exists(ogbn.processed_dir + "/features.pk"):
             features = dill.load(open(ogbn.processed_dir + "/features.pk", 'rb'))

@@ -21,7 +21,7 @@ from run.utils import load_node_dataset
 def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = False  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 100
+    MAX_EPOCHS = 50
 
     neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.t_order):
@@ -32,7 +32,7 @@ def train(hparams: Namespace):
     dataset = load_node_dataset(hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
                                 dir_path=hparams.dir_path)
 
-    METRICS = ["precision", "recall", "micro_f1", "macro_f1",
+    METRICS = ["micro_f1", "macro_f1",
                dataset.name() if "ogb" in dataset.name() else "accuracy"]
     hparams.loss_type = "BCE" if dataset.multilabel else hparams.loss_type
     hparams.n_classes = dataset.n_classes
@@ -42,14 +42,14 @@ def train(hparams: Namespace):
 
     trainer = Trainer(
         gpus=NUM_GPUS,
+        accelerator='ddp' if NUM_GPUS > 1 else None,
         gradient_clip_val=hparams.gradient_clip_val,
-        # auto_lr_find=True,
+        auto_lr_find=True,
         auto_scale_batch_size=True,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False)],
         logger=logger,
-        accelerator='ddp' if NUM_GPUS > 1 else None,
-        plugins='ddp_sharded' if NUM_GPUS > 1 else None,
+        # plugins='deepspeed' if NUM_GPUS > 1 else None,
         # amp_level='O1' if USE_AMP else None,
         # precision=16 if USE_AMP else 32
     )
