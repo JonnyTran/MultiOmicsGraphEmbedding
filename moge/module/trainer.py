@@ -3,6 +3,8 @@ import logging
 
 import pandas as pd
 import torch
+from torch.utils.data.distributed import DistributedSampler
+
 from pytorch_lightning import LightningModule
 
 from .metrics import Metrics
