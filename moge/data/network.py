@@ -157,7 +157,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         # DGL Datasets
         elif isinstance(dataset, DglNodePropPredDataset):
-            if len(dataset[0][0].node_types) + len(dataset[0][0].etypes) > 2:
+            if len(dataset[0][0].ntypes) + len(dataset[0][0].etypes) > 2:
                 print("DGLNodePropPredDataset Hetero")
                 self.process_DglNodeDataset_hetero(dataset)
             else:
