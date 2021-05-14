@@ -161,7 +161,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.t_order}"
+        self._name = f"DGL_LATTE-{hparams.t_order}"
         self.collate_fn = collate_fn
 
         # align the dimension of different types of nodes
@@ -186,7 +186,8 @@ class LATTENodeClassifier(NodeClfTrainer):
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
-                                            multilabel=dataset.multilabel)
+                                            multilabel=dataset.multilabel,
+                                            reduction=hparams.reduction if hasattr(dataset, "reduction") else None)
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, blocks, feat, **kwargs):
@@ -201,7 +202,7 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         embeddings = self.embedder.forward(blocks, h_dict, **kwargs)
 
-        y_pred = self.classifier.forward(embeddings[self.head_node_type]) \
+        y_pred = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
         return y_pred
 

@@ -197,7 +197,8 @@ class LATTEConv(nn.Module):
                 out[ntype] = torch.mean(out[ntype], dim=1)
 
                 # Apply \sigma activation to all embeddings
-                out[ntype] = self.activation(out[ntype])
+                if hasattr(self, "activation"):
+                    out[ntype] = self.activation(out[ntype])
 
             return out
 
