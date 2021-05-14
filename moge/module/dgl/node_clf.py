@@ -157,6 +157,7 @@ class LATTENodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
+        self.node_types = dataset.node_types
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
@@ -294,7 +295,7 @@ class LATTENodeClassifier(NodeClfTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation']
+        no_decay = ['bias', 'alpha_activation', 'LayerNorm.bias', 'LayerNorm.weight']
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
              'weight_decay': self.hparams.weight_decay},

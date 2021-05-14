@@ -46,7 +46,7 @@ class LATTE(nn.Module):
                           neg_sampling_ratio=neg_sampling_ratio, first=True if t == 0 else False))
         self.layers = nn.ModuleList(layers)
 
-    def forward(self, blocks: Union[Dict, DGLBlock], feat, **kwargs):
+    def forward(self, blocks: Union[Dict, DGLBlock], h_dict, **kwargs):
 
         for t in range(self.t_order):
             h_dict = self.layers[t].forward(blocks[t] if isinstance(blocks, Iterable) else blocks,
