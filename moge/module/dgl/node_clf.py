@@ -224,11 +224,12 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         self.train_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
-        logs = self.train_metrics.compute_metrics()
-        outputs = {'loss': loss}
-        if logs is not None:
-            outputs.update({'progress_bar': logs, "logs": logs})
-        return outputs
+        self.log("loss", loss, logger=True, on_step=True)
+        if batch_nb % 100 == 0:
+            logs = self.train_metrics.compute_metrics()
+            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+
+        return loss
 
     def validation_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
@@ -245,9 +246,11 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         y_hat = self.forward(blocks, batch_inputs)
         val_loss = self.criterion.forward(y_hat, batch_labels)
+
         self.valid_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
-        return {"val_loss": val_loss}
+        self.log("val_loss", val_loss, logger=True, on_step=True)
+        return val_loss
 
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
@@ -263,7 +266,6 @@ class LATTENodeClassifier(NodeClfTrainer):
         batch_labels = batch_labels[self.head_node_type] if isinstance(batch_labels, dict) else batch_labels
 
         y_hat = self.forward(blocks, batch_inputs)
-
         test_loss = self.criterion.forward(y_hat, batch_labels)
 
         if batch_nb == 0:
@@ -271,7 +273,9 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         self.test_metrics.update_metrics(y_hat, batch_labels, weights=None)
 
-        return {"test_loss": test_loss}
+        self.log("test_loss", test_loss, logger=True, on_step=True)
+
+        return test_loss
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=None,

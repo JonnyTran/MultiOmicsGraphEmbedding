@@ -171,18 +171,19 @@ class LATTEConv(nn.Module):
                 if len(etypes) == 0:
                     out[ntype] = feat_dst[ntype][:, :self.embedding_dim]
                     continue
-
+                # If homogeneous graph
                 if len(g.etypes) == 1:
                     out[ntype] = g.dstnodes[ntype].data["_E"]
+                    out[ntype] = self.activation(out[ntype])
+                    continue
 
                 # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-                else:
-                    out[ntype] = torch.stack(
-                        [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                            g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
+                out[ntype] = torch.stack(
+                    [g.dstnodes[ntype].data[etype] for etype in etypes] + [
+                        g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
 
-                    # out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
-                    out[ntype] = torch.mean(out[ntype], dim=1)
+                # out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
+                out[ntype] = torch.mean(out[ntype], dim=1)
 
                 # Apply \sigma activation to all embeddings
                 out[ntype] = self.activation(out[ntype])
