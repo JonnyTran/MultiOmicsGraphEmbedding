@@ -76,8 +76,8 @@ if __name__ == "__main__":
     parser.add_argument("-t", '--t_order', type=int, default=2)
 
     parser.add_argument('--activation', type=str, default="relu")
-    parser.add_argument('--layernorm', type=str, default=False)
-    parser.add_argument('--layernorm', type=str, default=True)
+    parser.add_argument('--batchnorm', type=str, default=False)
+    parser.add_argument('--batchnorm', type=str, default=True)
     parser.add_argument('--layer_pooling', type=str, default="last")
 
     parser.add_argument('--attn_heads', type=int, default=4)

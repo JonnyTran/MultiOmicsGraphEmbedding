@@ -176,9 +176,9 @@ class LATTENodeClassifier(NodeClfTrainer):
                               attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout)
 
-        if "layernorm" in hparams and hparams.layernorm:
-            self.layernorm = torch.nn.ModuleDict(
-                {node_type: torch.nn.LayerNorm(hparams.embedding_dim) for node_type in
+        if "batchnorm" in hparams and hparams.batchnorm:
+            self.batchnorm = torch.nn.ModuleDict(
+                {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) for node_type in
                  self.dataset.node_types})
 
         self.classifier = DenseClassification(hparams)
@@ -187,7 +187,7 @@ class LATTENodeClassifier(NodeClfTrainer):
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel,
-                                            reduction=hparams.reduction if hasattr(dataset, "reduction") else None)
+                                            reduction=hparams.reduction if hasattr(dataset, "reduction") else "mean")
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, blocks, feat, **kwargs):
@@ -196,8 +196,8 @@ class LATTENodeClassifier(NodeClfTrainer):
             if ntype in feat:
                 h_dict[ntype] = self.feature_projection[ntype](feat[ntype])
 
-        if hasattr(self, "layernorm"):
-            h_dict = {ntype: self.layernorm[ntype](emb) \
+        if hasattr(self, "batchnorm"):
+            h_dict = {ntype: self.batchnorm[ntype](emb) \
                       for ntype, emb, in h_dict.items()}
 
         embeddings = self.embedder.forward(blocks, h_dict, **kwargs)

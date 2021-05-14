@@ -55,7 +55,7 @@ class LATTEGraphClassifier(GraphClfTrainer):
         #                                          link_pred=False)
         self.readout = hparams.readout
 
-        if "layernorm" in hparams and hparams.layernorm:
+        if "batchnorm" in hparams and hparams.layernorm:
             self.batchnorm = torch.nn.BatchNorm1d(hparams.embedding_dim)
 
         self.classifier = DenseClassification(hparams)
@@ -77,7 +77,7 @@ class LATTEGraphClassifier(GraphClfTrainer):
 
         graph_emb = dgl.readout_nodes(multigraph, 'feature', op=self.readout)
 
-        if hasattr(self, "layernorm"):
+        if hasattr(self, "batchnorm"):
             graph_emb = self.batchnorm(graph_emb)
 
         y_hat = self.classifier.forward(graph_emb)

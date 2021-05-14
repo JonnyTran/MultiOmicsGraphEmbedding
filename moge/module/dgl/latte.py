@@ -178,6 +178,8 @@ class LATTEConv(nn.Module):
                 etypes = [etype for etype in self.get_head_relations(ntype, etype_only=True) \
                           if etype in g.dstnodes[ntype].data]
 
+                print(ntype, "etypes", etypes)
+
                 # If node type doesn't have any messages
                 if len(etypes) == 0:
                     out[ntype] = feat_dst[ntype][:, :self.embedding_dim]
@@ -194,13 +196,14 @@ class LATTEConv(nn.Module):
                         g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
 
                 # out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
+                print("out[ntype]", out[ntype].shape, out[ntype].isnan().sum())
                 out[ntype] = torch.mean(out[ntype], dim=1)
 
                 # Apply \sigma activation to all embeddings
                 if hasattr(self, "activation"):
                     out[ntype] = self.activation(out[ntype])
 
-            return out
+        return out
 
     def get_head_relations(self, head_node_type, to_str=False, etype_only=False) -> list:
         if self.edge_dir == "out":

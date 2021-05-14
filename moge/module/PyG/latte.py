@@ -52,7 +52,7 @@ class LATTE(nn.Module):
                           metapaths=t_order_metapaths,
                           activation=None if is_output_layer else activation,
                           layernorm=False if not hasattr(hparams,
-                                                         "layernorm") or is_output_layer else hparams.layernorm,
+                                                         "batchnorm") or is_output_layer else hparams.layernorm,
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout, use_proximity=use_proximity,
@@ -106,7 +106,7 @@ class LATTE(nn.Module):
         for ntype in self.node_types:
             if ntype in node_feats:
                 h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
-                if hasattr(self, "layernorm"):
+                if hasattr(self, "batchnorm"):
                     h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
 
                 h_dict[ntype] = F.relu(h_dict[ntype])
@@ -332,7 +332,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
 
-            if hasattr(self, "layernorm"):
+            if hasattr(self, "batchnorm"):
                 out[ntype] = self.layernorm[ntype](out[ntype])
 
             if hasattr(self, "activation"):
