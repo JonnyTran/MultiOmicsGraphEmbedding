@@ -204,6 +204,7 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         y_pred = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
+
         return y_pred
 
     def training_step(self, batch, batch_nb):
@@ -243,9 +244,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         batch_labels = batch_labels[self.head_node_type] if isinstance(batch_labels, dict) else batch_labels
 
         y_pred = self.forward(blocks, batch_inputs)
-        # print("y_hat", y_hat.shape, "batch_labels", batch_labels.shape)
         val_loss = self.criterion.forward(y_pred, batch_labels)
-        # print("val_loss", val_loss.shape, val_loss)
 
         self.valid_metrics.update_metrics(y_pred, batch_labels, weights=None)
 
@@ -280,37 +279,38 @@ class LATTENodeClassifier(NodeClfTrainer):
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=None,
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=int(0.8 * multiprocessing.cpu_count()))
+                                             num_workers=0)
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.valid_dataloader(collate_fn=None,
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+                                             num_workers=0)
 
     def valtrain_dataloader(self):
         return self.dataset.valtrain_dataloader(collate_fn=None,
                                                 batch_size=self.hparams.batch_size,
-                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+                                                num_workers=0)
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=None,
                                             batch_size=self.hparams.batch_size,
-                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+                                            num_workers=0)
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'LayerNorm.bias', 'LayerNorm.weight']
+        no_decay = ['bias', 'alpha_activation',
+                    'LayerNorm.bias', 'LayerNorm.weight']
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
              'weight_decay': self.hparams.weight_decay},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
+             'weight_decay': 0.0}
         ]
 
-        # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
-
         optimizer = torch.optim.Adam(optimizer_grouped_parameters,
-                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=self.hparams.weight_decay)
+                                     lr=self.hparams.lr)
         scheduler = ReduceLROnPlateau(optimizer)
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
+        return {"optimizer": optimizer,
+                "lr_scheduler": scheduler,
+                "monitor": "val_loss"}
