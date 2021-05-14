@@ -47,13 +47,13 @@ class ImportanceSampler(BlockSampler):
         elif self.edge_dir == "out":
             sg = dgl.out_subgraph(g, seed_nodes)
 
-        self.assign_prob(sg, seed_nodes)
+        # self.assign_prob(sg, seed_nodes)
         # for metapath in sg.canonical_etypes:
         #     sg.edges[metapath].data["prob"] = torch.rand((sg.edges[metapath].data[dgl.EID].size(0),))
 
         frontier = sample_neighbors(g=sg,
                                     nodes=seed_nodes,
-                                    prob="prob",
+                                    # prob="prob",
                                     fanout=fanouts,
                                     edge_dir=self.edge_dir)
 
@@ -115,11 +115,11 @@ class ImportanceSampler(BlockSampler):
             subgraph.edges[metapath].data["prob"] = subsampling_weight
 
     def get_edge_weights(self, nids: torch.Tensor, relation_id: int, ntype: str):
-        keys = nids.numpy()
-        lookup = lambda nid: self.degree_counts[nid, relation_id, ntype]
-        vfunc = np.vectorize(lookup)
+        # keys = nids.numpy()
+        # lookup = lambda nid: self.degree_counts[nid, relation_id, ntype]
+        # vfunc = np.vectorize(lookup)
+        #
+        # edge_weights = torch.tensor(vfunc(keys), dtype=torch.float)
 
-        edge_weights = torch.tensor(vfunc(keys), dtype=torch.float)
-
-        # edge_weights = nids.clone().apply_(lambda nid: self.degree_counts[(nid, relation_id, ntype)]).to(torch.float)
+        edge_weights = nids.clone().apply_(lambda nid: self.degree_counts[(nid, relation_id, ntype)]).to(torch.float)
         return edge_weights

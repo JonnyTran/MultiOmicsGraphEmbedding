@@ -162,7 +162,13 @@ class LATTENodeClassifier(NodeClfTrainer):
         self.y_types = list(dataset.y_dict.keys())
         self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
-        #
+
+        # align the dimension of different types of nodes
+        self.feature_projection = nn.ModuleDict({
+            ntype: nn.Linear(in_channels, hparams.embedding_dim) \
+            for ntype, in_channels in dataset.node_attr_shape.items()
+        })
+
         self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(), activation=hparams.activation,
@@ -171,8 +177,8 @@ class LATTENodeClassifier(NodeClfTrainer):
                               neg_sampling_ratio=hparams.neg_sampling_ratio)
 
         if "layernorm" in hparams and hparams.layernorm:
-            self.batchnorm = torch.nn.ModuleDict(
-                {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) for node_type in
+            self.layernorm = torch.nn.ModuleDict(
+                {node_type: torch.nn.LayerNorm(hparams.embedding_dim) for node_type in
                  self.dataset.node_types})
 
         self.classifier = DenseClassification(hparams)
@@ -184,13 +190,19 @@ class LATTENodeClassifier(NodeClfTrainer):
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, blocks, feat, **kwargs):
-        embeddings = self.embedder.forward(blocks, feat, **kwargs)
+        h_dict = {}
+        for ntype in self.node_types:
+            if ntype in feat:
+                h_dict[ntype] = self.feature_projection[ntype](feat[ntype])
+
+        embeddings = self.embedder.forward(blocks, h_dict, **kwargs)
 
         if hasattr(self, "layernorm"):
-            embeddings = {ntype: self.batchnorm[ntype](emb) \
+            embeddings = {ntype: self.layernorm[ntype](emb) \
                           for ntype, emb, in embeddings.items()}
 
-        y_hat = self.classifier.forward(embeddings[self.head_node_type])
+        y_hat = self.classifier.forward(embeddings[self.head_node_type]) \
+            if hasattr(self, "classifier") else embeddings[self.head_node_type]
         return y_hat
 
     def training_step(self, batch, batch_nb):
@@ -203,8 +215,8 @@ class LATTENodeClassifier(NodeClfTrainer):
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
         batch_labels = blocks[-1].dstdata['labels']
-        if isinstance(batch_labels, dict):
-            batch_labels = batch_labels[self.head_node_type]
+
+        batch_labels = batch_labels[self.head_node_type] if isinstance(batch_labels, dict) else batch_labels
 
         y_hat = self.forward(blocks, batch_inputs)
         loss = self.criterion.forward(y_hat, batch_labels)
@@ -227,8 +239,8 @@ class LATTENodeClassifier(NodeClfTrainer):
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
         batch_labels = blocks[-1].dstdata['labels']
-        if isinstance(batch_labels, dict):
-            batch_labels = batch_labels[self.head_node_type]
+
+        batch_labels = batch_labels[self.head_node_type] if isinstance(batch_labels, dict) else batch_labels
 
         y_hat = self.forward(blocks, batch_inputs)
         val_loss = self.criterion.forward(y_hat, batch_labels)
@@ -246,8 +258,8 @@ class LATTENodeClassifier(NodeClfTrainer):
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
         batch_labels = blocks[-1].dstdata['labels']
-        if isinstance(batch_labels, dict):
-            batch_labels = batch_labels[self.head_node_type]
+
+        batch_labels = batch_labels[self.head_node_type] if isinstance(batch_labels, dict) else batch_labels
 
         y_hat = self.forward(blocks, batch_inputs)
 
