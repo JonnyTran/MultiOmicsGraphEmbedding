@@ -23,17 +23,15 @@ from moge.module.utils import preprocess_input, tensor_sizes
 
 
 class LATTE(nn.Module):
-    def __init__(self, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
+    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list,
                  edge_dir="in", activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity=True, neg_sampling_ratio=2.0):
         super(LATTE, self).__init__()
+        self.t_order = t_order
         self.metapaths = metapaths
         self.edge_dir = edge_dir
         self.node_types = list(num_nodes_dict.keys())
         self.embedding_dim = embedding_dim * t_order
-        self.use_proximity = use_proximity
-        self.t_order = t_order
-        self.neg_sampling_ratio = neg_sampling_ratio
 
         layers = []
         for t in range(t_order):
@@ -42,8 +40,7 @@ class LATTE(nn.Module):
                           embedding_dim=embedding_dim,
                           num_nodes_dict=num_nodes_dict,
                           metapaths=metapaths, edge_dir=edge_dir, activation=activation, attn_heads=attn_heads,
-                          attn_activation=attn_activation, attn_dropout=attn_dropout, use_proximity=use_proximity,
-                          neg_sampling_ratio=neg_sampling_ratio, first=True if t == 0 else False))
+                          attn_activation=attn_activation, attn_dropout=attn_dropout, first=True if t == 0 else False))
         self.layers = nn.ModuleList(layers)
 
     def forward(self, blocks: Union[Dict, DGLBlock], h_dict, **kwargs):
@@ -58,7 +55,7 @@ class LATTE(nn.Module):
 class LATTEConv(nn.Module):
     def __init__(self, in_dim, embedding_dim, num_nodes_dict: {str: int}, metapaths: list,
                  edge_dir="in", activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
-                 use_proximity=False, neg_sampling_ratio=1.0, first=True) -> None:
+                 first=True) -> None:
         super(LATTEConv, self).__init__()
         self.first = first
         self.node_types = list(num_nodes_dict.keys())
@@ -69,8 +66,6 @@ class LATTEConv(nn.Module):
         self.metapath_id = {etype: i for i, (srctype, etype, dsttype) in enumerate(self.metapaths)}
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = embedding_dim
-        self.use_proximity = use_proximity
-        self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
 
@@ -139,6 +134,22 @@ class LATTEConv(nn.Module):
 
         return {etype: edges.data[etype], "h": edges.data["h"]}
 
+    def reduce_func(self, nodes: NodeBatch):
+        '''
+            Softmax based on target node's id (edge_index_i).
+        '''
+        output = {}
+        for srctype, etype, dsttype in self.metapaths:
+            if etype not in nodes.mailbox: continue
+
+            # print(nodes.ntype, "batch_size", nodes.batch_size(), )
+            # print(f"\t nodes.mailbox[{etype}]", nodes.mailbox[etype].shape)
+            att = F.softmax(nodes.mailbox[etype], dim=1)
+            h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['h'], dim=1)
+            output[etype] = h.view(-1, self.embedding_dim)
+
+        return output
+
     def forward(self, g: Union[DGLBlock, DGLHeteroGraph], feat: dict):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
 
@@ -188,23 +199,7 @@ class LATTEConv(nn.Module):
                 # Apply \sigma activation to all embeddings
                 out[ntype] = self.activation(out[ntype])
 
-        return out
-
-    def reduce_func(self, nodes: NodeBatch):
-        '''
-            Softmax based on target node's id (edge_index_i).
-        '''
-        output = {}
-        for srctype, etype, dsttype in self.metapaths:
-            if etype not in nodes.mailbox: continue
-
-            # print(nodes.ntype, "batch_size", nodes.batch_size(), )
-            # print(f"\t nodes.mailbox[{etype}]", nodes.mailbox[etype].shape)
-            att = F.softmax(nodes.mailbox[etype], dim=1)
-            h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['h'], dim=1)
-            output[etype] = h.view(-1, self.embedding_dim)
-
-        return output
+            return out
 
     def get_head_relations(self, head_node_type, to_str=False, etype_only=False) -> list:
         if self.edge_dir == "out":

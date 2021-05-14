@@ -4,6 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .utils import tensor_sizes
+
+
 class ClassificationLoss(nn.Module):
     def __init__(self, n_classes: int, loss_type="SOFTMAX_CROSS_ENTROPY", class_weight: torch.Tensor = None,
                  multilabel=True, reduction="mean", use_hierar=False, hierar_penalty=1e-6, hierar_relations=None):
