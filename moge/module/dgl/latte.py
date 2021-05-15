@@ -180,7 +180,7 @@ class LATTEConv(nn.Module):
 
                 # If node type doesn't have any messages
                 if len(etypes) == 0:
-                    out[ntype] = feat_dst[ntype][:, :self.embedding_dim]
+                    out[ntype] = feat_dst[ntype]
                     continue
                 # If homogeneous graph
                 if len(g.etypes) == 1:
