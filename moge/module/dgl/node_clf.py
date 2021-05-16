@@ -216,13 +216,12 @@ class LATTENodeClassifier(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        batch_labels = blocks[-1].dstdata['labels']
-        batch_labels = batch_labels[self.head_node_type] if isinstance(batch_labels, dict) else batch_labels
+        y_true = blocks[-1].dstdata['labels'][self.head_node_type]
 
         y_pred = self.forward(blocks, batch_inputs)
-        loss = self.criterion.forward(y_pred, batch_labels)
+        loss = self.criterion.forward(y_pred, y_true)
 
-        self.train_metrics.update_metrics(y_pred, batch_labels, weights=None)
+        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
         self.log("loss", loss, logger=True, on_step=True)
         if batch_nb % 25 == 0:
@@ -240,14 +239,12 @@ class LATTENodeClassifier(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        batch_labels = blocks[-1].dstdata['labels']
-        batch_labels = batch_labels[self.head_node_type] if isinstance(batch_labels, dict) else batch_labels
+        y_true = blocks[-1].dstdata['labels'][self.head_node_type]
 
         y_pred = self.forward(blocks, batch_inputs)
-        val_loss = self.criterion.forward(y_pred, batch_labels)
+        val_loss = self.criterion.forward(y_pred, y_true)
 
-        self.valid_metrics.update_metrics(y_pred, batch_labels, weights=None)
-
+        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
         self.log("val_loss", val_loss, logger=True, on_step=True)
         return val_loss
 
@@ -260,20 +257,16 @@ class LATTENodeClassifier(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        batch_labels = blocks[-1].dstdata['labels']
-
-        batch_labels = batch_labels[self.head_node_type] if isinstance(batch_labels, dict) else batch_labels
+        y_true = blocks[-1].dstdata['labels'][self.head_node_type]
 
         y_pred = self.forward(blocks, batch_inputs)
-        test_loss = self.criterion.forward(y_pred, batch_labels)
+        test_loss = self.criterion.forward(y_pred, y_true)
 
         if batch_nb == 0:
-            print_pred_class_counts(y_pred, batch_labels, multilabel=self.dataset.multilabel)
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_pred, batch_labels, weights=None)
-
+        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
         self.log("test_loss", test_loss, logger=True, on_step=True)
-
         return test_loss
 
     def train_dataloader(self):
@@ -309,8 +302,8 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters,
                                      lr=self.hparams.lr)
-        scheduler = ReduceLROnPlateau(optimizer)
+        # scheduler = ReduceLROnPlateau(optimizer)
 
         return {"optimizer": optimizer,
-                "lr_scheduler": scheduler,
+                # "lr_scheduler": scheduler,
                 "monitor": "val_loss"}

@@ -117,17 +117,13 @@ class LATTEConv(nn.Module):
         for node_type in self.conv:
             nn.init.xavier_uniform_(self.conv[node_type].weight)
 
-
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
         att_l = (edges.src["k"] * self.attn_l[self.metapath_id[etype]]).sum(dim=-1)
         att_r = (edges.dst["v"] * self.attn_r[self.metapath_id[etype]]).sum(dim=-1)
-        att = F.leaky_relu(att_l + att_r)
-        # if "feat" in edges.data and (edges.data["feat"].size(1) == self.attn_heads):
-        #     # Scale each attn channel by the coefficient in edge data
-        #     att = att * edges.data["feat"]
+        att = att_l + att_r
 
-        return {etype: att, "h": edges.dst["v"]}
+        return {etype: F.leaky_relu(att), "h": edges.dst["v"]}
 
     def message_func(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
@@ -188,6 +184,10 @@ class LATTEConv(nn.Module):
                     if hasattr(self, "activation"):
                         out[ntype] = self.activation(out[ntype])
                     continue
+
+                # print([(etype, g.dstnodes[ntype].data[etype].isnan().sum()) for etype in etypes])
+                # print(f"g.dstnodes[{ntype}].data['v'].view(-1, self.embedding_dim)",
+                #       g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim).isnan().sum())
 
                 # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
                 out[ntype] = torch.stack(
