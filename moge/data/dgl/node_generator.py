@@ -188,9 +188,10 @@ class DGLNodeSampler(HeteroNetDataset):
         if labels.dim() == 2 and labels.size(1) == 1:
             labels = labels.squeeze(1)
 
+        self.x_dict = {self.head_node_type: graph.ndata["feat"]} if "feat" in graph.ndata else {}
+
         graph.nodes[self.head_node_type].data["labels"] = labels
         self.y_dict = {self.head_node_type: labels}
-        self.x_dict = {self.head_node_type: graph.ndata["feat"]}
 
         self.metapaths = graph.canonical_etypes
 
