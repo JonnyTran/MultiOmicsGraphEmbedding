@@ -93,7 +93,7 @@ class Metrics(torch.nn.Module):
         for metric in self.metrics:
             # torchmetrics metrics
             if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
-                self.metrics[metric](y_pred, y_true)
+                self.metrics[metric].update(y_pred, y_true)
 
             # Torch ignite metrics
             elif "precision" in metric or "recall" in metric or "accuracy" in metric:
