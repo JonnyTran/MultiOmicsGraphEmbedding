@@ -278,6 +278,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         node_feat_sizes = np.unique(list(self.node_attr_shape.values()))
         if len(node_feat_sizes) == 1:
             in_features = node_feat_sizes[0]
+        elif len(node_feat_sizes) == 0:
+            return None
         else:
             raise Exception(
                 f"Must use self.node_attr_shape as node types have different feature sizes. {node_feat_sizes}")

@@ -155,6 +155,16 @@ class DGLNodeSampler(HeteroNetDataset):
                     graph.nodes[ntype].data["feat"] = torch.cat([graph.nodes[ntype].data["feat"],
                                                                  graph.nodes[ntype].data["year"]], dim=1)
 
+        self.init_node_embeddings(graph)
+
+        self.metapaths = graph.canonical_etypes
+
+        split_idx = dataset.get_idx_split()
+        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
+                                                                   split_idx["valid"][self.head_node_type], \
+                                                                   split_idx["test"][self.head_node_type]
+
+    def init_node_embeddings(self, graph):
         for ntype in graph.ntypes:
             if "feat" not in graph.nodes[ntype].data:
                 if self.node_attr_size:
@@ -165,17 +175,10 @@ class DGLNodeSampler(HeteroNetDataset):
                 embed = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
                 graph.nodes[ntype].data["feat"] = embed.weight
 
-        self.metapaths = graph.canonical_etypes
-
-        split_idx = dataset.get_idx_split()
-        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
-                                                                   split_idx["valid"][self.head_node_type], \
-                                                                   split_idx["test"][self.head_node_type]
-
-
     def process_DglNodeDataset_homo(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]
         self._name = dataset.name
+        self.G = graph
 
         if self.node_types is None:
             self.node_types = graph.ntypes
@@ -193,13 +196,14 @@ class DGLNodeSampler(HeteroNetDataset):
         graph.nodes[self.head_node_type].data["labels"] = labels
         self.y_dict = {self.head_node_type: labels}
 
+        self.init_node_embeddings(graph)
+
         self.metapaths = graph.canonical_etypes
 
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
 
-        self.G = graph
 
     @property
     def node_attr_shape(self):
