@@ -197,13 +197,16 @@ class LATTENodeClassifier(NodeClfTrainer):
                 h_dict[ntype] = self.feature_projection[ntype](feat[ntype])
 
         if hasattr(self, "batchnorm"):
-            h_dict = {ntype: self.batchnorm[ntype](emb) \
-                      for ntype, emb, in h_dict.items()}
+            h_dict = {ntype: self.batchnorm[ntype](emb) for ntype, emb, in h_dict.items()}
 
         embeddings = self.embedder.forward(blocks, h_dict, **kwargs)
 
+        print({f"embeddings[{ntype}]": embeddings[ntype].isnan().sum() for ntype in embeddings})
+
         y_pred = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
+
+        print(f"y_pred", y_pred.isnan().sum())
 
         return y_pred
 

@@ -264,8 +264,7 @@ class HGTNodeClf(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
 
-        y_hat = self.forward(blocks, batch_inputs, save_betas=True)
-
+        y_hat = self.forward(blocks, batch_inputs)
         test_loss = self.criterion.forward(y_hat, batch_labels)
 
         if batch_nb == 0:
