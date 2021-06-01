@@ -101,6 +101,13 @@ class LATTEConv(nn.Module):
         self.attn_l = nn.Parameter(torch.ones(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.ones(len(self.metapaths), attn_heads, self.out_channels))
 
+        self.rel_attn_l = nn.ParameterDict({
+            ntype: nn.Parameter(torch.ones(attn_heads, self.out_channels)) \
+            for ntype in self.node_types})
+        self.rel_attn_r = nn.ParameterDict({
+            ntype: nn.Parameter(torch.ones(attn_heads, self.out_channels)) \
+            for ntype in self.node_types})
+
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.ones(len(self.metapaths)))
         elif attn_activation == "PReLU":
@@ -117,6 +124,10 @@ class LATTEConv(nn.Module):
         nn.init.xavier_uniform_(self.attn_r)
         self.attn_l = torch.nan_to_num(self.attn_l, nan=0.0)
         self.attn_r = torch.nan_to_num(self.attn_r, nan=0.0)
+
+        for ntype in self.node_types:
+            nn.init.xavier_uniform_(self.rel_attn_l[ntype])
+            nn.init.xavier_uniform_(self.rel_attn_r[ntype])
 
         for node_type in self.linear_l:
             nn.init.xavier_uniform_(self.linear[node_type].weight)
@@ -151,15 +162,16 @@ class LATTEConv(nn.Module):
             # print(f"\t nodes.mailbox[{etype}]", nodes.mailbox[etype].shape)
             att = F.softmax(nodes.mailbox[etype], dim=1)
             h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['h'], dim=1)
-            output[etype] = h.view(-1, self.embedding_dim)
+            output[etype] = h
 
         return output
 
     def get_beta_weights(self, node_emb, rel_embs, ntype):
         alpha_l = (node_emb * self.rel_attn_l[ntype]).sum(dim=-1)
-        alpha_r = (rel_embs * self.rel_attn_r[ntype][:, None, :]).sum(dim=-1)
+        alpha_r = (rel_embs * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
 
-        beta = alpha_l[:, :, None] + alpha_r
+        print(alpha_l.shape, alpha_r.shape)
+        beta = alpha_l[:, None, :] + alpha_r
         beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = F.softmax(beta, dim=2)
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
@@ -198,23 +210,27 @@ class LATTEConv(nn.Module):
                     out[ntype] = feat_dst[ntype]
                     continue
                 # If homogeneous graph
-                if len(g.etypes) == 1:
-                    out[ntype] = g.dstnodes[ntype].data["_E"]
-                    if hasattr(self, "activation"):
-                        out[ntype] = self.activation(out[ntype])
-                    continue
+                # if len(g.etypes) == 1:
+                #     out[ntype] = out[ntype] = torch.stack(
+                #         [g.dstnodes[ntype].data[etype] for etype in etypes] + [
+                #             g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
+                #     if hasattr(self, "activation"):
+                #         out[ntype] = self.activation(out[ntype])
+                #     continue
 
                 # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-                # out[ntype] = torch.stack(
-                #     [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                #         g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
+                out[ntype] = torch.stack(
+                    [g.dstnodes[ntype].data[etype] for etype in etypes] + [
+                        g.dstnodes[ntype].data["v"], ], dim=1)
                 # out[ntype] = torch.mean(out[ntype], dim=1)
+                print("out[ntype]", out[ntype].shape)
 
-                beta = self.get_beta_weights(node_emb=g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim),
-                                             rel_embs=torch.cat([g.dstnodes[ntype].data[etype] for etype in etypes],
-                                                                dim=1),
+                beta = self.get_beta_weights(node_emb=out[ntype][:, -1, :],
+                                             rel_embs=out[ntype],
                                              ntype=ntype)
-                out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta).squeeze(-1)
+                print("beta", tensor_sizes(beta))
+                out[ntype] = torch.bmm(out[ntype], beta)
+                print(out[ntype].shape)
 
                 # Apply \sigma activation to all embeddings
                 if hasattr(self, "activation"):
