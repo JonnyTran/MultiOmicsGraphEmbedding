@@ -155,6 +155,16 @@ class LATTEConv(nn.Module):
 
         return output
 
+    def get_beta_weights(self, node_emb, rel_embs, ntype):
+        alpha_l = (node_emb * self.rel_attn_l[ntype]).sum(dim=-1)
+        alpha_r = (rel_embs * self.rel_attn_r[ntype][:, None, :]).sum(dim=-1)
+
+        beta = alpha_l[:, :, None] + alpha_r
+        beta = F.leaky_relu(beta, negative_slope=0.2)
+        beta = F.softmax(beta, dim=2)
+        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        return beta
+
     def forward(self, g: Union[DGLBlock, DGLHeteroGraph], feat: dict):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
 
@@ -195,13 +205,16 @@ class LATTEConv(nn.Module):
                     continue
 
                 # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-                out[ntype] = torch.stack(
-                    [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                        g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
+                # out[ntype] = torch.stack(
+                #     [g.dstnodes[ntype].data[etype] for etype in etypes] + [
+                #         g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
+                # out[ntype] = torch.mean(out[ntype], dim=1)
 
-                # out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
-
-                out[ntype] = torch.sum(out[ntype], dim=1)
+                beta = self.get_beta_weights(node_emb=g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim),
+                                             rel_embs=torch.cat([g.dstnodes[ntype].data[etype] for etype in etypes],
+                                                                dim=1),
+                                             ntype=ntype)
+                out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta).squeeze(-1)
 
                 # Apply \sigma activation to all embeddings
                 if hasattr(self, "activation"):
