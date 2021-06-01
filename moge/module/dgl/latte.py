@@ -23,7 +23,7 @@ from moge.module.utils import preprocess_input, tensor_sizes
 
 
 class LATTE(nn.Module):
-    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list,
+    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list, layernorm=False,
                  edge_dir="in", activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  ):
         super(LATTE, self).__init__()
@@ -40,6 +40,7 @@ class LATTE(nn.Module):
                           embedding_dim=embedding_dim,
                           num_nodes_dict=num_nodes_dict,
                           metapaths=metapaths,
+                          layernorm=layernorm,
                           edge_dir=edge_dir,
                           activation=activation,
                           attn_heads=attn_heads,
@@ -58,7 +59,7 @@ class LATTE(nn.Module):
 
 
 class LATTEConv(nn.Module):
-    def __init__(self, in_dim, embedding_dim, num_nodes_dict: {str: int}, metapaths: list,
+    def __init__(self, in_dim, embedding_dim, num_nodes_dict: {str: int}, metapaths: list, layernorm=False,
                  edge_dir="in", activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  first=True) -> None:
         super(LATTEConv, self).__init__()
@@ -100,6 +101,11 @@ class LATTEConv(nn.Module):
         self.out_channels = self.embedding_dim // attn_heads
         self.attn_l = nn.Parameter(torch.ones(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.ones(len(self.metapaths), attn_heads, self.out_channels))
+
+        if layernorm:
+            self.layernorm = nn.ModuleDict({
+                ntype: nn.LayerNorm(embedding_dim) \
+                for ntype in self.node_types})
 
         self.rel_attn_l = nn.ParameterDict({
             ntype: nn.Parameter(torch.ones(attn_heads, self.out_channels)) \
@@ -170,7 +176,6 @@ class LATTEConv(nn.Module):
         alpha_l = (node_emb * self.rel_attn_l[ntype]).sum(dim=-1)
         alpha_r = (rel_embs * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
 
-        print(alpha_l.shape, alpha_r.shape)
         beta = alpha_l[:, None, :] + alpha_r
         beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = F.softmax(beta, dim=2)
@@ -223,14 +228,15 @@ class LATTEConv(nn.Module):
                     [g.dstnodes[ntype].data[etype] for etype in etypes] + [
                         g.dstnodes[ntype].data["v"], ], dim=1)
                 # out[ntype] = torch.mean(out[ntype], dim=1)
-                print("out[ntype]", out[ntype].shape)
 
                 beta = self.get_beta_weights(node_emb=out[ntype][:, -1, :],
                                              rel_embs=out[ntype],
                                              ntype=ntype)
-                print("beta", tensor_sizes(beta))
-                out[ntype] = torch.bmm(out[ntype], beta)
-                print(out[ntype].shape)
+                out[ntype] = out[ntype] * beta.unsqueeze(-1)
+                out[ntype] = out[ntype].sum(1).view(out[ntype].size(0), self.embedding_dim)
+
+                if hasattr(self, "layernorm"):
+                    out[ntype] = self.layernorm[ntype](out[ntype])
 
                 # Apply \sigma activation to all embeddings
                 if hasattr(self, "activation"):

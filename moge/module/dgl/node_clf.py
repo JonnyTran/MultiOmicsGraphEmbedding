@@ -28,7 +28,9 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(), activation=hparams.activation,
+                              metapaths=dataset.get_metapaths(),
+                              layernorm=hparams.layernorm if "layernorm" in hparams else False,
+                              activation=hparams.activation,
                               attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout)
 
