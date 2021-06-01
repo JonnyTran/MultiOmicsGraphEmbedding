@@ -98,11 +98,11 @@ class LATTEConv(nn.Module):
              for node_type in self.node_types})  # W.shape (F x D_m)
 
         self.out_channels = self.embedding_dim // attn_heads
-        self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
-        self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
+        self.attn_l = nn.Parameter(torch.ones(len(self.metapaths), attn_heads, self.out_channels))
+        self.attn_r = nn.Parameter(torch.ones(len(self.metapaths), attn_heads, self.out_channels))
 
         if attn_activation == "sharpening":
-            self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
+            self.alpha_activation = nn.Parameter(torch.ones(len(self.metapaths)))
         elif attn_activation == "PReLU":
             self.alpha_activation = nn.PReLU(init=0.2)
         elif attn_activation == "LeakyReLU":
@@ -125,11 +125,9 @@ class LATTEConv(nn.Module):
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
-        print("edges.src['k']", edges.src["k"].isnan().sum(), 'edges.dst["v"]', edges.dst["v"].isnan().sum())
 
         att_l = (edges.src["k"] * self.attn_l[self.metapath_id[etype]]).sum(dim=-1)
         att_r = (edges.dst["v"] * self.attn_r[self.metapath_id[etype]]).sum(dim=-1)
-        print("att_l", att_l.isnan().sum(), "att_r", att_r.isnan().sum())
         att = F.leaky_relu(att_l + att_r)
 
         return {etype: att,
@@ -137,7 +135,6 @@ class LATTEConv(nn.Module):
 
     def message_func(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
-        print(f"{etype} edges.data", edges.data)
 
         return {etype: edges.data[etype],
                 "h": edges.data["h"]}
@@ -160,8 +157,6 @@ class LATTEConv(nn.Module):
 
     def forward(self, g: Union[DGLBlock, DGLHeteroGraph], feat: dict):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
-        print("feat_src", feat_src["_N"].isnan().sum())
-        print("feat_dst", feat_dst["_N"].isnan().sum())
 
         with g.local_scope():
             funcs = {}
@@ -194,8 +189,6 @@ class LATTEConv(nn.Module):
                     continue
                 # If homogeneous graph
                 if len(g.etypes) == 1:
-                    print("g.dstnodes[ntype].data", g.dstnodes[ntype].data)
-                    print("g.dstnodes[ntype].data['_E']", g.dstnodes[ntype].data["_E"].isnan().sum())
                     out[ntype] = g.dstnodes[ntype].data["_E"]
                     if hasattr(self, "activation"):
                         out[ntype] = self.activation(out[ntype])

@@ -52,7 +52,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         for ntype in self.node_types:
             if isinstance(feat, torch.Tensor):
                 h_dict[ntype] = self.feature_projection[ntype](feat)
-            elif ntype in feat:
+            elif isinstance(feat, dict) and ntype in feat:
                 h_dict[ntype] = self.feature_projection[ntype](feat[ntype])
 
             if hasattr(self, "batchnorm"):
@@ -106,7 +106,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         val_loss = self.criterion.forward(y_pred, y_true)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
-        self.log("val_loss", val_loss, logger=True, on_step=True)
+        self.log("val_loss", val_loss, prog_bar=True, logger=True, on_step=True)
         return val_loss
 
     def test_step(self, batch, batch_nb):

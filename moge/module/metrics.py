@@ -86,7 +86,7 @@ class Metrics(torch.nn.Module):
             if "SOFTMAX" in self.loss_type:
                 y_pred = torch.softmax(y_pred, dim=1)
             else:
-                torch.sigmoid(y_pred)
+                y_pred = torch.sigmoid(y_pred)
         elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type or "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
 
