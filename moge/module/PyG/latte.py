@@ -52,7 +52,7 @@ class LATTE(nn.Module):
                           metapaths=t_order_metapaths,
                           activation=None if is_output_layer else activation,
                           layernorm=False if not hasattr(hparams,
-                                                         "batchnorm") or is_output_layer else hparams.layernorm,
+                                                         "layernorm") or is_output_layer else hparams.layernorm,
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout, use_proximity=use_proximity,

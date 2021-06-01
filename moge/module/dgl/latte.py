@@ -25,7 +25,7 @@ from moge.module.utils import preprocess_input, tensor_sizes
 class LATTE(nn.Module):
     def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list,
                  edge_dir="in", activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
-                 use_proximity=True, neg_sampling_ratio=2.0):
+                 ):
         super(LATTE, self).__init__()
         self.t_order = t_order
         self.metapaths = metapaths
@@ -39,8 +39,13 @@ class LATTE(nn.Module):
                 LATTEConv(in_dim=embedding_dim,
                           embedding_dim=embedding_dim,
                           num_nodes_dict=num_nodes_dict,
-                          metapaths=metapaths, edge_dir=edge_dir, activation=activation, attn_heads=attn_heads,
-                          attn_activation=attn_activation, attn_dropout=attn_dropout, first=True if t == 0 else False))
+                          metapaths=metapaths,
+                          edge_dir=edge_dir,
+                          activation=activation,
+                          attn_heads=attn_heads,
+                          attn_activation=attn_activation,
+                          attn_dropout=attn_dropout,
+                          first=True if t == 0 else False))
         self.layers = nn.ModuleList(layers)
 
     def forward(self, blocks: Union[Dict, DGLBlock], h_dict, **kwargs):
@@ -119,12 +124,10 @@ class LATTEConv(nn.Module):
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
-        # print(etype)
         att_l = (edges.src["k"] * self.attn_l[self.metapath_id[etype]]).sum(dim=-1)
         att_r = (edges.dst["v"] * self.attn_r[self.metapath_id[etype]]).sum(dim=-1)
         # print("att_l", att_l.shape, "att_r", att_r.shape)
         att = F.leaky_relu(att_l + att_r)
-        # print("att", att.shape)
 
         return {etype: att,
                 "h": edges.dst["v"]}
