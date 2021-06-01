@@ -70,7 +70,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
 
-        elif hasattr(data, "edge_attr") and hasattr(data, "node_species"):  # for ogbn-proteins
+        elif False and hasattr(data, "edge_attr") and hasattr(data, "node_species"):  # for ogbn-proteins
             self.edge_index_dict = {}
             edge_reltype = data.edge_attr.argmax(1)
 

@@ -66,6 +66,8 @@ class LATTE(nn.Module):
         else:
             non_attr_node_types = []
         if len(non_attr_node_types) > 0:
+            print("num_nodes_dict", num_nodes_dict)
+
             if cpu_embeddings:
                 print("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=num_nodes_dict[node_type],
