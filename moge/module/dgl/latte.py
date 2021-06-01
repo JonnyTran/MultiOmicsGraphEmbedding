@@ -113,9 +113,10 @@ class LATTEConv(nn.Module):
 
 
     def reset_parameters(self):
-        for i, metapath in enumerate(self.metapaths):
-            nn.init.xavier_uniform_(self.attn_l[i])
-            nn.init.xavier_uniform_(self.attn_r[i])
+        nn.init.xavier_uniform_(self.attn_l)
+        nn.init.xavier_uniform_(self.attn_r)
+        self.attn_l = torch.nan_to_num(self.attn_l, nan=0.0)
+        self.attn_r = torch.nan_to_num(self.attn_r, nan=0.0)
 
         for node_type in self.linear_l:
             nn.init.xavier_uniform_(self.linear[node_type].weight)
@@ -124,9 +125,11 @@ class LATTEConv(nn.Module):
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
+        print("edges.src['k']", edges.src["k"].isnan().sum(), 'edges.dst["v"]', edges.dst["v"].isnan().sum())
+
         att_l = (edges.src["k"] * self.attn_l[self.metapath_id[etype]]).sum(dim=-1)
         att_r = (edges.dst["v"] * self.attn_r[self.metapath_id[etype]]).sum(dim=-1)
-        # print("att_l", att_l.shape, "att_r", att_r.shape)
+        print("att_l", att_l.isnan().sum(), "att_r", att_r.isnan().sum())
         att = F.leaky_relu(att_l + att_r)
 
         return {etype: att,
@@ -134,6 +137,7 @@ class LATTEConv(nn.Module):
 
     def message_func(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
+        print(f"{etype} edges.data", edges.data)
 
         return {etype: edges.data[etype],
                 "h": edges.data["h"]}
@@ -156,6 +160,8 @@ class LATTEConv(nn.Module):
 
     def forward(self, g: Union[DGLBlock, DGLHeteroGraph], feat: dict):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
+        print("feat_src", feat_src["_N"].isnan().sum())
+        print("feat_dst", feat_dst["_N"].isnan().sum())
 
         with g.local_scope():
             funcs = {}
@@ -188,6 +194,8 @@ class LATTEConv(nn.Module):
                     continue
                 # If homogeneous graph
                 if len(g.etypes) == 1:
+                    print("g.dstnodes[ntype].data", g.dstnodes[ntype].data)
+                    print("g.dstnodes[ntype].data['_E']", g.dstnodes[ntype].data["_E"].isnan().sum())
                     out[ntype] = g.dstnodes[ntype].data["_E"]
                     if hasattr(self, "activation"):
                         out[ntype] = self.activation(out[ntype])

@@ -7,7 +7,7 @@ from moge.module.losses import ClassificationLoss
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 
 from moge.module.dgl.latte import LATTE
-
+from ..utils import tensor_sizes
 
 class LATTENodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
@@ -48,8 +48,11 @@ class LATTENodeClassifier(NodeClfTrainer):
 
     def forward(self, blocks, feat, **kwargs):
         h_dict = {}
+
         for ntype in self.node_types:
-            if ntype in feat:
+            if isinstance(feat, torch.Tensor):
+                h_dict[ntype] = self.feature_projection[ntype](feat)
+            elif ntype in feat:
                 h_dict[ntype] = self.feature_projection[ntype](feat[ntype])
 
             if hasattr(self, "batchnorm"):
