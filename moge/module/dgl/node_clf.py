@@ -29,6 +29,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(),
+                              batchnorm=hparams.batchnorm if "batchnorm" in hparams else False,
                               layernorm=hparams.layernorm if "layernorm" in hparams else False,
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
@@ -107,8 +108,11 @@ class LATTENodeClassifier(NodeClfTrainer):
         y_pred = self.forward(blocks, batch_inputs)
         val_loss = self.criterion.forward(y_pred, y_true)
 
+        if batch_nb == 0:
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
-        self.log("val_loss", val_loss, prog_bar=True, logger=True, on_step=True)
+        self.log("val_loss", val_loss, prog_bar=True, logger=True)
         return val_loss
 
     def test_step(self, batch, batch_nb):
@@ -130,7 +134,7 @@ class LATTENodeClassifier(NodeClfTrainer):
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
         self.test_metrics.update_metrics(y_pred, y_true, weights=None)
-        self.log("test_loss", test_loss, logger=True, on_step=True)
+        self.log("test_loss", test_loss, logger=True)
         return test_loss
 
     def train_dataloader(self):

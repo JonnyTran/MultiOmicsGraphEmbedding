@@ -23,7 +23,8 @@ from moge.module.utils import preprocess_input, tensor_sizes
 
 
 class LATTE(nn.Module):
-    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list, layernorm=False,
+    def __init__(self, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list, batchnorm=False,
+                 layernorm=False,
                  edge_dir="in", activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  ):
         super(LATTE, self).__init__()
@@ -33,6 +34,7 @@ class LATTE(nn.Module):
         self.node_types = list(num_nodes_dict.keys())
         self.embedding_dim = embedding_dim * t_order
 
+
         layers = []
         for t in range(t_order):
             layers.append(
@@ -40,6 +42,7 @@ class LATTE(nn.Module):
                           embedding_dim=embedding_dim,
                           num_nodes_dict=num_nodes_dict,
                           metapaths=metapaths,
+                          batchnorm=batchnorm,
                           layernorm=layernorm,
                           edge_dir=edge_dir,
                           activation=activation,
@@ -59,7 +62,8 @@ class LATTE(nn.Module):
 
 
 class LATTEConv(nn.Module):
-    def __init__(self, in_dim, embedding_dim, num_nodes_dict: {str: int}, metapaths: list, layernorm=False,
+    def __init__(self, in_dim, embedding_dim, num_nodes_dict: {str: int}, metapaths: list, batchnorm=False,
+                 layernorm=False,
                  edge_dir="in", activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  first=True) -> None:
         super(LATTEConv, self).__init__()
@@ -113,6 +117,11 @@ class LATTEConv(nn.Module):
         self.rel_attn_r = nn.ParameterDict({
             ntype: nn.Parameter(torch.ones(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
+
+        if batchnorm:
+            self.batchnorm = torch.nn.ModuleDict(
+                {ntype: torch.nn.BatchNorm1d(embedding_dim) for ntype in
+                 self.node_types})
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.ones(len(self.metapaths)))
@@ -237,8 +246,9 @@ class LATTEConv(nn.Module):
 
                 if hasattr(self, "layernorm"):
                     out[ntype] = self.layernorm[ntype](out[ntype])
+                elif hasattr(self, "batchnorm"):
+                    out[ntype] = self.batchnorm[ntype](out[ntype])
 
-                # Apply \sigma activation to all embeddings
                 if hasattr(self, "activation"):
                     out[ntype] = self.activation(out[ntype])
 

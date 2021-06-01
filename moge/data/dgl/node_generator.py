@@ -164,17 +164,6 @@ class DGLNodeSampler(HeteroNetDataset):
                                                                    split_idx["valid"][self.head_node_type], \
                                                                    split_idx["test"][self.head_node_type]
 
-    def init_node_embeddings(self, graph):
-        for ntype in graph.ntypes:
-            if "feat" not in graph.nodes[ntype].data:
-                if self.node_attr_size:
-                    embedding_dim = self.node_attr_size
-                else:
-                    embedding_dim = self.embedding_dim
-
-                embed = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
-                graph.nodes[ntype].data["feat"] = embed.weight
-
     def process_DglNodeDataset_homo(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]
         self._name = dataset.name
@@ -204,6 +193,18 @@ class DGLNodeSampler(HeteroNetDataset):
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
 
+    def init_node_embeddings(self, graph):
+        for ntype in graph.ntypes:
+            if "feat" not in graph.nodes[ntype].data:
+                if self.node_attr_size:
+                    embedding_dim = self.node_attr_size
+                else:
+                    embedding_dim = self.embedding_dim
+
+                print(f"Initialized Embedding({graph.num_nodes(ntype)}, {embedding_dim}) for ntype: {ntype}")
+                embed = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
+                graph.nodes[ntype].data["feat"] = embed.weight
+                assert graph.nodes[ntype].data["feat"].requires_grad
 
     @property
     def node_attr_shape(self):
