@@ -70,7 +70,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
 
-        elif False and hasattr(data, "edge_attr") and hasattr(data, "node_species"):  # for ogbn-proteins
+        elif hasattr(data, "edge_attr") and hasattr(data, "node_species"):  # for ogbn-proteins
             self.edge_index_dict = {}
             edge_reltype = data.edge_attr.argmax(1)
 
@@ -83,10 +83,12 @@ class HeteroNeighborGenerator(HeteroNetDataset):
                     edge_index = data.edge_index[:, node_mask.logical_and(edge_mask)]
 
                     if edge_index.size(1) == 0: continue
-                    self.edge_index_dict[(str(node_type.item()), str(edge_type), str(node_type.item()))] = edge_index
+                    metapath = (str(node_type.item()), str(edge_type), str(node_type.item()))
+                    print(metapath)
+                    self.edge_index_dict[metapath] = edge_index
 
-            self.num_nodes_dict = {str(node_type.item()): data.node_species.size(0) for node_type in
-                                   data.node_species.unique()}
+            self.num_nodes_dict = {str(node_type.item()): (data.node_species == node_type).sum() \
+                                   for node_type in data.node_species.unique()}
             self.metapaths = list(self.edge_index_dict.keys())
             self.head_node_type = self.metapaths[0][0]
             self.y_dict = {node_type: data.y for node_type in self.num_nodes_dict}
@@ -101,7 +103,8 @@ class HeteroNeighborGenerator(HeteroNetDataset):
                 edge_index = data.edge_index[:, mask]
 
                 if edge_index.size(1) == 0: continue
-                self.edge_index_dict[(self.head_node_type, str(edge_type), self.head_node_type)] = edge_index
+                metapath = (self.head_node_type, str(edge_type), self.head_node_type)
+                self.edge_index_dict[metapath] = edge_index
 
             self.metapaths = list(self.edge_index_dict.keys())
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)

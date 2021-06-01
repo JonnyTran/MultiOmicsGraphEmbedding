@@ -48,7 +48,6 @@ class LATTE(nn.Module):
         for t in range(self.t_order):
             h_dict = self.layers[t].forward(blocks[t] if isinstance(blocks, Iterable) else blocks,
                                             h_dict, **kwargs)
-            print({f"{t} h_dict[{ntype}]": h_dict[ntype].isnan().sum() for ntype in h_dict})
 
         return h_dict
 
@@ -120,16 +119,21 @@ class LATTEConv(nn.Module):
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
+        # print(etype)
         att_l = (edges.src["k"] * self.attn_l[self.metapath_id[etype]]).sum(dim=-1)
         att_r = (edges.dst["v"] * self.attn_r[self.metapath_id[etype]]).sum(dim=-1)
-        att = att_l + att_r
+        # print("att_l", att_l.shape, "att_r", att_r.shape)
+        att = F.leaky_relu(att_l + att_r)
+        # print("att", att.shape)
 
-        return {etype: F.leaky_relu(att), "h": edges.dst["v"]}
+        return {etype: att,
+                "h": edges.dst["v"]}
 
     def message_func(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
 
-        return {etype: edges.data[etype], "h": edges.data["h"]}
+        return {etype: edges.data[etype],
+                "h": edges.data["h"]}
 
     def reduce_func(self, nodes: NodeBatch):
         '''
@@ -160,9 +164,6 @@ class LATTEConv(nn.Module):
                 g.dstnodes[dsttype].data['v'] = self.linear_r[dsttype](feat_dst[dsttype]) \
                     .view(-1, self.attn_heads, self.out_channels)
 
-            print('g.dstnodes["_N"].data["k"]', g.srcnodes[srctype].data["k"].isnan().sum())
-            print('g.dstnodes["_N"].data["v"]', g.dstnodes[dsttype].data["v"].isnan().sum())
-
             for srctype, etype, dsttype in g.canonical_etypes:
                 # Compute node-level attention coefficients
                 g.apply_edges(func=self.edge_attention, etype=etype)
@@ -171,8 +172,6 @@ class LATTEConv(nn.Module):
                     funcs[etype] = (self.message_func, self.reduce_func)
 
             g.multi_update_all(funcs, cross_reducer='mean')
-
-            print({f"v[{etype}]": g.dstnodes[dsttype].data[etype].isnan().sum() for etype in g.etypes})
 
             # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
             out = {}
@@ -191,10 +190,6 @@ class LATTEConv(nn.Module):
                         out[ntype] = self.activation(out[ntype])
                     continue
 
-                print([(etype, g.dstnodes[ntype].data[etype].isnan().sum()) for etype in etypes])
-                print(f"g.dstnodes[{ntype}].data['v'].view(-1, self.embedding_dim)",
-                      g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim).isnan().sum())
-
                 # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
                 out[ntype] = torch.stack(
                     [g.dstnodes[ntype].data[etype] for etype in etypes] + [
@@ -202,13 +197,11 @@ class LATTEConv(nn.Module):
 
                 # out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
 
-                out[ntype] = torch.mean(out[ntype], dim=1)
+                out[ntype] = torch.sum(out[ntype], dim=1)
 
                 # Apply \sigma activation to all embeddings
                 if hasattr(self, "activation"):
                     out[ntype] = self.activation(out[ntype])
-
-                print(f"out[{ntype}]", out[ntype].isnan().sum())
 
         return out
 
