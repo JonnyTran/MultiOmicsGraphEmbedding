@@ -185,64 +185,63 @@ class LATTEConv(nn.Module):
     def forward(self, g: Union[DGLBlock, DGLHeteroGraph], feat: dict):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
 
-        with g.local_scope():
-            funcs = {}
-            for srctype in set(srctype for srctype, etype, dsttype in g.canonical_etypes):
-                g.srcnodes[srctype].data['k'] = self.linear_l[srctype](feat_src[srctype]) \
-                    .view(-1, self.attn_heads, self.out_channels)
+        funcs = {}
+        for srctype in set(srctype for srctype, etype, dsttype in g.canonical_etypes):
+            g.srcnodes[srctype].data['k'] = self.linear_l[srctype](feat_src[srctype]) \
+                .view(-1, self.attn_heads, self.out_channels)
 
-            for dsttype in set(dsttype for srctype, etype, dsttype in g.canonical_etypes):
-                g.dstnodes[dsttype].data['v'] = self.linear_r[dsttype](feat_dst[dsttype]) \
-                    .view(-1, self.attn_heads, self.out_channels)
+        for dsttype in set(dsttype for srctype, etype, dsttype in g.canonical_etypes):
+            g.dstnodes[dsttype].data['v'] = self.linear_r[dsttype](feat_dst[dsttype]) \
+                .view(-1, self.attn_heads, self.out_channels)
 
-            for srctype, etype, dsttype in g.canonical_etypes:
-                # Compute node-level attention coefficients
-                g.apply_edges(func=self.edge_attention, etype=etype)
+        for srctype, etype, dsttype in g.canonical_etypes:
+            # Compute node-level attention coefficients
+            g.apply_edges(func=self.edge_attention, etype=etype)
 
-                if g.batch_num_edges(etype=etype).nelement() > 1 or g.batch_num_edges(etype=etype).item() > 0:
-                    funcs[etype] = (self.message_func, self.reduce_func)
+            if g.batch_num_edges(etype=etype).nelement() > 1 or g.batch_num_edges(etype=etype).item() > 0:
+                funcs[etype] = (self.message_func, self.reduce_func)
 
-            g.multi_update_all(funcs, cross_reducer='mean')
+        g.multi_update_all(funcs, cross_reducer='mean')
 
-            # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
-            out = {}
-            for ntype in set(g.ntypes):
-                etypes = [etype for etype in self.get_head_relations(ntype, etype_only=True) \
-                          if etype in g.dstnodes[ntype].data]
+        # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
+        out = {}
+        for ntype in set(g.ntypes):
+            etypes = [etype for etype in self.get_head_relations(ntype, etype_only=True) \
+                      if etype in g.dstnodes[ntype].data]
 
-                # If node type doesn't have any messages
-                if len(etypes) == 0:
-                    out[ntype] = feat_dst[ntype]
-                    continue
-                # If homogeneous graph
-                # if len(g.etypes) == 1:
-                #     out[ntype] = out[ntype] = torch.stack(
-                #         [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                #             g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
-                #     if hasattr(self, "activation"):
-                #         out[ntype] = self.activation(out[ntype])
-                #     continue
+            # If node type doesn't have any messages
+            if len(etypes) == 0:
+                out[ntype] = feat_dst[ntype]
+                continue
+            # If homogeneous graph
+            # if len(g.etypes) == 1:
+            #     out[ntype] = out[ntype] = torch.stack(
+            #         [g.dstnodes[ntype].data[etype] for etype in etypes] + [
+            #             g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
+            #     if hasattr(self, "activation"):
+            #         out[ntype] = self.activation(out[ntype])
+            #     continue
 
-                # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-                out[ntype] = torch.stack(
-                    [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                        g.dstnodes[ntype].data["v"], ], dim=1)
-                # out[ntype] = torch.mean(out[ntype], dim=1)
+            # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
+            out[ntype] = torch.stack(
+                [g.dstnodes[ntype].data[etype] for etype in etypes] + [
+                    g.dstnodes[ntype].data["v"], ], dim=1)
+            # out[ntype] = torch.mean(out[ntype], dim=1)
 
-                beta = self.get_beta_weights(node_emb=out[ntype][:, -1, :],
-                                             rel_embs=out[ntype],
-                                             ntype=ntype)
-                out[ntype] = out[ntype] * beta.unsqueeze(-1)
-                out[ntype] = out[ntype].sum(1).view(out[ntype].size(0), self.embedding_dim)
+            beta = self.get_beta_weights(node_emb=out[ntype][:, -1, :],
+                                         rel_embs=out[ntype],
+                                         ntype=ntype)
+            out[ntype] = out[ntype] * beta.unsqueeze(-1)
+            out[ntype] = out[ntype].sum(1).view(out[ntype].size(0), self.embedding_dim)
 
-                if hasattr(self, "layernorm"):
-                    out[ntype] = self.layernorm[ntype](out[ntype])
+            if hasattr(self, "layernorm"):
+                out[ntype] = self.layernorm[ntype](out[ntype])
 
-                if hasattr(self, "batchnorm"):
-                    out[ntype] = self.batchnorm[ntype](out[ntype])
+            if hasattr(self, "batchnorm"):
+                out[ntype] = self.batchnorm[ntype](out[ntype])
 
-                if hasattr(self, "activation"):
-                    out[ntype] = self.activation(out[ntype])
+            if hasattr(self, "activation"):
+                out[ntype] = self.activation(out[ntype])
 
         return out
 

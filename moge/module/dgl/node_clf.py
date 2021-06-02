@@ -20,12 +20,22 @@ class LATTENodeClassifier(NodeClfTrainer):
         self._name = f"DGL_LATTE-{hparams.t_order}"
         self.collate_fn = collate_fn
 
+        self.node_embedding = {}
+        for ntype in dataset.G.ntypes:
+            if dataset.node_attr_size:
+                embedding_dim = dataset.node_attr_size
+            else:
+                embedding_dim = hparams.embedding_dim
+
+            if "feat" not in dataset.G.nodes[ntype].data:
+                self.node_embedding[ntype] = torch.nn.Embedding(dataset.G.num_nodes(ntype), embedding_dim)
+                print(f"Initialized Embedding({dataset.G.num_nodes(ntype)}, {embedding_dim}) for ntype: {ntype}")
+
         # align the dimension of different types of nodes
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(in_channels, hparams.embedding_dim) \
             for ntype, in_channels in dataset.node_attr_shape.items()
         })
-
 
         self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
@@ -54,10 +64,12 @@ class LATTENodeClassifier(NodeClfTrainer):
         h_dict = {}
 
         for ntype in self.node_types:
-            if isinstance(feat, torch.Tensor):
+            if isinstance(feat, torch.Tensor) and ntype in self.feature_projection:
                 h_dict[ntype] = self.feature_projection[ntype](feat)
-            elif isinstance(feat, dict) and ntype in feat:
+            elif isinstance(feat, dict) and ntype in feat and ntype in self.feature_projection:
                 h_dict[ntype] = self.feature_projection[ntype](feat[ntype])
+            else:
+                h_dict[ntype] = feat[ntype]
 
             if hasattr(self, "batchnorm"):
                 h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
@@ -72,6 +84,11 @@ class LATTENodeClassifier(NodeClfTrainer):
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
 
+        if "feat" not in blocks[0].srcdata:
+            for ntype in self.node_types:
+                blocks[0].nodes[ntype].data["feat"] = self.node_embedding[ntype].weight[
+                                                      blocks[0].nodes[ntype].data["_ID"], :].to(
+                    self.device)
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 
@@ -97,6 +114,11 @@ class LATTENodeClassifier(NodeClfTrainer):
     def validation_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
 
+        if "feat" not in blocks[0].srcdata:
+            for ntype in self.node_types:
+                blocks[0].nodes[ntype].data["feat"] = self.node_embedding[ntype].weight[
+                                                      blocks[0].nodes[ntype].data["_ID"], :].to(
+                    self.device)
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 
@@ -120,6 +142,10 @@ class LATTENodeClassifier(NodeClfTrainer):
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
 
+        if "feat" not in blocks[0].srcdata:
+            for ntype in self.node_types:
+                blocks[0].nodes[ntype].data["feat"] = self.node_embedding[ntype].weight[
+                                                      blocks[0].nodes[ntype].data["_ID"], :].to(self.device)
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 

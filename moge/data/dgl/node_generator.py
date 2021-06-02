@@ -39,7 +39,7 @@ class DGLNodeSampler(HeteroNetDataset):
         elif "feat" in self.G.edata:
             self.G = self.create_heterograph(self.G, decompose_etypes=True, add_reverse=add_reverse_metapaths)
 
-        self.init_node_embeddings(self.G)
+        # self.init_node_embeddings(self.G)
 
         self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
 
