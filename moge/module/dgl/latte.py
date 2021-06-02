@@ -149,14 +149,12 @@ class LATTEConv(nn.Module):
         att = self.alpha_activation(att) if isinstance(self.alpha_activation, nn.Module) else \
             att * self.alpha_activation[self.metapath_id[etype]]
 
-        return {etype: att,
-                "h": edges.dst["v"]}
+        return {etype: att, "h": edges.dst["v"]}
 
     def message_func(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
 
-        return {etype: edges.data[etype],
-                "h": edges.data["h"]}
+        return {etype: edges.data[etype], "h": edges.data["h"]}
 
     def reduce_func(self, nodes: NodeBatch):
         '''
@@ -217,7 +215,7 @@ class LATTEConv(nn.Module):
             # if len(g.etypes) == 1:
             #     out[ntype] = out[ntype] = torch.stack(
             #         [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-            #             g.dstnodes[ntype].data["v"].view(-1, self.embedding_dim), ], dim=1)
+            #             g.dstnodes[ntype].data["feat"].view(-1, self.embedding_dim), ], dim=1)
             #     if hasattr(self, "activation"):
             #         out[ntype] = self.activation(out[ntype])
             #     continue
@@ -225,7 +223,7 @@ class LATTEConv(nn.Module):
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[ntype] = torch.stack(
                 [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                    g.dstnodes[ntype].data["v"], ], dim=1)
+                    g.dstnodes[ntype].data["feat"].view(-1, self.attn_heads, self.out_channels), ], dim=1)
             # out[ntype] = torch.mean(out[ntype], dim=1)
 
             beta = self.get_beta_weights(node_emb=out[ntype][:, -1, :],
