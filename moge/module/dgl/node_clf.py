@@ -20,6 +20,10 @@ class LATTENodeClassifier(NodeClfTrainer):
         self._name = f"DGL_LATTE-{hparams.t_order}"
         self.collate_fn = collate_fn
 
+        if "fanouts" in hparams:
+            self.dataset.neighbor_sizes = hparams.fanouts
+            self.dataset.neighbor_sampler.fanouts = hparams.fanouts
+            self.dataset.neighbor_sampler.num_layers = len(hparams.fanouts)
 
         # align the dimension of different types of nodes
         self.feature_projection = nn.ModuleDict({

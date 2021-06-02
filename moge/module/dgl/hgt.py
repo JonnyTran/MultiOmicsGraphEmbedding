@@ -1,4 +1,3 @@
-import multiprocessing
 import dgl
 import math
 import torch
@@ -16,7 +15,7 @@ from moge.data import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from ...module.utils import tensor_sizes
-from ..trainer import NodeClfTrainer
+from ..trainer import NodeClfTrainer, print_pred_class_counts
 
 
 class HGTLayer(nn.Module):
@@ -226,73 +225,82 @@ class HGTNodeClf(NodeClfTrainer):
     def forward(self, blocks, batch_inputs: dict, **kwargs):
         embeddings = self.embedder(blocks, batch_inputs)
 
-        y_hat = self.classifier(embeddings[self.head_node_type])
-        return y_hat
+        y_pred = self.classifier(embeddings[self.head_node_type])
+        return y_pred
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         batch_inputs = blocks[0].srcdata['feat']
-        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
+        if not isinstance(batch_inputs, dict):
+            batch_inputs = {self.head_node_type: batch_inputs}
+        y_true = blocks[-1].dstdata['labels']
+        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
-        y_hat = self.forward(blocks, batch_inputs)
-        loss = self.criterion.forward(y_hat, batch_labels)
+        y_pred = self.forward(blocks, batch_inputs)
+        loss = self.criterion.forward(y_pred, y_true)
 
-        self.train_metrics.update_metrics(y_hat, batch_labels, weights=None)
+        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
-        logs = None
+        self.log("loss", loss, logger=True, on_step=True)
+        if batch_nb % 25 == 0:
+            logs = self.train_metrics.compute_metrics()
+            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
-        outputs = {'loss': loss}
-        if logs is not None:
-            outputs.update({'progress_bar': logs, "logs": logs})
-        return outputs
+        return loss
 
     def validation_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         batch_inputs = blocks[0].srcdata['feat']
-        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
+        if not isinstance(batch_inputs, dict):
+            batch_inputs = {self.head_node_type: batch_inputs}
+        y_true = blocks[-1].dstdata['labels']
+        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
-        y_hat = self.forward(blocks, batch_inputs)
+        y_pred = self.forward(blocks, batch_inputs)
 
-        val_loss = self.criterion.forward(y_hat, batch_labels)
+        val_loss = self.criterion.forward(y_pred, y_true)
 
-        self.valid_metrics.update_metrics(y_hat, batch_labels, weights=None)
-
-        return {"val_loss": val_loss}
+        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.log("val_loss", val_loss, prog_bar=True, logger=True)
+        return val_loss
 
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         batch_inputs = blocks[0].srcdata['feat']
-        batch_labels = blocks[-1].dstdata['labels'][self.head_node_type]
+        if not isinstance(batch_inputs, dict):
+            batch_inputs = {self.head_node_type: batch_inputs}
+        y_true = blocks[-1].dstdata['labels']
+        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
-        y_hat = self.forward(blocks, batch_inputs)
-        test_loss = self.criterion.forward(y_hat, batch_labels)
+        y_pred = self.forward(blocks, batch_inputs)
+        test_loss = self.criterion.forward(y_pred, y_true)
 
         if batch_nb == 0:
-            self.print_pred_class_counts(y_hat, batch_labels, multilabel=self.dataset.multilabel)
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_hat, batch_labels, weights=None)
-
-        return {"test_loss": test_loss}
+        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.log("test_loss", test_loss, logger=True)
+        return test_loss
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=None,
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=int(0.4 * multiprocessing.cpu_count()))
+                                             num_workers=0)
 
     def val_dataloader(self, batch_size=None):
         return self.dataset.valid_dataloader(collate_fn=None,
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+                                             num_workers=0)
 
     def valtrain_dataloader(self):
         return self.dataset.valtrain_dataloader(collate_fn=None,
                                                 batch_size=self.hparams.batch_size,
-                                                num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+                                                num_workers=0)
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=None,
                                             batch_size=self.hparams.batch_size,
-                                            num_workers=max(1, int(0.1 * multiprocessing.cpu_count())))
+                                            num_workers=0)
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
