@@ -108,8 +108,8 @@ class LATTENodeClassifier(NodeClfTrainer):
         y_pred = self.forward(blocks, batch_inputs)
         val_loss = self.criterion.forward(y_pred, y_true)
 
-        if batch_nb == 0:
-            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+        # if batch_nb == 0:
+        #     print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
@@ -160,7 +160,8 @@ class LATTENodeClassifier(NodeClfTrainer):
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
         no_decay = ['bias', 'alpha_activation',
-                    'LayerNorm.bias', 'LayerNorm.weight']
+                    'LayerNorm.bias', 'LayerNorm.weight',
+                    'BatchNorm.bias', 'BatchNorm.weight']
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
              'weight_decay': self.hparams.weight_decay},

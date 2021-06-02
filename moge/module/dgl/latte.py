@@ -88,13 +88,6 @@ class LATTEConv(nn.Module):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
-        self.conv = torch.nn.ModuleDict(
-            {node_type: torch.nn.Conv1d(
-                in_channels=in_dim[node_type] if isinstance(in_dim, dict) else in_dim,
-                out_channels=self.num_head_relations(node_type),
-                kernel_size=1) \
-                for node_type in self.node_types})  # W_phi.shape (D x F)
-
         self.linear_l = nn.ModuleDict(
             {node_type: nn.Linear(in_dim, embedding_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x D_m)
@@ -106,17 +99,17 @@ class LATTEConv(nn.Module):
         self.attn_l = nn.Parameter(torch.ones(len(self.metapaths), attn_heads, self.out_channels))
         self.attn_r = nn.Parameter(torch.ones(len(self.metapaths), attn_heads, self.out_channels))
 
-        if layernorm:
-            self.layernorm = nn.ModuleDict({
-                ntype: nn.LayerNorm(embedding_dim) \
-                for ntype in self.node_types})
-
         self.rel_attn_l = nn.ParameterDict({
             ntype: nn.Parameter(torch.ones(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
         self.rel_attn_r = nn.ParameterDict({
             ntype: nn.Parameter(torch.ones(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
+
+        if layernorm:
+            self.layernorm = nn.ModuleDict({
+                ntype: nn.LayerNorm(embedding_dim) \
+                for ntype in self.node_types})
 
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict(
@@ -133,21 +126,18 @@ class LATTEConv(nn.Module):
             print(f"WARNING: alpha_activation `{attn_activation}` did not match, so used linear activation")
             self.alpha_activation = None
 
+        self.reset_parameters()
 
     def reset_parameters(self):
         nn.init.xavier_uniform_(self.attn_l)
         nn.init.xavier_uniform_(self.attn_r)
-        self.attn_l = torch.nan_to_num(self.attn_l, nan=0.0)
-        self.attn_r = torch.nan_to_num(self.attn_r, nan=0.0)
 
         for ntype in self.node_types:
             nn.init.xavier_uniform_(self.rel_attn_l[ntype])
             nn.init.xavier_uniform_(self.rel_attn_r[ntype])
 
-        for node_type in self.linear_l:
-            nn.init.xavier_uniform_(self.linear[node_type].weight)
-        for node_type in self.conv:
-            nn.init.xavier_uniform_(self.conv[node_type].weight)
+            nn.init.xavier_uniform_(self.linear_l[ntype].weight)
+            nn.init.xavier_uniform_(self.linear_r[ntype].weight)
 
     def edge_attention(self, edges: EdgeBatch):
         srctype, etype, dsttype = edges.canonical_etype
@@ -246,7 +236,8 @@ class LATTEConv(nn.Module):
 
                 if hasattr(self, "layernorm"):
                     out[ntype] = self.layernorm[ntype](out[ntype])
-                elif hasattr(self, "batchnorm"):
+
+                if hasattr(self, "batchnorm"):
                     out[ntype] = self.batchnorm[ntype](out[ntype])
 
                 if hasattr(self, "activation"):
