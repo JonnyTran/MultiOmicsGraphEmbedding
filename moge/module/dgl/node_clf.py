@@ -26,6 +26,7 @@ class LATTENodeClassifier(NodeClfTrainer):
             for ntype, in_channels in dataset.node_attr_shape.items()
         })
 
+
         self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(),
@@ -77,6 +78,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
+
         y_true = blocks[-1].dstdata['labels']
         y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
@@ -124,6 +126,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
+
         y_true = blocks[-1].dstdata['labels']
         y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
@@ -159,9 +162,8 @@ class LATTENodeClassifier(NodeClfTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation',
-                    'LayerNorm.bias', 'LayerNorm.weight',
-                    'BatchNorm.bias', 'BatchNorm.weight']
+        no_decay = ['bias', 'alpha_activation', 'embedding', 'batchnorm', 'layernorm']
+
         optimizer_grouped_parameters = [
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
              'weight_decay': self.hparams.weight_decay},
@@ -169,10 +171,31 @@ class LATTENodeClassifier(NodeClfTrainer):
              'weight_decay': 0.0}
         ]
 
+        print("weight_decay", [name for name, p in param_optimizer if not any(key in name for key in no_decay)])
+        print("no weight_decay", [name for name, p in param_optimizer if any(key in name for key in no_decay)])
+
         optimizer = torch.optim.Adam(optimizer_grouped_parameters,
                                      lr=self.hparams.lr)
-        # scheduler = ReduceLROnPlateau(optimizer)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
+                                                               eta_min=self.hparams.lr / 100)
 
         return {"optimizer": optimizer,
-                # "lr_scheduler": scheduler,
+                "lr_scheduler": scheduler,
                 "monitor": "val_loss"}
+
+    @property
+    def num_training_steps(self) -> int:
+        """Total training steps inferred from datamodule and devices."""
+        if self.trainer.max_steps:
+            return self.trainer.max_steps
+
+        limit_batches = self.trainer.limit_train_batches
+        batches = len(self.train_dataloader())
+        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
+
+        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+        if self.trainer.tpu_cores:
+            num_devices = max(num_devices, self.trainer.tpu_cores)
+
+        effective_accum = self.trainer.accumulate_grad_batches * num_devices
+        return (batches // effective_accum) * self.trainer.max_epochs

@@ -29,11 +29,10 @@ class LATTE(nn.Module):
                  ):
         super(LATTE, self).__init__()
         self.t_order = t_order
-        self.metapaths = metapaths
         self.edge_dir = edge_dir
         self.node_types = list(num_nodes_dict.keys())
+        self.metapaths = metapaths
         self.embedding_dim = embedding_dim * t_order
-
 
         layers = []
         for t in range(t_order):
@@ -64,7 +63,9 @@ class LATTE(nn.Module):
 class LATTEConv(nn.Module):
     def __init__(self, in_dim, embedding_dim, num_nodes_dict: {str: int}, metapaths: list, batchnorm=False,
                  layernorm=False,
-                 edge_dir="in", activation: str = "relu", attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
+                 edge_dir="in", activation: str = "relu", attn_heads=4,
+                 attn_activation="sharpening",
+                 attn_dropout=0.2,
                  first=True) -> None:
         super(LATTEConv, self).__init__()
         self.first = first
@@ -108,13 +109,11 @@ class LATTEConv(nn.Module):
 
         if layernorm:
             self.layernorm = nn.ModuleDict({
-                ntype: nn.LayerNorm(embedding_dim) \
-                for ntype in self.node_types})
+                ntype: nn.LayerNorm(embedding_dim) for ntype in self.node_types})
 
         if batchnorm:
-            self.batchnorm = torch.nn.ModuleDict(
-                {ntype: torch.nn.BatchNorm1d(embedding_dim) for ntype in
-                 self.node_types})
+            self.batchnorm = torch.nn.ModuleDict({
+                ntype: torch.nn.BatchNorm1d(embedding_dim) for ntype in self.node_types})
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.ones(len(self.metapaths)))
@@ -144,7 +143,11 @@ class LATTEConv(nn.Module):
 
         att_l = (edges.src["k"] * self.attn_l[self.metapath_id[etype]]).sum(dim=-1)
         att_r = (edges.dst["v"] * self.attn_r[self.metapath_id[etype]]).sum(dim=-1)
-        att = F.leaky_relu(att_l + att_r)
+
+        att = att_l + att_r
+        att = F.dropout(att, p=self.attn_dropout, training=self.training)
+        att = self.alpha_activation(att) if isinstance(self.alpha_activation, nn.Module) else \
+            att * self.alpha_activation[self.metapath_id[etype]]
 
         return {etype: att,
                 "h": edges.dst["v"]}
@@ -163,8 +166,6 @@ class LATTEConv(nn.Module):
         for srctype, etype, dsttype in self.metapaths:
             if etype not in nodes.mailbox: continue
 
-            # print(nodes.ntype, "batch_size", nodes.batch_size(), )
-            # print(f"\t nodes.mailbox[{etype}]", nodes.mailbox[etype].shape)
             att = F.softmax(nodes.mailbox[etype], dim=1)
             h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['h'], dim=1)
             output[etype] = h

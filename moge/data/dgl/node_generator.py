@@ -36,6 +36,10 @@ class DGLNodeSampler(HeteroNetDataset):
 
         if add_reverse_metapaths:
             self.G = self.create_heterograph(self.G, add_reverse=True)
+        elif "feat" in self.G.edata:
+            self.G = self.create_heterograph(self.G, decompose_etypes=True, add_reverse=add_reverse_metapaths)
+
+        self.init_node_embeddings(self.G)
 
         self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
 
@@ -51,7 +55,7 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             raise Exception("Use one of", ["ImportanceSampler"])
 
-    def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False):
+    def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False, decompose_etypes=False):
         reversed_g = g.reverse(copy_edata=True, share_edata=True)
 
         relations = {}
@@ -59,6 +63,16 @@ class DGLNodeSampler(HeteroNetDataset):
             # Original edges
             src, dst = g.all_edges(etype=metapath[1])
             relations[metapath] = (src, dst)
+
+            if decompose_etypes:
+                relations = {}
+                edge_reltype = g.edata["feat"].argmax(1)
+                assert src.size(0) == edge_reltype.size(0)
+
+                for edge_type in range(g.edata["feat"].size(1)):
+                    mask = edge_reltype == edge_type
+                    metapath = (self.head_node_type, str(edge_type), self.head_node_type)
+                    relations[metapath] = (src[mask], dst[mask])
 
             # Reverse edges
             if add_reverse:
@@ -155,8 +169,6 @@ class DGLNodeSampler(HeteroNetDataset):
                     graph.nodes[ntype].data["feat"] = torch.cat([graph.nodes[ntype].data["feat"],
                                                                  graph.nodes[ntype].data["year"]], dim=1)
 
-        self.init_node_embeddings(graph)
-
         self.metapaths = graph.canonical_etypes
 
         split_idx = dataset.get_idx_split()
@@ -166,8 +178,8 @@ class DGLNodeSampler(HeteroNetDataset):
 
     def process_DglNodeDataset_homo(self, dataset: DglNodePropPredDataset):
         graph, labels = dataset[0]
-        self._name = dataset.name
         self.G = graph
+        self._name = dataset.name
 
         if self.node_types is None:
             self.node_types = graph.ntypes
@@ -185,26 +197,34 @@ class DGLNodeSampler(HeteroNetDataset):
         graph.nodes[self.head_node_type].data["labels"] = labels
         self.y_dict = {self.head_node_type: labels}
 
-        self.init_node_embeddings(graph)
-
         self.metapaths = graph.canonical_etypes
 
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
 
-    def init_node_embeddings(self, graph):
+    def init_node_embeddings(self, graph, ntype_key="species"):
+        if self.node_attr_size:
+            embedding_dim = self.node_attr_size
+        else:
+            embedding_dim = self.embedding_dim
+
         for ntype in graph.ntypes:
             if "feat" not in graph.nodes[ntype].data:
-                if self.node_attr_size:
-                    embedding_dim = self.node_attr_size
-                else:
-                    embedding_dim = self.embedding_dim
-
+                self.node_embedding = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
                 print(f"Initialized Embedding({graph.num_nodes(ntype)}, {embedding_dim}) for ntype: {ntype}")
-                embed = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
-                graph.nodes[ntype].data["feat"] = embed.weight
+                graph.nodes[ntype].data["feat"] = self.node_embedding.weight
+
                 assert graph.nodes[ntype].data["feat"].requires_grad
+
+            # if ntype_key in graph.nodes[ntype].data:
+            #     species = graph.nodes[ntype].data[ntype_key].unique()
+            #     self.ntype_embedding = torch.nn.Embedding(species.size(0), embedding_dim)
+            #     print(f"Initialized ntype_embedding({species.size(0)}, {embedding_dim}) for ntype: {ntype}")
+            #     for species_id in species:
+            #         nmask = (graph.nodes[ntype].data[ntype_key] == species_id).squeeze(-1)
+            #         graph.nodes[ntype].data["feat"][nmask, :] = \
+            #             graph.nodes[ntype].data["feat"][nmask, :] + self.ntype_embedding.weight[(species == species_id).nonzero().item()].unsqueeze(0)
 
     @property
     def node_attr_shape(self):
@@ -236,7 +256,7 @@ class DGLNodeSampler(HeteroNetDataset):
     def sample(self, iloc, mode):
         raise NotImplementedError()
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         if self.inductive:
             nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
             nodes[self.head_node_type] = self.training_idx
@@ -257,7 +277,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
         return dataloader
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         if self.inductive:
             nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
             nodes[self.head_node_type] = torch.tensor(np.union1d(self.training_idx, self.validation_idx))
@@ -276,7 +296,7 @@ class DGLNodeSampler(HeteroNetDataset):
         #     batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return dataloader
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
 
         collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
