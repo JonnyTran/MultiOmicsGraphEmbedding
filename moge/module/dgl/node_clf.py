@@ -11,7 +11,7 @@ from ..utils import tensor_sizes
 
 class LATTENodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler",
-                 cpu_embeddings=False) -> None:
+                 cpu_embeddings=True) -> None:
         super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
@@ -104,7 +104,7 @@ class LATTENodeClassifier(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         # batch_inputs = blocks[0].srcdata['feat']
-        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :]
+        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :].to(self.device)
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
 
@@ -130,7 +130,7 @@ class LATTENodeClassifier(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         # batch_inputs = blocks[0].srcdata['feat']
-        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :]
+        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :].to(self.device)
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
 
@@ -153,7 +153,8 @@ class LATTENodeClassifier(NodeClfTrainer):
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 
-        batch_inputs = blocks[0].srcdata['feat']
+        # batch_inputs = blocks[0].srcdata['feat']
+        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :].to(self.device)
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
 
