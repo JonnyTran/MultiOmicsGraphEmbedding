@@ -58,20 +58,13 @@ class LATTENodeClassifier(NodeClfTrainer):
             non_attr_node_types = (dataset.num_nodes_dict.keys() - dataset.node_attr_shape.keys())
         else:
             non_attr_node_types = []
-        if len(non_attr_node_types) > 0:
-            print("num_nodes_dict", dataset.num_nodes_dict)
 
-            if "cpu_embeddings" in hparams and hparams.cpu_embeddings:
-                print("Embedding.device = 'cpu'")
-                self.embeddings = {node_type: nn.Embedding(num_embeddings=dataset.num_nodes_dict[node_type],
-                                                           embedding_dim=hparams.embedding_dim,
-                                                           sparse=False).cpu() for node_type in non_attr_node_types}
-            else:
-                print("Embedding.device = 'gpu'")
-                self.embeddings = nn.ModuleDict(
-                    {node_type: nn.Embedding(num_embeddings=dataset.num_nodes_dict[node_type],
-                                             embedding_dim=hparams.embedding_dim,
-                                             sparse=False) for node_type in non_attr_node_types})
+        if len(non_attr_node_types) > 0:
+            print("Embedding.device = 'gpu'", "num_nodes_dict", dataset.num_nodes_dict)
+            self.embeddings = nn.ModuleDict(
+                {node_type: nn.Embedding(num_embeddings=dataset.num_nodes_dict[node_type],
+                                         embedding_dim=hparams.embedding_dim,
+                                         sparse=False) for node_type in non_attr_node_types})
         else:
             self.embeddings = None
 

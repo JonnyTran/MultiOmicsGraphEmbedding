@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 
 
-def one_hot_encoder(x):
+def one_hot_encoder(x, embed_dim=None):
     """
     Get ont hot embedding of the input tensor.
     Args:
@@ -19,7 +19,6 @@ def one_hot_encoder(x):
             pass
         else:
             one_hot[i][id_dict[u.item()]] = 1
-    one_hot.requires_grad_(True)
     return one_hot
 
 

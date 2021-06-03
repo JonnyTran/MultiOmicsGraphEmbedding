@@ -54,7 +54,7 @@ class Metrics(torch.nn.Module):
 
 
             elif "accuracy" in metric:
-                self.metrics[metric] = Accuracy()
+                self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None)
 
             elif "ogbn" in metric:
                 self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric))
