@@ -10,8 +10,7 @@ from moge.module.dgl.latte import LATTE
 from ..utils import tensor_sizes
 
 class LATTENodeClassifier(NodeClfTrainer):
-    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler",
-                 cpu_embeddings=True) -> None:
+    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
@@ -62,11 +61,11 @@ class LATTENodeClassifier(NodeClfTrainer):
         if len(non_attr_node_types) > 0:
             print("num_nodes_dict", dataset.num_nodes_dict)
 
-            if cpu_embeddings:
+            if "cpu_embeddings" in hparams and hparams.cpu_embeddings:
                 print("Embedding.device = 'cpu'")
                 self.embeddings = {node_type: nn.Embedding(num_embeddings=dataset.num_nodes_dict[node_type],
                                                            embedding_dim=hparams.embedding_dim,
-                                                           sparse=True).cpu() for node_type in non_attr_node_types}
+                                                           sparse=False).cpu() for node_type in non_attr_node_types}
             else:
                 print("Embedding.device = 'gpu'")
                 self.embeddings = nn.ModuleDict(
@@ -87,7 +86,7 @@ class LATTENodeClassifier(NodeClfTrainer):
             else:
                 h_dict[ntype] = feat[ntype]
 
-            if hasattr(self, "batchnorm"):
+            if hasattr(self, "batchnorm") and ntype in self.feature_projection:
                 h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
 
         embeddings = self.embedder.forward(blocks, h_dict, **kwargs)
@@ -97,19 +96,27 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         return y_pred
 
+    def process_blocks(self, blocks):
+        if self.embeddings is not None:
+            batch_inputs = {ntype: self.embeddings[ntype].weight[blocks[0].ndata["_ID"][ntype]].to(self.device) \
+                            for ntype in self.node_types}
+        else:
+            batch_inputs = blocks[0].srcdata['feat']
+
+        if not isinstance(batch_inputs, dict):
+            batch_inputs = {self.head_node_type: batch_inputs}
+
+        y_true = blocks[-1].dstdata['labels']
+        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
+        return batch_inputs, y_true
+
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
 
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 
-        # batch_inputs = blocks[0].srcdata['feat']
-        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :].to(self.device)
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-
-        y_true = blocks[-1].dstdata['labels']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
+        batch_inputs, y_true = self.process_blocks(blocks)
 
         y_pred = self.forward(blocks, batch_inputs)
         loss = self.criterion.forward(y_pred, y_true)
@@ -129,13 +136,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 
-        # batch_inputs = blocks[0].srcdata['feat']
-        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :].to(self.device)
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-
-        y_true = blocks[-1].dstdata['labels']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
+        batch_inputs, y_true = self.process_blocks(blocks)
 
         y_pred = self.forward(blocks, batch_inputs)
         val_loss = self.criterion.forward(y_pred, y_true)
@@ -153,13 +154,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 
-        # batch_inputs = blocks[0].srcdata['feat']
-        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :].to(self.device)
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-
-        y_true = blocks[-1].dstdata['labels']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
+        batch_inputs, y_true = self.process_blocks(blocks)
 
         y_pred = self.forward(blocks, batch_inputs)
         test_loss = self.criterion.forward(y_pred, y_true)
@@ -203,7 +198,6 @@ class LATTENodeClassifier(NodeClfTrainer):
         ]
 
         print("weight_decay", [name for name, p in param_optimizer if not any(key in name for key in no_decay)])
-        print("no weight_decay", [name for name, p in param_optimizer if any(key in name for key in no_decay)])
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters,
                                      lr=self.hparams.lr)
