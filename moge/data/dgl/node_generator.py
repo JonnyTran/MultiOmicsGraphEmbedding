@@ -11,9 +11,10 @@ from dgl import convert, utils, batch
 from dgl import backend as F
 from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
 from dgl import utils as dglutils
+from dgl.init import zero_initializer
 from moge.data.network import HeteroNetDataset
 from .samplers import ImportanceSampler, MultiLayerNeighborSampler
-
+from ..utils import one_hot_encoder
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
@@ -38,6 +39,7 @@ class DGLNodeSampler(HeteroNetDataset):
             self.G = self.create_heterograph(self.G, add_reverse=True)
         elif "feat" in self.G.edata:
             self.G = self.create_heterograph(self.G, decompose_etypes=True, add_reverse=add_reverse_metapaths)
+
 
         self.init_node_embeddings(self.G)
 
@@ -203,19 +205,25 @@ class DGLNodeSampler(HeteroNetDataset):
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
 
-    def init_node_embeddings(self, graph, ntype_key="species"):
+    def init_node_embeddings(self, graph: dgl.DGLHeteroGraph, ntype_key="species"):
         if self.node_attr_size:
             embedding_dim = self.node_attr_size
         else:
             embedding_dim = self.embedding_dim
 
         for ntype in graph.ntypes:
-            if "feat" not in graph.nodes[ntype].data:
-                self.node_embedding = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
-                print(f"Initialized Embedding({graph.num_nodes(ntype)}, {embedding_dim}) for ntype: {ntype}")
-                graph.nodes[ntype].data["feat"] = self.node_embedding.weight
+            graph.set_n_initializer(zero_initializer, field="feat", ntype=ntype)
 
-                assert graph.nodes[ntype].data["feat"].requires_grad
+            # if ntype_key in graph.nodes[ntype].data and "feat" not in graph.nodes[ntype].data:
+            #     onehot = one_hot_encoder(graph.nodes[ntype].data[ntype_key])
+            #     print("onehot", onehot.shape, onehot)
+            #     graph.nodes[ntype].data["feat"] = onehot
+            # elif "feat" not in graph.nodes[ntype].data:
+            #     self.node_embedding = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
+            #     print(f"Initialized Embedding({graph.num_nodes(ntype)}, {embedding_dim}) for ntype: {ntype}")
+            #     graph.nodes[ntype].data["feat"] = self.node_embedding.weight
+            #
+            #     assert graph.nodes[ntype].data["feat"].requires_grad
 
             # if ntype_key in graph.nodes[ntype].data:
             #     species = graph.nodes[ntype].data[ntype_key].unique()

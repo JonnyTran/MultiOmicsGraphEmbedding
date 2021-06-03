@@ -230,7 +230,7 @@ class HGTNodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        batch_inputs = blocks[0].srcdata['feat']
+        batch_inputs = blocks[0].srcdata['feat'].requires_grad_(True)
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
         y_true = blocks[-1].dstdata['labels']

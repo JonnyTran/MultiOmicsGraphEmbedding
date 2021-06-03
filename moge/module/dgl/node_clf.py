@@ -10,7 +10,8 @@ from moge.module.dgl.latte import LATTE
 from ..utils import tensor_sizes
 
 class LATTENodeClassifier(NodeClfTrainer):
-    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
+    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler",
+                 cpu_embeddings=False) -> None:
         super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
@@ -54,14 +55,37 @@ class LATTENodeClassifier(NodeClfTrainer):
                                             reduction=hparams.reduction if hasattr(dataset, "reduction") else "mean")
         self.hparams.n_params = self.get_n_params()
 
+        if isinstance(dataset.node_attr_shape, dict):
+            non_attr_node_types = (dataset.num_nodes_dict.keys() - dataset.node_attr_shape.keys())
+        else:
+            non_attr_node_types = []
+        if len(non_attr_node_types) > 0:
+            print("num_nodes_dict", dataset.num_nodes_dict)
+
+            if cpu_embeddings:
+                print("Embedding.device = 'cpu'")
+                self.embeddings = {node_type: nn.Embedding(num_embeddings=dataset.num_nodes_dict[node_type],
+                                                           embedding_dim=hparams.embedding_dim,
+                                                           sparse=True).cpu() for node_type in non_attr_node_types}
+            else:
+                print("Embedding.device = 'gpu'")
+                self.embeddings = nn.ModuleDict(
+                    {node_type: nn.Embedding(num_embeddings=dataset.num_nodes_dict[node_type],
+                                             embedding_dim=hparams.embedding_dim,
+                                             sparse=False) for node_type in non_attr_node_types})
+        else:
+            self.embeddings = None
+
     def forward(self, blocks, feat, **kwargs):
         h_dict = {}
 
         for ntype in self.node_types:
-            if isinstance(feat, torch.Tensor):
+            if isinstance(feat, torch.Tensor) and ntype in self.feature_projection:
                 h_dict[ntype] = self.feature_projection[ntype](feat)
-            elif isinstance(feat, dict) and ntype in feat:
+            elif isinstance(feat, dict) and ntype in feat and ntype in self.feature_projection:
                 h_dict[ntype] = self.feature_projection[ntype](feat[ntype])
+            else:
+                h_dict[ntype] = feat[ntype]
 
             if hasattr(self, "batchnorm"):
                 h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
@@ -79,7 +103,8 @@ class LATTENodeClassifier(NodeClfTrainer):
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 
-        batch_inputs = blocks[0].srcdata['feat']
+        # batch_inputs = blocks[0].srcdata['feat']
+        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :]
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
 
@@ -104,7 +129,8 @@ class LATTENodeClassifier(NodeClfTrainer):
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
 
-        batch_inputs = blocks[0].srcdata['feat']
+        # batch_inputs = blocks[0].srcdata['feat']
+        batch_inputs = self.embeddings["_N"].weight[blocks[0].srcdata["_ID"], :]
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
 

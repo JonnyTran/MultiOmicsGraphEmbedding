@@ -51,6 +51,7 @@ class LATTE(nn.Module):
                           first=True if t == 0 else False))
         self.layers = nn.ModuleList(layers)
 
+
     def forward(self, blocks: Union[Dict, DGLBlock], h_dict, **kwargs):
 
         for t in range(self.t_order):
@@ -223,7 +224,7 @@ class LATTEConv(nn.Module):
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[ntype] = torch.stack(
                 [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                    g.dstnodes[ntype].data["feat"].view(-1, self.attn_heads, self.out_channels), ], dim=1)
+                    g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels), ], dim=1)
             # out[ntype] = torch.mean(out[ntype], dim=1)
 
             beta = self.get_beta_weights(node_emb=out[ntype][:, -1, :],

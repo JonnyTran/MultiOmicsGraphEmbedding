@@ -3,6 +3,26 @@ import pandas as pd
 import torch
 
 
+def one_hot_encoder(x):
+    """
+    Get ont hot embedding of the input tensor.
+    Args:
+        x: torch.Tensor, input 1-D tensor.
+    Returns:
+        one_hot: torch.Tensor, one-hot embedding of x.
+    """
+    ids = x.unique()
+    id_dict = dict(list(zip(ids.numpy(), np.arange(len(ids)))))
+    one_hot = torch.zeros((len(x), len(ids)))
+    for i, u in enumerate(x):
+        if id_dict[u.item()] == 4:
+            pass
+        else:
+            one_hot[i][id_dict[u.item()]] = 1
+    one_hot.requires_grad_(True)
+    return one_hot
+
+
 def edge_dict_sizes(edge_index_dict):
     return {k: v.shape[1] for k, v in edge_index_dict.items()}
 
