@@ -9,6 +9,7 @@ from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+import torch_sparse
 
 from moge.data import HeteroNetDataset
 from moge.module.PyG.hgt import HGTModel
@@ -576,6 +577,69 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         self.log_dict(logs, prog_bar=logs)
         return None
 
+    def pos_sample(self, batch):
+        batch = batch.repeat(self.walks_per_node)
+
+        rws = [batch]
+        for i in range(self.walk_length):
+            keys = self.metapath[i % len(self.metapath)]
+            adj = self.adj_dict[keys]
+            batch = adj.sample(num_neighbors=1, subset=batch).squeeze()
+            rws.append(batch)
+
+        rw = torch.stack(rws, dim=-1)
+        rw.add_(self.offset.view(1, -1))
+
+        walks = []
+        num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
+        for j in range(num_walks_per_rw):
+            walks.append(rw[:, j:j + self.context_size])
+        return torch.cat(walks, dim=0)
+
+    def neg_sample(self, batch):
+        batch = batch.repeat(self.walks_per_node * self.num_negative_samples)
+
+        rws = [batch]
+        for i in range(self.walk_length):
+            keys = self.metapath[i % len(self.metapath)]
+            batch = torch.randint(0, self.num_nodes_dict[keys[-1]],
+                                  (batch.size(0),), dtype=torch.long)
+            rws.append(batch)
+
+        rw = torch.stack(rws, dim=-1)
+        rw.add_(self.offset.view(1, -1))
+
+        walks = []
+        num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
+        for j in range(num_walks_per_rw):
+            walks.append(rw[:, j:j + self.context_size])
+        return torch.cat(walks, dim=0)
+
+    def collate_fn(self, batch):
+        if not isinstance(batch, torch.Tensor):
+            batch = torch.tensor(batch)
+        return self.pos_sample(batch), self.neg_sample(batch)
+
+    def train_dataloader(self, ):
+        loader = torch.utils.data.DataLoader(range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
+                                             batch_size=self.hparams.batch_size,
+                                             shuffle=True, num_workers=0,
+                                             collate_fn=self.collate_fn,
+                                             )
+        return loader
+
+    def val_dataloader(self, ):
+        loader = torch.utils.data.DataLoader(self.dataset.validation_idx, batch_size=self.hparams.batch_size,
+                                             shuffle=True, num_workers=0,
+                                             collate_fn=self.collate_fn, )
+        return loader
+
+    def test_dataloader(self, ):
+        loader = torch.utils.data.DataLoader(self.dataset.testing_idx, batch_size=self.hparams.batch_size,
+                                             shuffle=True, num_workers=0,
+                                             collate_fn=self.collate_fn, )
+        return loader
+
     def classification_results(self, training=True, testing=False):
         if training:
             z = self.forward(self.head_node_type,
@@ -623,72 +687,6 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
                           precision_recall_fscore_support(y_test, y_pred, average="micro")))
         result["acc" if not multilabel else "accuracy"] = result["precision"]
         return result
-
-    def pos_sample(self, batch):
-        # device = self.embedding.weight.device
-
-        batch = batch.repeat(self.walks_per_node)
-
-        rws = [batch]
-        for i in range(self.walk_length):
-            keys = self.metapath[i % len(self.metapath)]
-            adj = self.adj_dict[keys]
-            batch = adj.sample(num_neighbors=1, subset=batch).squeeze()
-            rws.append(batch)
-
-        rw = torch.stack(rws, dim=-1)
-        rw.add_(self.offset.view(1, -1))
-
-        walks = []
-        num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
-        for j in range(num_walks_per_rw):
-            walks.append(rw[:, j:j + self.context_size])
-        return torch.cat(walks, dim=0)
-
-    def neg_sample(self, batch):
-        batch = batch.repeat(self.walks_per_node * self.num_negative_samples)
-
-        rws = [batch]
-        for i in range(self.walk_length):
-            keys = self.metapath[i % len(self.metapath)]
-            batch = torch.randint(0, self.num_nodes_dict[keys[-1]],
-                                  (batch.size(0),), dtype=torch.long)
-            rws.append(batch)
-
-        rw = torch.stack(rws, dim=-1)
-        rw.add_(self.offset.view(1, -1))
-
-        walks = []
-        num_walks_per_rw = 1 + self.walk_length + 1 - self.context_size
-        for j in range(num_walks_per_rw):
-            walks.append(rw[:, j:j + self.context_size])
-        return torch.cat(walks, dim=0)
-
-    def collate_fn(self, batch):
-        if not isinstance(batch, torch.Tensor):
-            batch = torch.tensor(batch)
-        return self.pos_sample(batch), self.neg_sample(batch)
-
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
-        loader = torch.utils.data.DataLoader(self.dataset.training_idx, batch_size=batch_size,
-                                             shuffle=True, num_workers=num_workers,
-                                             collate_fn=self.collate_fn,
-                                             **kwargs)
-        return loader
-
-    def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
-        loader = torch.utils.data.DataLoader(self.dataset.validation_idx, batch_size=batch_size,
-                                             shuffle=True, num_workers=num_workers,
-                                             collate_fn=self.collate_fn,
-                                             **kwargs)
-        return loader
-
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
-        loader = torch.utils.data.DataLoader(self.dataset.testing_idx, batch_size=batch_size,
-                                             shuffle=True, num_workers=num_workers,
-                                             collate_fn=self.collate_fn,
-                                             **kwargs)
-        return loader
 
     def configure_optimizers(self):
         if self.sparse:
