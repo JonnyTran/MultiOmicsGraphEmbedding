@@ -514,7 +514,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         hparams.name = self.name()
         hparams.n_params = self.get_n_params()
         hparams.inductive = dataset.inductive
-        self.hparams = hparams
+        self._set_hparams(hparams)
 
     def get_n_params(self):
         size = 0
@@ -633,7 +633,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         for i in range(self.walk_length):
             keys = self.metapath[i % len(self.metapath)]
             adj = self.adj_dict[keys]
-            batch = adj.sample().squeeze()
+            batch = adj.sample(num_neighbors=1, subset=batch).squeeze()
             rws.append(batch)
 
         rw = torch.stack(rws, dim=-1)
@@ -669,6 +669,26 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
             batch = torch.tensor(batch)
         return self.pos_sample(batch), self.neg_sample(batch)
 
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+        loader = torch.utils.data.DataLoader(self.dataset.training_idx, batch_size=batch_size,
+                                             shuffle=True, num_workers=num_workers,
+                                             collate_fn=self.collate_fn,
+                                             **kwargs)
+        return loader
+
+    def val_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+        loader = torch.utils.data.DataLoader(self.dataset.validation_idx, batch_size=batch_size,
+                                             shuffle=True, num_workers=num_workers,
+                                             collate_fn=self.collate_fn,
+                                             **kwargs)
+        return loader
+
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+        loader = torch.utils.data.DataLoader(self.dataset.testing_idx, batch_size=batch_size,
+                                             shuffle=True, num_workers=num_workers,
+                                             collate_fn=self.collate_fn,
+                                             **kwargs)
+        return loader
 
     def configure_optimizers(self):
         if self.sparse:
