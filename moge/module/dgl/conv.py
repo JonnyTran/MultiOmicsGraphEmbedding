@@ -6,7 +6,6 @@ from dgl.utils import expand_as_pair
 from torch import nn
 from torch.nn import functional as F
 
-
 class GAT(nn.Module):
     def __init__(self, in_dim, hid_dim, out_dim, n_layers, ntypes, etypes):
         super().__init__()

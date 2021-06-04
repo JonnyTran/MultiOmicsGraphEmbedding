@@ -329,17 +329,20 @@ class GraphClfTrainer(LightningModule):
                                             batch_size=self.hparams.batch_size)
 
 
-def print_pred_class_counts(y_hat, y, multilabel, n_top_class=8):
+def print_pred_class_counts(y_pred, y_true, multilabel, n_top_class=8):
+    if (y_pred < 0.0).any():
+        y_pred = torch.sigmoid(y_pred.clone()) if multilabel else torch.softmax(y_pred.clone(), dim=-1)
+
     if multilabel:
-        y_pred_dict = pd.Series(y_hat.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-        y_true_dict = pd.Series(y.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+        y_pred_dict = pd.Series(y_pred.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+        y_true_dict = pd.Series(y_true.sum(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
         print(f"y_pred {len(y_pred_dict)} classes",
               {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
         print(f"y_true {len(y_true_dict)} classes",
               {str(k): v for k, v in itertools.islice(y_true_dict.items(), n_top_class)})
     else:
-        y_pred_dict = pd.Series(y_hat.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
-        y_true_dict = pd.Series(y.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+        y_pred_dict = pd.Series(y_pred.argmax(1).detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
+        y_true_dict = pd.Series(y_true.detach().cpu().type(torch.int).numpy()).value_counts().to_dict()
         print(f"y_pred {len(y_pred_dict)} classes",
               {str(k): v for k, v in itertools.islice(y_pred_dict.items(), n_top_class)})
         print(f"y_true {len(y_true_dict)} classes",

@@ -19,6 +19,7 @@ def one_hot_encoder(x, embed_dim=None):
             pass
         else:
             one_hot[i][id_dict[u.item()]] = 1
+
     return one_hot
 
 

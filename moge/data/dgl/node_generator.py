@@ -214,10 +214,11 @@ class DGLNodeSampler(HeteroNetDataset):
         for ntype in graph.ntypes:
             graph.set_n_initializer(zero_initializer, field="feat", ntype=ntype)
 
-            # if ntype_key in graph.nodes[ntype].data and "feat" not in graph.nodes[ntype].data:
-            #     onehot = one_hot_encoder(graph.nodes[ntype].data[ntype_key])
-            #     print("onehot", onehot.shape, onehot)
-            #     graph.nodes[ntype].data["feat"] = onehot
+            if ntype_key in graph.nodes[ntype].data and "feat" not in graph.nodes[ntype].data:
+                onehot = one_hot_encoder(graph.nodes[ntype].data[ntype_key])
+                print("onehot", onehot.shape, onehot)
+                graph.nodes[ntype].data["feat"] = onehot.requires_grad_(True)
+
             # elif "feat" not in graph.nodes[ntype].data:
             #     self.node_embedding = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
             #     print(f"Initialized Embedding({graph.num_nodes(ntype)}, {embedding_dim}) for ntype: {ntype}")
