@@ -489,7 +489,8 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
         # Dataset
         self.dataset = dataset
-        num_nodes_dict = None
+        num_nodes_dict = {k: v - 1 for k, v in self.dataset.num_nodes_dict.items()}
+
         metapaths = self.dataset.get_metapaths()
         self.head_node_type = self.dataset.head_node_type
         edge_index_dict = dataset.edge_index_dict
@@ -503,14 +504,11 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         metapaths.append(last_metapath)
         print("metapaths", metapaths)
 
-        if dataset.use_reverse:
-            dataset.add_reverse_edge_index(dataset.edge_index_dict)
-
-        super(MetaPath2Vec, self).__init__(edge_index_dict, embedding_dim,
-                                           metapaths, walk_length, context_size,
-                                           walks_per_node,
-                                           num_negative_samples, num_nodes_dict,
-                                           hparams.sparse)
+        super(MetaPath2Vec, self).__init__(edge_index_dict=edge_index_dict, embedding_dim=embedding_dim,
+                                           metapath=metapaths, walk_length=walk_length, context_size=context_size,
+                                           walks_per_node=walks_per_node,
+                                           num_negative_samples=num_negative_samples, num_nodes_dict=num_nodes_dict,
+                                           sparse=hparams.sparse)
 
         hparams.name = self.name()
         hparams.n_params = self.get_n_params()
