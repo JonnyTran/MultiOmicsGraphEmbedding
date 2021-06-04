@@ -629,13 +629,15 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         return loader
 
     def val_dataloader(self, ):
-        loader = torch.utils.data.DataLoader(self.dataset.validation_idx, batch_size=self.hparams.batch_size,
+        loader = torch.utils.data.DataLoader(range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
+                                             batch_size=self.hparams.batch_size,
                                              shuffle=True, num_workers=0,
                                              collate_fn=self.collate_fn, )
         return loader
 
     def test_dataloader(self, ):
-        loader = torch.utils.data.DataLoader(self.dataset.testing_idx, batch_size=self.hparams.batch_size,
+        loader = torch.utils.data.DataLoader(range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
+                                             batch_size=self.hparams.batch_size,
                                              shuffle=True, num_workers=0,
                                              collate_fn=self.collate_fn, )
         return loader
