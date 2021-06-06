@@ -69,7 +69,6 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             self.edge_index_dict = {self.metapaths[0]: data.edge_index}
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
-
         elif False and hasattr(data, "edge_attr") and hasattr(data, "node_species"):  # for ogbn-proteins
             self.edge_index_dict = {}
             edge_reltype = data.edge_attr.argmax(1)
@@ -112,14 +111,14 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         else:
             raise Exception("Something wrong here")
 
+        self.metapaths = list(self.edge_index_dict.keys())
+
         if self.node_types is None:
             self.node_types = list(self.num_nodes_dict.keys())
 
         self.x_dict = {self.head_node_type: data.x} if hasattr(data, "x") and data.x is not None else {}
         if not hasattr(self, "y_dict"):
             self.y_dict = {self.head_node_type: data.y} if hasattr(data, "y") else {}
-
-        self.metapaths = list(self.edge_index_dict.keys())
 
         split_idx = dataset.get_idx_split()
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[

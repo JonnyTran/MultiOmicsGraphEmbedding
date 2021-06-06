@@ -9,7 +9,7 @@ from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-import torch_sparse
+import torch_sparse.sample
 
 from moge.data import HeteroNetDataset
 from moge.module.PyG.hgt import HGTModel
@@ -537,43 +537,62 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
         pos_rw, neg_rw = batch
         loss = self.loss(pos_rw, neg_rw)
-        return {'loss': loss}
+        self.log("loss", loss, logger=True, on_step=True)
+        return loss
 
     def validation_step(self, batch, batch_nb):
         pos_rw, neg_rw = batch
-        loss = self.loss(pos_rw, neg_rw)
-        return {"val_loss": loss}
+        val_loss = self.loss(pos_rw, neg_rw)
+        self.log("val_loss", val_loss, on_step=True)
+        return val_loss
 
     def test_step(self, batch, batch_nb):
         pos_rw, neg_rw = batch
-        loss = self.loss(pos_rw, neg_rw)
-        return {"test_loss": loss}
+        test_loss = self.loss(pos_rw, neg_rw)
+        self.log("test_loss", test_loss, on_step=True)
+        return test_loss
 
     def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["loss"] for x in outputs]).sum().item()
         if self.current_epoch % 10 == 0:
             results = self.classification_results(training=True)
         else:
             results = {}
 
-        logs = {"val_loss": avg_loss, **results}
-        self.log_dict(logs, prog_bar=logs)
+        logs = results
+        self.log_dict(logs, prog_bar=True)
         return None
 
     def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).sum().item()
-        logs = {"val_loss": avg_loss}
+        logs = {}
         if self.current_epoch % 5 == 0:
             logs.update({"val_" + k: v for k, v in self.classification_results(training=False).items()})
-        self.log_dict(logs, prog_bar=logs)
+        self.log_dict(logs, prog_bar=True)
         return None
 
     def test_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["test_loss"] for x in outputs]).sum().item()
-        logs = {"test_loss": avg_loss}
+        logs = {}
         logs.update({"test_" + k: v for k, v in self.classification_results(training=False, testing=True).items()})
-        self.log_dict(logs, prog_bar=logs)
+        self.log_dict(logs, prog_bar=True)
         return None
+
+    def sample(self, src: torch_sparse.SparseTensor, num_neighbors: int,
+               subset=None) -> torch.Tensor:
+
+        rowptr, col, _ = src.csr()
+        rowcount = src.storage.rowcount()
+
+        if subset is not None:
+            rowcount = rowcount[subset]
+            rowptr = rowptr[subset]
+
+        rand = torch.rand((rowcount.size(0), num_neighbors), device=col.device)
+        rand.mul_(rowcount.to(rand.dtype).view(-1, 1))
+        rand = rand.to(torch.long)
+        rand.add_(rowptr.view(-1, 1))
+
+        rand = torch.clamp(rand, min=0, max=col.size(0) - 1)
+
+        return col[rand]
 
     def pos_sample(self, batch):
         batch = batch.repeat(self.walks_per_node)
@@ -582,7 +601,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         for i in range(self.walk_length):
             keys = self.metapath[i % len(self.metapath)]
             adj = self.adj_dict[keys]
-            batch = adj.sample(num_neighbors=1, subset=batch).squeeze()
+            batch = self.sample(adj, num_neighbors=1, subset=batch).squeeze()
             rws.append(batch)
 
         rw = torch.stack(rws, dim=-1)
@@ -627,14 +646,14 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         return loader
 
     def val_dataloader(self, ):
-        loader = torch.utils.data.DataLoader(range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
+        loader = torch.utils.data.DataLoader(self.dataset.validation_idx,
                                              batch_size=self.hparams.batch_size,
                                              shuffle=False, num_workers=0,
                                              collate_fn=self.collate_fn, )
         return loader
 
     def test_dataloader(self, ):
-        loader = torch.utils.data.DataLoader(range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
+        loader = torch.utils.data.DataLoader(self.dataset.testing_idx,
                                              batch_size=self.hparams.batch_size,
                                              shuffle=False, num_workers=0,
                                              collate_fn=self.collate_fn, )
