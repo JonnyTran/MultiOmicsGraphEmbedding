@@ -149,8 +149,7 @@ class LATTENodeClf(NodeClfTrainer):
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
-        print("weight_decay", [name for name, p in param_optimizer if not any(key in name for key in no_decay)])
-        print("no weight_decay", [name for name, p in param_optimizer if any(key in name for key in no_decay)])
+        print("weight_decay", {name for name, p in param_optimizer if not any(key in name for key in no_decay)})
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
@@ -590,7 +589,7 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         rand = rand.to(torch.long)
         rand.add_(rowptr.view(-1, 1))
 
-        rand = torch.clamp(rand, min=0, max=col.size(0) - 1)
+        rand = torch.clamp(rand, min=0, max=min(col.size(0) - 1, rand.squeeze(-1).max()))
 
         return col[rand]
 
@@ -709,10 +708,15 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
     def configure_optimizers(self):
         if self.sparse:
-            return torch.optim.SparseAdam(self.parameters(), lr=self.hparams.lr)
+            optimizer = torch.optim.SparseAdam(self.parameters(), lr=self.hparams.lr)
         else:
-            return torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
 
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+
+        return {"optimizer": optimizer,
+                "lr_scheduler": scheduler,
+                "monitor": "val_loss"}
 
 class HIN2Vec(Hin2vec):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):

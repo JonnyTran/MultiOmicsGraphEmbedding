@@ -34,7 +34,7 @@ class LATTE(nn.Module):
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(in_channels_dict[ntype], embedding_dim) for ntype in in_channels_dict
         })
-        if hparams.layernorm:
+        if hparams.batchnorm:
             self.batchnorm = nn.ModuleDict({
                 ntype: nn.BatchNorm1d(embedding_dim) for ntype in in_channels_dict
             })
