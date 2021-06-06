@@ -62,10 +62,10 @@ class HeteroNeighborGenerator(HeteroNetDataset):
     def process_PygNodeDataset_homo(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
         self._name = dataset.name
-        self.head_node_type = "entity"
+        self.head_node_type = "_N"
 
         if not hasattr(data, "edge_reltype") and (not hasattr(data, "edge_attr") or data.edge_attr is None):
-            self.metapaths = [(self.head_node_type, "default", self.head_node_type)]
+            self.metapaths = [(self.head_node_type, "_E", self.head_node_type)]
             self.edge_index_dict = {self.metapaths[0]: data.edge_index}
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
 
@@ -96,10 +96,10 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         elif hasattr(data, "edge_attr"):  # for ogbn-proteins
             self.edge_index_dict = {}
-            edge_reltype = data.edge_attr.argmax(1)
+            # edge_reltype = data.edge_attr.argmax(1)
 
             for edge_type in range(data.edge_attr.size(1)):
-                mask = edge_reltype == edge_type
+                mask = data.edge_attr[:, edge_type] > 0.18
                 edge_index = data.edge_index[:, mask]
 
                 if edge_index.size(1) == 0: continue

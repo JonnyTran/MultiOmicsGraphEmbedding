@@ -477,7 +477,6 @@ class HAN(Han, NodeClfTrainer):
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
         # Hparams
-        self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size
         self.sparse = hparams.sparse
 
@@ -489,7 +488,6 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
 
         # Dataset
         self.dataset = dataset
-        num_nodes_dict = {k: v - 1 for k, v in self.dataset.num_nodes_dict.items()}
 
         metapaths = self.dataset.get_metapaths()
         self.head_node_type = self.dataset.head_node_type
@@ -503,6 +501,8 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
         metapaths.pop(metapaths.index(last_metapath))
         metapaths.append(last_metapath)
         print("metapaths", metapaths)
+
+        num_nodes_dict = dataset.get_num_nodes_dict(dataset.edge_index_dict)
 
         super(MetaPath2Vec, self).__init__(edge_index_dict=edge_index_dict, embedding_dim=embedding_dim,
                                            metapath=metapaths, walk_length=walk_length, context_size=context_size,
@@ -629,14 +629,14 @@ class MetaPath2Vec(Metapath2vec, pl.LightningModule):
     def val_dataloader(self, ):
         loader = torch.utils.data.DataLoader(range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
                                              batch_size=self.hparams.batch_size,
-                                             shuffle=True, num_workers=0,
+                                             shuffle=False, num_workers=0,
                                              collate_fn=self.collate_fn, )
         return loader
 
     def test_dataloader(self, ):
         loader = torch.utils.data.DataLoader(range(self.dataset.num_nodes_dict[self.dataset.head_node_type]),
                                              batch_size=self.hparams.batch_size,
-                                             shuffle=True, num_workers=0,
+                                             shuffle=False, num_workers=0,
                                              collate_fn=self.collate_fn, )
         return loader
 
