@@ -29,10 +29,10 @@ class LATTENodeClf(NodeClfTrainer):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
+        self._name = f"LATTE-{hparams.n_layers}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.embedder = LATTE(n_layers=hparams.t_order,
+        self.embedder = LATTE(n_layers=hparams.n_layers,
                               embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape,
                               num_nodes_dict=dataset.num_nodes_dict,
@@ -50,7 +50,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         if hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":
-                hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+                hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
                 logging.info("embedding_dim {}".format(hparams.embedding_dim))
 
             self.classifier = DenseClassification(hparams)

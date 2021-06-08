@@ -17,7 +17,7 @@ class LATTENodeClassifier(NodeClfTrainer):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"DGL_LATTE-{hparams.t_order}"
+        self._name = f"DGL_LATTE-{hparams.n_layers}"
         self.collate_fn = collate_fn
 
         if "fanouts" in hparams:
@@ -31,7 +31,7 @@ class LATTENodeClassifier(NodeClfTrainer):
             for ntype, in_channels in dataset.node_attr_shape.items()
         })
 
-        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+        self.embedder = LATTE(t_order=hparams.n_layers, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(),
                               batchnorm=hparams.batchnorm if "batchnorm" in hparams else False,
