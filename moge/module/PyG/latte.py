@@ -11,6 +11,7 @@ from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing, GATConv
 from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
+import torch_sparse
 
 from moge.module.sampling import negative_sample
 from ..utils import tensor_sizes
@@ -106,19 +107,19 @@ class LATTE(nn.Module):
         return metapaths
 
     @staticmethod
-    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=True):
+    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=True, threshold=0.2):
         if isinstance(edge_index_tup, tuple):
             edge_index, edge_values = edge_index_tup
 
             if filter_edge:
-                mask = edge_values >= 0.5
+                mask = edge_values >= threshold
                 # print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
+
+                if mask.sum(0) == 0:
+                    mask[torch.argmax(edge_values)] = True
 
                 edge_index = edge_index[:, mask]
                 edge_values = edge_values[mask]
-
-                if edge_values.size(0) == 0:
-                    return None, None
 
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
@@ -147,14 +148,14 @@ class LATTE(nn.Module):
                 if edge_index_b is None: continue
 
                 try:
-                    new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                             indexB=edge_index_b, valueB=values_b,
-                                                             m=global_node_idx[metapath_a[0]].size(0),
-                                                             k=global_node_idx[metapath_b[0]].size(0),
-                                                             n=global_node_idx[metapath_b[-1]].size(0),
-                                                             coalesced=True,
-                                                             sampling=edge_sampling
-                                                             )
+                    new_edge_index, new_values = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                                     indexB=edge_index_b, valueB=values_b,
+                                                                     m=global_node_idx[metapath_a[0]].size(0),
+                                                                     k=global_node_idx[metapath_b[0]].size(0),
+                                                                     n=global_node_idx[metapath_b[-1]].size(0),
+                                                                     coalesced=False,
+                                                                     # sampling=edge_sampling
+                                                                     )
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
 
@@ -371,9 +372,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             assert len(alpha_dict) > 0
             if isinstance(edge_index_dict, dict):
                 return out, {
-                    metapath: (edge_index[0] if isinstance(edge_index, tuple) else edge_index,
+                    metapath: (edge_index_tup[0] if isinstance(edge_index_tup, tuple) else edge_index_tup,
                                alpha_dict[metapath]) \
-                    for metapath, edge_index in edge_index_dict.items() if metapath in alpha_dict}
+                    for metapath, edge_index_tup in edge_index_dict.items()}
         else:
             return out, None
 
