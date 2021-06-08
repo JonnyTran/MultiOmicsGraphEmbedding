@@ -95,77 +95,6 @@ class LATTE(nn.Module):
             for ntype in self.embeddings:
                 self.embeddings[ntype].reset_parameters()
 
-    def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False,
-                return_attention_weights=True):
-        """
-        This
-        :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
-        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
-        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
-        :param save_betas: whether to save _beta values for batch
-        :return embedding_output, proximity_loss, edge_pred_dict:
-        """
-        # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
-
-        h_dict = {}
-        for ntype in self.node_types:
-            if ntype in node_feats:
-                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
-                if hasattr(self, "batchnorm"):
-                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
-
-                h_dict[ntype] = F.relu(h_dict[ntype])
-                if self.dropout:
-                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
-            else:
-                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
-
-        h_layers = {ntype: [] for ntype in global_node_idx}
-        for l in range(self.n_layers):
-            if l == 0:
-                h_dict, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
-                                                                      edge_index_dict=edge_index_dict,
-                                                                      global_node_idx=global_node_idx,
-                                                                      save_betas=save_betas,
-                                                                      return_attention_weights=return_attention_weights)
-
-            else:
-                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
-                                                               edge_sampling=self.edge_sampling, )
-                h_dict, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
-                                                                      edge_index_dict=next_edge_index_dict,
-                                                                      global_node_idx=global_node_idx,
-                                                                      save_betas=save_betas,
-                                                                      return_attention_weights=return_attention_weights)
-            print(l, tensor_sizes(next_edge_index_dict))
-
-            for ntype in global_node_idx:
-                h_layers[ntype].append(h_dict[ntype])
-
-            # if self.use_proximity:
-            #     proximity_loss += t_loss
-
-        if self.layer_pooling == "last" or self.n_layers == 1:
-            out = h_dict
-
-        elif self.layer_pooling == "max":
-            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                   if len(h_list) > 0}
-            out = {ntype: h_s.max(1).values for ntype, h_s in out.items()}
-
-        elif self.layer_pooling == "mean":
-            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                   if len(h_list) > 0}
-            out = {ntype: torch.mean(h_s, dim=1) for ntype, h_s in out.items()}
-
-        elif self.layer_pooling == "concat":
-            out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                   if len(h_list) > 0}
-        else:
-            raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
-
-        return out, next_edge_index_dict
-
     @staticmethod
     def join_metapaths(metapath_A, metapath_B):
         metapaths = []
@@ -183,7 +112,7 @@ class LATTE(nn.Module):
 
             if filter_edge:
                 mask = edge_values >= 0.5
-                print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
+                # print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
 
                 edge_index = edge_index[:, mask]
                 edge_values = edge_values[mask]
@@ -237,6 +166,77 @@ class LATTE(nn.Module):
                     continue
 
         return output_edge_index
+
+    def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False,
+                return_attention_weights=True):
+        """
+        This
+        :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
+        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
+        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
+        :param save_betas: whether to save _beta values for batch
+        :return embedding_output, proximity_loss, edge_pred_dict:
+        """
+        # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
+
+        h_dict = {}
+        for ntype in self.node_types:
+            if ntype in node_feats:
+                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
+                if hasattr(self, "batchnorm"):
+                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+
+                h_dict[ntype] = F.relu(h_dict[ntype])
+                if self.dropout:
+                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+            else:
+                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
+
+        h_layers = {ntype: [] for ntype in global_node_idx}
+        for l in range(self.n_layers):
+            if l == 0:
+                h_dict, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
+                                                                      edge_index_dict=edge_index_dict,
+                                                                      global_node_idx=global_node_idx,
+                                                                      save_betas=save_betas,
+                                                                      return_attention_weights=return_attention_weights)
+
+            else:
+                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
+                                                               edge_sampling=self.edge_sampling, )
+                h_dict, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
+                                                                      edge_index_dict=next_edge_index_dict,
+                                                                      global_node_idx=global_node_idx,
+                                                                      save_betas=save_betas,
+                                                                      return_attention_weights=return_attention_weights)
+            # print(l, tensor_sizes(next_edge_index_dict))
+
+            for ntype in global_node_idx:
+                h_layers[ntype].append(h_dict[ntype])
+
+            # if self.use_proximity:
+            #     proximity_loss += t_loss
+
+        if self.layer_pooling == "last" or self.n_layers == 1:
+            out = h_dict
+
+        elif self.layer_pooling == "max":
+            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                   if len(h_list) > 0}
+            out = {ntype: h_s.max(1).values for ntype, h_s in out.items()}
+
+        elif self.layer_pooling == "mean":
+            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                   if len(h_list) > 0}
+            out = {ntype: torch.mean(h_s, dim=1) for ntype, h_s in out.items()}
+
+        elif self.layer_pooling == "concat":
+            out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                   if len(h_list) > 0}
+        else:
+            raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
+
+        return out, next_edge_index_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -371,8 +371,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             assert len(alpha_dict) > 0
             if isinstance(edge_index_dict, dict):
                 return out, {
-                    metapath: (edge_index[0] if isinstance(edge_index, tuple) else edge_index, alpha_dict[metapath]) \
-                    for metapath, edge_index in edge_index_dict.items()}
+                    metapath: (edge_index[0] if isinstance(edge_index, tuple) else edge_index,
+                               alpha_dict[metapath]) \
+                    for metapath, edge_index in edge_index_dict.items() if metapath in alpha_dict}
         else:
             return out, None
 
