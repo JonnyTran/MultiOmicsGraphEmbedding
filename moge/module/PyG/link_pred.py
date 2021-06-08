@@ -103,20 +103,20 @@ class LATTELinkPred(LinkPredTrainer):
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self._name = f"LATTE-{hparams.t_order}{' Link' if hparams.use_proximity else ''}"
+        self._name = f"LATTE-{hparams.n_layers}{' Link' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.embedder = LATTE(n_layers=hparams.t_order, embedding_dim=hparams.embedding_dim,
+        self.embedder = LATTE(n_layers=hparams.n_layers, embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(), attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
                               use_proximity=hparams.use_proximity, neg_sampling_ratio=hparams.neg_sampling_ratio,
                               cpu_embeddings=True if "cpu_embedding" in hparams else False)
 
-        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim * hparams.t_order, metapaths=dataset.metapaths)
+        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim * hparams.n_layers, metapaths=dataset.metapaths)
         self.criterion = LinkPredLoss()
 
-        hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+        hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
 
     def forward(self, inputs: dict, edges_true: dict, **kwargs):
         embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],

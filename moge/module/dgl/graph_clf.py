@@ -29,10 +29,10 @@ class LATTEGraphClassifier(GraphClfTrainer):
 
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
+        self._name = f"LATTE-{hparams.n_layers}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = None
 
-        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+        self.embedder = LATTE(t_order=hparams.n_layers, embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(), activation=hparams.activation,
                               attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,

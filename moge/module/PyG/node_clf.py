@@ -29,10 +29,10 @@ class LATTENodeClf(NodeClfTrainer):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.t_order}{' proximity' if hparams.use_proximity else ''}"
+        self._name = f"LATTE-{hparams.n_layers}{' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.embedder = LATTE(n_layers=hparams.t_order,
+        self.embedder = LATTE(n_layers=hparams.n_layers,
                               embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape,
                               num_nodes_dict=dataset.num_nodes_dict,
@@ -50,7 +50,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         if hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":
-                hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+                hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
                 logging.info("embedding_dim {}".format(hparams.embedding_dim))
 
             self.classifier = DenseClassification(hparams)
@@ -73,18 +73,18 @@ class LATTENodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],
-                                                      inputs["edge_index_dict"],
-                                                      inputs["global_node_index"], **kwargs)
+        embeddings, next_edge_index_dict = self.embedder(inputs["x_dict"],
+                                                         inputs["edge_index_dict"],
+                                                         inputs["global_node_index"], **kwargs)
 
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
 
-        return y_hat, proximity_loss
+        return y_hat, next_edge_index_dict
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X)
+        y_pred = self.forward(X)
 
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
@@ -97,9 +97,9 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             logs = {}
 
-        if self.hparams.use_proximity:
-            loss = loss + proximity_loss
-            logs.update({"proximity_loss": proximity_loss})
+        # if self.hparams.use_proximity:
+        #     loss = loss + proximity_loss
+        #     logs.update({"proximity_loss": proximity_loss})
 
         self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
@@ -107,14 +107,14 @@ class LATTENodeClf(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X)
+        y_pred = self.forward(X)
 
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.valid_metrics.update_metrics(y_pred, y_true)
 
-        if self.hparams.use_proximity:
-            val_loss = val_loss + proximity_loss
+        # if self.hparams.use_proximity:
+        #     val_loss = val_loss + proximity_loss
 
         self.log("val_loss", val_loss, on_step=True)
 
@@ -122,7 +122,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X, save_betas=True)
+        y_pred = self.forward(X, save_betas=True)
 
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         test_loss = self.criterion(y_pred, y_true, weights=weights)
@@ -132,8 +132,8 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
 
-        if self.hparams.use_proximity:
-            test_loss = test_loss + proximity_loss
+        # if self.hparams.use_proximity:
+        #     test_loss = test_loss + proximity_loss
 
         self.log("test_loss", test_loss, on_step=True)
 
