@@ -43,6 +43,7 @@ class LATTENodeClf(NodeClfTrainer):
                               attn_dropout=hparams.attn_dropout,
                               use_proximity=hparams.use_proximity,
                               neg_sampling_ratio=hparams.neg_sampling_ratio,
+                              edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
                               cpu_embeddings=True if "cpu_embedding" in hparams else False,
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
