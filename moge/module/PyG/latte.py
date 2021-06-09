@@ -248,7 +248,7 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: {str: int}, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", layernorm=False, attn_heads=4, attn_activation="sharpening",
+                 activation: str = "relu", batchnorm=False, attn_heads=4, attn_activation="sharpening",
                  attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.node_types = list(num_nodes_dict.keys())
@@ -269,9 +269,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
-        if layernorm:
-            self.layernorm = torch.nn.ModuleDict({
-                node_type: nn.LayerNorm(output_dim) \
+        if batchnorm:
+            self.batchnorm = torch.nn.ModuleDict({
+                node_type: nn.BatchNorm1d(output_dim) \
                 for node_type in self.node_types})
 
         self.conv = torch.nn.ModuleDict(
@@ -354,7 +354,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
 
             if hasattr(self, "batchnorm"):
-                out[ntype] = self.layernorm[ntype](out[ntype])
+                out[ntype] = self.batchnorm[ntype](out[ntype])
 
             if hasattr(self, "activation"):
                 out[ntype] = self.activation(out[ntype])
@@ -413,7 +413,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        self._alpha = alpha
+        self._alpha = alpha.detach()
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
