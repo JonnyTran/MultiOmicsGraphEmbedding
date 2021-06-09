@@ -84,12 +84,16 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
+        print("got here1")
         y_pred, proximity_loss = self.forward(X)
-
+        print("got here2")
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        print("got here3")
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
+        print("got here4")
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
+        print("got here5")
 
         if batch_nb % 100 == 0:
             logs = self.train_metrics.compute_metrics()
@@ -97,11 +101,13 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             logs = {}
 
+        print("got here6")
+
         if self.hparams.use_proximity:
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
 
-        self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+        self.log_dict(logs, on_step=True)
 
         return loss
 
