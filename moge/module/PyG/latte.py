@@ -54,6 +54,8 @@ class LATTE(nn.Module):
                           num_nodes_dict=num_nodes_dict,
                           metapaths=t_order_metapaths,
                           activation=None if is_output_layer else activation,
+                          batchnorm=False if not hasattr(hparams,
+                                                         "batchnorm") or is_output_layer else hparams.batchnorm,
                           layernorm=False if not hasattr(hparams,
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           attn_heads=attn_heads,
@@ -248,7 +250,7 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: {str: int}, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", batchnorm=False, attn_heads=4, attn_activation="sharpening",
+                 activation: str = "relu", batchnorm=False, layernorm=False, attn_heads=4, attn_activation="sharpening",
                  attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.node_types = list(num_nodes_dict.keys())
@@ -272,6 +274,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(output_dim) \
+                for node_type in self.node_types})
+        if layernorm:
+            self.layernorm = torch.nn.ModuleDict({
+                node_type: nn.LayerNorm(output_dim) \
                 for node_type in self.node_types})
 
         self.conv = torch.nn.ModuleDict(
@@ -413,7 +419,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
         alpha = self.attn_activation(alpha, metapath_idx)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        self._alpha = alpha.detach()
+        self._alpha = alpha
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
         return x_j * alpha.unsqueeze(-1)
 
