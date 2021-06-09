@@ -45,7 +45,7 @@ class LATTE(nn.Module):
         for t in range(n_layers):
             is_last_layer = t + 1 == n_layers
             is_output_layer = hparams.nb_cls_dense_size < 0
-
+            print(t, metapaths)
             layers.append(
                 LATTEConv(input_dim=embedding_dim,
                           output_dim=hparams.n_classes if is_last_layer and is_output_layer else embedding_dim,

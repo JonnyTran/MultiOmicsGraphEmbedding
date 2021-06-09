@@ -54,7 +54,7 @@ class Metrics(torch.nn.Module):
 
 
             elif "accuracy" in metric:
-                self.metrics[metric] = Accuracy()
+                self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None)
 
             elif "ogbn" in metric:
                 self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric))
@@ -79,7 +79,6 @@ class Metrics(torch.nn.Module):
         """
         y_pred = y_hat.detach()
         y_true = y.detach()
-
         y_pred, y_true = filter_samples(y_pred, y_true, weights)
 
         # Apply softmax/sigmoid activation if needed
@@ -87,14 +86,14 @@ class Metrics(torch.nn.Module):
             if "SOFTMAX" in self.loss_type:
                 y_pred = torch.softmax(y_pred, dim=1)
             else:
-                torch.sigmoid(y_pred)
+                y_pred = torch.sigmoid(y_pred)
         elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type or "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
 
         for metric in self.metrics:
             # torchmetrics metrics
             if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
-                self.metrics[metric](y_pred, y_true)
+                self.metrics[metric].update(y_pred, y_true)
 
             # Torch ignite metrics
             elif "precision" in metric or "recall" in metric or "accuracy" in metric:
@@ -170,8 +169,7 @@ class OGBNodeClfMetrics(torchmetrics.Metric):
         self.y_pred = []
         self.y_true = []
 
-    def update(self, outputs):
-        y_pred, y_true = outputs
+    def update(self, y_pred, y_true):
         if isinstance(self.evaluator, (NodeEvaluator, GraphEvaluator)):
             assert y_pred.dim() == 2
             if y_true.dim() == 1 or y_true.size(1) == 1:
@@ -221,8 +219,7 @@ class OGBLinkPredMetrics(torchmetrics.Metric):
     def reset(self):
         self.outputs = {}
 
-    def update(self, outputs):
-        e_pred_pos, e_pred_neg = outputs
+    def update(self, e_pred_pos, e_pred_neg):
 
         if e_pred_pos.dim() > 1:
             e_pred_pos = e_pred_pos.squeeze(-1)
@@ -266,8 +263,7 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
         self._num_correct = {k: 0 for k in self.k_s}
         self._num_examples = 0
 
-    def update(self, outputs):
-        y_pred, y_true = outputs
+    def update(self, y_pred, y_true):
         batch_size, n_classes = y_true.size()
         _, top_indices = y_pred.topk(k=max(self.k_s), dim=1, largest=True, sorted=True)
 
