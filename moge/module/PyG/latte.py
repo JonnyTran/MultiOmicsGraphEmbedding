@@ -107,7 +107,7 @@ class LATTE(nn.Module):
         return metapaths
 
     @staticmethod
-    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=True, threshold=0.2):
+    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.2):
         if isinstance(edge_index_tup, tuple):
             edge_index, edge_values = edge_index_tup
 
@@ -392,7 +392,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
             num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
-            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
+            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
