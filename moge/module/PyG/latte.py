@@ -325,6 +325,45 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for node_type in self.conv:
             nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
+    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
+        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
+        alpha = self.attn_activation(alpha, metapath_idx)
+        alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+        self._alpha = alpha
+        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
+        return x_j * alpha.unsqueeze(-1)
+
+    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx,
+                               ):
+        # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
+        emb_relations = torch.zeros(
+            size=(global_node_idx[node_type].size(0),
+                  self.num_head_relations(node_type),
+                  self.embedding_dim)).type_as(self.conv[node_type].weight)
+
+        alpha = {}
+        for i, metapath in enumerate(self.get_head_relations(node_type)):
+            if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
+            head, tail = metapath[0], metapath[-1]
+            num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
+
+            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
+            if edge_index is None: continue
+
+            # Propapate flows from target nodes to source nodes
+            out = self.propagate(
+                edge_index=edge_index,
+                x=(r_dict[tail], l_dict[head]),
+                alpha=(alpha_r[metapath], alpha_l[metapath]),
+                size=(num_node_tail, num_node_head),
+                metapath_idx=self.metapaths.index(metapath))
+            emb_relations[:, i] = out.view(-1, self.embedding_dim)
+
+            alpha[metapath] = self._alpha.max(1).values  # Select max attn value across multi-head attn.
+            self._alpha = None
+
+        return emb_relations, alpha
+
     def forward(self, x_l, edge_index_dict, global_node_idx, x_r=None, save_betas=False,
                 return_attention_weights=False):
         """
@@ -383,45 +422,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     for metapath, edge_index_tup in edge_index_dict.items()}
         else:
             return out, None
-
-    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx,
-                               ):
-        # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
-        emb_relations = torch.zeros(
-            size=(global_node_idx[node_type].size(0),
-                  self.num_head_relations(node_type),
-                  self.embedding_dim)).type_as(self.conv[node_type].weight)
-
-        alpha = {}
-        for i, metapath in enumerate(self.get_head_relations(node_type)):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
-            head, tail = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
-
-            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
-            if edge_index is None: continue
-
-            # Propapate flows from target nodes to source nodes
-            out = self.propagate(
-                edge_index=edge_index,
-                x=(r_dict[tail], l_dict[head]),
-                alpha=(alpha_r[metapath], alpha_l[metapath]),
-                size=(num_node_tail, num_node_head),
-                metapath_idx=self.metapaths.index(metapath))
-            emb_relations[:, i] = out.view(-1, self.embedding_dim)
-
-            alpha[metapath] = self._alpha.max(1).values  # Select max attn value across multi-head attn.
-            self._alpha = None
-
-        return emb_relations, alpha
-
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_activation(alpha, metapath_idx)
-        alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        self._alpha = alpha
-        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
-        return x_j * alpha.unsqueeze(-1)
 
     def get_h_dict(self, input, global_node_idx, left_right="left"):
         h_dict = {}
