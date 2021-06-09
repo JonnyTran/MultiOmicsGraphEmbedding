@@ -84,16 +84,11 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        print("got here1")
         y_pred, proximity_loss = self.forward(X)
-        print("got here2")
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        print("got here3")
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        print("got here4")
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
-        print("got here5")
 
         if batch_nb % 100 == 0:
             logs = self.train_metrics.compute_metrics()
@@ -101,14 +96,11 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             logs = {}
 
-        print("got here6")
-
         if self.hparams.use_proximity:
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
 
         self.log_dict(logs, on_step=True)
-
         return loss
 
     def validation_step(self, batch, batch_nb):
@@ -160,11 +152,11 @@ class LATTENodeClf(NodeClfTrainer):
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
-                                                               eta_min=self.lr / 100)
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
+        #                                                        eta_min=self.lr / 100)
 
         return {"optimizer": optimizer,
-                "lr_scheduler": scheduler,
+                # "lr_scheduler": scheduler,
                 "monitor": "val_loss"}
 
     @property
