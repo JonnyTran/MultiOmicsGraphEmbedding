@@ -158,14 +158,15 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             else:
                 allowed_nodes = self.training_idx
         elif "valid" in mode:
-            filter = True if self.inductive else False
+            filter = False
             if self.inductive and hasattr(self, "training_subgraph_idx"):
                 allowed_nodes = torch.cat([self.validation_idx, self.training_subgraph_idx])
             else:
                 allowed_nodes = self.validation_idx
         elif "test" in mode:
             filter = False
-            allowed_nodes = self.testing_idx
+            allowed_nodes = torch.cat(
+                [self.validation_idx, self.testing_idx, self.training_subgraph_idx])  # self.testing_idx
         else:
             raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
 
