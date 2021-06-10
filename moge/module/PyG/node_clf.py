@@ -114,7 +114,7 @@ class LATTENodeClf(NodeClfTrainer):
         if self.hparams.use_proximity:
             val_loss = val_loss + proximity_loss
 
-        self.log("val_loss", val_loss, prog_bar=True, on_step=True, on_epoch=False)
+        self.log("val_loss", val_loss)
 
         return val_loss
 
@@ -133,7 +133,7 @@ class LATTENodeClf(NodeClfTrainer):
         if self.hparams.use_proximity:
             test_loss = test_loss + proximity_loss
 
-        self.log("test_loss", test_loss, on_step=True)
+        self.log("test_loss", test_loss)
 
         return test_loss
 

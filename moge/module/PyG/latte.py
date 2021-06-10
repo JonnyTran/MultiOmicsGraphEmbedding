@@ -157,8 +157,7 @@ class LATTE(nn.Module):
                                                              k=global_node_idx[metapath_b[0]].size(0),
                                                              n=global_node_idx[metapath_b[-1]].size(0),
                                                              coalesced=True,
-                                                             sampling=edge_sampling
-                                                             )
+                                                             sampling=edge_sampling)
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
 
