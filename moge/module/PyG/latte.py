@@ -109,7 +109,7 @@ class LATTE(nn.Module):
         return metapaths
 
     @staticmethod
-    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.2):
+    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.5):
         if isinstance(edge_index_tup, tuple):
             edge_index, edge_values = edge_index_tup
 
@@ -150,14 +150,14 @@ class LATTE(nn.Module):
                 if edge_index_b is None: continue
 
                 try:
-                    new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                             indexB=edge_index_b, valueB=values_b,
-                                                             m=global_node_idx[metapath_a[0]].size(0),
-                                                             k=global_node_idx[metapath_b[0]].size(0),
-                                                             n=global_node_idx[metapath_b[-1]].size(0),
-                                                             coalesced=True,
-                                                             sampling=edge_sampling
-                                                             )
+                    new_edge_index, new_values = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
+                                                                     indexB=edge_index_b, valueB=values_b,
+                                                                     m=global_node_idx[metapath_a[0]].size(0),
+                                                                     k=global_node_idx[metapath_b[0]].size(0),
+                                                                     n=global_node_idx[metapath_b[-1]].size(0),
+                                                                     coalesced=True,
+                                                                     # sampling=edge_sampling
+                                                                     )
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
 
@@ -203,10 +203,9 @@ class LATTE(nn.Module):
                                                                       global_node_idx=global_node_idx,
                                                                       save_betas=save_betas,
                                                                       return_attention_weights=return_attention_weights)
-
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
-                                                               edge_sampling=self.edge_sampling, )
+                                                               edge_sampling=self.edge_sampling)
                 h_dict, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
                                                                       edge_index_dict=next_edge_index_dict,
                                                                       global_node_idx=global_node_idx,
@@ -325,14 +324,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for node_type in self.conv:
             nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_activation(alpha, metapath_idx)
-        alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        self._alpha = alpha
-        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
-        return x_j * alpha.unsqueeze(-1)
-
     def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx,
                                ):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
@@ -363,6 +354,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self._alpha = None
 
         return emb_relations, alpha
+
+    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
+        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
+        alpha = self.attn_activation(alpha, metapath_idx)
+        alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+        self._alpha = alpha
+        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
+        return x_j * alpha.unsqueeze(-1)
 
     def forward(self, x_l, edge_index_dict, global_node_idx, x_r=None, save_betas=False,
                 return_attention_weights=False):
