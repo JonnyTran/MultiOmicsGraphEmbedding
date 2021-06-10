@@ -179,7 +179,8 @@ class LATTE(nn.Module):
         :param save_betas: whether to save _beta values for batch
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
-        proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
+        proximity_loss = torch.tensor(0.0,
+                                      device=global_node_idx[self.node_types[0]].device) if self.use_proximity else None
 
         h_dict = {}
         for ntype in self.node_types:
@@ -191,8 +192,10 @@ class LATTE(nn.Module):
                 h_dict[ntype] = F.relu(h_dict[ntype])
                 if self.dropout:
                     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+
             else:
-                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
+                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(
+                    global_node_idx[self.node_types[0]].device)
 
         h_layers = {ntype: [] for ntype in global_node_idx}
         for l in range(self.n_layers):
@@ -210,9 +213,9 @@ class LATTE(nn.Module):
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
 
-            if self.dropout:
-                h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
-                          h_dict.items()}
+            # if self.dropout:
+            #     h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
+            #               h_dict.items()}
 
             for ntype in global_node_idx:
                 h_layers[ntype].append(h_dict[ntype])
