@@ -195,6 +195,10 @@ class LATTE(nn.Module):
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
 
+            if self.dropout:
+                h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
+                          h_dict.items()}
+
             for ntype in global_node_idx:
                 h_layers[ntype].append(h_dict[ntype])
 
@@ -278,7 +282,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
         elif attn_activation == "PReLU":
-            self.alpha_activation = nn.PReLU(init=0.2)
+            self.alpha_activation = nn.PReLU(num_parameters=attn_heads, init=0.2)
         elif attn_activation == "LeakyReLU":
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
         else:
@@ -333,7 +337,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
 
-            if hasattr(self, "batchnorm"):
+            if hasattr(self, "layernorm"):
                 out[ntype] = self.layernorm[ntype](out[ntype])
 
             if hasattr(self, "activation"):
