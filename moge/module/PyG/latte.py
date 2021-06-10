@@ -1,4 +1,5 @@
 import copy
+from typing import Union, Dict
 
 import numpy as np
 import pandas as pd
@@ -10,8 +11,10 @@ from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
+import torch_sparse
 
 from moge.module.sampling import negative_sample
+from ..utils import tensor_sizes
 
 
 class LATTE(nn.Module):
@@ -51,6 +54,8 @@ class LATTE(nn.Module):
                           num_nodes_dict=num_nodes_dict,
                           metapaths=t_order_metapaths,
                           activation=None if is_output_layer else activation,
+                          batchnorm=False if not hasattr(hparams,
+                                                         "batchnorm") or is_output_layer else hparams.batchnorm,
                           layernorm=False if not hasattr(hparams,
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           attn_heads=attn_heads,
@@ -104,9 +109,19 @@ class LATTE(nn.Module):
         return metapaths
 
     @staticmethod
-    def get_edge_index_values(edge_index_tup: [tuple, torch.Tensor]):
+    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.5):
         if isinstance(edge_index_tup, tuple):
             edge_index, edge_values = edge_index_tup
+
+            if filter_edge:
+                mask = edge_values >= threshold
+                # print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
+
+                if mask.sum(0) == 0:
+                    mask[torch.argmax(edge_values)] = True
+
+                edge_index = edge_index[:, mask]
+                edge_values = edge_values[mask]
 
         elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
@@ -124,14 +139,14 @@ class LATTE(nn.Module):
         output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
-            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a)
+            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a, filter_edge=False)
             if edge_index_a is None: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
 
                 new_metapath = metapath_a + metapath_b[1:]
-                edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
+                edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b, filter_edge=False)
                 if edge_index_b is None: continue
 
                 try:
@@ -235,7 +250,7 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: {str: int}, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", layernorm=False, attn_heads=4, attn_activation="sharpening",
+                 activation: str = "relu", batchnorm=False, layernorm=False, attn_heads=4, attn_activation="sharpening",
                  attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
         self.node_types = list(num_nodes_dict.keys())
@@ -256,6 +271,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
+        if batchnorm:
+            self.batchnorm = torch.nn.ModuleDict({
+                node_type: nn.BatchNorm1d(output_dim) \
+                for node_type in self.node_types})
         if layernorm:
             self.layernorm = torch.nn.ModuleDict({
                 node_type: nn.LayerNorm(output_dim) \
@@ -362,7 +381,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
             num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
-            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
+            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
