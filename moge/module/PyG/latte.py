@@ -60,7 +60,8 @@ class LATTE(nn.Module):
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
-                          attn_dropout=attn_dropout, use_proximity=use_proximity,
+                          attn_dropout=attn_dropout,
+                          use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio))
             t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
         self.layers = nn.ModuleList(layers)
@@ -213,9 +214,9 @@ class LATTE(nn.Module):
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
 
-            # if self.dropout:
-            #     h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
-            #               h_dict.items()}
+            if self.dropout:
+                h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
+                          h_dict.items()}
 
             for ntype in global_node_idx:
                 h_layers[ntype].append(h_dict[ntype])
