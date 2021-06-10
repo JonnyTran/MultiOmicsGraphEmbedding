@@ -150,14 +150,14 @@ class LATTE(nn.Module):
                 if edge_index_b is None: continue
 
                 try:
-                    new_edge_index, new_values = torch_sparse.spspmm(indexA=edge_index_a, valueA=values_a,
-                                                                     indexB=edge_index_b, valueB=values_b,
-                                                                     m=global_node_idx[metapath_a[0]].size(0),
-                                                                     k=global_node_idx[metapath_b[0]].size(0),
-                                                                     n=global_node_idx[metapath_b[-1]].size(0),
-                                                                     coalesced=True,
-                                                                     # sampling=edge_sampling
-                                                                     )
+                    new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
+                                                             indexB=edge_index_b, valueB=values_b,
+                                                             m=global_node_idx[metapath_a[0]].size(0),
+                                                             k=global_node_idx[metapath_b[0]].size(0),
+                                                             n=global_node_idx[metapath_b[-1]].size(0),
+                                                             coalesced=True,
+                                                             sampling=edge_sampling
+                                                             )
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
 
