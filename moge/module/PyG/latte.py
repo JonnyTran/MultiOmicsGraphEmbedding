@@ -180,7 +180,8 @@ class LATTE(nn.Module):
         :param save_betas: whether to save _beta values for batch
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
-        # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
+        proximity_loss = torch.tensor(0.0,
+                                      device=global_node_idx[self.node_types[0]].device) if self.use_proximity else None
 
         h_dict = {}
         for ntype in self.node_types:
@@ -193,31 +194,36 @@ class LATTE(nn.Module):
                 if self.dropout:
                     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
             else:
-                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
+                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(
+                    global_node_idx[self.node_types[0]].device)
 
         h_layers = {ntype: [] for ntype in global_node_idx}
         for l in range(self.n_layers):
             if l == 0:
-                h_dict, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
-                                                                      edge_index_dict=edge_index_dict,
-                                                                      global_node_idx=global_node_idx,
-                                                                      save_betas=save_betas,
-                                                                      return_attention_weights=return_attention_weights)
+                h_dict, t_loss, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
+                                                                              edge_index_dict=edge_index_dict,
+                                                                              global_node_idx=global_node_idx,
+                                                                              save_betas=save_betas,
+                                                                              return_attention_weights=return_attention_weights)
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
                                                                edge_sampling=self.edge_sampling)
-                h_dict, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
-                                                                      edge_index_dict=next_edge_index_dict,
-                                                                      global_node_idx=global_node_idx,
-                                                                      save_betas=save_betas,
-                                                                      return_attention_weights=return_attention_weights)
+                h_dict, t_loss, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
+                                                                              edge_index_dict=next_edge_index_dict,
+                                                                              global_node_idx=global_node_idx,
+                                                                              save_betas=save_betas,
+                                                                              return_attention_weights=return_attention_weights)
+
             # print(l, tensor_sizes(next_edge_index_dict))
+            if self.dropout:
+                h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
+                          h_dict.items()}
 
             for ntype in global_node_idx:
                 h_layers[ntype].append(h_dict[ntype])
 
-            # if self.use_proximity:
-            #     proximity_loss += t_loss
+            if self.use_proximity:
+                proximity_loss += t_loss
 
         if self.layer_pooling == "last" or self.n_layers == 1:
             out = h_dict
@@ -238,7 +244,7 @@ class LATTE(nn.Module):
         else:
             raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
 
-        return out, next_edge_index_dict
+        return out, proximity_loss, next_edge_index_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -406,21 +412,28 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if return_attention_weights and alpha:
                 alpha_dict.update(alpha)
 
+        if return_attention_weights:
+            edge_index_dict = {metapath: (edge_index_tup[0] if isinstance(edge_index_tup, tuple) else edge_index_tup,
+                                          alpha_dict[metapath]) \
+                               for metapath, edge_index_tup in edge_index_dict.items()}
+
         # proximity_loss, edge_pred_dict = None, None
-        # if self.use_proximity:
-        #     proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
-        #                                                          alpha_l=alpha_l, alpha_r=alpha_r,
-        #                                                          global_node_idx=global_node_idx)
+        if self.use_proximity:
+            proximity_loss, _ = self.proximity_loss(edge_index_dict,
+                                                    alpha_l=alpha_l, alpha_r=alpha_r,
+                                                    global_node_idx=global_node_idx)
+        else:
+            proximity_loss = None
 
         if return_attention_weights:
             assert len(alpha_dict) > 0
             if isinstance(edge_index_dict, dict):
-                return out, {
-                    metapath: (edge_index_tup[0] if isinstance(edge_index_tup, tuple) else edge_index_tup,
-                               alpha_dict[metapath]) \
-                    for metapath, edge_index_tup in edge_index_dict.items()}
+                return out, proximity_loss, \
+                       {metapath: (edge_index_tup[0] if isinstance(edge_index_tup, tuple) else edge_index_tup,
+                                   alpha_dict[metapath]) \
+                        for metapath, edge_index_tup in edge_index_dict.items()}
         else:
-            return out, None
+            return out, proximity_loss, None
 
     def get_h_dict(self, input, global_node_idx, left_right="left"):
         h_dict = {}
@@ -457,11 +470,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
         assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
 
-        # e_pred = self.attn_q[self.metapaths.index(metapath)].forward(
-        #     torch.cat([alpha_l[metapath][edge_index[0]], alpha_r[metapath][edge_index[1]]], dim=1)).squeeze(-1)
-
-        e_pred = self.attn_activation(alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]],
-                                      metapath_id=self.metapaths.index(metapath)).squeeze(-1)
+        e_pred = self.attn_activation(
+            (alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]).max(1).values,
+            metapath_id=self.metapaths.index(metapath)).squeeze(-1)
+        print("e_pred", e_pred.shape)
         if logits:
             return e_pred
         else:
@@ -517,7 +529,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def attn_activation(self, alpha, metapath_id):
         if isinstance(self.alpha_activation, torch.Tensor):
-            return self.alpha_activation[metapath_id] * alpha
+            return self.alpha_activation[metapath_id] * F.leaky_relu(alpha, negative_slope=0.2)
         elif isinstance(self.alpha_activation, nn.Module):
             return self.alpha_activation(alpha)
         else:
