@@ -501,7 +501,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def attn_activation(self, alpha, metapath_id):
         if isinstance(self.alpha_activation, torch.Tensor):
-            return self.alpha_activation[metapath_id] * F.leaky_relu(alpha, negative_slope=0.2)
+            return self.alpha_activation[metapath_id] * alpha
         elif isinstance(self.alpha_activation, nn.Module):
             return self.alpha_activation(alpha)
         else:
