@@ -331,7 +331,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
     def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx,
-                               ):
+                               relation_weights=None):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
             size=(global_node_idx[node_type].size(0),
@@ -357,6 +357,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             emb_relations[:, i] = out.view(-1, self.embedding_dim)
 
             alpha[metapath] = self._alpha.max(1).values  # Select max attn value across multi-head attn.
+            if relation_weights is not None:
+                alpha[metapath] = alpha[metapath] * relation_weights[:, i].squeeze(-1)[edge_index[0]]
             self._alpha = None
 
         return emb_relations, alpha
@@ -397,11 +399,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out[ntype], alpha = self.agg_relation_neighbors(node_type=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
                                                             l_dict=l_dict, r_dict=r_dict,
                                                             edge_index_dict=edge_index_dict,
-                                                            global_node_idx=global_node_idx, )
+                                                            global_node_idx=global_node_idx,
+                                                            relation_weights=beta[ntype])
             out[ntype][:, -1] = l_dict[ntype].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
+
+            if hasattr(self, "layernorm"):
+                out[ntype] = self.layernorm[ntype](out[ntype])
 
             if hasattr(self, "batchnorm"):
                 out[ntype] = self.batchnorm[ntype](out[ntype])
