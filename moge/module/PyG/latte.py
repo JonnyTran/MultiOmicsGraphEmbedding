@@ -473,7 +473,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         e_pred = self.attn_activation(
             (alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]).max(1).values,
             metapath_id=self.metapaths.index(metapath)).squeeze(-1)
-        print("e_pred", e_pred.shape)
+
         if logits:
             return e_pred
         else:
