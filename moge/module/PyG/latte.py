@@ -109,7 +109,7 @@ class LATTE(nn.Module):
         return metapaths
 
     @staticmethod
-    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.5):
+    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.25):
         if isinstance(edge_index_tup, tuple):
             edge_index, edge_values = edge_index_tup
 
