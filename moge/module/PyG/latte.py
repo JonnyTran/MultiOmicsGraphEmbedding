@@ -156,7 +156,7 @@ class LATTE(nn.Module):
                                                              k=global_node_idx[metapath_b[0]].size(0),
                                                              n=global_node_idx[metapath_b[-1]].size(0),
                                                              coalesced=True,
-                                                             sampling=edge_sampling
+                                                             # sampling=edge_sampling
                                                              )
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
@@ -645,10 +645,10 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
     B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
                      sparse_sizes=(k, n), is_sorted=not coalesced)
 
-    deg_A = A.storage.colcount()
-    deg_B = B.storage.rowcount()
-    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
-    deg_normalized[deg_normalized == float('inf')] = 0.0
+    deg_A = A.sum(0)
+    deg_B = B.sum(1)
+    deg_normalized = 1.0 / (deg_A + deg_B)
+    # deg_normalized[deg_normalized == float('inf')] = 0.0
 
     D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
                      col=torch.arange(deg_normalized.size(0), device=valueA.device),
