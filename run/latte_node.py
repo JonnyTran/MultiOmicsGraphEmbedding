@@ -25,7 +25,7 @@ def train(hparams: Namespace):
     MAX_EPOCHS = 50
 
     neighbor_sizes = [hparams.n_neighbors, ]
-    for t in range(1, hparams.t_order):
+    for t in range(1, hparams.n_layers):
         neighbor_sizes.extend([neighbor_sizes[-1] // 2])
     print("neighbor_sizes", neighbor_sizes)
     hparams.neighbor_sizes = neighbor_sizes
@@ -45,8 +45,8 @@ def train(hparams: Namespace):
         gpus=NUM_GPUS,
         accelerator='ddp' if NUM_GPUS > 1 else None,
         gradient_clip_val=hparams.gradient_clip_val,
-        auto_lr_find=True,
-        auto_scale_batch_size=True,
+        auto_lr_find=False,
+        auto_scale_batch_size=False,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=5, min_delta=0.001, strict=False)],
         logger=logger,
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
     parser.add_argument('--dir_path', type=str, default="datasets/")
     parser.add_argument('--inductive', type=bool, default=False)
-    parser.add_argument('--use_reverse', type=bool, default=True)
+    parser.add_argument('--use_reverse', type=bool, default=False)
 
     # parametrize the network
     parser.add_argument('-g', '--num_gpus', type=int, default=1)
@@ -76,16 +76,16 @@ if __name__ == "__main__":
     parser.add_argument("-t", '--n_layers', type=int, default=2)
 
     parser.add_argument('--activation', type=str, default="relu")
-    parser.add_argument('--batchnorm', type=str, default=False)
-    parser.add_argument('--batchnorm', type=str, default=True)
-    parser.add_argument('--layer_pooling', type=str, default="last")
+    parser.add_argument('--batchnorm', type=bool, default=False)
+    parser.add_argument('--layernorm', type=bool, default=False)
+    parser.add_argument('--layer_pooling', type=str, default="concat")
 
-    parser.add_argument('--attn_heads', type=int, default=4)
-    parser.add_argument('--attn_activation', type=str, default="LeakyReLU")
-    parser.add_argument('--attn_dropout', type=float, default=0.5)
+    parser.add_argument('--attn_heads', type=int, default=1)
+    parser.add_argument('--attn_activation', type=str, default="sharpening")
+    parser.add_argument('--attn_dropout', type=float, default=0.2)
 
     parser.add_argument('--nb_cls_dense_size', type=int, default=0)
-    parser.add_argument('--nb_cls_dropout', type=float, default=0.4)
+    parser.add_argument('--nb_cls_dropout', type=float, default=0.2)
 
     parser.add_argument('--disable_alpha', type=bool, default=False)
     parser.add_argument('--disable_beta', type=bool, default=False)
@@ -93,7 +93,9 @@ if __name__ == "__main__":
     parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
 
-    parser.add_argument('--reduction', type=str, default="none")
+    parser.add_argument('--edge_threshold', type=float, default=0.5)
+
+    # parser.add_argument('--reduction', type=str, default="none")
     parser.add_argument('--use_class_weights', type=bool, default=False)
 
     # Optimizer parameters

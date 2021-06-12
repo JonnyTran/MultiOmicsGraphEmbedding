@@ -30,6 +30,7 @@ class LATTE(nn.Module):
         self.n_layers = n_layers
         self.neg_sampling_ratio = neg_sampling_ratio
         self.edge_sampling = edge_sampling
+        self.edge_threshold = hparams.edge_threshold
 
         self.layer_pooling = layer_pooling
 
@@ -135,11 +136,11 @@ class LATTE(nn.Module):
         return edge_index, edge_values
 
     @staticmethod
-    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False):
+    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False, threshold=0.5):
         output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
-            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a, filter_edge=True)
+            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a, filter_edge=True, threshold=threshold)
             if edge_index_a is None: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
@@ -207,7 +208,8 @@ class LATTE(nn.Module):
                                                                               return_attention_weights=return_attention_weights)
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
-                                                               edge_sampling=self.edge_sampling)
+                                                               edge_sampling=self.edge_sampling,
+                                                               threshold=self.edge_threshold)
                 h_dict, t_loss, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
                                                                               edge_index_dict=next_edge_index_dict,
                                                                               global_node_idx=global_node_idx,
