@@ -90,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument('--disable_alpha', type=bool, default=False)
     parser.add_argument('--disable_beta', type=bool, default=False)
 
-    parser.add_argument('--use_proximity', type=bool, default=False)
+    parser.add_argument('--use_proximity', type=bool, default=True)
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
 
     parser.add_argument('--edge_threshold', type=float, default=0.5)
