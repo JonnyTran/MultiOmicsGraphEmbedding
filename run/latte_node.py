@@ -94,6 +94,7 @@ if __name__ == "__main__":
     parser.add_argument('--neg_sampling_ratio', type=float, default=5.0)
 
     parser.add_argument('--edge_threshold', type=float, default=0.5)
+    parser.add_argument('--edge_sampling', type=bool, default=True)
 
     # parser.add_argument('--reduction', type=str, default="none")
     parser.add_argument('--use_class_weights', type=bool, default=False)
