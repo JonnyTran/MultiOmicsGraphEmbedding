@@ -255,10 +255,10 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         # Get higher-order relations
         next_edge_index_dict = edge_index_dict
         for t in range(len(self.neighbor_sizes) - 1):
-            next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict,
-                                                           edge_index_dict,
-                                                           sampled_local_nodes,
-                                                           edge_sampling=True)
+            next_edge_index_dict = self.join_edge_indexes(next_edge_index_dict,
+                                                          edge_index_dict,
+                                                          sampled_local_nodes,
+                                                          edge_sampling=True)
 
             X["edge_index_dict"].update(next_edge_index_dict)
 

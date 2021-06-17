@@ -109,8 +109,7 @@ class LATTE(nn.Module):
                     metapaths.append(new_relation)
         return metapaths
 
-    @staticmethod
-    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.25):
+    def get_edge_index_values(self, edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.25):
         if isinstance(edge_index_tup, tuple):
             edge_index, edge_values = edge_index_tup
 
@@ -135,20 +134,20 @@ class LATTE(nn.Module):
 
         return edge_index, edge_values
 
-    @staticmethod
-    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False, threshold=0.5):
+    def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False,
+                          threshold=0.5):
         output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
-            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a, filter_edge=True, threshold=threshold)
+            edge_index_a, values_a = self.get_edge_index_values(edge_index_a, filter_edge=True, threshold=threshold)
             if edge_index_a is None: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
 
                 new_metapath = metapath_a + metapath_b[1:]
-                edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b, filter_edge=False)
-                if edge_index_b is None: continue
+                edge_index_b, values_b = self.get_edge_index_values(edge_index_b, filter_edge=False)
+                if edge_index_b is None or new_metapath not in self.metapaths: continue
 
                 try:
                     new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
@@ -206,9 +205,9 @@ class LATTE(nn.Module):
                                                                               save_betas=save_betas,
                                                                               return_attention_weights=return_attention_weights)
             else:
-                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
-                                                               edge_sampling=self.edge_sampling,
-                                                               threshold=self.edge_threshold)
+                next_edge_index_dict = self.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
+                                                              edge_sampling=self.edge_sampling,
+                                                              threshold=self.edge_threshold)
                 h_dict, t_loss, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
                                                                               edge_index_dict=next_edge_index_dict,
                                                                               global_node_idx=global_node_idx,
@@ -345,7 +344,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
             num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
-            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
+            edge_index, values = self.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
@@ -424,7 +423,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                           alpha_dict[metapath]) \
                                for metapath, edge_index_tup in edge_index_dict.items()}
 
-        # proximity_loss, edge_pred_dict = None, None
         if self.use_proximity:
             proximity_loss, _ = self.proximity_loss(edge_index_dict,
                                                     alpha_l=alpha_l, alpha_r=alpha_r,
@@ -433,9 +431,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             proximity_loss = None
 
         if return_attention_weights:
-            # assert len(alpha_dict) > 0, f"alpha_dict: {alpha_dict}, edge_index_dict: {tensor_sizes(edge_index_dict)}"
-            if isinstance(edge_index_dict, dict):
-                return out, proximity_loss, edge_index_dict
+            return out, proximity_loss, edge_index_dict
         else:
             return out, proximity_loss, None
 
@@ -474,8 +470,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
         assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
 
+        alpha = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
+        if alpha.size(1) > 1:
+            alpha = alpha.max(1).values
+
         e_pred = self.attn_activation(
-            (alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]).max(1).values,
+            alpha,
             metapath_id=self.metapaths.index(metapath)).squeeze(-1)
 
         if logits:
