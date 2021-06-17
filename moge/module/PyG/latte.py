@@ -109,7 +109,8 @@ class LATTE(nn.Module):
                     metapaths.append(new_relation)
         return metapaths
 
-    def get_edge_index_values(self, edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.25):
+    @staticmethod
+    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.25):
         if isinstance(edge_index_tup, tuple):
             edge_index, edge_values = edge_index_tup
 
@@ -139,14 +140,14 @@ class LATTE(nn.Module):
         output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
-            edge_index_a, values_a = self.get_edge_index_values(edge_index_a, filter_edge=True, threshold=threshold)
+            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a, filter_edge=True, threshold=threshold)
             if edge_index_a is None: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
 
                 new_metapath = metapath_a + metapath_b[1:]
-                edge_index_b, values_b = self.get_edge_index_values(edge_index_b, filter_edge=False)
+                edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b, filter_edge=False)
                 if edge_index_b is None or new_metapath not in self.metapaths: continue
 
                 try:
@@ -344,7 +345,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
             num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
-            edge_index, values = self.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
+            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
