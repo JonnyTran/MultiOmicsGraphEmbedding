@@ -433,12 +433,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             proximity_loss = None
 
         if return_attention_weights:
-            assert len(alpha_dict) > 0
+            # assert len(alpha_dict) > 0, f"alpha_dict: {alpha_dict}, edge_index_dict: {tensor_sizes(edge_index_dict)}"
             if isinstance(edge_index_dict, dict):
-                return out, proximity_loss, \
-                       {metapath: (edge_index_tup[0] if isinstance(edge_index_tup, tuple) else edge_index_tup,
-                                   alpha_dict[metapath]) \
-                        for metapath, edge_index_tup in edge_index_dict.items()}
+                return out, proximity_loss, edge_index_dict
         else:
             return out, proximity_loss, None
 
