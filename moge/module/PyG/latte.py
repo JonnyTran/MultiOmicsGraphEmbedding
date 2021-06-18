@@ -63,7 +63,8 @@ class LATTE(nn.Module):
                           attn_dropout=attn_dropout,
                           use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio))
-            t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
+            t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths,
+                                                     head_ntype_only=hparams.head_ntype_only if "head_ntype_only" in hparams else None)
         self.layers = nn.ModuleList(layers)
 
         # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
@@ -100,11 +101,13 @@ class LATTE(nn.Module):
                 self.embeddings[ntype].reset_parameters()
 
     @staticmethod
-    def join_metapaths(metapath_A, metapath_B, head_node_type=None):
+    def join_metapaths(metapath_A, metapath_B, head_ntype_only=None):
         metapaths = []
         for relation_a in metapath_A:
-            if head_node_type:
-                None
+            if head_ntype_only and relation_a[0] != head_ntype_only:
+                metapaths.append(relation_a)
+                continue
+
             for relation_b in metapath_B:
                 if relation_a[-1] == relation_b[0]:
                     new_relation = relation_a + relation_b[1:]
