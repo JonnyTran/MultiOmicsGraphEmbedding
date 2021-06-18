@@ -204,7 +204,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         # Higher weights for sampled focal nodes in `n_idx`
         seed_node_idx = np.isin(X["global_node_index"][self.head_node_type], n_idx, invert=True)
-        weights[seed_node_idx] = weights[seed_node_idx] * 0.2
+        weights[seed_node_idx] = weights[seed_node_idx] * 0.2 if "train" in mode else 0.0
 
         return X, y, weights
 
@@ -283,8 +283,8 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         weights = weights & np.isin(X["global_node_index"][self.head_node_type], allowed_nodes)
         weights = torch.tensor(weights, dtype=torch.float)
 
-        # Lower weights for nodes not in `n_idx`, i.e. neighbor nodes
-        seed_node_idx = np.isin(X["global_node_index"][self.head_node_type], n_idx, invert=True)
-        weights[seed_node_idx] = weights[seed_node_idx] * 0.2
+        # Higher weights for sampled focal nodes in `n_idx`
+        nonseed_nodes = np.isin(X["global_node_index"][self.head_node_type], n_idx, invert=True)
+        weights[nonseed_nodes] = weights[nonseed_nodes] * 0.2 if "train" in mode else 0.0
 
         return X, y, weights
