@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from torch_geometric.nn import MessagePassing
+from torch_geometric.nn import MessagePassing, GATConv
 from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
 import torch_sparse
@@ -100,9 +100,11 @@ class LATTE(nn.Module):
                 self.embeddings[ntype].reset_parameters()
 
     @staticmethod
-    def join_metapaths(metapath_A, metapath_B):
+    def join_metapaths(metapath_A, metapath_B, head_node_type=None):
         metapaths = []
         for relation_a in metapath_A:
+            if head_node_type:
+                None
             for relation_b in metapath_B:
                 if relation_a[-1] == relation_b[0]:
                     new_relation = relation_a + relation_b[1:]
@@ -136,7 +138,7 @@ class LATTE(nn.Module):
         return edge_index, edge_values
 
     @staticmethod
-    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False):
+    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, metapaths=None, edge_sampling=False):
         output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
@@ -147,6 +149,7 @@ class LATTE(nn.Module):
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
 
                 new_metapath = metapath_a + metapath_b[1:]
+                if metapaths and new_metapath not in metapaths: continue
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b, filter_edge=False)
                 if edge_index_b is None: continue
 
@@ -167,6 +170,10 @@ class LATTE(nn.Module):
                                  "k": global_node_idx[metapath_a[-1]].size(0),
                                  "n": global_node_idx[metapath_b[-1]].size(0), })
                     continue
+
+            if metapaths and metapath_a in metapaths:
+                # In the current LATTE layer that calls this method, a metapath is repeated (i.e. not higher-order), so we return the edges to it again.
+                output_edge_index[metapath_a] = (edge_index_a, values_a)
 
         return output_edge_index
 
@@ -207,6 +214,7 @@ class LATTE(nn.Module):
                 next_edge_index_dict = edge_index_dict
             else:
                 next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
+                                                               metapaths=self.layers[l].metapaths,
                                                                edge_sampling=self.edge_sampling)
                 h_dict, t_loss, _ = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
                                                            edge_index_dict=next_edge_index_dict,
