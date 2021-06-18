@@ -61,9 +61,11 @@ class LATTE(nn.Module):
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
-                          attn_dropout=attn_dropout, use_proximity=use_proximity,
+                          attn_dropout=attn_dropout,
+                          use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio))
-            t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
+            t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths,
+                                                     head_ntype_only=hparams.head_ntype_only if "head_ntype_only" in hparams else None)
         self.layers = nn.ModuleList(layers)
 
         # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
@@ -100,9 +102,13 @@ class LATTE(nn.Module):
                 self.embeddings[ntype].reset_parameters()
 
     @staticmethod
-    def join_metapaths(metapath_A, metapath_B):
+    def join_metapaths(metapath_A, metapath_B, head_ntype_only=None):
         metapaths = []
         for relation_a in metapath_A:
+            if head_ntype_only and relation_a[0] != head_ntype_only:
+                metapaths.append(relation_a)
+                continue
+
             for relation_b in metapath_B:
                 if relation_a[-1] == relation_b[0]:
                     new_relation = relation_a + relation_b[1:]
@@ -135,7 +141,8 @@ class LATTE(nn.Module):
 
         return edge_index, edge_values
 
-    def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False,
+    def join_edge_indexes(self, edge_index_dict_A, edge_index_dict_B, global_node_idx, metapaths=None,
+                          edge_sampling=False,
                           threshold=0.5):
         output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
@@ -147,8 +154,9 @@ class LATTE(nn.Module):
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
 
                 new_metapath = metapath_a + metapath_b[1:]
+                if metapaths and new_metapath not in metapaths: continue
                 edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b, filter_edge=False)
-                if edge_index_b is None or new_metapath not in self.metapaths: continue
+                if edge_index_b is None: continue
 
                 try:
                     new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
@@ -167,6 +175,10 @@ class LATTE(nn.Module):
                                  "k": global_node_idx[metapath_a[-1]].size(0),
                                  "n": global_node_idx[metapath_b[-1]].size(0), })
                     continue
+
+            if metapaths and metapath_a in metapaths:
+                # In the current LATTE layer that calls this method, a metapath is repeated (i.e. not higher-order), so we return the edges to it again.
+                output_edge_index[metapath_a] = (edge_index_a, values_a)
 
         return output_edge_index
 
@@ -207,6 +219,7 @@ class LATTE(nn.Module):
                                                                               return_attention_weights=return_attention_weights)
             else:
                 next_edge_index_dict = self.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
+                                                              metapaths=self.layers[l].metapaths,
                                                               edge_sampling=self.edge_sampling,
                                                               threshold=self.edge_threshold)
                 h_dict, t_loss, next_edge_index_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
