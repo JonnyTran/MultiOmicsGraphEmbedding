@@ -9,7 +9,6 @@ from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-from torch_geometric.nn.conv import GATv2Conv
 import torch_sparse.sample
 
 from moge.data import HeteroNetDataset

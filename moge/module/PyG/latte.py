@@ -375,7 +375,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return emb_relations, alpha
 
     def message(self, x_j, x_i, index, ptr, size_i, metapath_idx):
-        x = torch.stack([x_i, x_j], dim=2)
+        x = torch.cat([x_i, x_j], dim=2)
         x = self.attn_activation(x, metapath_idx)
         alpha = (x * self.attn[metapath_idx]).sum(dim=-1)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
@@ -455,18 +455,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             h_dict[ntype] = h_dict[ntype].view(-1, self.attn_heads, self.out_channels)
 
         return h_dict
-
-    def get_alphas(self, edge_index_dict, l_dict, r_dict):
-        alpha_l, alpha_r = {}, {}
-
-        for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
-                continue
-            head, tail = metapath[0], metapath[-1]
-
-            alpha_l[metapath] = (l_dict[head] * self.attn[i]).sum(-1)
-            alpha_r[metapath] = (r_dict[tail] * self.attn_r[i]).sum(-1)
-        return alpha_l, alpha_r
 
     def get_beta_weights(self, h_dict, global_node_idx):
         beta = {}
