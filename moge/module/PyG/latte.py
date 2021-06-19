@@ -438,7 +438,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         if self.use_proximity:
             proximity_loss, _ = self.proximity_loss(edge_index_dict,
-                                                    alpha_l=alpha_l, alpha_r=alpha_r,
+                                                    l_dict=l_dict, r_dict=r_dict,
                                                     global_node_idx=global_node_idx)
         else:
             proximity_loss = None
@@ -468,23 +468,28 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return beta
 
-    def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
+    def predict_scores(self, edge_index, l_dict, r_dict, metapath, logits=False):
         assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
+        metapath_idx = self.metapaths.index(metapath)
+        head, tail = metapath[0], metapath[-1]
 
-        alpha = alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]]
-        if alpha.size(1) > 1:
-            alpha = alpha.max(1).values
+        x = torch.cat([l_dict[head][edge_index[0]], r_dict[tail][edge_index[1]]], dim=2)
+        if isinstance(self.alpha_activation, nn.Module):
+            x = self.alpha_activation(x)
+        else:
+            x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
 
-        e_pred = self.attn_activation(
-            alpha,
-            metapath_id=self.metapaths.index(metapath)).squeeze(-1)
+        e_pred = (x * self.attn[metapath_idx]).sum(dim=-1)
+
+        if e_pred.size(1) > 1:
+            e_pred = e_pred.max(1).values
 
         if logits:
             return e_pred
         else:
             return F.sigmoid(e_pred)
 
-    def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
+    def proximity_loss(self, edge_index_dict, l_dict, r_dict, global_node_idx):
         """
         For each relation/metapath type given in `edge_index_dict`, this function both predict link scores and computes
         the NCE loss for both positive and negative (sampled) links. For each relation type in `edge_index_dict`, if the
@@ -509,10 +514,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             if not is_negative(metapath):
-                e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
+                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, metapath, logits=True)
                 loss += -torch.mean(values * F.logsigmoid(e_pred_logits), dim=-1)
             elif is_negative(metapath):
-                e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, untag_negative(metapath), logits=True)
+                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, untag_negative(metapath), logits=True)
                 loss += -torch.mean(F.logsigmoid(-e_pred_logits), dim=-1)
 
             edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
@@ -525,7 +530,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                  n_sample_per_edge=self.neg_sampling_ratio)
                 if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
 
-                e_neg_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
+                e_neg_logits = self.predict_scores(neg_edge_index, l_dict, r_dict, metapath, logits=True)
                 loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
                 edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_logits.detach())
 
@@ -570,7 +575,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
                                              enumerate(relations)}
 
-    def save_attn_weights(self, node_type, attn_weights, node_idx):
+    def save_attn_weights(self, node_type, attn_weights: torch.Tensor, node_idx):
         if not hasattr(self, "_betas"):
             self._betas = {}
         if not hasattr(self, "_beta_avg"):
