@@ -6,7 +6,7 @@ from ogb.linkproppred import PygLinkPropPredDataset
 from moge.data.PyG.node_generator import HeteroNeighborGenerator
 from moge.data.network import HeteroNetDataset
 from moge.data.utils import merge_node_index
-from moge.module.PyG.latte import is_negative
+from moge.module.PyG.utils import is_negative
 
 
 class EdgeDataset(HeteroNetDataset):
