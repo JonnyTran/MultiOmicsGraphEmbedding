@@ -79,7 +79,7 @@ class Metrics(torch.nn.Module):
         """
         y_pred = y_hat.detach()
         y_true = y.detach()
-        y_pred, y_true = filter_samples(y_pred, y_true, weights)
+        y_pred, y_true = filter_samples(y_pred, y_true, weights, max_mode=True)
 
         # Apply softmax/sigmoid activation if needed
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:

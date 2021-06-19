@@ -45,7 +45,7 @@ class LATTENodeClf(NodeClfTrainer):
                               use_proximity=hparams.use_proximity,
                               neg_sampling_ratio=hparams.neg_sampling_ratio,
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
-                              cpu_embeddings=True if "cpu_embedding" in hparams else False,
+                              cpu_embeddings=hparams.cpu_embedding if "cpu_embedding" in hparams else False,
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
 
@@ -74,9 +74,9 @@ class LATTENodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],
-                                                      inputs["edge_index_dict"],
-                                                      inputs["global_node_index"], **kwargs)
+        embeddings, proximity_loss, edge_index_dict = self.embedder(inputs["x_dict"],
+                                                                    inputs["edge_index_dict"],
+                                                                    inputs["global_node_index"], **kwargs)
 
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
@@ -86,6 +86,7 @@ class LATTENodeClf(NodeClfTrainer):
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
+
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
@@ -101,7 +102,8 @@ class LATTENodeClf(NodeClfTrainer):
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
 
-        self.log_dict(logs, on_step=True)
+        self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+
         return loss
 
     def validation_step(self, batch, batch_nb):

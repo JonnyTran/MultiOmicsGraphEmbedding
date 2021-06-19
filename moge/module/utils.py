@@ -2,14 +2,17 @@ import numpy as np
 import torch
 
 
-def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
+def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights, max_mode=False):
     if weights is None or weights.shape == None:
         return Y_hat, Y
 
-    if isinstance(weights, torch.Tensor):
-        idx = torch.nonzero(weights).view(-1)
+    if not isinstance(weights, torch.Tensor):
+        weights = torch.tensor(weights)
+
+    if max_mode:
+        idx = weights == weights.max()
     else:
-        idx = torch.tensor(np.nonzero(weights)[0])
+        idx = torch.nonzero(weights).view(-1)
 
     if Y.dim() > 1:
         Y = Y[idx, :]
