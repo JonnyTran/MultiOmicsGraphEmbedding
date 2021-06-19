@@ -217,8 +217,9 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         # print("node_ids_dict", node_ids_dict)
         # print("batch_seed_ids", batch_seed_ids)
 
-        weights = self.compute_weights(y, batch_node_ids=batch_nodes, batch_seed_ids=None,
-                                       allowed_nodes=allowed_nodes, mode=mode)
+        # weights = self.compute_weights(y, batch_node_ids=batch_nodes, batch_seed_ids=None,
+        #                                allowed_nodes=allowed_nodes, mode=mode)
+        weights = None
         return X, y, weights
 
     def khop_sampler(self, n_idx, mode):

@@ -10,7 +10,6 @@ from torch_geometric.utils import softmax
 
 from moge.module.sampling import negative_sample
 from .utils import *
-from ..utils import tensor_sizes
 
 
 class LATTE(nn.Module):
@@ -141,7 +140,6 @@ class LATTE(nn.Module):
                                                            edge_index_dict=edge_index_dict[l],
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
-            print(l, "output", tensor_sizes(h_dict))
 
             if self.dropout:
                 h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in

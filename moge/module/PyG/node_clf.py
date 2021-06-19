@@ -1,16 +1,15 @@
 import logging
+
 import numpy as np
 import pytorch_lightning as pl
 import torch
+import torch_sparse.sample
 from cogdl.models.emb.hin2vec import Hin2vec, Hin2vec_layer, RWgraph, tqdm
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-from torch_geometric.nn import RGCNConv
-import torch_sparse.sample
 
 from moge.data import HeteroNetDataset
 from moge.module.PyG.hgt import HGTModel
@@ -78,8 +77,11 @@ class LATTENodeClf(NodeClfTrainer):
                                                                     inputs["edge_index"],
                                                                     inputs["global_node_index"], **kwargs)
 
-        y_hat = self.classifier(embeddings[self.head_node_type]) \
-            if hasattr(self, "classifier") else embeddings[self.head_node_type]
+        batch_target_nids = HeteroNetDataset.get_unique_nodes(inputs["edge_index"][-1], source=False, target=True)[
+            self.head_node_type]
+
+        y_hat = self.classifier(embeddings[self.head_node_type][batch_target_nids]) \
+            if hasattr(self, "classifier") else embeddings[self.head_node_type][batch_target_nids]
 
         return y_hat, proximity_loss
 
@@ -102,7 +104,7 @@ class LATTENodeClf(NodeClfTrainer):
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
 
-        self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+        self.log_dict(logs, prog_bar=True, logger=True, on_step=True, on_epoch=True)
 
         return loss
 
@@ -111,8 +113,9 @@ class LATTENodeClf(NodeClfTrainer):
         y_pred, proximity_loss = self.forward(X)
 
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        self.valid_metrics.update_metrics(y_pred, y_true)
+        self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
 
         if self.hparams.use_proximity:
             val_loss = val_loss + proximity_loss
