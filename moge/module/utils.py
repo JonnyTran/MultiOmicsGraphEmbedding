@@ -2,8 +2,8 @@ import numpy as np
 import torch
 
 
-def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights, max_mode=False):
-    if weights is None or weights.shape == None:
+def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights: torch.Tensor, max_mode=False):
+    if weights is None or weights.shape == None or weights.numel() == 0:
         return Y_hat, Y
 
     if not isinstance(weights, torch.Tensor):
