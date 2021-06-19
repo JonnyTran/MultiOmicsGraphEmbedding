@@ -2,10 +2,10 @@ import numpy as np
 import torch
 from ogb.nodeproppred import PygNodePropPredDataset
 
-from moge.data.network import HeteroNetDataset
 from moge.data.PyG.neighbor_sampler import NeighborSampler
-from moge.module.PyG.latte import LATTE
-from moge.module.utils import tensor_sizes
+from moge.data.network import HeteroNetDataset
+from moge.module.PyG.utils import join_edge_indexes
+
 
 class HeteroNeighborGenerator(HeteroNetDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, edge_dir=True,
@@ -255,10 +255,10 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         # Get higher-order relations
         next_edge_index_dict = edge_index_dict
         for t in range(len(self.neighbor_sizes) - 1):
-            next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict,
-                                                           edge_index_dict,
-                                                           sampled_local_nodes,
-                                                           edge_sampling=True)
+            next_edge_index_dict = join_edge_indexes(next_edge_index_dict,
+                                                     edge_index_dict,
+                                                     sampled_local_nodes,
+                                                     edge_sampling=True)
 
             X["edge_index_dict"].update(next_edge_index_dict)
 

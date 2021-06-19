@@ -1,20 +1,16 @@
 import copy
-from typing import Union, Dict
 
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
-
-import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from torch_geometric.nn import MessagePassing, GATConv
+from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
-from torch_sparse.tensor import SparseTensor
-import torch_sparse
 
-from moge.module.sampling import negative_sample
 from moge.data.network import HeteroNetDataset
+from moge.module.sampling import negative_sample
+from .utils import *
 from ..utils import tensor_sizes
 
 
@@ -64,7 +60,7 @@ class LATTE(nn.Module):
                           attn_dropout=attn_dropout,
                           use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio))
-            # t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths,
+            # t_order_metapaths = join_metapaths(t_order_metapaths, metapaths,
             #                                          head_ntype_only=hparams.head_ntype_only if "head_ntype_only" in hparams else None)
         self.layers = nn.ModuleList(layers)
 
@@ -101,85 +97,6 @@ class LATTE(nn.Module):
             for ntype in self.embeddings:
                 self.embeddings[ntype].reset_parameters()
 
-    @staticmethod
-    def join_metapaths(metapath_A, metapath_B, head_ntype_only=None):
-        metapaths = []
-        for relation_a in metapath_A:
-            if head_ntype_only and relation_a[0] != head_ntype_only:
-                metapaths.append(relation_a)
-                continue
-
-            for relation_b in metapath_B:
-                if relation_a[-1] == relation_b[0]:
-                    new_relation = relation_a + relation_b[1:]
-                    metapaths.append(new_relation)
-        return metapaths
-
-    @staticmethod
-    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.5):
-        if isinstance(edge_index_tup, tuple):
-            edge_index, edge_values = edge_index_tup
-
-            if filter_edge:
-                mask = edge_values >= threshold
-                # print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
-
-                if mask.sum(0) == 0:
-                    mask[torch.argmax(edge_values)] = True
-
-                edge_index = edge_index[:, mask]
-                edge_values = edge_values[mask]
-
-        elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
-            edge_index = edge_index_tup
-            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float64, device=edge_index_tup.device)
-        else:
-            return None, None
-
-        if edge_values.dtype != torch.float:
-            edge_values = edge_values.to(torch.float)
-
-        return edge_index, edge_values
-
-    @staticmethod
-    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, metapaths=None, edge_sampling=False):
-        output_edge_index = {}
-        for metapath_a, edge_index_a in edge_index_dict_A.items():
-            if is_negative(metapath_a): continue
-            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a, filter_edge=False)
-            if edge_index_a is None: continue
-
-            for metapath_b, edge_index_b in edge_index_dict_B.items():
-                if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
-
-                new_metapath = metapath_a + metapath_b[1:]
-                if metapaths and new_metapath not in metapaths: continue
-                edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b, filter_edge=False)
-                if edge_index_b is None: continue
-
-                try:
-                    new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                             indexB=edge_index_b, valueB=values_b,
-                                                             m=global_node_idx[metapath_a[0]].size(0),
-                                                             k=global_node_idx[metapath_b[0]].size(0),
-                                                             n=global_node_idx[metapath_b[-1]].size(0),
-                                                             coalesced=True,
-                                                             sampling=edge_sampling)
-                    if new_edge_index.size(1) == 0: continue
-                    output_edge_index[new_metapath] = (new_edge_index, new_values)
-
-                except Exception as e:
-                    print(f"{e} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
-                    print("\t", {"m": global_node_idx[metapath_a[0]].size(0),
-                                 "k": global_node_idx[metapath_a[-1]].size(0),
-                                 "n": global_node_idx[metapath_b[-1]].size(0), })
-                    continue
-
-            if metapaths and metapath_a in metapaths:
-                # In the current LATTE layer that calls this method, a metapath is repeated (i.e. not higher-order), so we return the edges to it again.
-                output_edge_index[metapath_a] = (edge_index_a, values_a)
-
-        return output_edge_index
 
     def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
         """
@@ -217,7 +134,7 @@ class LATTE(nn.Module):
                                                                         save_betas=save_betas)
                 # next_edge_index_dict = edge_index_dict[l]
             else:
-                # next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
+                # next_edge_index_dict = join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
                 #                                                metapaths=self.layers[l].metapaths,
                 #                                                edge_sampling=self.edge_sampling)
 
@@ -407,7 +324,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
             # num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
-            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
+            edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
 
             print(metapath, tensor_sizes(
@@ -609,56 +526,3 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
 
-def tag_negative(metapath):
-    if isinstance(metapath, tuple):
-        return metapath + ("neg",)
-    elif isinstance(metapath, str):
-        return metapath + "_neg"
-    else:
-        return "neg"
-
-
-def untag_negative(metapath):
-    if isinstance(metapath, tuple) and metapath[-1] == "neg":
-        return metapath[:-1]
-    elif isinstance(metapath, str):
-        return metapath.strip("_neg")
-    else:
-        return metapath
-
-
-def is_negative(metapath):
-    if isinstance(metapath, tuple) and "neg" in metapath:
-        return True
-    elif isinstance(metapath, str) and "_neg" in metapath:
-        return True
-    else:
-        return False
-
-
-def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
-    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=not coalesced)
-    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=not coalesced)
-
-    deg_A = A.storage.colcount()
-    deg_B = B.storage.rowcount()
-    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
-    deg_normalized[deg_normalized == float('inf')] = 0.0
-
-    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     value=deg_normalized.type_as(valueA),
-                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
-
-    out = A @ D @ B
-    row, col, values = out.coo()
-
-    num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
-    if sampling and values.numel() > num_samples:
-        idx = torch.multinomial(values, num_samples=num_samples,
-                                replacement=False)
-        row, col, values = row[idx], col[idx], values[idx]
-
-    return torch.stack([row, col], dim=0), values

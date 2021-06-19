@@ -16,10 +16,10 @@ from scipy.io import loadmat
 from sklearn.cluster import KMeans
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
-
 from torch_sparse import transpose
 
-from moge.module.PyG.latte import LATTE, is_negative
+import moge.module.PyG.utils
+from moge.module.PyG.utils import is_negative
 
 
 class Network:
@@ -60,28 +60,28 @@ class Network:
                 self.node_degrees.loc[(tail, name)] = (
                         self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
 
-        if order >= 2:
-            global_node_idx = self.get_node_id_dict(self.edge_index_dict)
-            new_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict_A=self.edge_index_dict,
-                                                          edge_index_dict_B=self.edge_index_dict,
-                                                          global_node_idx=global_node_idx)
-
-            metapaths = list(new_edge_index_dict.keys())
-            metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
-                              metapaths]
-            for metapath, name in zip(metapaths, metapath_names):
-                edge_index = new_edge_index_dict[metapath]
-                head, tail = metapath[0], metapath[-1]
-
-            D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
-                                          sparse_sizes=(self.num_nodes_dict[head],
-                                                        self.num_nodes_dict[tail]))
-
-            self.node_degrees.loc[(head, name)] = (
-                    self.node_degrees.loc[(head, name)] + D.storage.rowcount().numpy()).values
-            if not directed:
-                self.node_degrees.loc[(tail, name)] = (
-                        self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
+        # if order >= 2:
+        #     global_node_idx = self.get_node_id_dict(self.edge_index_dict)
+        #     new_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict_A=self.edge_index_dict,
+        #                                                   edge_index_dict_B=self.edge_index_dict,
+        #                                                   global_node_idx=global_node_idx)
+        #
+        #     metapaths = list(new_edge_index_dict.keys())
+        #     metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
+        #                       metapaths]
+        #     for metapath, name in zip(metapaths, metapath_names):
+        #         edge_index = new_edge_index_dict[metapath]
+        #         head, tail = metapath[0], metapath[-1]
+        #
+        #     D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
+        #                                   sparse_sizes=(self.num_nodes_dict[head],
+        #                                                 self.num_nodes_dict[tail]))
+        #
+        #     self.node_degrees.loc[(head, name)] = (
+        #             self.node_degrees.loc[(head, name)] + D.storage.rowcount().numpy()).values
+        #     if not directed:
+        #         self.node_degrees.loc[(tail, name)] = (
+        #                 self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
 
         return self.node_degrees
 
@@ -316,7 +316,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if khop:
             t_order_metapaths = metapaths
             for k in range(len(self.neighbor_sizes) - 1):
-                t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
+                t_order_metapaths = moge.module.PyG.utils.join_metapaths(t_order_metapaths, metapaths)
                 metapaths = metapaths + t_order_metapaths
 
         return metapaths
