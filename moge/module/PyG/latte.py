@@ -124,8 +124,8 @@ class LATTE(nn.Module):
                 mask = edge_values >= threshold
                 # print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
 
-                if mask.sum(0) == 0:
-                    mask[torch.argmax(edge_values)] = True
+                # if mask.sum(0) == 0:
+                #     mask[torch.argmax(edge_values)] = True
 
                 edge_index = edge_index[:, mask]
                 edge_values = edge_values[mask]
@@ -165,7 +165,7 @@ class LATTE(nn.Module):
                                                              k=global_node_idx[metapath_b[0]].size(0),
                                                              n=global_node_idx[metapath_b[-1]].size(0),
                                                              sampling=edge_sampling,
-                                                             coalesced=True)
+                                                             is_sorted=False)
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
 
@@ -174,7 +174,6 @@ class LATTE(nn.Module):
                     print("\t", {"m": global_node_idx[metapath_a[0]].size(0),
                                  "k": global_node_idx[metapath_a[-1]].size(0),
                                  "n": global_node_idx[metapath_b[-1]].size(0), })
-                    raise e
                     continue
 
             if metapaths and metapath_a in metapaths:
@@ -652,11 +651,11 @@ def is_negative(metapath):
         return False
 
 
-def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
+def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, is_sorted=False, sampling=True):
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=False)
+                     sparse_sizes=(m, k), is_sorted=is_sorted)
     B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=False)
+                     sparse_sizes=(k, n), is_sorted=is_sorted)
 
     deg_A = A.sum(0)
     deg_B = B.sum(1)
