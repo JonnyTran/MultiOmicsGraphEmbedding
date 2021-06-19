@@ -314,8 +314,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
              for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
-        self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
-        self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
+        self.attn = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels * 2))
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -332,8 +331,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def reset_parameters(self):
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
         for i, metapath in enumerate(self.metapaths):
-            nn.init.xavier_normal_(self.attn_l[i], gain=gain)
-            nn.init.xavier_normal_(self.attn_r[i], gain=gain)
+            nn.init.xavier_normal_(self.attn[i], gain=gain)
 
         gain = nn.init.calculate_gain('relu')
         for node_type in self.linear_l:
@@ -344,7 +342,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for node_type in self.conv:
             nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
-    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx,
+    def agg_relation_neighbors(self, node_type, l_dict, r_dict, edge_index_dict, global_node_idx,
                                relation_weights=None):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
@@ -365,7 +363,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out = self.propagate(
                 edge_index=edge_index,
                 x=(r_dict[tail], l_dict[head]),
-                alpha=(alpha_r[metapath], alpha_l[metapath]),
                 size=(num_node_tail, num_node_head),
                 metapath_idx=self.metapaths.index(metapath))
             emb_relations[:, i] = out.view(-1, self.embedding_dim)
@@ -377,9 +374,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return emb_relations, alpha
 
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_activation(alpha, metapath_idx)
+    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx):
+        x = torch.stack([x_i, x_j], dim=2)
+        x = self.attn_activation(x, metapath_idx)
+        alpha = (x * self.attn[metapath_idx]).sum(dim=-1)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         self._alpha = alpha
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
@@ -403,14 +401,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # Save beta weights from testing samples
         if not self.training: self.save_relation_weights(beta, global_node_idx)
 
-        # Compute node-level attention coefficients
-        alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
-
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
         alpha_dict = {}
         for ntype in global_node_idx:
-            out[ntype], alpha = self.agg_relation_neighbors(node_type=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
+            out[ntype], alpha = self.agg_relation_neighbors(node_type=ntype,
                                                             l_dict=l_dict, r_dict=r_dict,
                                                             edge_index_dict=edge_index_dict,
                                                             global_node_idx=global_node_idx,
@@ -469,7 +464,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 continue
             head, tail = metapath[0], metapath[-1]
 
-            alpha_l[metapath] = (l_dict[head] * self.attn_l[i]).sum(-1)
+            alpha_l[metapath] = (l_dict[head] * self.attn[i]).sum(-1)
             alpha_r[metapath] = (r_dict[tail] * self.attn_r[i]).sum(-1)
         return alpha_l, alpha_r
 
