@@ -333,11 +333,14 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             num_nodes_dict[key] = max(N, num_nodes_dict.get(key, N))
         return num_nodes_dict
 
-    def get_node_id_dict(self, edge_index_dict):
+    @staticmethod
+    def get_node_id_dict(edge_index_dict, source=True, target=True):
         node_ids_dict = {}
         for metapath, edge_index in edge_index_dict.items():
-            node_ids_dict.setdefault(metapath[0], []).append(edge_index[0])
-            node_ids_dict.setdefault(metapath[-1], []).append(edge_index[1])
+            if source:
+                node_ids_dict.setdefault(metapath[0], []).append(edge_index[0])
+            if target:
+                node_ids_dict.setdefault(metapath[-1], []).append(edge_index[1])
 
         for node_type in node_ids_dict:
             node_ids_dict[node_type] = torch.cat(node_ids_dict[node_type], 0).unique()
