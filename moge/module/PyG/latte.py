@@ -8,7 +8,6 @@ from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.data.network import HeteroNetDataset
 from moge.module.sampling import negative_sample
 from .utils import *
 from ..utils import tensor_sizes
@@ -186,7 +185,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: {str: int}, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
                  activation: str = "relu", batchnorm=False, layernorm=False, attn_heads=4, attn_activation="sharpening",
                  attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0) -> None:
-        super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
+        super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
         self.num_nodes_dict = num_nodes_dict
@@ -304,14 +303,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return out, proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx):
-
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
             size=(global_node_idx[node_type].size(0),
                   self.num_head_relations(node_type),
                   self.embedding_dim)).type_as(self.conv[node_type].weight)
-
-        print(node_type, emb_relations.shape)
 
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
@@ -321,21 +317,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
 
-            print(metapath, tensor_sizes(
-                HeteroNetDataset.get_unique_nodes({m: eid for m, eid in edge_index_dict.items() if m == metapath},
-                                                  source=True, target=False)),
-                  tensor_sizes(
-                      HeteroNetDataset.get_unique_nodes({m: eid for m, eid in edge_index_dict.items() if m == metapath},
-                                                        source=False, target=True)))
-
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(r_dict[tail], l_dict[head]),
-                alpha=(alpha_r[metapath], alpha_l[metapath]),
-                size=(num_node_tail[tail].size(), num_node_head[head].size()),
+                x=(l_dict[head], r_dict[tail]),
+                alpha=(alpha_l[metapath], alpha_r[metapath]),
+                size=(num_node_head, num_node_tail),
                 metapath_idx=self.metapaths.index(metapath))
-            print(metapath, "out", out.shape)
             emb_relations[:, i] = out.view(-1, self.embedding_dim)
 
         return emb_relations
@@ -452,7 +440,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def get_head_relations(self, head_node_type, to_str=False) -> list:
         relations = [".".join(metapath) if to_str and isinstance(metapath, tuple) else metapath for metapath in
                      self.metapaths if
-                     metapath[0] == head_node_type]
+                     metapath[-1] == head_node_type]
         return relations
 
     def num_head_relations(self, node_type) -> int:
