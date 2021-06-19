@@ -161,15 +161,17 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
         return allowed_nodes, filter
 
-    def compute_weights(self, y: torch.Tensor, node_ids_dict: dict, seed_nodes: torch.Tensor,
+    def compute_weights(self, y: torch.Tensor, batch_node_ids: dict, batch_seed_ids: torch.Tensor,
                         allowed_nodes: torch.Tensor, mode: str):
         # Weights
         weights = (y != -1) if y.dim() == 1 else (y != -1).all(1)
-        weights = weights & np.isin(node_ids_dict[self.head_node_type], allowed_nodes)
+        weights = weights & np.isin(batch_node_ids[self.head_node_type], allowed_nodes)
         weights = torch.tensor(weights, dtype=torch.float)
+
         # Higher weights for sampled focal nodes in `n_idx`
-        seed_node_idx = np.isin(node_ids_dict[self.head_node_type], seed_nodes, invert=True)
-        weights[seed_node_idx] = weights[seed_node_idx] * 0.2 if "train" in mode else 0.0
+        if batch_seed_ids is not None:
+            seed_node_idx = np.isin(batch_node_ids[self.head_node_type], batch_seed_ids, invert=True)
+            weights[seed_node_idx] = weights[seed_node_idx] * 0.2 if "train" in mode else 0.0
         return weights
 
     def sample(self, n_idx, mode):
@@ -183,9 +185,9 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         sampled_local_nodes = self.graph_sampler.get_nodes_dict(adjs, n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
-        allowed_nodes, filter = self.get_allowed_nodes(mode)
+        allowed_nodes, do_filter = self.get_allowed_nodes(mode)
 
-        if filter:
+        if do_filter:
             node_mask = np.isin(sampled_local_nodes[self.head_node_type], allowed_nodes)
             sampled_local_nodes[self.head_node_type] = sampled_local_nodes[self.head_node_type][node_mask]
 
@@ -214,7 +216,12 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         else:
             y = None
 
-        weights = self.compute_weights(y, node_ids_dict, n_idx, allowed_nodes, mode)
+        # batch_seed_ids = self.graph_sampler.get_nid_relabel_dict(sampled_local_nodes)[self.head_node_type][self.graph_sampler.get_global_nidx(n_idx)]
+        # print("node_ids_dict", node_ids_dict)
+        # print("batch_seed_ids", batch_seed_ids)
+
+        weights = self.compute_weights(y, batch_node_ids=node_ids_dict, batch_seed_ids=None,
+                                       allowed_nodes=allowed_nodes, mode=mode)
         return X, y, weights
 
     def khop_sampler(self, n_idx, mode):
@@ -261,16 +268,19 @@ class HeteroNeighborGenerator(HeteroNetDataset):
                            for node_type in self.x_dict if node_type in X["global_node_index"]}
 
         # y_dict
+        node_ids_dict = self.get_node_id_dict(X["edge_index"][1], source=False, target=True)
+
         if hasattr(self, "y_dict") and len(self.y_dict) > 1:
-            y = {node_type: y_true[X["global_node_index"][node_type]] \
-                 for node_type, y_true in self.y_dict.items()}
+            y = {ntype: y_true[node_ids_dict[ntype]] \
+                 for ntype, y_true in self.y_dict.items()}
         elif hasattr(self, "y_dict"):
-            y = self.y_dict[self.head_node_type][sampled_local_nodes[self.head_node_type]]
+            y = self.y_dict[self.head_node_type][node_ids_dict[self.head_node_type]].squeeze(-1)
         else:
             y = None
         if y.dim() == 2 and y.size(1) == 1:
             y = y.squeeze(-1)
 
-        weights = self.compute_weights(y, node_ids_dict, n_idx, allowed_nodes, mode)
+        weights = self.compute_weights(y, batch_node_ids=node_ids_dict, batch_seed_ids=n_idx,
+                                       allowed_nodes=allowed_nodes, mode=mode)
 
         return X, y, weights

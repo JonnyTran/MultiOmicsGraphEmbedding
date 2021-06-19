@@ -75,7 +75,7 @@ class LATTENodeClf(NodeClfTrainer):
             self._node_ids = inputs["global_node_index"]
 
         embeddings, proximity_loss, edge_index_dict = self.embedder(inputs["x_dict"],
-                                                                    inputs["edge_index_dict"],
+                                                                    inputs["edge_index"],
                                                                     inputs["global_node_index"], **kwargs)
 
         y_hat = self.classifier(embeddings[self.head_node_type]) \

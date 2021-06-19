@@ -14,6 +14,7 @@ from torch_sparse.tensor import SparseTensor
 import torch_sparse
 
 from moge.module.sampling import negative_sample
+from moge.data.network import HeteroNetDataset
 from ..utils import tensor_sizes
 
 
@@ -63,8 +64,8 @@ class LATTE(nn.Module):
                           attn_dropout=attn_dropout,
                           use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio))
-            t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths,
-                                                     head_ntype_only=hparams.head_ntype_only if "head_ntype_only" in hparams else None)
+            # t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths,
+            #                                          head_ntype_only=hparams.head_ntype_only if "head_ntype_only" in hparams else None)
         self.layers = nn.ModuleList(layers)
 
         # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
@@ -211,18 +212,20 @@ class LATTE(nn.Module):
         for l in range(self.n_layers):
             if l == 0:
                 h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
-                                                                        edge_index_dict=edge_index_dict,
+                                                                        edge_index_dict=edge_index_dict[l],
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
-                next_edge_index_dict = edge_index_dict
+                # next_edge_index_dict = edge_index_dict[l]
             else:
-                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
-                                                               metapaths=self.layers[l].metapaths,
-                                                               edge_sampling=self.edge_sampling)
+                # next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
+                #                                                metapaths=self.layers[l].metapaths,
+                #                                                edge_sampling=self.edge_sampling)
+
                 h_dict, t_loss, _ = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
-                                                           edge_index_dict=next_edge_index_dict,
+                                                           edge_index_dict=edge_index_dict[l],
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
+            print(l, "output", tensor_sizes(h_dict))
 
             if self.dropout:
                 h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
@@ -384,27 +387,44 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return out, proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx):
+
+        num_node_head = HeteroNetDataset.get_node_id_dict(edge_index_dict, source=True, target=False)
+        num_node_tail = HeteroNetDataset.get_node_id_dict(edge_index_dict, source=False, target=True)
+
+        print("num_node_head", tensor_sizes(num_node_head))
+        print("num_node_tail", tensor_sizes(num_node_tail))
+
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
-            size=(global_node_idx[node_type].size(0),
+            size=(num_node_head[node_type].size(0),
                   self.num_head_relations(node_type),
                   self.embedding_dim)).type_as(self.conv[node_type].weight)
+
+        print(node_type, emb_relations.shape)
 
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
+            # num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
             edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
+
+            print(metapath, tensor_sizes(
+                HeteroNetDataset.get_node_id_dict({m: eid for m, eid in edge_index_dict.items() if m == metapath},
+                                                  source=True, target=False)),
+                  tensor_sizes(
+                      HeteroNetDataset.get_node_id_dict({m: eid for m, eid in edge_index_dict.items() if m == metapath},
+                                                        source=False, target=True)))
 
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
                 x=(r_dict[tail], l_dict[head]),
                 alpha=(alpha_r[metapath], alpha_l[metapath]),
-                size=(num_node_tail, num_node_head),
+                size=(num_node_tail[tail].size(), num_node_head[head].size()),
                 metapath_idx=self.metapaths.index(metapath))
+            print(metapath, "out", out.shape)
             emb_relations[:, i] = out.view(-1, self.embedding_dim)
 
         return emb_relations
