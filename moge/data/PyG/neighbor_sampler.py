@@ -194,7 +194,7 @@ class NeighborSampler(Sampler):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def get_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict, filter_nodes: bool):
+    def get_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict):
         """Conbine all edge_index's across multiple layers and convert local node id to "batch node
         index" that aligns with `x_dict` and `global_node_index`
 
@@ -202,7 +202,6 @@ class NeighborSampler(Sampler):
             adjs:
             n_id:
             sampled_local_nodes (dict):
-            filter_nodes (bool):
         """
         relabel_nodes = self.get_nid_relabel_dict(sampled_local_nodes)
 
