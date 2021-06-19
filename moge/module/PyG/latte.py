@@ -305,15 +305,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx):
 
-        num_node_head = HeteroNetDataset.get_node_id_dict(edge_index_dict, source=True, target=False)
-        num_node_tail = HeteroNetDataset.get_node_id_dict(edge_index_dict, source=False, target=True)
-
-        print("num_node_head", tensor_sizes(num_node_head))
-        print("num_node_tail", tensor_sizes(num_node_tail))
-
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
-            size=(num_node_head[node_type].size(0),
+            size=(global_node_idx[node_type].size(0),
                   self.num_head_relations(node_type),
                   self.embedding_dim)).type_as(self.conv[node_type].weight)
 
@@ -322,16 +316,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
-            # num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
+            num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
 
             print(metapath, tensor_sizes(
-                HeteroNetDataset.get_node_id_dict({m: eid for m, eid in edge_index_dict.items() if m == metapath},
+                HeteroNetDataset.get_unique_nodes({m: eid for m, eid in edge_index_dict.items() if m == metapath},
                                                   source=True, target=False)),
                   tensor_sizes(
-                      HeteroNetDataset.get_node_id_dict({m: eid for m, eid in edge_index_dict.items() if m == metapath},
+                      HeteroNetDataset.get_unique_nodes({m: eid for m, eid in edge_index_dict.items() if m == metapath},
                                                         source=False, target=True)))
 
             # Propapate flows from target nodes to source nodes

@@ -51,7 +51,10 @@ def filter_samples_weights(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
 
 def tensor_sizes(input):
     if isinstance(input, dict):
-        return {k if not isinstance(k, tuple) else ".".join(k[1::2]): tensor_sizes(v) for k, v in input.items()}
+        return {metapath if not isinstance(metapath, tuple) else \
+                    ".".join([type[0].upper() if i % 2 == 0 else type[0].lower() for i, type in
+                              enumerate(metapath)]): tensor_sizes(v) \
+                for metapath, v in input.items()}
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)
     elif isinstance(input, list):
