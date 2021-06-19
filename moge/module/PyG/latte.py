@@ -376,7 +376,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def message(self, x_j, x_i, index, ptr, size_i, metapath_idx):
         x = torch.cat([x_i, x_j], dim=2)
-        x = self.attn_activation(x, metapath_idx)
+        if isinstance(self.alpha_activation, nn.Module):
+            x = self.alpha_activation(x)
+        else:
+            x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
+
         alpha = (x * self.attn[metapath_idx]).sum(dim=-1)
         alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         self._alpha = alpha
@@ -528,13 +532,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         loss = torch.true_divide(loss, max(len(edge_index_dict) * 2, 1))
         return loss, edge_pred_dict
 
-    def attn_activation(self, alpha, metapath_id):
-        if isinstance(self.alpha_activation, torch.Tensor):
-            return self.alpha_activation[metapath_id] * F.leaky_relu(alpha, negative_slope=0.2)
-        elif isinstance(self.alpha_activation, nn.Module):
-            return self.alpha_activation(alpha)
-        else:
-            return alpha
 
     def get_head_relations(self, head_node_type, to_str=False) -> list:
         relations = [".".join(metapath) if to_str and isinstance(metapath, tuple) else metapath for metapath in
