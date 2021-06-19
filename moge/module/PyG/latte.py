@@ -174,6 +174,7 @@ class LATTE(nn.Module):
                     print("\t", {"m": global_node_idx[metapath_a[0]].size(0),
                                  "k": global_node_idx[metapath_a[-1]].size(0),
                                  "n": global_node_idx[metapath_b[-1]].size(0), })
+                    raise e
                     continue
 
             if metapaths and metapath_a in metapaths:
