@@ -11,7 +11,7 @@ from torch_geometric.data.sampler import Adj, EdgeIndex
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_geometric.utils.hetero import group_hetero_graph
 from torch_sparse import coalesce, SparseTensor
-from torch_geometric.data import NeighborSampler
+from torch_geometric.data import NeighborSampler as PyGNeighborSampler
 
 
 class Sampler(metaclass=ABCMeta):
@@ -145,9 +145,9 @@ class NeighborSampler(Sampler):
         self.int2edge_type = {type_int: edge_type for edge_type, type_int in self.key2int.items() if
                               edge_type in edge_index_dict}
 
-        self.neighbor_sampler = HeteroNeighborSampler(self.edge_index, node_idx=None,
-                                                      sizes=neighbor_sizes, batch_size=128,
-                                                      shuffle=True)
+        self.neighbor_sampler = PyGNeighborSampler(self.edge_index, node_idx=None,
+                                                   sizes=neighbor_sizes, batch_size=128,
+                                                   shuffle=True)
 
     def sample(self, node_ids: dict):
         """
@@ -194,7 +194,7 @@ class NeighborSampler(Sampler):
         sampled_nodes = {k: torch.cat(v, dim=0).unique() for k, v in sampled_nodes.items()}
         return sampled_nodes
 
-    def get_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict, filter_nodes: bool):
+    def get_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict):
         """Conbine all edge_index's across multiple layers and convert local node id to "batch node
         index" that aligns with `x_dict` and `global_node_index`
 
@@ -247,6 +247,48 @@ class NeighborSampler(Sampler):
                                               n=sampled_local_nodes[metapath[-1]].size(0),
                                               op="add")[0] \
                            for metapath, edge_index in edge_index_dict.items()}
+
+        return edge_index_dict
+
+    def get_multi_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict):
+        """Conbine all edge_index's across multiple layers and convert local node id to "batch node
+        index" that aligns with `x_dict` and `global_node_index`
+
+        Args:
+            adjs:
+            n_id:
+            sampled_local_nodes (dict):
+            filter_nodes (bool):
+        """
+        relabel_nodes = self.get_nid_relabel_dict(sampled_local_nodes)
+
+        edge_index_dict = [{} for i in range(len(adjs))]
+        for i, adj in enumerate(adjs):
+            for edge_type_id in self.edge_type[adj.e_id].unique():
+                metapath = self.int2edge_type[edge_type_id.item()]
+                head, tail = metapath[0], metapath[-1]
+
+                # Filter edges to correct edge_type_id
+                edge_mask = self.edge_type[adj.e_id] == edge_type_id
+                edge_index = adj.edge_index[:, edge_mask]
+
+                # convert from "sampled_edge_index" to global index
+                edge_index[0] = n_id[edge_index[0]]
+                edge_index[1] = n_id[edge_index[1]]
+
+                # Convert node global index -> local index -> batch index
+                if head == tail:
+                    edge_index = self.local_node_idx[edge_index].apply_(relabel_nodes[head].get)
+                else:
+                    edge_index[0] = self.local_node_idx[edge_index[0]].apply_(lambda x: relabel_nodes[head].get(x, -1))
+                    edge_index[1] = self.local_node_idx[edge_index[1]].apply_(lambda x: relabel_nodes[tail].get(x, -1))
+
+                # Remove edges labeled as -1, which contain nodes not in sampled_local_nodes
+                mask = np.isin(edge_index, [-1], assume_unique=False, invert=True).all(axis=0)
+                edge_index = edge_index[:, mask]
+                if edge_index.size(1) == 0: continue
+
+                edge_index_dict[i][metapath] = edge_index
 
         return edge_index_dict
 
