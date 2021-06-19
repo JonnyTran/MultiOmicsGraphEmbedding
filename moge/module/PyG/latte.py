@@ -654,14 +654,13 @@ def is_negative(metapath):
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=not coalesced)
+                     sparse_sizes=(m, k), is_sorted=False)
     B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=not coalesced)
+                     sparse_sizes=(k, n), is_sorted=False)
 
     deg_A = A.sum(0)
     deg_B = B.sum(1)
     deg_normalized = 1.0 / (deg_A + deg_B)
-    # deg_normalized[deg_normalized == float('inf')] = 0.0
 
     D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
                      col=torch.arange(deg_normalized.size(0), device=valueA.device),
