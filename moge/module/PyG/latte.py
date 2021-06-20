@@ -1,10 +1,12 @@
 import copy
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 from torch import nn as nn
 from torch.nn import functional as F
+from torch_geometric.data.sampler import EdgeIndex
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
@@ -95,13 +97,12 @@ class LATTE(nn.Module):
             for ntype in self.embeddings:
                 self.embeddings[ntype].reset_parameters()
 
-
-    def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
+    def forward(self, node_feats: dict, adjs: List[Dict[Tuple, EdgeIndex]], global_node_idx: dict, save_betas=False):
         """
         This
         :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
         :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
-        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
+        :param adjs: Dict of <metapath>:<tensor size (2, num_edge_index)>
         :param save_betas: whether to save _beta values for batch
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
@@ -127,7 +128,7 @@ class LATTE(nn.Module):
         for l in range(self.n_layers):
             if l == 0:
                 h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x=h_dict,
-                                                                        edge_index_dict=edge_index_dict[l],
+                                                                        edge_index_dict=adjs[l],
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
                 # next_edge_index_dict = edge_index_dict[l]
@@ -137,7 +138,7 @@ class LATTE(nn.Module):
                 #                                                edge_sampling=self.edge_sampling)
 
                 h_dict, t_loss, _ = self.layers[l].forward(x=h_dict,
-                                                           edge_index_dict=edge_index_dict[l],
+                                                           edge_index_dict=adjs[l],
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
 
@@ -256,7 +257,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for node_type in self.conv:
             nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
-    def forward(self, x, edge_index_dict, global_node_idx, save_betas=False):
+    def forward(self, x, edge_index_dict: Dict[Tuple, EdgeIndex], global_node_idx, save_betas=False):
         """
 
         :param x_l: a dict of node attributes indexed node_type
@@ -300,7 +301,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                  global_node_idx=global_node_idx)
         return out, proximity_loss, edge_pred_dict
 
-    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx):
+    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict,
+                               edge_index_dict: Dict[Tuple, EdgeIndex], global_node_idx):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
             size=(global_node_idx[node_type].size(0),
@@ -312,7 +314,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
             num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
-            edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
+            edge_index, values = get_edge_index_values(edge_index_dict[metapath].edge_index, filter_edge=False)
             if edge_index is None: continue
 
             # Propapate flows from target nodes to source nodes
@@ -322,6 +324,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 alpha=(alpha_l[metapath], alpha_r[metapath]),
                 size=(num_node_head, num_node_tail),
                 metapath_idx=self.metapaths.index(metapath))
+            print("out", node_type, out.shape)
             emb_relations[:, i] = out.view(-1, self.embedding_dim)
 
         return emb_relations
