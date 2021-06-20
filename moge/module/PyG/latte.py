@@ -119,10 +119,6 @@ class LATTE(nn.Module):
 
             if filter_edge:
                 mask = edge_values >= threshold
-                # print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
-
-                # if mask.sum(0) == 0:
-                #     mask[torch.argmax(edge_values)] = True
 
                 edge_index = edge_index[:, mask]
                 edge_values = edge_values[mask]
@@ -434,9 +430,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                for metapath, edge_index_tup in edge_index_dict.items()}
 
         if self.use_proximity:
-            proximity_loss, _ = self.proximity_loss(edge_index_dict,
-                                                    l_dict=l_dict, r_dict=r_dict,
-                                                    global_node_idx=global_node_idx)
+            proximity_loss = self.proximity_loss(edge_index_dict,
+                                                 l_dict=l_dict, r_dict=r_dict,
+                                                 global_node_idx=global_node_idx)
         else:
             proximity_loss = None
 
@@ -501,7 +497,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         :return loss, edge_pred_dict: NCE loss. edge_pred_dict will contain both positive relations of shape (num_edges,) and negative relations of shape (num_edges*num_neg_edges, )
         """
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
-        edge_pred_dict = {}
         for metapath, edge_index in edge_index_dict.items():
             # KL Divergence over observed positive edges or negative edges (if included)
             if isinstance(edge_index, tuple):  # Weighted edges
@@ -517,7 +512,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, untag_negative(metapath), logits=True)
                 loss += -torch.mean(F.logsigmoid(-e_pred_logits), dim=-1)
 
-            edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
 
             # Only need to sample for negative edges if negative metapath is not included
             if not is_negative(metapath) and tag_negative(metapath) not in edge_index_dict:
@@ -529,10 +523,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
                 e_neg_logits = self.predict_scores(neg_edge_index, l_dict, r_dict, metapath, logits=True)
                 loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
-                edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_logits.detach())
 
         loss = torch.true_divide(loss, max(len(edge_index_dict) * 2, 1))
-        return loss, edge_pred_dict
+        return loss,
 
 
     def get_head_relations(self, head_node_type, to_str=False) -> list:
