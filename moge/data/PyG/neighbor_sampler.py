@@ -251,10 +251,9 @@ class NeighborSampler(Sampler):
         index" that aligns with `x_dict` and `global_node_index`
 
         Args:
-            adjs:
-            n_id:
-            local_sampled_nodes (dict):
-            filter_nodes (bool):
+            adjs: global_batched edge index
+            n_id: global nodes ordering for adjs
+            local_sampled_nodes (dict): local nodes (original node ids)
         """
         local2batch = self.get_local2batch_dict(local_sampled_nodes)
 

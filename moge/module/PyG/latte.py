@@ -126,7 +126,7 @@ class LATTE(nn.Module):
         h_layers = {ntype: [] for ntype in global_node_idx}
         for l in range(self.n_layers):
             if l == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
+                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x=h_dict,
                                                                         edge_index_dict=edge_index_dict[l],
                                                                         global_node_idx=global_node_idx,
                                                                         save_betas=save_betas)
@@ -136,7 +136,7 @@ class LATTE(nn.Module):
                 #                                                metapaths=self.layers[l].metapaths,
                 #                                                edge_sampling=self.edge_sampling)
 
-                h_dict, t_loss, _ = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
+                h_dict, t_loss, _ = self.layers[l].forward(x=h_dict,
                                                            edge_index_dict=edge_index_dict[l],
                                                            global_node_idx=global_node_idx,
                                                            save_betas=save_betas)
@@ -256,7 +256,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for node_type in self.conv:
             nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
-    def forward(self, x_l, edge_index_dict, global_node_idx, x_r=None, save_betas=False):
+    def forward(self, x, edge_index_dict, global_node_idx, save_betas=False):
         """
 
         :param x_l: a dict of node attributes indexed node_type
@@ -265,11 +265,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         :param x_r: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
         :return: output_emb, loss
         """
-        l_dict = self.get_h_dict(x_l, global_node_idx, left_right="left")
-        r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
+        l_dict = self.get_h_dict(x, global_node_idx, left_right="left")
+        r_dict = self.get_h_dict(x, global_node_idx, left_right="right")
 
         # Predict relations attention coefficients
-        beta = self.get_beta_weights(x_l, global_node_idx=global_node_idx)
+        beta = self.get_beta_weights(x, global_node_idx=global_node_idx)
         # Save beta weights from testing samples
         if not self.training: self.save_relation_weights(beta, global_node_idx)
 
