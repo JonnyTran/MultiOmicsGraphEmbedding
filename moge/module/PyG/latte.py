@@ -1,20 +1,17 @@
 import copy
-from typing import Union, Dict
+from typing import Union
 
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
-
 import torch
 from torch import nn as nn
 from torch.nn import functional as F
-from torch_geometric.nn import MessagePassing, GATConv
+from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
-import torch_sparse
 
 from moge.module.sampling import negative_sample
-from ..utils import tensor_sizes
 
 
 class LATTE(nn.Module):
@@ -148,7 +145,7 @@ class LATTE(nn.Module):
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
             edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a, filter_edge=True, threshold=threshold)
-            if edge_index_a is None: continue
+            if edge_index_a is None or values_a.size(0) == 0: continue
 
             for metapath_b, edge_index_b in edge_index_dict_B.items():
                 if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
