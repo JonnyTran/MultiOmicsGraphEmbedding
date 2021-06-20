@@ -192,13 +192,15 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             local_sampled_nids[self.head_node_type] = local_sampled_nids[self.head_node_type][node_mask]
 
         # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
-        X = {"edge_index": [],
+        X = {"adjs": adjs,
+             "batch_size": batch_size,
+             "n_id": n_id,
              "global_node_index": local_sampled_nids,
              "x_dict": {}}
 
-        X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
-                                                                       n_id=n_id,
-                                                                       local_sampled_nodes=local_sampled_nids)
+        # X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
+        #                                                                n_id=n_id,
+        #                                                                local_sampled_nodes=local_sampled_nids)
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
@@ -206,12 +208,15 @@ class HeteroNeighborGenerator(HeteroNetDataset):
                            for node_type in self.x_dict if node_type in local_sampled_nids}
 
         # y_dict
-        batch_nodes = self.get_unique_nodes(X["edge_index"][1], source=False, target=True)
+        assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
 
         if hasattr(self, "y_dict"):
-            y = self.y_dict[self.head_node_type][local_seed_nids].squeeze(-1)
+            y = self.y_dict[self.head_node_type][self.graph_sampler.global2local[n_id]][:batch_size]
         else:
             y = None
+
+        if y.dim() == 2 and y.size(1) == 1:
+            y = y.squeeze(-1)
 
         # batch_seed_ids = self.graph_sampler.get_nid_relabel_dict(sampled_local_nodes)[self.head_node_type][self.graph_sampler.get_global_nidx(n_idx)]
         # print("node_ids_dict", node_ids_dict)
