@@ -1,3 +1,5 @@
+from typing import List, Dict, Tuple
+
 import numpy as np
 import torch
 from ogb.nodeproppred import PygNodePropPredDataset
@@ -182,7 +184,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         batch_size, n_id, adjs = self.graph_sampler.sample(local_seed_nids)
 
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        local_sampled_nids = self.graph_sampler.get_local_nodes(adjs, n_id)
+        local_sampled_nids = self.graph_sampler.get_local_nodes(n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         allowed_nodes, do_filter = self.get_allowed_nodes(mode)
@@ -192,15 +194,14 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             local_sampled_nids[self.head_node_type] = local_sampled_nids[self.head_node_type][node_mask]
 
         # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
-        X = {"adjs": adjs,
-             "batch_size": batch_size,
-             "n_id": n_id,
+        X = {"batch_size": batch_size,
              "global_node_index": local_sampled_nids,
              "x_dict": {}}
 
-        # X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
-        #                                                                n_id=n_id,
-        #                                                                local_sampled_nodes=local_sampled_nids)
+        X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
+                                                                       n_id=n_id,
+                                                                       local_sampled_nodes=local_sampled_nids)
+        X["sizes"] = self.get_adjs_sizes(X["edge_index"], local_sampled_nids)
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
@@ -211,7 +212,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
 
         if hasattr(self, "y_dict"):
-            y = self.y_dict[self.head_node_type][self.graph_sampler.global2local[n_id]][:batch_size]
+            y = self.y_dict[self.head_node_type][local_seed_nids]
         else:
             y = None
 
@@ -227,6 +228,20 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         weights = None
         return X, y, weights
 
+    def get_adjs_sizes(self, edge_index_adjs: List[Dict[Tuple, torch.Tensor]], local_sampled_nids):
+        sizes = [{ntype: (None, None) for i in range(len(edge_index_adjs)) for ntype in local_sampled_nids} \
+                 for i in range(len(edge_index_adjs))]
+        for i, edge_index_dict in enumerate(edge_index_adjs):
+            source_sizes = {ntype: nids.max() + 1 for ntype, nids in
+                            HeteroNetDataset.get_unique_nodes(edge_index_adjs[i], source=True, target=False).items()}
+            target_sizes = {ntype: nids.max() + 1 for ntype, nids in
+                            HeteroNetDataset.get_unique_nodes(edge_index_adjs[i], source=False, target=True).items()}
+            sizes[i] = {ntype: (source_sizes[ntype] if ntype in source_sizes else None,
+                                target_sizes[ntype] if ntype in target_sizes else None) \
+                        for ntype in self.node_types}
+
+        return sizes
+
     def khop_sampler(self, n_idx, mode):
         if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):
             n_idx = torch.tensor(n_idx)
@@ -235,7 +250,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         batch_size, n_id, adjs = self.graph_sampler.sample(n_idx)
 
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        sampled_local_nodes = self.graph_sampler.get_local_nodes(adjs, n_id)
+        sampled_local_nodes = self.graph_sampler.get_local_nodes(n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
         allowed_nodes, filter = self.get_allowed_nodes(mode)
