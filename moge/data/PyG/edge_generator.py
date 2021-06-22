@@ -205,7 +205,7 @@ class BidirectionalGenerator(EdgeDataset, HeteroNeighborGenerator):
         # Neighbor sampling with global_node_index
         batch_size, n_id, adjs = self.graph_sampler.sample(triplets_node_index)
 
-        sampled_local_nodes = self.graph_sampler.get_local_nodes(adjs, n_id)
+        sampled_local_nodes = self.graph_sampler.get_local_nodes(n_id)
 
         # Merge triplets_node_index + sampled_local_nodes = global_node_index, while ensuring index order in triplets_node_index
         global_node_index = merge_node_index(old_node_index=triplets_node_index,

@@ -31,10 +31,9 @@ class Sampler(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_local_nodes(self, adjs, n_id):
+    def get_local_nodes(self, n_id):
         """
         Args:
-            adjs:
             n_id:
         """
         pass
@@ -172,25 +171,19 @@ class NeighborSampler(Sampler):
 
         return n_idx_to_sample
 
-    def get_local_nodes(self, adjs: List[EdgeIndex], n_id):
+    def get_local_nodes(self, n_id):
         """
         Args:
-            adjs:
-            n_id:
+            n_id: maps batch indices from adjs to global node ids
         """
         local_nodes = {}
-        for adj in adjs:
-            for i in [0, 1]:
-                node_ids = n_id[adj.edge_index[i]]
-                node_types = self.node_type[node_ids]
+        node_types = self.node_type[n_id]
 
-                for node_type_id in node_types.unique():
-                    mask = node_types == node_type_id
-                    local_node_ids = self.global2local[node_ids[mask]]
-                    local_nodes.setdefault(self.int2node_type[node_type_id.item()], []).append(local_node_ids)
+        for node_type_id in node_types.unique():
+            mask = node_types == node_type_id
+            local_node_ids = self.global2local[n_id[mask]]
+            local_nodes[self.int2node_type[node_type_id.item()]] = local_node_ids
 
-        # Concatenate & remove duplicate nodes
-        local_nodes = {k: torch.cat(v, dim=0).unique() for k, v in local_nodes.items()}
         return local_nodes
 
     def get_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict):
@@ -251,25 +244,25 @@ class NeighborSampler(Sampler):
         index" that aligns with `x_dict` and `global_node_index`
 
         Args:
-            adjs: global_batched edge index
+            adjs: global_batched edge index (local indices for the hetero graph sampler's global index, not original local index)
             n_id: global nodes ordering for adjs
             local_sampled_nodes (dict): local nodes (original node ids)
         """
         local2batch = self.get_local2batch_dict(local_sampled_nodes)
 
         local_edges_dict = [{} for i in range(len(adjs))]
+
         for i, adj in enumerate(adjs):
-            for edge_type_id in self.edge_type[adj.e_id].unique():
-                metapath = self.int2edge_type[edge_type_id.item()]
+            for etype_id in self.edge_type[adj.e_id].unique():
+                metapath = self.int2edge_type[etype_id.item()]
                 head, tail = metapath[0], metapath[-1]
 
                 # Filter edges to correct edge_type_id
-                edge_mask = self.edge_type[adj.e_id] == edge_type_id
+                edge_mask = self.edge_type[adj.e_id] == etype_id
                 edge_index = adj.edge_index[:, edge_mask]
 
                 # convert from "sampled_edge_index" to global index
-                edge_index[0] = n_id[edge_index[0]]
-                edge_index[1] = n_id[edge_index[1]]
+                edge_index = n_id[edge_index]
 
                 # Convert node global index -> local index -> batch index
                 if head == tail:
