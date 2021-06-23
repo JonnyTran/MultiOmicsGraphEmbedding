@@ -1,6 +1,3 @@
-import copy
-from typing import Dict, List, Tuple
-
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
@@ -15,7 +12,8 @@ from .utils import *
 
 
 class LATTE(nn.Module):
-    def __init__(self, n_layers: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
+    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict,
+                 metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True, cpu_embeddings=False,
                  layer_pooling=False, hparams=None):
@@ -24,6 +22,7 @@ class LATTE(nn.Module):
         self.node_types = list(num_nodes_dict.keys())
         self.embedding_dim = embedding_dim * n_layers
         self.use_proximity = use_proximity
+        self.t_order = t_order
         self.n_layers = n_layers
         self.neg_sampling_ratio = neg_sampling_ratio
         self.edge_sampling = edge_sampling
@@ -42,15 +41,21 @@ class LATTE(nn.Module):
         self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         layers = []
-        t_order_metapaths = copy.deepcopy(metapaths)
+        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize a nother set of
         for l in range(n_layers):
-            is_output_layer = (l + 1 == n_layers) and (hparams.nb_cls_dense_size < 0)
-            print("\n", l, t_order_metapaths)
+            is_last_layer = (l + 1 == n_layers)
+            is_output_layer = is_last_layer and (hparams.nb_cls_dense_size < 0)
+
+            l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
+                                                 order=range(1, t_order + 1),  # Select only up to t-order
+                                                 # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
+                                                 tail_type=hparams.head_ntype_only if is_last_layer else None)
+
             layers.append(
                 LATTEConv(input_dim=embedding_dim,
                           output_dim=hparams.n_classes if is_output_layer else embedding_dim,
                           num_nodes_dict=num_nodes_dict,
-                          metapaths=t_order_metapaths,
+                          metapaths=l_layer_metapaths,
                           activation=None if is_output_layer else activation,
                           batchnorm=False if not hasattr(hparams,
                                                          "batchnorm") or is_output_layer else hparams.batchnorm,
@@ -61,8 +66,9 @@ class LATTE(nn.Module):
                           attn_dropout=attn_dropout,
                           use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio))
-            # t_order_metapaths = join_metapaths(t_order_metapaths, metapaths,
-            #                                          head_ntype_only=hparams.head_ntype_only if "head_ntype_only" in hparams else None)
+
+            higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
+
         self.layers = nn.ModuleList(layers)
 
         # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
@@ -136,24 +142,24 @@ class LATTE(nn.Module):
                 for ntype in global_node_idx if sizes[l][ntype][1] is not None}
 
             if l == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict,
-                                                                        x_r=h_dict_r,
-                                                                        edge_index_dict=adjs[l],
-                                                                        size=sizes[l],
-                                                                        global_node_idx=global_node_idx,
-                                                                        save_betas=save_betas)
-                # next_edge_index_dict = edge_index_dict[l]
-            else:
-                # next_edge_index_dict = join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
-                #                                                metapaths=self.layers[l].metapaths,
-                #                                                edge_sampling=self.edge_sampling)
+                edge_index_dict = adjs[l]
 
-                h_dict, t_loss, _ = self.layers[l].forward(x_l=h_dict,
-                                                           x_r=h_dict_r,
-                                                           edge_index_dict=adjs[l],
-                                                           size=sizes[l],
-                                                           global_node_idx=global_node_idx,
-                                                           save_betas=save_betas)
+            else:
+                edge_index_dict = join_edge_indexes(edge_pred_dict, adjs[l], global_node_idx,
+                                                    metapaths=self.layers[l].metapaths,
+                                                    edge_sampling=self.edge_sampling)
+
+            print(l, "METAPATHS", [".".join([d[0] for d in k]) for k in self.layers[l].metapaths], "\n\t LOCAL NODES",
+                  {ntype: list(nids.shape) for ntype, nids in global_node_idx.items()})
+            print("\t EDGE_INDEX_DICT \n\t",
+                  {".".join([k[0] for k in m]): eid.max(1).values for m, eid in edge_index_dict.items()})
+
+            h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict,
+                                                                    x_r=h_dict_r,
+                                                                    edge_index_dict=edge_index_dict,
+                                                                    size=sizes[l],
+                                                                    global_node_idx=global_node_idx,
+                                                                    save_betas=save_betas)
 
             if self.dropout:
                 h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) \
@@ -179,7 +185,8 @@ class LATTE(nn.Module):
             out = {ntype: torch.mean(h_s, dim=1) for ntype, h_s in out.items()}
 
         elif self.layer_pooling == "concat":
-            out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+            out = {node_type: torch.cat([h[sizes[-1][self.head]] for h in h_list], dim=1) \
+                   for node_type, h_list in h_layers.items() \
                    if len(h_list) > 0}
         else:
             raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
@@ -206,6 +213,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
+        print("\n LATTE", metapaths)
 
         if activation == "sigmoid":
             self.activation = F.sigmoid

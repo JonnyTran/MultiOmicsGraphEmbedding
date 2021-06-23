@@ -1,4 +1,5 @@
-from typing import Union
+from collections import OrderedDict
+from typing import Union, Tuple, Iterable, List
 
 import torch
 from torch_sparse import SparseTensor
@@ -59,18 +60,38 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
     return torch.stack([row, col], dim=0), values
 
 
-def join_metapaths(metapath_A, metapath_B, head_ntype_only=None):
-    metapaths = []
-    for relation_a in metapath_A:
-        if head_ntype_only and relation_a[0] != head_ntype_only:
-            metapaths.append(relation_a)
-            continue
+def join_metapaths(metapath_A, metapath_B):
+    output_metapaths = []
 
-        for relation_b in metapath_B:
+    for relation_b in metapath_B:
+        for relation_a in metapath_A:
             if relation_a[-1] == relation_b[0]:
                 new_relation = relation_a + relation_b[1:]
-                metapaths.append(new_relation)
-    return metapaths
+                output_metapaths.append(new_relation)
+    return output_metapaths
+
+
+def filter_metapaths(metapaths: List[Tuple[str]],
+                     order: Union[int, Iterable] = None,
+                     head_type: str = None,
+                     tail_type: str = None,
+                     remove_duplicates=True):
+    def filter_func(metapath: Tuple[str]):
+        condition = True
+
+        if order and isinstance(order, int):
+            condition = condition & (len(metapath[1::2]) == order)
+        elif order and isinstance(order, Iterable):
+            condition = condition & (len(metapath[1::2]) in order)
+
+        if head_type:
+            condition = condition & (metapath[0] == head_type)
+        if tail_type:
+            condition = condition & (metapath[-1] == tail_type)
+
+        return condition
+
+    return [m for m in sorted(OrderedDict.fromkeys(metapaths)) if filter_func(m)]
 
 
 def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.5):
@@ -111,6 +132,7 @@ def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, met
 
             new_metapath = metapath_a + metapath_b[1:]
             if metapaths and new_metapath not in metapaths: continue
+
             edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False)
             if edge_index_b is None: continue
 
