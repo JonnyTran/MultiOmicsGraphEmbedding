@@ -186,23 +186,23 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         batch_size, n_id, adjs = self.graph_sampler.sample(local_seed_nids)
 
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        local_sampled_nids, n_id = self.graph_sampler.get_local_nodes(n_id,
-                                                                      filter_nodes=allowed_nodes if do_filter else None)
+        local_nodes_nids, n_id = self.graph_sampler.get_local_nodes(n_id,
+                                                                    filter_nodes=allowed_nodes if do_filter else None)
 
         # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
         X = {"batch_size": batch_size,
-             "global_node_index": local_sampled_nids,
+             "global_node_index": local_nodes_nids,
              "x_dict": {}}
 
         X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
                                                                        n_id=n_id,
-                                                                       local_sampled_nodes=local_sampled_nids)
-        X["sizes"] = self.get_adjs_sizes(X["edge_index"], local_sampled_nids)
+                                                                       local_nodes_nids=local_nodes_nids)
+        X["sizes"] = self.get_adjs_sizes(X["edge_index"])
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
-            X["x_dict"] = {node_type: self.x_dict[node_type][local_sampled_nids[node_type]] \
-                           for node_type in self.x_dict if node_type in local_sampled_nids}
+            X["x_dict"] = {node_type: self.x_dict[node_type][local_nodes_nids[node_type]] \
+                           for node_type in self.x_dict if node_type in local_nodes_nids}
 
         # y_dict
         assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
@@ -224,14 +224,14 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         weights = None
         return X, y, weights
 
-    def get_adjs_sizes(self, edge_index_adjs: List[Dict[Tuple, torch.Tensor]], local_sampled_nids):
-        sizes = [{ntype: (None, None) for i in range(len(edge_index_adjs)) for ntype in local_sampled_nids} \
-                 for i in range(len(edge_index_adjs))]
-        for i, edge_index_dict in enumerate(edge_index_adjs):
+    def get_adjs_sizes(self, adjs: List[Dict[Tuple, torch.Tensor]]):
+        sizes = [{} for i in range(len(adjs))]
+
+        for i, edge_index_dict in enumerate(adjs):
             source_sizes = {ntype: nids.max() + 1 for ntype, nids in
-                            HeteroNetDataset.get_unique_nodes(edge_index_adjs[i], source=True, target=False).items()}
+                            HeteroNetDataset.get_unique_nodes(adjs[i], source=True, target=False).items()}
             target_sizes = {ntype: nids.max() + 1 for ntype, nids in
-                            HeteroNetDataset.get_unique_nodes(edge_index_adjs[i], source=False, target=True).items()}
+                            HeteroNetDataset.get_unique_nodes(adjs[i], source=False, target=True).items()}
             sizes[i] = {ntype: (source_sizes[ntype] if ntype in source_sizes else None,
                                 target_sizes[ntype] if ntype in target_sizes else None) \
                         for ntype in self.node_types}

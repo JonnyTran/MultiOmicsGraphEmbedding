@@ -189,8 +189,9 @@ class NeighborSampler(Sampler):
             # Ensure the sampled nodes only either belongs to training, validation, or testing set
             if filter_nodes is not None and (isinstance(filter_nodes, torch.Tensor) and ntype == self.head_node_type):
                 node_mask = np.isin(local_nodes[ntype], filter_nodes)
-                n_id_outlier_idx = mask.nonzero().flatten()[
-                    ~node_mask]  # Get the indices in n_id that were filtered out
+
+                # Get the indices in n_id that were filtered out
+                n_id_outlier_idx = mask.nonzero().flatten()[~node_mask]
                 n_id[n_id_outlier_idx] = -1
 
         return local_nodes, n_id
@@ -248,16 +249,16 @@ class NeighborSampler(Sampler):
 
         return edge_index_dict
 
-    def get_multi_edge_index_dict(self, adjs: List[EdgeIndex], n_id, local_sampled_nodes: dict):
+    def get_multi_edge_index_dict(self, adjs: List[EdgeIndex], n_id, local_nodes_nids: dict):
         """Conbine all edge_index's across multiple layers and convert local node id to "batch node
         index" that aligns with `x_dict` and `global_node_index`
 
         Args:
             adjs: global_batched edge index (local indices for the hetero graph sampler's global index, not original local index)
             n_id: global nodes ordering for adjs
-            local_sampled_nodes (dict): local nodes (original node ids)
+            local_nodes_nids (dict): local nodes (original node ids)
         """
-        local2batch = self.get_local2batch_dict(local_sampled_nodes)
+        local2batch = self.get_local2batch_dict(local_nodes_nids)
         local_edges_dict = [{} for i in range(len(adjs))]
 
         for i, adj in enumerate(adjs):
