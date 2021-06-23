@@ -299,4 +299,7 @@ class NeighborSampler(Sampler):
                                                          range(local_node_ids[node_type].size(0))))) \
                          for node_type in local_node_ids}
 
+        # relabel_nodes = {ntype: pd.Series(data=np.arange(node_ids_dict[ntype].size(0)),
+        #                                   index=node_ids_dict[ntype].numpy()) \
+        #                  for ntype in node_ids_dict}
         return relabel_nodes
