@@ -19,7 +19,7 @@ from moge.module.cogdl.conv import GTN as Gtn
 from moge.module.cogdl.conv import HAN as Han
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples, filter_samples_weights
+from moge.module.utils import filter_samples
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -74,7 +74,8 @@ class LATTENodeClf(NodeClfTrainer):
             self._node_ids = inputs["global_node_index"]
 
         embeddings, proximity_loss, edge_index_dict = self.embedder(inputs["x_dict"],
-                                                                    inputs["edge_index"], inputs["sizes"],
+                                                                    inputs["edge_index"],
+                                                                    inputs["sizes"],
                                                                     inputs["global_node_index"], **kwargs)
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
@@ -85,7 +86,8 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        # print(tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
@@ -108,7 +110,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
@@ -124,7 +126,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X, save_betas=True)
 
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 
         if batch_nb == 0:

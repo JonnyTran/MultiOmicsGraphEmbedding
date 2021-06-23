@@ -2,15 +2,16 @@ from typing import Optional, Any, Callable
 
 import numpy as np
 import torch
+import torchmetrics
 from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy, MetricsLambda
+from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
 
-import torchmetrics
-from .utils import filter_samples, tensor_sizes
+from .utils import filter_samples
+
 
 class Metrics(torch.nn.Module):
     def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
@@ -79,7 +80,7 @@ class Metrics(torch.nn.Module):
         """
         y_pred = y_hat.detach()
         y_true = y.detach()
-        y_pred, y_true = filter_samples(y_pred, y_true, weights, max_mode=True)
+        y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
 
         # Apply softmax/sigmoid activation if needed
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
