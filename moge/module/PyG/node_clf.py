@@ -33,6 +33,7 @@ class LATTENodeClf(NodeClfTrainer):
         self.collate_fn = collate_fn
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
+                              t_order=hparams.t_order,
                               embedding_dim=hparams.embedding_dim,
                               in_channels_dict=dataset.node_attr_shape,
                               num_nodes_dict=dataset.num_nodes_dict,
