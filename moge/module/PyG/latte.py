@@ -128,10 +128,6 @@ class LATTE(nn.Module):
 
         h_layers = {ntype: [] for ntype in global_node_idx}
         for l in range(self.n_layers):
-            # print("h_dict_l", l, tensor_sizes(h_dict))
-            # print("h_dict_r", l, tensor_sizes({ntype: h_dict[ntype][:sizes[l][ntype][1]] for ntype in h_dict}))
-            # print("sizes", sizes[l])
-
             h_dict_r = {ntype: h_dict[ntype][: sizes[l][ntype][1]] \
                         for ntype in h_dict if sizes[l][ntype][1] is not None}
 
@@ -140,7 +136,8 @@ class LATTE(nn.Module):
                 for ntype in global_node_idx if sizes[l][ntype][1] is not None}
 
             if l == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict_r,
+                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict,
+                                                                        x_r=h_dict_r,
                                                                         edge_index_dict=adjs[l],
                                                                         size=sizes[l],
                                                                         global_node_idx=global_node_idx,
