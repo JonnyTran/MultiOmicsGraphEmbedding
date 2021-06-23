@@ -131,7 +131,7 @@ class LATTE(nn.Module):
             # print("h_dict_r", l, tensor_sizes({ntype: h_dict[ntype][:sizes[l][ntype][1]] for ntype in h_dict}))
             # print("sizes", sizes[l])
 
-            h_dict_r = {ntype: h_dict[ntype][:sizes[l][ntype][1]] \
+            h_dict_r = {ntype: h_dict[ntype][: sizes[l][ntype][1]] \
                         for ntype in h_dict if sizes[l][ntype][1] is not None}
 
             global_node_idx = {
@@ -158,10 +158,10 @@ class LATTE(nn.Module):
                                                            save_betas=save_betas)
 
             if self.dropout:
-                h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
-                          h_dict.items()}
+                h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) \
+                          for ntype, emb in h_dict.items()}
 
-            for ntype in global_node_idx:
+            for ntype in h_dict:
                 h_layers[ntype].append(h_dict[ntype])
 
             if self.use_proximity:
@@ -480,7 +480,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             relations = self.get_head_relations(node_type, True) + [node_type, ]
 
             with torch.no_grad():
-                print(node_type, betas[node_type].shape, global_node_idx[node_type].shape)
                 self._betas[node_type] = pd.DataFrame(betas[node_type].squeeze(-1).cpu().numpy(),
                                                       columns=relations,
                                                       index=global_node_idx[node_type].cpu().numpy())

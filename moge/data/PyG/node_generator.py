@@ -187,11 +187,11 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         local_sampled_nids = self.graph_sampler.get_local_nodes(n_id)
 
         # Ensure the sampled nodes only either belongs to training, validation, or testing set
-        allowed_nodes, do_filter = self.get_allowed_nodes(mode)
-
-        if do_filter:
-            node_mask = np.isin(local_sampled_nids[self.head_node_type], allowed_nodes)
-            local_sampled_nids[self.head_node_type] = local_sampled_nids[self.head_node_type][node_mask]
+        # allowed_nodes, do_filter = self.get_allowed_nodes(mode)
+        #
+        # if do_filter:
+        #     node_mask = np.isin(local_sampled_nids[self.head_node_type], allowed_nodes)
+        #     local_sampled_nids[self.head_node_type] = local_sampled_nids[self.head_node_type][node_mask]
 
         # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
         X = {"batch_size": batch_size,
