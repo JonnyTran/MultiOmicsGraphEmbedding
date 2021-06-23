@@ -331,16 +331,17 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = size[head][0], size[tail][1]
+            head_size_in, tail_size_out = size[head][0], size[tail][1]
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
-            if edge_index is None: continue
+            if edge_index is None:
+                continue
 
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
                 x=(l_dict[head], r_dict[tail]),
-                size=(num_node_head, num_node_tail),
+                size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath))
             emb_relations[:, i] = out.view(-1, self.embedding_dim)
 
