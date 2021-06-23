@@ -171,7 +171,7 @@ class NeighborSampler(Sampler):
 
         return n_idx_to_sample
 
-    def get_local_nodes(self, n_id):
+    def get_local_nodes(self, n_id, filter_nodes: torch.Tensor = None):
         """
         Args:
             n_id: maps batch indices from adjs to global node ids
@@ -182,9 +182,18 @@ class NeighborSampler(Sampler):
         for node_type_id in node_types.unique():
             mask = node_types == node_type_id
             local_node_ids = self.global2local[n_id[mask]]
-            local_nodes[self.int2node_type[node_type_id.item()]] = local_node_ids
 
-        return local_nodes
+            ntype = self.int2node_type[node_type_id.item()]
+            local_nodes[ntype] = local_node_ids
+
+            # Ensure the sampled nodes only either belongs to training, validation, or testing set
+            if filter_nodes is not None and (isinstance(filter_nodes, torch.Tensor) and ntype == self.head_node_type):
+                node_mask = np.isin(local_nodes[ntype], filter_nodes)
+                n_id_outlier_idx = mask.nonzero().flatten()[
+                    ~node_mask]  # Get the indices in n_id that were filtered out
+                n_id[n_id_outlier_idx] = -1
+
+        return local_nodes, n_id
 
     def get_edge_index_dict(self, adjs: List[EdgeIndex], n_id, sampled_local_nodes: dict):
         """Conbine all edge_index's across multiple layers and convert local node id to "batch node
@@ -249,7 +258,6 @@ class NeighborSampler(Sampler):
             local_sampled_nodes (dict): local nodes (original node ids)
         """
         local2batch = self.get_local2batch_dict(local_sampled_nodes)
-
         local_edges_dict = [{} for i in range(len(adjs))]
 
         for i, adj in enumerate(adjs):
@@ -264,17 +272,17 @@ class NeighborSampler(Sampler):
                 # convert from "sampled_edge_index" to global index
                 edge_index = n_id[edge_index]
 
-                # Convert node global index -> local index -> batch index
-                if head == tail:
-                    edge_index = self.global2local[edge_index].apply_(local2batch[head].get)
-                else:
-                    edge_index[0] = self.global2local[edge_index[0]].apply_(lambda x: local2batch[head].get(x, -1))
-                    edge_index[1] = self.global2local[edge_index[1]].apply_(lambda x: local2batch[tail].get(x, -1))
-
                 # Remove edges labeled as -1, which contain nodes not in sampled_local_nodes
                 mask = np.isin(edge_index, [-1], assume_unique=False, invert=True).all(axis=0)
                 edge_index = edge_index[:, mask]
                 if edge_index.size(1) == 0: continue
+
+                # Convert node global index -> local index -> batch index
+                # if head == tail:
+                #     edge_index = self.global2local[edge_index].apply_(local2batch[head].get)
+                # else:
+                edge_index[0] = self.global2local[edge_index[0]].apply_(lambda x: local2batch[head].get(x, -1))
+                edge_index[1] = self.global2local[edge_index[1]].apply_(lambda x: local2batch[tail].get(x, -1))
 
                 local_edges_dict[i][metapath] = edge_index
 
