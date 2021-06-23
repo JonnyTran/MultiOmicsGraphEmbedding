@@ -295,7 +295,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha_dict = {}
         for ntype in global_node_idx:
             out[ntype], alpha = self.agg_relation_neighbors(node_type=ntype, l_dict=l_dict, r_dict=r_dict,
-                                                            edge_index_dict=edge_index_dict, sizes=size)
+                                                            edge_index_dict=edge_index_dict, size=size)
             out[ntype][:, -1] = r_dict[ntype].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
@@ -323,7 +323,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return out, proximity_loss, edge_index_dict
 
     def agg_relation_neighbors(self, node_type, l_dict, r_dict,
-                               edge_index_dict: Dict[Tuple, torch.Tensor], sizes: Dict[str, Tuple[int]]):
+                               edge_index_dict: Dict[Tuple, torch.Tensor], size: Dict[str, Tuple[int]]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
             size=(r_dict[node_type].size(0),
@@ -334,7 +334,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = sizes[head][0], sizes[tail][1]
+            num_node_head, num_node_tail = size[head][0], size[tail][1]
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
@@ -379,18 +379,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             h_dict[ntype] = h_dict[ntype].view(-1, self.attn_heads, self.out_channels)
 
         return h_dict
-
-    def get_alphas(self, edge_index_dict, l_dict, r_dict):
-        alpha_l, alpha_r = {}, {}
-
-        for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
-                continue
-            head, tail = metapath[0], metapath[-1]
-
-            alpha_l[metapath] = (l_dict[head] * self.attn_l[i]).sum(-1)
-            alpha_r[metapath] = (r_dict[tail] * self.attn_r[i]).sum(-1)
-        return alpha_l, alpha_r
 
     def get_beta_weights(self, h_dict):
         beta = {}
