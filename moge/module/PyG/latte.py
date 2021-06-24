@@ -136,9 +136,6 @@ class LATTE(nn.Module):
 
         h_layers = {ntype: [] for ntype in global_node_idx}
         for l in range(self.n_layers):
-            h_dict_r = {ntype: h_dict[ntype][: sizes[l][ntype][1]] \
-                        for ntype in h_dict if sizes[l][ntype][1] is not None}
-
             global_node_idx = {
                 ntype: global_node_idx[ntype][: sizes[l][ntype][1]] \
                 for ntype in global_node_idx if sizes[l][ntype][1] is not None}
@@ -153,12 +150,17 @@ class LATTE(nn.Module):
                                                     edge_threshold=self.edge_threshold,
                                                     edge_sampling=self.edge_sampling)
 
-            print(l, "METAPATHS", [".".join([d[0] for d in k]) for k in self.layers[l].metapaths], "\n\t LOCAL NODES",
+            print("\n", l, "\t METAPATHS", [".".join([d[0] for d in k]) for k in self.layers[l].metapaths],
+                  "\n\t LOCAL NODES",
                   {ntype: list(nids.shape) for ntype, nids in global_node_idx.items()})
             print("\t EDGE_INDEX_DICT",
-                  {".".join([k[0] for k in m]): eid[0].max(1).values if isinstance(eid, tuple) else eid.max(1).values
+                  {".".join([k[0] for k in m]): (eid[0].max(1).values, eid[1].shape) if isinstance(eid,
+                                                                                                   tuple) else eid.max(
+                      1).values
                    for m, eid in edge_index_dict.items()})
 
+            h_dict_r = {ntype: h_dict[ntype][: sizes[l][ntype][1]] \
+                        for ntype in h_dict if sizes[l][ntype][1] is not None}
             h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict,
                                                                     x_r=h_dict_r,
                                                                     edge_index_dict=edge_index_dict,
@@ -221,7 +223,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
-        print("\n LATTE", [".".join([k[0].upper() if i % 2 == 1 else k[0].lower() for i, k in enumerate(m)]) for m in
+        print("\n LATTE", [".".join([k[0].upper() if i % 2 == 0 else k[0].lower() for i, k in enumerate(m)]) for m in
                            sorted(metapaths)])
 
         if activation == "sigmoid":

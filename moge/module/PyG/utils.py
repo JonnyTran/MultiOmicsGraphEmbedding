@@ -139,7 +139,7 @@ def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, sizes, metapaths=Non
             if edge_index_b is None: continue
 
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
-            a_order, b_order = len(metapath_a[1::2]), len(metapath_b[1::2])
+            a_order, b_order = len(metapath_a[1::2]) - 1, len(metapath_b[1::2]) - 1
 
             try:
                 new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
