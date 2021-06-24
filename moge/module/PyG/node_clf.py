@@ -30,7 +30,7 @@ class LATTENodeClf(NodeClfTrainer):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.n_layers}{' proximity' if hparams.use_proximity else ''}"
+        self._name = f"LATTE-{hparams.n_layers} ({hparams.t_order}-order){' proximity' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
