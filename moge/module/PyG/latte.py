@@ -222,9 +222,11 @@ class LATTE(nn.Module):
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
-    def __init__(self, input_dim: {str: int}, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", batchnorm=False, layernorm=False, attn_heads=4, attn_activation="sharpening",
-                 attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0) -> None:
+    def __init__(self, input_dim: Dict[str, int], output_dim: int,
+                 num_nodes_dict: Dict[str, int], metapaths: list,
+                 activation: str = "relu", batchnorm=False, layernorm=False,
+                 attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
+                 use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
