@@ -2,13 +2,15 @@ from typing import Optional, Any, Callable
 
 import numpy as np
 import torch
-import torchmetrics
-from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
-from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
+
+from ignite.exceptions import NotComputableError
+from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
+
+import torchmetrics
+from torchmetrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
 
 from .utils import filter_samples
 
