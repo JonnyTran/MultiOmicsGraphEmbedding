@@ -1,3 +1,5 @@
+from typing import Dict, Tuple, List
+import copy
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
@@ -145,14 +147,17 @@ class LATTE(nn.Module):
                 edge_index_dict = adjs[l]
 
             else:
-                edge_index_dict = join_edge_indexes(edge_pred_dict, adjs[l], global_node_idx,
+                edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict, edge_index_dict_B=adjs[l],
+                                                    sizes=sizes,
                                                     metapaths=self.layers[l].metapaths,
+                                                    edge_threshold=self.edge_threshold,
                                                     edge_sampling=self.edge_sampling)
 
             print(l, "METAPATHS", [".".join([d[0] for d in k]) for k in self.layers[l].metapaths], "\n\t LOCAL NODES",
                   {ntype: list(nids.shape) for ntype, nids in global_node_idx.items()})
-            print("\t EDGE_INDEX_DICT \n\t",
-                  {".".join([k[0] for k in m]): eid.max(1).values for m, eid in edge_index_dict.items()})
+            print("\t EDGE_INDEX_DICT",
+                  {".".join([k[0] for k in m]): eid[0].max(1).values if isinstance(eid, tuple) else eid.max(1).values
+                   for m, eid in edge_index_dict.items()})
 
             h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict,
                                                                     x_r=h_dict_r,
@@ -160,6 +165,9 @@ class LATTE(nn.Module):
                                                                     size=sizes[l],
                                                                     global_node_idx=global_node_idx,
                                                                     save_betas=save_betas)
+
+            print("edge_pred_dict",
+                  {".".join([k[0] for k in m]): e_attr.shape for m, (eid, e_attr) in edge_pred_dict.items()})
 
             if self.dropout:
                 h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) \
@@ -213,7 +221,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
-        print("\n LATTE", metapaths)
+        print("\n LATTE", [".".join([k[0].upper() if i % 2 == 1 else k[0].lower() for i, k in enumerate(m)]) for m in
+                           sorted(metapaths)])
 
         if activation == "sigmoid":
             self.activation = F.sigmoid
