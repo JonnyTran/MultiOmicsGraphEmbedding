@@ -106,7 +106,7 @@ class LATTE(nn.Module):
             for ntype in self.embeddings:
                 self.embeddings[ntype].reset_parameters()
 
-    def forward(self, node_feats: dict, adjs: List[Dict[Tuple, EdgeIndex]], sizes: List[Dict[str, int]],
+    def forward(self, node_feats: dict, adjs: List[Dict[Tuple, EdgeIndex]], sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: dict, save_betas=False):
         """
         This
@@ -162,6 +162,7 @@ class LATTE(nn.Module):
 
             h_dict_r = {ntype: h_dict[ntype][: sizes[l][ntype][1]] \
                         for ntype in h_dict if sizes[l][ntype][1] is not None}
+
             (h_source, h_dict), t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict,
                                                                                 x_r=h_dict_r,
                                                                                 h_layers=h_source_layers,

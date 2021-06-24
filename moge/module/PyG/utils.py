@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Union, Tuple, Iterable, List
+from typing import Union, Tuple, Iterable, List, Dict
 
 import torch
 from torch_sparse import SparseTensor
@@ -94,7 +94,8 @@ def filter_metapaths(metapaths: List[Tuple[str]],
     return [m for m in sorted(OrderedDict.fromkeys(metapaths)) if filter_func(m)]
 
 
-def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.5):
+def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor],
+                          filter_edge=False, threshold=0.5):
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
 
@@ -120,27 +121,32 @@ def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edg
     return edge_index, edge_values
 
 
-def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, sizes, metapaths=None, edge_threshold=None,
-                      edge_sampling=False):
+def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Tensor]],
+                      edge_index_dict_B: Dict[str, torch.Tensor],
+                      sizes: List[Dict[str, Tuple[int]]],
+                      metapaths: Tuple[str] = None,
+                      edge_threshold: float = None,
+                      edge_sampling: bool = False):
     output_edge_index = {}
     for metapath_b, edge_index_b in edge_index_dict_B.items():
         edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False)
         if edge_index_b is None: continue
 
+        # In the current LATTE layer that calls this method, a metapath is not higher-order
         if metapaths and metapath_b in metapaths:
-            # In the current LATTE layer that calls this method, a metapath is repeated (i.e. not higher-order), so we return the edges to it again.
             output_edge_index[metapath_b] = (edge_index_b, values_b)
 
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if metapath_a[-1] != metapath_b[0]: continue
-            edge_index_a, values_a = get_edge_index_values(edge_index_a,
-                                                           filter_edge=True if edge_threshold else False,
-                                                           threshold=edge_threshold)
-            if edge_index_a is None or is_negative(metapath_a):
-                continue
 
             new_metapath = metapath_a + metapath_b[1:]
             if metapaths and new_metapath not in metapaths: continue
+
+            edge_index_a, values_a = get_edge_index_values(edge_index_a,
+                                                           filter_edge=True if edge_threshold else False,
+                                                           threshold=edge_threshold)
+            if edge_index_a is None or is_negative(metapath_a): continue
+
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
             a_order_idx, b_order_idx = len(metapath_a[1::2]) - 1, len(metapath_b[1::2]) - 1
 
