@@ -191,7 +191,7 @@ class LATTE(nn.Module):
                     if len(h_in_layers[ntype]) > self.t_order:
                         h_in_layers[ntype].pop(0)
 
-            if self.use_proximity:
+            if self.use_proximity and t_loss is not None:
                 proximity_loss += t_loss
 
             if self.layer_pooling != "last":
