@@ -190,8 +190,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
                                                                     filter_nodes=allowed_nodes if do_filter else None)
 
         # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
-        X = {"batch_size": batch_size,
-             "global_node_index": local_nodes_nids,
+        X = {"global_node_index": local_nodes_nids,
              "x_dict": {}}
 
         X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
@@ -204,9 +203,9 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             X["x_dict"] = {node_type: self.x_dict[node_type][local_nodes_nids[node_type]] \
                            for node_type in self.x_dict if node_type in local_nodes_nids}
 
-        # y_dict
-        assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
+        # assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
 
+        # y_dict
         if hasattr(self, "y_dict"):
             y = self.y_dict[self.head_node_type][local_seed_nids]
         else:
