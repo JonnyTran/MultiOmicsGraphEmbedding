@@ -98,7 +98,7 @@ class LATTE(nn.Module):
                 self.embeddings = nn.ModuleDict(
                     {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                          embedding_dim=embedding_dim,
-                                         sparse=False,
+                                         sparse=True,
                                          _weight=hparams.embeddings[ntype] if "embeddings" in hparams else None) \
                      for ntype in non_attr_node_types})
         else:
@@ -150,13 +150,8 @@ class LATTE(nn.Module):
         h_in_layers = {ntype: [] for ntype in global_node_idx}
         h_out_layers = {ntype: [] for ntype in global_node_idx}
         for l in range(self.n_layers):
-            global_node_idx = {
-                ntype: global_node_idx[ntype][: sizes[l][ntype][1]] \
-                for ntype in global_node_idx if sizes[l][ntype][1] is not None}
-
             if l == 0:
                 edge_index_dict = adjs[l]
-
             else:
                 edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
                                                     edge_index_dict_B=adjs[l],
@@ -174,6 +169,9 @@ class LATTE(nn.Module):
             #           1).values
             #        for m, eid in edge_index_dict.items()})
 
+            global_node_idx = {
+                ntype: global_node_idx[ntype][: sizes[l][ntype][1]] \
+                for ntype in global_node_idx if sizes[l][ntype][1] is not None}
             (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
                                                                            prev_h_in=h_in_layers,
                                                                            edge_index_dict=edge_index_dict,
@@ -334,12 +332,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         out = {}
         alpha_dict = {}
         for ntype in global_node_idx:
-            out[ntype], alpha = self.agg_relation_neighbors(node_type=ntype,
-                                                            l_dict=l_dict,
-                                                            r_dict=r_dict,
-                                                            h_layers=prev_h_in,
-                                                            edge_index_dict=edge_index_dict,
-                                                            size=size)
+            out[ntype], alphas = self.agg_relation_neighbors(node_type=ntype,
+                                                             l_dict=l_dict,
+                                                             r_dict=r_dict,
+                                                             h_layers=prev_h_in,
+                                                             edge_index_dict=edge_index_dict,
+                                                             size=size)
             out[ntype][:, -1] = r_dict[ntype].view(-1, self.embedding_dim)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
@@ -354,8 +352,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if self.dropout:
                 out[ntype] = F.dropout(out[ntype], p=self.dropout, training=self.training)
 
-            if alpha:
-                alpha_dict.update(alpha)
+            if alphas:
+                alpha_dict.update(alphas)
 
         proximity_loss, edge_pred_dict = None, {}
         if self.use_proximity:
