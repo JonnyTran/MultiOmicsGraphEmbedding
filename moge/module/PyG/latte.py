@@ -65,6 +65,8 @@ class LATTE(nn.Module):
                                                          "batchnorm") or is_output_layer else hparams.batchnorm,
                           layernorm=False if not hasattr(hparams,
                                                          "layernorm") or is_output_layer else hparams.layernorm,
+                          dropout=False if not hasattr(hparams,
+                                                       "dropout") or is_output_layer else hparams.dropout,
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout,
@@ -108,6 +110,23 @@ class LATTE(nn.Module):
             for ntype in self.embeddings:
                 self.embeddings[ntype].reset_parameters()
 
+    def transform_inp_feats(self, node_feats, global_node_idx):
+        h_dict = {}
+        for ntype in self.node_types:
+            if ntype in node_feats:
+                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
+                if hasattr(self, "batchnorm"):
+                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+
+                h_dict[ntype] = F.relu(h_dict[ntype])
+                if self.dropout:
+                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+
+            else:
+                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(
+                    global_node_idx[self.node_types[0]].device)
+        return h_dict
+
     def forward(self, node_feats: dict, adjs: List[Dict[Tuple, EdgeIndex]], sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: dict, save_betas=False):
         """
@@ -134,7 +153,8 @@ class LATTE(nn.Module):
                 edge_index_dict = adjs[l]
 
             else:
-                edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict, edge_index_dict_B=adjs[l],
+                edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
+                                                    edge_index_dict_B=adjs[l],
                                                     sizes=sizes,
                                                     metapaths=self.layers[l].metapaths,
                                                     edge_threshold=self.edge_threshold,
@@ -159,13 +179,7 @@ class LATTE(nn.Module):
             # print("\t EDGE_PRED_DICT",
             #       {".".join([k[0] for k in m]): e_attr.shape for m, (eid, e_attr) in edge_pred_dict.items()})
 
-            if self.dropout:
-                h_out = {ntype: F.dropout(emb, p=self.dropout, training=self.training) \
-                         for ntype, emb in h_out.items()}
-
-            for ntype in h_out:
-                h_out_layers[ntype].append(h_out[ntype])
-
+            # Add the h_in embeddings to
             if l < self.n_layers and self.t_order > 1:
                 for ntype in h_in:
                     h_in_layers[ntype].append(h_in[ntype])
@@ -175,7 +189,8 @@ class LATTE(nn.Module):
             if self.use_proximity:
                 proximity_loss += t_loss
 
-            # print("\t H_LAYERS", tensor_sizes(h_layers))
+            if self.layer_pooling != "last":
+                h_out_layers[self.head_node_type].append(h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
 
         if self.layer_pooling == "last" or self.n_layers == 1:
             out = h_out
@@ -191,31 +206,11 @@ class LATTE(nn.Module):
             out = {ntype: torch.mean(h_s, dim=1) for ntype, h_s in out.items()}
 
         elif self.layer_pooling == "concat":
-            out = {ntype: torch.cat([h[: sizes[-1][self.head_node_type]] \
-                                     for h in h_list], dim=1) \
+            out = {ntype: torch.cat(h_list, dim=1) \
                    for ntype, h_list in h_out_layers.items() \
                    if len(h_list) > 0}
-        else:
-            raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
 
         return out, proximity_loss, edge_pred_dict
-
-    def transform_inp_feats(self, node_feats, global_node_idx):
-        h_dict = {}
-        for ntype in self.node_types:
-            if ntype in node_feats:
-                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
-                if hasattr(self, "batchnorm"):
-                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
-
-                h_dict[ntype] = F.relu(h_dict[ntype])
-                if self.dropout:
-                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
-
-            else:
-                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(
-                    global_node_idx[self.node_types[0]].device)
-        return h_dict
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -227,7 +222,7 @@ class LATTE(nn.Module):
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: Dict[str, int], output_dim: int,
                  num_nodes_dict: Dict[str, int], metapaths: list,
-                 activation: str = "relu", batchnorm=False, layernorm=False,
+                 activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0,
                  attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
@@ -251,6 +246,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
+        self.dropout = dropout
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(output_dim) \
@@ -350,6 +346,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if hasattr(self, "activation"):
                 out[ntype] = self.activation(out[ntype])
 
+            if self.dropout:
+                out[ntype] = F.dropout(out[ntype], p=self.dropout, training=self.training)
+
             if alpha:
                 alpha_dict.update(alpha)
 
@@ -358,18 +357,17 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             proximity_loss, _ = self.proximity_loss(edge_index_dict,
                                                     l_dict=l_dict, r_dict=r_dict,
                                                     global_node_idx=global_node_idx)
-        if alpha_dict:
-            # print("\t\t ALPHA_DICT", [".".join([d[0] for d in k]) for k in alpha_dict.keys()])
-            # print("\t\t EDGE_INDEX_DICT", [".".join([d[0] for d in k]) for k in edge_index_dict.keys()])
-            for metapath, edge_index in edge_index_dict.items():
-                if metapath in alpha_dict:
-                    edge_pred_dict[metapath] = (edge_index[0] \
-                                                    if isinstance(edge_index, tuple) else edge_index,
-                                                alpha_dict[metapath])
-                else:
-                    edge_pred_dict[metapath] = edge_index
+        # print("\t\t ALPHA_DICT", [".".join([d[0] for d in k]) for k in alpha_dict.keys()])
+        # print("\t\t EDGE_INDEX_DICT", [".".join([d[0] for d in k]) for k in edge_index_dict.keys()])
+        for metapath, edge_index in edge_index_dict.items():
+            if metapath in alpha_dict:
+                edge_pred_dict[metapath] = (edge_index[0] \
+                                                if isinstance(edge_index, tuple) else edge_index,
+                                            alpha_dict[metapath])
+            else:
+                edge_pred_dict[metapath] = edge_index
 
-        return (l_dict, out), proximity_loss, edge_index_dict
+        return (l_dict, out), proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type, l_dict, r_dict, h_layers,
                                edge_index_dict: Dict[Tuple, torch.Tensor], size: Dict[str, Tuple[int]]):
@@ -448,7 +446,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def get_beta_weights(self, h_dict):
         beta = {}
         for node_type in h_dict:
-            beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            beta[node_type] = self.conv[node_type].forward(h_dict[node_type].view(-1, self.embedding_dim).unsqueeze(-1))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
 
         return beta
