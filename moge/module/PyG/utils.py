@@ -120,7 +120,6 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
 
     return edge_index, edge_values
 
-
 def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Tensor]],
                       edge_index_dict_B: Dict[str, torch.Tensor],
                       sizes: List[Dict[str, Tuple[int]]],
