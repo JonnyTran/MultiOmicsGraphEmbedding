@@ -87,15 +87,20 @@ class LATTE(nn.Module):
 
             if cpu_embeddings:
                 print("Embedding.device = 'cpu'")
-                self.embeddings = {node_type: nn.Embedding(num_embeddings=num_nodes_dict[node_type],
-                                                           embedding_dim=embedding_dim,
-                                                           sparse=True).cpu() for node_type in non_attr_node_types}
+                self.embeddings = {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
+                                                       embedding_dim=embedding_dim,
+                                                       sparse=True,
+                                                       _weight=hparams.embeddings[
+                                                           ntype] if "embeddings" in hparams else None).cpu() \
+                                   for ntype in non_attr_node_types}
             else:
                 print("Embedding.device = 'gpu'")
                 self.embeddings = nn.ModuleDict(
-                    {node_type: nn.Embedding(num_embeddings=num_nodes_dict[node_type],
-                                             embedding_dim=embedding_dim,
-                                             sparse=False) for node_type in non_attr_node_types})
+                    {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
+                                         embedding_dim=embedding_dim,
+                                         sparse=False,
+                                         _weight=hparams.embeddings[ntype] if "embeddings" in hparams else None) \
+                     for ntype in non_attr_node_types})
         else:
             self.embeddings = None
 
