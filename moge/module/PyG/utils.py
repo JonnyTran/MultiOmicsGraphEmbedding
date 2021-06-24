@@ -120,12 +120,14 @@ def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edg
     return edge_index, edge_values
 
 
-def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, metapaths=None, edge_sampling=False):
+def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, sizes, metapaths=None, edge_threshold=None,
+                      edge_sampling=False):
     output_edge_index = {}
     for metapath_a, edge_index_a in edge_index_dict_A.items():
-        if is_negative(metapath_a): continue
-        edge_index_a, values_a = get_edge_index_values(edge_index_a, filter_edge=False)
-        if edge_index_a is None: continue
+        edge_index_a, values_a = get_edge_index_values(edge_index_a,
+                                                       filter_edge=True if edge_threshold else False,
+                                                       threshold=edge_threshold)
+        if edge_index_a is None or is_negative(metapath_a): continue
 
         for metapath_b, edge_index_b in edge_index_dict_B.items():
             if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
@@ -136,22 +138,26 @@ def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, met
             edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False)
             if edge_index_b is None: continue
 
+            head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
+            a_order, b_order = len(metapath_a[1::2]), len(metapath_b[1::2])
+
             try:
                 new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
                                                          indexB=edge_index_b, valueB=values_b,
-                                                         m=global_node_idx[metapath_a[0]].size(0),
-                                                         k=global_node_idx[metapath_b[0]].size(0),
-                                                         n=global_node_idx[metapath_b[-1]].size(0),
+                                                         m=sizes[a_order][head][0],
+                                                         k=sizes[a_order][middle][1],
+                                                         n=sizes[b_order][tail][1],
                                                          coalesced=True,
                                                          sampling=edge_sampling)
                 if new_edge_index.size(1) == 0: continue
                 output_edge_index[new_metapath] = (new_edge_index, new_values)
 
             except Exception as e:
-                print(f"{e} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
-                print("\t", {"m": global_node_idx[metapath_a[0]].size(0),
-                             "k": global_node_idx[metapath_a[-1]].size(0),
-                             "n": global_node_idx[metapath_b[-1]].size(0), })
+                print(
+                    f"{e} \n {metapath_a}: {edge_index_a.max(1).values, edge_index_a.size(1)}, {metapath_b}: {edge_index_b.max(1).values, edge_index_b.size(1)}")
+                print("sizes: ",
+                      {"m": sizes[a_order][head][0], "k": sizes[a_order][middle][1], "n": sizes[b_order][tail][1], })
+                raise e
                 continue
 
         if metapaths and metapath_a in metapaths:
