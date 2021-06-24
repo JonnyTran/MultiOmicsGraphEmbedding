@@ -10,6 +10,7 @@ from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+from torch_geometric.nn import DNAConv
 
 from moge.data import HeteroNetDataset
 from moge.module.PyG.hgt import HGTModel
