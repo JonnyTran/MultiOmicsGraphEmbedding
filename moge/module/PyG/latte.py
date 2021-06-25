@@ -269,9 +269,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.linear_l = nn.ModuleDict(
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F)
+
         self.linear_r = nn.ModuleDict(
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F}
+
+        self.linear_prev = nn.ModuleDict(
+            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+             for node_type in self.node_types})  # W.shape (F x F)
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels * 2))
@@ -303,7 +308,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
     def forward(self, x: Dict[str, torch.Tensor],
-                prev_h_in,
+                prev_h_in: Dict[str, List[torch.Tensor]],
                 edge_index_dict: Dict[Tuple, torch.Tensor],
                 size: Dict[str, Tuple[int]],
                 global_node_idx: Dict[str, torch.Tensor],
@@ -323,6 +328,18 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         l_dict = self.get_h_dict(x, left_right="left")
         r_dict = self.get_h_dict(x_r, left_right="right")
 
+        prev_dict = prev_h_in
+        for head in {m[0] for m in edge_index_dict}:
+            for metapath in filter_metapaths(edge_index_dict, head_type=head):
+                order = len(metapath[1::2])
+                if order == 1: continue
+                h_source = prev_dict[head][-(order - 1)]
+
+                orig_shape = h_source.shape
+                h_source = self.linear_prev[head].forward(h_source.view(orig_shape[0], self.embedding_dim))
+
+                prev_dict[head][-(order - 1)] = h_source.view(orig_shape)
+
         # Predict relations attention coefficients
         beta = self.get_beta_weights(r_dict)
         # Save beta weights from testing samples
@@ -335,7 +352,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out[ntype], alphas = self.agg_relation_neighbors(node_type=ntype,
                                                              l_dict=l_dict,
                                                              r_dict=r_dict,
-                                                             h_layers=prev_h_in,
+                                                             h_layers=prev_dict,
                                                              edge_index_dict=edge_index_dict,
                                                              size=size)
             out[ntype][:, -1] = r_dict[ntype].view(-1, self.embedding_dim)
@@ -372,7 +389,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return (l_dict, out), proximity_loss, edge_pred_dict
 
-    def agg_relation_neighbors(self, node_type, l_dict, r_dict, h_layers,
+    def agg_relation_neighbors(self, node_type: str,
+                               l_dict: Dict[str, torch.Tensor],
+                               r_dict: Dict[str, torch.Tensor],
+                               h_layers: Dict[str, List[torch.Tensor]],
                                edge_index_dict: Dict[Tuple, torch.Tensor], size: Dict[str, Tuple[int]]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
