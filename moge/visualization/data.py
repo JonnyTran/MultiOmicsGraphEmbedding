@@ -14,16 +14,18 @@ import xarray as xr
 
 
 def heatmap_fast(mtx, x_label, y_label, size=1000):
-    pw_s = xr.DataArray(mtx, coords=[(x_label, np.arange(mtx.shape[0])),
-                                     (y_label, np.arange(mtx.shape[1]))])
+    pw_s = xr.DataArray(mtx,
+                        # coords=[(x_label, np.arange(mtx.shape[0])),
+                        #              (y_label, np.arange(mtx.shape[1]))]
+                        )
     cvs = ds.Canvas(plot_width=int(size * mtx.shape[0] / sum(mtx.shape)),
                     plot_height=int(size * mtx.shape[1] / sum(mtx.shape)),
                     x_range=(0, mtx.shape[1]),
                     y_range=(0, mtx.shape[0]))
 
-    agg = cvs.raster(pw_s, agg=rd.max())
+    agg = cvs.raster(pw_s, agg=rd.mean())
 
-    fig = px.imshow(agg)
+    fig = px.imshow(agg, labels={"x": x_label, "y": y_label})
     fig['layout'].update(autosize=False)
     return fig
 
