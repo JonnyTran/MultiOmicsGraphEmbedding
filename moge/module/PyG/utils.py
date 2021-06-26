@@ -32,33 +32,6 @@ def is_negative(metapath):
         return False
 
 
-def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=False):
-    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=not coalesced)
-    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=not coalesced)
-
-    deg_A = A.sum(0)
-    deg_B = B.sum(1)
-    deg_normalized = 1.0 / (deg_A + deg_B)
-
-    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     value=deg_normalized.type_as(valueA),
-                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
-
-    out = A @ D @ B
-    row, col, values = out.coo()
-
-    num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
-    if sampling and values.numel() > num_samples:
-        idx = torch.multinomial(values, num_samples=num_samples,
-                                replacement=False)
-        row, col, values = row[idx], col[idx], values[idx]
-
-    return torch.stack([row, col], dim=0), values
-
-
 def join_metapaths(metapath_A, metapath_B):
     output_metapaths = []
 
@@ -98,13 +71,8 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
 
-        if filter_edge:
-            mask = edge_values >= threshold
-            # print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
-
-            if mask.sum(0) == 0:
-                mask[torch.argmax(edge_values)] = True
-
+        if filter_edge and threshold > 0.0:
+            mask = (edge_values >= threshold).any(dim=1)
             edge_index = edge_index[:, mask]
             edge_values = edge_values[mask]
 
@@ -118,6 +86,7 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
         edge_values = edge_values.to(torch.float)
 
     return edge_index, edge_values
+
 
 def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Tensor]],
                       edge_index_dict_B: Dict[str, torch.Tensor], sizes: List[Dict[str, Tuple[int]]], layer,
@@ -166,3 +135,36 @@ def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Ten
                 continue
 
     return output_edge_index
+
+
+def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=False):
+    if valueA.dim() > 1:
+        valueA = valueA.squeeze(-1)
+    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
+                     sparse_sizes=(m, k), is_sorted=not coalesced)
+    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
+                     sparse_sizes=(k, n), is_sorted=not coalesced)
+
+    deg_A = A.sum(0)
+    deg_B = B.sum(1)
+    if deg_A.dim() > deg_B.dim():
+        deg_B = deg_B.unsqueeze(1)
+        B.storage._value = B.storage._value.expand(deg_A.size(1), B.storage._value.numel()).T
+    deg_normalized = 1.0 / (deg_A + deg_B)
+
+    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
+                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
+                     value=deg_normalized.type_as(valueA),
+                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
+
+    # print("A", A.sizes(), "D", D.sizes(), "B", B.sizes(), )
+    out = A @ D @ B
+    row, col, values = out.coo()
+
+    num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
+    if sampling and values.numel() > num_samples:
+        idx = torch.multinomial(values, num_samples=num_samples,
+                                replacement=False)
+        row, col, values = row[idx], col[idx], values[idx]
+
+    return torch.stack([row, col], dim=0), values

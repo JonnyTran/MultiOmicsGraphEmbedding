@@ -191,6 +191,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
         X = {"global_node_index": local_nodes_nids,
+             "adjs": adjs,
              "x_dict": {}}
 
         X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,

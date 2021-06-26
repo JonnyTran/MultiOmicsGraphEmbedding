@@ -229,6 +229,34 @@ class LATTE(nn.Module):
             df = df[df.notnull().sum(1) >= min_order]
         return df
 
+    def get_sankey_flow(self, t, node_type, self_loop=False):
+        data = {}
+        df = self.layers[t]._betas[node_type].sum(0)
+        new_index = df.index.str.split(".").map(lambda tup: [str(len(tup) - i) + n for i, n in enumerate(tup)])
+        all_nodes = {node for nodes in new_index for node in nodes}
+        all_nodes = {node: i for i, node in enumerate(all_nodes)}
+
+        links = {}
+        for i, (metapath, value) in enumerate(df.to_dict().items()):
+            if len(metapath.split(".")) > 1:
+                sources = [all_nodes[new_index[i][j]] for j, _ in enumerate(new_index[i][:-1])]
+                targets = [all_nodes[new_index[i][j + 1]] for j, _ in enumerate(new_index[i][:-1])]
+
+                links.setdefault("source", []).extend(sources)
+                links.setdefault("target", []).extend(targets)
+                links.setdefault("value", []).extend([value, ] * len(targets))
+                links.setdefault("label", []).extend([metapath, ] * len(targets))
+            elif self_loop:
+                source = all_nodes[new_index[i][0]]
+                links.setdefault("source", []).append(source)
+                links.setdefault("target", []).append(source)
+                links.setdefault("value", []).extend([value, ])
+                links.setdefault("label", []).extend([metapath, ])
+
+        data["links"] = links
+        data.setdefault("nodes", {})["labels"] = [node[1:] for node in all_nodes.keys()]
+        return data
+
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: Dict[str, int], output_dim: int,
@@ -385,8 +413,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             proximity_loss, _ = self.proximity_loss(edge_index_dict,
                                                     l_dict=l_dict, r_dict=r_dict,
                                                     global_node_idx=global_node_idx)
-        # print("\t\t ALPHA_DICT", [".".join([d[0] for d in k]) for k in alpha_dict.keys()])
-        # print("\t\t EDGE_INDEX_DICT", [".".join([d[0] for d in k]) for k in edge_index_dict.keys()])
+
         for metapath, edge_index in edge_index_dict.items():
             if metapath in alpha_dict:
                 edge_pred_dict[metapath] = (edge_index[0] \
@@ -401,7 +428,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                l_dict: Dict[str, torch.Tensor],
                                r_dict: Dict[str, torch.Tensor],
                                prev_l_dict: Dict[str, List[torch.Tensor]],
-                               edge_index_dict: Dict[Tuple, torch.Tensor], size: Dict[str, Tuple[int]]):
+                               edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
+                               size: Dict[str, Tuple[int]]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
             size=(r_dict[node_type].size(0),
@@ -414,8 +442,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
-            if edge_index is None:
-                continue
+            if edge_index is None: continue
 
             # Select the right t-order context node presentations based on the order of the metapath
             order = len(metapath[1::2])
@@ -433,28 +460,33 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     edge_index=edge_index,
                     x=(h_source, r_dict[tail]),
                     size=(head_size_in, tail_size_out),
-                    metapath_idx=self.metapaths.index(metapath))
+                    metapath_idx=self.metapaths.index(metapath),
+                    values=values if order > 1 else None)
                 emb_relations[:, i] = out.view(-1, self.embedding_dim)
             except Exception as e:
-                print(metapath, edge_index.max(1).values, head_size_in, tail_size_out)
+                print(e.__class__, metapath, edge_index.max(1).values, head_size_in, tail_size_out)
                 raise e
 
-            alpha[metapath] = self._alpha.max(1).values  # Select max attn value across multi-head attn.
+            alpha[metapath] = self._alpha  # .max(1).values  # Select max attn value across multi-head attn.
             # if relation_weights is not None:
             #     alpha[metapath] = alpha[metapath] * relation_weights[:, i].squeeze(-1)[edge_index[0]]
             self._alpha = None
 
         return emb_relations, alpha
 
-    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx):
-        x = torch.cat([x_i, x_j], dim=2)
-        if isinstance(self.alpha_activation, nn.Module):
-            x = self.alpha_activation(x)
-        else:
-            x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
+    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, values=None):
+        if values is None:
+            x = torch.cat([x_i, x_j], dim=2)
+            if isinstance(self.alpha_activation, nn.Module):
+                x = self.alpha_activation(x)
+            else:
+                x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
 
-        alpha = (x * self.attn[metapath_idx]).sum(dim=-1)
-        alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+            alpha = (x * self.attn[metapath_idx]).sum(dim=-1)
+            alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+        else:
+            alpha = values.unsqueeze(-1)
+
         self._alpha = alpha
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
 
@@ -607,7 +639,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return print_output
 
     def get_top_relations(self, ntype="paper"):
-        # columns: [2-neighbors, 2-order relations, 1-neighbors, 1-order relations, targets]
+        # columns: [..., 2-neighbors, 2-order relations, 1-neighbors, 1-order relations, targets]
         top_rels: pd.DataFrame = self._betas[ntype].idxmax(axis=1).str.split(".", expand=True)
 
         # Shift top meta relations to the right if its right value is None
@@ -617,7 +649,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             top_rels.loc[rows2shift.index] = rows2shift
 
         # Rename columns
-        columns = [f"{int(np.ceil(i / 2))}-neighbors" \
+        ordinal = lambda n: str(n) + {1: 'st', 2: 'nd', 3: 'rd'}.get(4 if 10 <= n % 100 < 20 else n % 10, "th")
+        columns = [f"{ordinal(int(np.ceil(i / 2)))} neighbors" \
                        if i % 2 == 0 \
                        else f"{int(np.ceil(i / 2))}-order relations"
                    for i, _ in enumerate(top_rels.columns)]
@@ -625,11 +658,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         top_rels.columns = reversed(columns)
 
         return top_rels
-
-        # return {(metapath if "." in metapath or len(metapath) > 1 else node_type): (avg, std) \
-        #         for node_type in _beta_avg \
-        #         for (metapath, avg), (relation_b, std) in
-        #         zip(_beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
     def save_attn_weights(self, node_type: str,
                           attn_weights: torch.Tensor,
