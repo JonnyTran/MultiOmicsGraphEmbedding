@@ -98,6 +98,13 @@ class LATTENodeClf(NodeClfTrainer):
             self.embedder.layers[l]._beta_std = {}
         super().on_validation_epoch_end()
 
+    def on_predict_epoch_start(self) -> None:
+        for l in range(self.embedder.n_layers):
+            self.embedder.layers[l]._betas = {}
+            self.embedder.layers[l]._beta_avg = {}
+            self.embedder.layers[l]._beta_std = {}
+        super().on_predict_epoch_start()
+
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
@@ -156,6 +163,20 @@ class LATTENodeClf(NodeClfTrainer):
         self.log("test_loss", test_loss)
 
         return test_loss
+
+    def predict_step(self, batch, batch_idx: int, dataloader_idx=None):
+        X, y_true, weights = batch
+        y_pred, proximity_loss = self.forward(X, save_betas=True)
+
+        predict_loss = self.criterion(y_pred, y_true)
+        self.test_metrics.update_metrics(y_pred, y_true)
+
+        if self.hparams.use_proximity:
+            predict_loss = predict_loss + proximity_loss
+
+        self.log("predict_loss", predict_loss)
+
+        return predict_loss
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())

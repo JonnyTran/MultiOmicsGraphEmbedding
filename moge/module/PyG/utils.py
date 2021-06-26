@@ -2,7 +2,7 @@ from collections import OrderedDict
 from typing import Union, Tuple, Iterable, List, Dict
 
 import torch
-from torch_sparse import SparseTensor
+from torch_sparse import SparseTensor, spspmm
 
 
 def tag_negative(metapath):
@@ -32,16 +32,15 @@ def is_negative(metapath):
         return False
 
 
-def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
+def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=False):
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
                      sparse_sizes=(m, k), is_sorted=not coalesced)
     B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
                      sparse_sizes=(k, n), is_sorted=not coalesced)
 
-    deg_A = A.storage.colcount()
-    deg_B = B.storage.rowcount()
-    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
-    deg_normalized[deg_normalized == float('inf')] = 0.0
+    deg_A = A.sum(0)
+    deg_B = B.sum(1)
+    deg_normalized = 1.0 / (deg_A + deg_B)
 
     D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
                      col=torch.arange(deg_normalized.size(0), device=valueA.device),
@@ -150,13 +149,14 @@ def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Ten
             a_order_idx, b_order_idx = len(metapath_a[1::2]) - 1, len(metapath_b[1::2]) - 1
 
             try:
-                new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                         indexB=edge_index_b, valueB=values_b,
-                                                         m=sizes[a_order_idx][head][0],
-                                                         k=sizes[a_order_idx][middle][1],
-                                                         n=sizes[b_order_idx][tail][1],
-                                                         coalesced=True,
-                                                         sampling=edge_sampling)
+                new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=values_a,
+                                                    indexB=edge_index_b, valueB=values_b,
+                                                    m=sizes[a_order_idx][head][0],
+                                                    k=sizes[a_order_idx][middle][1],
+                                                    n=sizes[b_order_idx][tail][1],
+                                                    # sampling=edge_sampling,
+                                                    coalesced=True,
+                                                    )
                 if new_edge_index.size(1) == 0: continue
                 output_edge_index[new_metapath] = (new_edge_index, new_values)
 
