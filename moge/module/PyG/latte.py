@@ -98,6 +98,7 @@ class LATTE(nn.Module):
                 self.embeddings = nn.ModuleDict(
                     {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                          embedding_dim=embedding_dim,
+                                         scale_grad_by_freq=True,
                                          sparse=True,
                                          _weight=hparams.embeddings[ntype] if "embeddings" in hparams else None) \
                      for ntype in non_attr_node_types})
@@ -132,7 +133,7 @@ class LATTE(nn.Module):
                     global_node_idx[self.node_types[0]].device)
         return h_dict
 
-    def forward(self, node_feats: dict, adjs: List[Dict[Tuple, EdgeIndex]], sizes: List[Dict[str, Tuple[int]]],
+    def forward(self, node_feats: dict, adjs: List[Dict[Tuple, torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: dict, save_betas=False):
         """
         This
@@ -147,6 +148,7 @@ class LATTE(nn.Module):
 
         h_out = self.transform_inp_feats(node_feats, global_node_idx)
 
+        edge_pred_dicts = [None for l in range(self.n_layers)]
         h_in_layers = {ntype: [] for ntype in global_node_idx}
         h_out_layers = {ntype: [] for ntype in global_node_idx}
         for l in range(self.n_layers):
@@ -179,6 +181,7 @@ class LATTE(nn.Module):
                                                                            global_node_idx=global_node_idx,
                                                                            save_betas=save_betas)
 
+            edge_pred_dicts[l] = edge_pred_dict
             # print("\t EDGE_PRED_DICT",
             #       {".".join([k[0] for k in m]): e_attr.shape for m, (eid, e_attr) in edge_pred_dict.items()})
 
@@ -213,7 +216,7 @@ class LATTE(nn.Module):
                    for ntype, h_list in h_out_layers.items() \
                    if len(h_list) > 0}
 
-        return out, proximity_loss, edge_pred_dict
+        return out, proximity_loss, edge_pred_dicts
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
@@ -221,8 +224,11 @@ class LATTE(nn.Module):
     def get_relation_weights(self, t, **kwargs):
         return self.layers[t].get_relation_weights(**kwargs)
 
-    def get_top_relations(self, t, node_type):
-        return self.layers[t].get_top_relations(ntype=node_type)
+    def get_top_relations(self, t, node_type, min_order=1):
+        df = self.layers[t].get_top_relations(ntype=node_type)
+        if min_order:
+            df = df[df.notnull().sum(1) >= min_order]
+        return df
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
@@ -382,15 +388,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                     global_node_idx=global_node_idx)
         # print("\t\t ALPHA_DICT", [".".join([d[0] for d in k]) for k in alpha_dict.keys()])
         # print("\t\t EDGE_INDEX_DICT", [".".join([d[0] for d in k]) for k in edge_index_dict.keys()])
-        for metapath, edge_index in edge_index_dict.items():
-            if metapath in alpha_dict:
-                edge_pred_dict[metapath] = (edge_index[0] \
-                                                if isinstance(edge_index, tuple) else edge_index,
-                                            alpha_dict[metapath])
-            else:
-                edge_pred_dict[metapath] = edge_index
+        # for metapath, edge_index in edge_index_dict.items():
+        #     if metapath in alpha_dict:
+        #         edge_pred_dict[metapath] = (edge_index[0] \
+        #                                         if isinstance(edge_index, tuple) else edge_index,
+        #                                     alpha_dict[metapath])
+        #     else:
+        #         edge_pred_dict[metapath] = edge_index
 
-        return (l_dict, out), proximity_loss, edge_pred_dict
+        return (l_dict, out), proximity_loss, edge_index_dict
 
     def agg_relation_neighbors(self, node_type: str,
                                l_dict: Dict[str, torch.Tensor],
@@ -603,7 +609,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def get_top_relations(self, ntype="paper"):
         # columns: [2-neighbors, 2-order relations, 1-neighbors, 1-order relations, targets]
-        top_rels = self._betas[ntype].idxmax(axis=1).str.split(".", expand=True)
+        top_rels: pd.DataFrame = self._betas[ntype].idxmax(axis=1).str.split(".", expand=True)
 
         # Shift top meta relations to the right if its right value is None
         for col_idx in top_rels.columns[1::2]:
