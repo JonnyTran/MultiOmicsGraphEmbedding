@@ -84,6 +84,20 @@ class LATTENodeClf(NodeClfTrainer):
 
         return y_hat, proximity_loss
 
+    def on_test_epoch_start(self) -> None:
+        for l in range(self.embedder.n_layers):
+            self.embedder.layers[l]._betas = {}
+            self.embedder.layers[l]._beta_avg = {}
+            self.embedder.layers[l]._beta_std = {}
+        super().on_test_epoch_start()
+
+    def on_validation_epoch_end(self) -> None:
+        for l in range(self.embedder.n_layers):
+            self.embedder.layers[l]._betas = {}
+            self.embedder.layers[l]._beta_avg = {}
+            self.embedder.layers[l]._beta_std = {}
+        super().on_validation_epoch_end()
+
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
         y_pred, proximity_loss = self.forward(X)
@@ -154,7 +168,7 @@ class LATTENodeClf(NodeClfTrainer):
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
-        print("weight_decay", {name for name, p in param_optimizer if not any(key in name for key in no_decay)})
+        print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
