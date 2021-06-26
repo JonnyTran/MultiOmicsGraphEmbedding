@@ -155,10 +155,8 @@ class LATTE(nn.Module):
             if l == 0:
                 edge_index_dict = adjs[l]
             else:
-                edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
-                                                    edge_index_dict_B=adjs[l],
-                                                    sizes=sizes,
-                                                    metapaths=self.layers[l].metapaths,
+                edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict, edge_index_dict_B=adjs[l],
+                                                    sizes=sizes, layer=l, metapaths=self.layers[l].metapaths,
                                                     edge_threshold=self.edge_threshold,
                                                     edge_sampling=self.edge_sampling)
 
