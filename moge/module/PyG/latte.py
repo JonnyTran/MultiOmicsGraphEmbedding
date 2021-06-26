@@ -422,13 +422,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 h_source = prev_l_dict[head][-(order - 1)]
                 head_size_in, tail_size_out = h_source.size(0), size[tail][1]
 
-            h_target = r_dict[tail]
-
             # Propapate flows from target nodes to source nodes
             try:
                 out = self.propagate(
                     edge_index=edge_index,
-                    x=(h_source, h_target),
+                    x=(h_source, r_dict[tail]),
                     size=(head_size_in, tail_size_out),
                     metapath_idx=self.metapaths.index(metapath))
                 emb_relations[:, i] = out.view(-1, self.embedding_dim)
