@@ -173,7 +173,8 @@ class LATTE(nn.Module):
 
             global_node_idx = {
                 ntype: global_node_idx[ntype][: sizes[l][ntype][1]] \
-                for ntype in global_node_idx if sizes[l][ntype][1] is not None}
+                for ntype in global_node_idx \
+                if sizes[l][ntype][1] is not None}
             (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
                                                                            prev_h_in=h_in_layers,
                                                                            edge_index_dict=edge_index_dict,
@@ -224,7 +225,7 @@ class LATTE(nn.Module):
     def get_relation_weights(self, t, **kwargs):
         return self.layers[t].get_relation_weights(**kwargs)
 
-    def get_top_relations(self, t, node_type, min_order=1):
+    def get_top_relations(self, t, node_type, min_order=None):
         df = self.layers[t].get_top_relations(ntype=node_type)
         if min_order:
             df = df[df.notnull().sum(1) >= min_order]
@@ -283,9 +284,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F}
 
-        self.linear_prev = nn.ModuleDict(
-            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
-             for node_type in self.node_types})  # W.shape (F x F)
+        # self.linear_prev = nn.ModuleDict(
+        #     {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+        #      for node_type in self.node_types})  # W.shape (F x F)
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels * 2))
@@ -388,15 +389,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                     global_node_idx=global_node_idx)
         # print("\t\t ALPHA_DICT", [".".join([d[0] for d in k]) for k in alpha_dict.keys()])
         # print("\t\t EDGE_INDEX_DICT", [".".join([d[0] for d in k]) for k in edge_index_dict.keys()])
-        # for metapath, edge_index in edge_index_dict.items():
-        #     if metapath in alpha_dict:
-        #         edge_pred_dict[metapath] = (edge_index[0] \
-        #                                         if isinstance(edge_index, tuple) else edge_index,
-        #                                     alpha_dict[metapath])
-        #     else:
-        #         edge_pred_dict[metapath] = edge_index
+        for metapath, edge_index in edge_index_dict.items():
+            if metapath in alpha_dict:
+                edge_pred_dict[metapath] = (edge_index[0] \
+                                                if isinstance(edge_index, tuple) else edge_index,
+                                            alpha_dict[metapath])
+            else:
+                edge_pred_dict[metapath] = edge_index
 
-        return (l_dict, out), proximity_loss, edge_index_dict
+        return (l_dict, out), proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type: str,
                                l_dict: Dict[str, torch.Tensor],

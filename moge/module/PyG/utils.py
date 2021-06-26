@@ -149,14 +149,14 @@ def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Ten
             a_order_idx, b_order_idx = len(metapath_a[1::2]) - 1, len(metapath_b[1::2]) - 1
 
             try:
-                new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=values_a,
-                                                    indexB=edge_index_b, valueB=values_b,
-                                                    m=sizes[a_order_idx][head][0],
-                                                    k=sizes[a_order_idx][middle][1],
-                                                    n=sizes[b_order_idx][tail][1],
-                                                    # sampling=edge_sampling,
-                                                    coalesced=True,
-                                                    )
+                new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
+                                                         indexB=edge_index_b, valueB=values_b,
+                                                         m=sizes[a_order_idx][head][0],
+                                                         k=sizes[a_order_idx][middle][1],
+                                                         n=sizes[b_order_idx][tail][1],
+                                                         sampling=edge_sampling,
+                                                         coalesced=True,
+                                                         )
                 if new_edge_index.size(1) == 0: continue
                 output_edge_index[new_metapath] = (new_edge_index, new_values)
 
