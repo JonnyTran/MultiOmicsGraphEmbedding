@@ -143,8 +143,6 @@ def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Ten
             if edge_index_a is None or is_negative(metapath_a): continue
 
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
-            print({metapath_a: edge_index_a.max(1).values, metapath_b: edge_index_b.max(1).values})
-            print({"m": sizes[layer - 1][head][0], "k": sizes[layer - 1][middle][1], "n": sizes[layer][tail][1]})
             try:
                 new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
                                                          indexB=edge_index_b, valueB=values_b,
