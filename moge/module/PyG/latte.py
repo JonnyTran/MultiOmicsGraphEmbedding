@@ -99,7 +99,7 @@ class LATTE(nn.Module):
                     {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                          embedding_dim=embedding_dim,
                                          scale_grad_by_freq=True,
-                                         sparse=True,
+                                         sparse=False,
                                          _weight=hparams.embeddings[ntype] if "embeddings" in hparams else None) \
                      for ntype in non_attr_node_types})
         else:
@@ -129,7 +129,7 @@ class LATTE(nn.Module):
                     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
             else:
-                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(
+                h_dict[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(
                     global_node_idx[self.node_types[0]].device)
         return h_dict
 
@@ -229,15 +229,26 @@ class LATTE(nn.Module):
             df = df[df.notnull().sum(1) >= min_order]
         return df
 
-    def get_sankey_flow(self, t, node_type, self_loop=False):
-        data = {}
-        df = self.layers[t]._betas[node_type].sum(0)
-        new_index = df.index.str.split(".").map(lambda tup: [str(len(tup) - i) + n for i, n in enumerate(tup)])
+    def get_sankey_flow(self, t, node_type, self_loop=False, agg="sum"):
+        rel_attn: pd.DataFrame = self.layers[t]._betas[node_type]
+        if agg == "sum":
+            rel_attn = rel_attn.sum(0)
+        elif agg == "mean":
+            rel_attn = rel_attn.mean(0)
+        elif agg == "max":
+            rel_attn = rel_attn.max(0)
+        elif agg == "min":
+            rel_attn = rel_attn.min(0)
+        else:
+            rel_attn = rel_attn.median(0)
+
+        new_index = rel_attn.index.str.split(".").map(lambda tup: [str(len(tup) - i) + n for i, n in enumerate(tup)])
         all_nodes = {node for nodes in new_index for node in nodes}
         all_nodes = {node: i for i, node in enumerate(all_nodes)}
 
+        data = {}
         links = {}
-        for i, (metapath, value) in enumerate(df.to_dict().items()):
+        for i, (metapath, value) in enumerate(rel_attn.to_dict().items()):
             if len(metapath.split(".")) > 1:
                 sources = [all_nodes[new_index[i][j]] for j, _ in enumerate(new_index[i][:-1])]
                 targets = [all_nodes[new_index[i][j + 1]] for j, _ in enumerate(new_index[i][:-1])]
@@ -377,7 +388,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         #         prev_dict[head][-(order - 1)] = h_source.view(orig_shape)
 
         # Predict relations attention coefficients
-        beta = self.get_beta_weights(r_dict)
+        beta = self.get_beta_weights(x_r)
         # Save beta weights from testing samples
         if save_betas and not self.training: self.save_relation_weights(beta, global_node_idx)
 
@@ -507,7 +518,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def get_beta_weights(self, h_dict):
         beta = {}
         for node_type in h_dict:
-            beta[node_type] = self.conv[node_type].forward(h_dict[node_type].view(-1, self.embedding_dim).unsqueeze(-1))
+            beta[node_type] = self.conv[node_type].forward(
+                h_dict[node_type].unsqueeze(-1))  # .view(-1, self.embedding_dim).unsqueeze(-1))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
 
         return beta
