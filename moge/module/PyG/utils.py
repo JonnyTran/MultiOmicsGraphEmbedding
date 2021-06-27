@@ -89,8 +89,24 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
 
 
 def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Tensor]],
-                      edge_index_dict_B: Dict[str, torch.Tensor], sizes: List[Dict[str, Tuple[int]]], layer,
+                      edge_index_dict_B: Dict[str, torch.Tensor], sizes: List[Dict[str, Tuple[int]]], layer: int,
                       metapaths: Tuple[str] = None, edge_threshold: float = None, edge_sampling: bool = False):
+    """
+    Return a cartesian product from two set of adjacency matrices, such that the output adjacency matricees are
+    relation-matching.
+
+    Args:
+        edge_index_dict_A ():
+        edge_index_dict_B ():
+        sizes ():
+        layer ():
+        metapaths ():
+        edge_threshold ():
+        edge_sampling ():
+
+    Returns:
+
+    """
     output_edge_index = {}
     for metapath_b, edge_index_b in edge_index_dict_B.items():
         edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False)
@@ -112,12 +128,15 @@ def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Ten
             if edge_index_a is None or is_negative(metapath_a): continue
 
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
+            a_order = len(metapath_a[1::2])
+            m = sizes[layer - a_order][head][0]
+            k = sizes[layer - a_order][middle][1]
+            n = sizes[layer][tail][1]
+
             try:
                 new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
                                                          indexB=edge_index_b, valueB=values_b,
-                                                         m=sizes[layer - 1][head][0],
-                                                         k=sizes[layer - 1][middle][1],
-                                                         n=sizes[layer][tail][1],
+                                                         m=m, k=k, n=n,
                                                          sampling=edge_sampling,
                                                          coalesced=True,
                                                          )
@@ -128,9 +147,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Ten
                 print(
                     f"{e} \n {metapath_a}: {edge_index_a.max(1).values, edge_index_a.size(1)}, {metapath_b}: {edge_index_b.max(1).values, edge_index_b.size(1)}")
                 print("sizes: ",
-                      {"m": sizes[layer - 1][head][0],
-                       "k": sizes[layer - 1][middle][1],
-                       "n": sizes[layer][tail][1], })
+                      {"m": m, "k": k, "n": n, })
                 raise e
                 continue
 
