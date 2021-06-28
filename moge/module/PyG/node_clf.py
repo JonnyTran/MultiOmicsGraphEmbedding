@@ -125,7 +125,7 @@ class LATTENodeClf(NodeClfTrainer):
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
 
-        self.log_dict(logs, prog_bar=True, logger=True, on_epoch=True)
+        self.log_dict(logs, prog_bar=True, logger=True)
 
         return loss
 
