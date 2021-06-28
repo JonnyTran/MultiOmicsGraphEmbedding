@@ -95,11 +95,12 @@ class LATTE(nn.Module):
                                    for ntype in non_attr_node_types}
             else:
                 print("Embedding.device = 'gpu'")
+                use_sparse = hparams.sparse if "sparse" in hparams else False
                 self.embeddings = nn.ModuleDict(
                     {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                          embedding_dim=embedding_dim,
-                                         scale_grad_by_freq=True,
-                                         sparse=hparams.sparse if "sparse" in hparams else False,
+                                         scale_grad_by_freq=True if not use_sparse else False,
+                                         sparse=use_sparse,
                                          _weight=hparams.embeddings[ntype] if "embeddings" in hparams else None) \
                      for ntype in non_attr_node_types})
         else:
@@ -491,7 +492,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                                       order=remaining_orders),
                                                     edge_threshold=None,
                                                     edge_sampling=False)
-        print(higher_order_edge_index.keys())
+
         for metapath in self.get_head_relations(node_type, order=range(2, layer + 1)):
             if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
