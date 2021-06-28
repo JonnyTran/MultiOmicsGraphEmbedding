@@ -126,7 +126,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
             edge_index_a, values_a = get_edge_index_values(edge_index_a,
                                                            filter_edge=True if edge_threshold else False,
                                                            threshold=edge_threshold)
-            if edge_index_a is None or is_negative(metapath_a): continue
+            if edge_index_a is None or edge_index_a.size(1) == 0 or is_negative(metapath_a): continue
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
             a_order = len(metapath_a[1::2])
             m = sizes[layer - a_order][head][0]
