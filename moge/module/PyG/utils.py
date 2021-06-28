@@ -144,13 +144,16 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              coalesced=True)
                     new_values.append(values)
                     new_values = torch.stack(new_values, dim=1)
-
                 else:
+                    if values_b.dim() > 1 and values_b.size(1) == 1:
+                        values_b = values_b.squeeze(-1)
+
                     new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
                                                              indexB=edge_index_b, valueB=values_b,
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
                                                              coalesced=True)
+
                 if new_edge_index.size(1) == 0: continue
                 output_edge_index[new_metapath] = (new_edge_index, new_values)
 
