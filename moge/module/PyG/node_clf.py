@@ -190,11 +190,7 @@ class LATTENodeClf(NodeClfTrainer):
         ]
 
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
-
-        if (self.hparams.sparse if "sparse" in self.hparams else False):
-            optimizer = torch.optim.SparseAdam(optimizer_grouped_parameters, lr=self.lr)
-        else:
-            optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
+        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
                                                                eta_min=self.lr / 100)
