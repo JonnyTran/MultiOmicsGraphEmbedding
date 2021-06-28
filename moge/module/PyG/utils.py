@@ -2,7 +2,7 @@ from collections import OrderedDict
 from typing import Union, Tuple, Iterable, List, Dict
 
 import torch
-from torch_sparse import SparseTensor, spspmm
+from torch_sparse import SparseTensor, spspmm, matmul
 
 
 def tag_negative(metapath):
@@ -88,9 +88,10 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
     return edge_index, edge_values
 
 
-def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Tensor]],
-                      edge_index_dict_B: Dict[str, torch.Tensor], sizes: List[Dict[str, Tuple[int]]], layer: int,
-                      metapaths: Tuple[str] = None, edge_threshold: float = None, edge_sampling: bool = False):
+def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
+                      edge_index_dict_B: Dict[Tuple, Tuple[torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
+                      layer: int,
+                      metapaths: List[Tuple[str]] = None, edge_threshold: float = None, edge_sampling: bool = False):
     """
     Return a cartesian product from two set of adjacency matrices, such that the output adjacency matricees are
     relation-matching.
@@ -126,7 +127,6 @@ def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Ten
                                                            filter_edge=True if edge_threshold else False,
                                                            threshold=edge_threshold)
             if edge_index_a is None or is_negative(metapath_a): continue
-
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
             a_order = len(metapath_a[1::2])
             m = sizes[layer - a_order][head][0]
@@ -134,12 +134,23 @@ def join_edge_indexes(edge_index_dict_A: Dict[str, Tuple[torch.Tensor, torch.Ten
             n = sizes[layer][tail][1]
 
             try:
-                new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                         indexB=edge_index_b, valueB=values_b,
-                                                         m=m, k=k, n=n,
-                                                         sampling=edge_sampling,
-                                                         coalesced=True,
-                                                         )
+                if values_a.dim() > 1 and values_a.size(1) > 1:
+                    new_values = []
+                    for d in range(values_a.size(1)):
+                        new_edge_index, values = adamic_adar(indexA=edge_index_a, valueA=values_a[:, d],
+                                                             indexB=edge_index_b, valueB=values_b[:, d],
+                                                             m=m, k=k, n=n,
+                                                             sampling=edge_sampling,
+                                                             coalesced=True)
+                    new_values.append(values)
+                    new_values = torch.stack(new_values, dim=1)
+
+                else:
+                    new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
+                                                             indexB=edge_index_b, valueB=values_b,
+                                                             m=m, k=k, n=n,
+                                                             sampling=edge_sampling,
+                                                             coalesced=True)
                 if new_edge_index.size(1) == 0: continue
                 output_edge_index[new_metapath] = (new_edge_index, new_values)
 
@@ -164,9 +175,9 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
 
     deg_A = A.sum(0)
     deg_B = B.sum(1)
-    if deg_A.dim() > deg_B.dim():
-        deg_B = deg_B.unsqueeze(1)
-        B.storage._value = B.storage._value.expand(deg_A.size(1), B.storage._value.numel()).T
+    # if deg_A.dim() > deg_B.dim():
+    #     deg_B = deg_B.unsqueeze(1)
+    #     B.storage._value = B.storage._value.expand(deg_A.size(1), B.storage._value.numel()).T
     deg_normalized = 1.0 / (deg_A + deg_B)
 
     D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
