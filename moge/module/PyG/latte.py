@@ -480,16 +480,18 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             edge_pred_dict[metapath] = (edge_index, alpha[metapath])
             self._alpha = None
 
-        if layer == 0 or (prev_edge_index_dict is None):
+        remaining_orders = range(2, layer + 1)
+        if layer == 0 or (prev_edge_index_dict is None) or len(remaining_orders) == 0:
             return emb_relations, alpha
 
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
                                                     edge_index_dict_B=edge_pred_dict,
                                                     sizes=sizes, layer=layer,
                                                     metapaths=self.get_head_relations(node_type,
-                                                                                      order=range(2, layer + 1)),
+                                                                                      order=remaining_orders),
                                                     edge_threshold=None,
                                                     edge_sampling=False)
+        print(higher_order_edge_index.keys())
         for metapath in self.get_head_relations(node_type, order=range(2, layer + 1)):
             if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
@@ -560,72 +562,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
 
         return beta
-
-    def predict_scores(self, edge_index, l_dict, r_dict, metapath, logits=False):
-        assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
-        metapath_idx = self.metapaths.index(metapath)
-        head, tail = metapath[0], metapath[-1]
-
-        x = torch.cat([l_dict[head][edge_index[0]], r_dict[tail][edge_index[1]]], dim=2)
-        if isinstance(self.alpha_activation, nn.Module):
-            x = self.alpha_activation(x)
-        else:
-            x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
-
-        e_pred = (x * self.attn[metapath_idx]).sum(dim=-1)
-
-        if e_pred.size(1) > 1:
-            e_pred = e_pred.max(1).values
-
-        if logits:
-            return e_pred
-        else:
-            return F.sigmoid(e_pred)
-
-    def proximity_loss(self, edge_index_dict, l_dict, r_dict, global_node_idx):
-        """
-        For each relation/metapath type given in `edge_index_dict`, this function both predict link scores and computes
-        the NCE loss for both positive and negative (sampled) links. For each relation type in `edge_index_dict`, if the
-        negative metapath is not included, then the function automatically samples for random negative edges. And, if it
-        is included, then computes the NCE loss over the given negative edges. This function returns the scores of the
-        predicted positive and negative edges.
-
-        :param edge_index_dict (dict): Dict of <relation/metapath>: <Tensor(2, num_edges)>
-        :param alpha_l (dict): Dict of <node_type>:<alpha_l tensor>
-        :param alpha_r (dict): Dict of <node_type>:<alpha_r tensor>
-        :param global_node_idx (dict): Dict of <node_type>:<Tensor(node_idx,)>
-        :return loss, edge_pred_dict: NCE loss. edge_pred_dict will contain both positive relations of shape (num_edges,) and negative relations of shape (num_edges*num_neg_edges, )
-        """
-        loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
-        for metapath, edge_index in edge_index_dict.items():
-            # KL Divergence over observed positive edges or negative edges (if included)
-            if isinstance(edge_index, tuple):  # Weighted edges
-                edge_index, values = edge_index
-            else:
-                values = 1.0
-            if edge_index is None: continue
-
-            if not is_negative(metapath):
-                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, metapath, logits=True)
-                loss += -torch.mean(values * F.logsigmoid(e_pred_logits), dim=-1)
-            elif is_negative(metapath):
-                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, untag_negative(metapath), logits=True)
-                loss += -torch.mean(F.logsigmoid(-e_pred_logits), dim=-1)
-
-
-            # Only need to sample for negative edges if negative metapath is not included
-            if not is_negative(metapath) and tag_negative(metapath) not in edge_index_dict:
-                neg_edge_index = negative_sample(edge_index,
-                                                 M=global_node_idx[metapath[0]].size(0),
-                                                 N=global_node_idx[metapath[-1]].size(0),
-                                                 n_sample_per_edge=self.neg_sampling_ratio)
-                if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
-
-                e_neg_logits = self.predict_scores(neg_edge_index, l_dict, r_dict, metapath, logits=True)
-                loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
-
-        loss = torch.true_divide(loss, max(len(edge_index_dict) * 2, 1))
-        return loss
 
     def get_head_relations(self, head_node_type, order=None, str_form=False) -> list:
         relations = filter_metapaths(self.metapaths, order=order, tail_type=head_node_type)
@@ -728,3 +664,68 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                      enumerate(metapaths)}
         self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
                                      enumerate(metapaths)}
+
+    def proximity_loss(self, edge_index_dict, l_dict, r_dict, global_node_idx):
+        """
+        For each relation/metapath type given in `edge_index_dict`, this function both predict link scores and computes
+        the NCE loss for both positive and negative (sampled) links. For each relation type in `edge_index_dict`, if the
+        negative metapath is not included, then the function automatically samples for random negative edges. And, if it
+        is included, then computes the NCE loss over the given negative edges. This function returns the scores of the
+        predicted positive and negative edges.
+
+        :param edge_index_dict (dict): Dict of <relation/metapath>: <Tensor(2, num_edges)>
+        :param alpha_l (dict): Dict of <node_type>:<alpha_l tensor>
+        :param alpha_r (dict): Dict of <node_type>:<alpha_r tensor>
+        :param global_node_idx (dict): Dict of <node_type>:<Tensor(node_idx,)>
+        :return loss, edge_pred_dict: NCE loss. edge_pred_dict will contain both positive relations of shape (num_edges,) and negative relations of shape (num_edges*num_neg_edges, )
+        """
+        loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
+        for metapath, edge_index in edge_index_dict.items():
+            # KL Divergence over observed positive edges or negative edges (if included)
+            if isinstance(edge_index, tuple):  # Weighted edges
+                edge_index, values = edge_index
+            else:
+                values = 1.0
+            if edge_index is None: continue
+
+            if not is_negative(metapath):
+                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, metapath, logits=True)
+                loss += -torch.mean(values * F.logsigmoid(e_pred_logits), dim=-1)
+            elif is_negative(metapath):
+                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, untag_negative(metapath), logits=True)
+                loss += -torch.mean(F.logsigmoid(-e_pred_logits), dim=-1)
+
+            # Only need to sample for negative edges if negative metapath is not included
+            if not is_negative(metapath) and tag_negative(metapath) not in edge_index_dict:
+                neg_edge_index = negative_sample(edge_index,
+                                                 M=global_node_idx[metapath[0]].size(0),
+                                                 N=global_node_idx[metapath[-1]].size(0),
+                                                 n_sample_per_edge=self.neg_sampling_ratio)
+                if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
+
+                e_neg_logits = self.predict_scores(neg_edge_index, l_dict, r_dict, metapath, logits=True)
+                loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
+
+        loss = torch.true_divide(loss, max(len(edge_index_dict) * 2, 1))
+        return loss
+
+    def predict_scores(self, edge_index, l_dict, r_dict, metapath, logits=False):
+        assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
+        metapath_idx = self.metapaths.index(metapath)
+        head, tail = metapath[0], metapath[-1]
+
+        x = torch.cat([l_dict[head][edge_index[0]], r_dict[tail][edge_index[1]]], dim=2)
+        if isinstance(self.alpha_activation, nn.Module):
+            x = self.alpha_activation(x)
+        else:
+            x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
+
+        e_pred = (x * self.attn[metapath_idx]).sum(dim=-1)
+
+        if e_pred.size(1) > 1:
+            e_pred = e_pred.max(1).values
+
+        if logits:
+            return e_pred
+        else:
+            return F.sigmoid(e_pred)
