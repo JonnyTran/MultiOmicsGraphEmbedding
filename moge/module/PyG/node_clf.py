@@ -189,7 +189,7 @@ class LATTENodeClf(NodeClfTrainer):
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
         ]
 
-        print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
+        # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
 
         if (self.hparams.sparse if "sparse" in self.hparams else False):
             optimizer = torch.optim.SparseAdam(optimizer_grouped_parameters, lr=self.lr)

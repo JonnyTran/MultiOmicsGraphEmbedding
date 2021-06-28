@@ -13,24 +13,24 @@ parameters:
   trainable_embedding:
     values: [ True, False ]
   n_layers:
-    values: [ 1, 2, 3 ]
+    values: [ 2, 3 ]
   t_order:
     values: [ 1, 2, 3 ]
   n_neighbors:
     values: [ 20, 30, 40 ]
   layer_pooling:
     values: [ "last", "concat" ]
+  dropout:
+    values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
+
   attn_heads:
     values: [ 1, 4, 8 ]
   attn_dropout:
     values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
-  dropout:
-    values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
+
   attn_activation:
     values: [ "sharpening", "LeakyReLU" ]
 
-  nb_cls_dense_size:
-    values: [ 0, -1 ]
   nb_cls_dropout:
     values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 ]
 
