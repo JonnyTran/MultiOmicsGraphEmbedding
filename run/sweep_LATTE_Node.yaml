@@ -20,6 +20,11 @@ parameters:
     values: [ 20, 30, 40 ]
   layer_pooling:
     values: [ "last", "concat" ]
+
+  batchnorm:
+    values: [ True, False ]
+  layernorm:
+    values: [ True, False ]
   dropout:
     values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
 

@@ -70,6 +70,7 @@ class LATTE(nn.Module):
                           attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout,
+                          edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
                           use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio))
 
@@ -96,10 +97,11 @@ class LATTE(nn.Module):
             else:
                 print("Embedding.device = 'gpu'")
                 use_sparse = hparams.sparse if "sparse" in hparams else False
+
                 self.embeddings = nn.ModuleDict(
                     {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                          embedding_dim=embedding_dim,
-                                         scale_grad_by_freq=True if not use_sparse else False,
+                                         scale_grad_by_freq=True,
                                          sparse=use_sparse,
                                          _weight=hparams.embeddings[ntype] if "embeddings" in hparams else None) \
                      for ntype in non_attr_node_types})
@@ -278,6 +280,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  num_nodes_dict: Dict[str, int], metapaths: list,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0,
                  attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
+                 edge_threshold=0.0,
                  use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.node_types = list(num_nodes_dict.keys())
@@ -288,6 +291,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
+        self.edge_threshold = edge_threshold
         print("\n LATTE", [".".join([k[0].upper() if i % 2 == 0 else k[0].lower() for i, k in enumerate(m)]) for m in
                            sorted(metapaths)])
 
@@ -490,7 +494,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                     sizes=sizes, layer=layer,
                                                     metapaths=self.get_head_relations(node_type,
                                                                                       order=remaining_orders),
-                                                    edge_threshold=None,
+                                                    edge_threshold=self.edge_threshold,
                                                     edge_sampling=False)
 
         for metapath in self.get_head_relations(node_type, order=range(2, layer + 1)):
