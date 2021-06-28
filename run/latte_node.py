@@ -6,11 +6,7 @@ logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
-import torch.distributed as dist
-import pytorch_lightning as pl
 from pytorch_lightning.trainer import Trainer
-
-from pytorch_lightning.callbacks import EarlyStopping
 
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
