@@ -197,12 +197,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
                                                                        n_id=n_id,
                                                                        local_nodes_dict=local_nodes_dict)
-        X["sizes"] = self.get_adjs_sizes(X["edge_index"])
-
-        X["adj_sizes"] = [{} for i in range(len(adjs))]
-        for adj in adjs:
-            for source_target in [0, 1]:
-                self.graph_sampler.global2local[n_id[: adj.size[source_target]]]
+        X["sizes"] = self.get_adjs_sizes(adjs, n_id)
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
@@ -229,18 +224,18 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         weights = None
         return X, y, weights
 
-    def get_adjs_sizes(self, adjs: List[Dict[Tuple, torch.Tensor]]):
-        sizes = [{} for i in range(len(adjs))]
+    def get_adjs_sizes(self, adjs, n_id):
+        sizes = [{} for _ in range(len(adjs))]
 
-        for i, edge_index_dict in enumerate(adjs):
-            source_sizes = {ntype: nids.max() + 1 for ntype, nids in
-                            HeteroNetDataset.get_unique_nodes(adjs[i], source=True, target=False).items()}
-            target_sizes = {ntype: nids.max() + 1 for ntype, nids in
-                            HeteroNetDataset.get_unique_nodes(adjs[i], source=False, target=True).items()}
-            sizes[i] = {ntype: (source_sizes[ntype] if ntype in source_sizes else None,
-                                target_sizes[ntype] if ntype in target_sizes else None) \
-                        for ntype in self.node_types}
+        for layer, adj in enumerate(adjs):
+            for source_target in [0, 1]:
+                node_types = self.graph_sampler.node_type[n_id][: adj.size[source_target]]
+                for ntype_id, ntype_count in enumerate(torch.bincount(node_types)):
+                    ntype = self.graph_sampler.int2node_type[ntype_id]
+                    sizes[layer].setdefault(ntype, [None, None])[
+                        source_target] = ntype_count if ntype_count > 0 else None
 
+            sizes[layer] = {ntype: tuple(sizes) for ntype, sizes in sizes[layer].items()}
         return sizes
 
     def khop_sampler(self, n_idx, mode):
