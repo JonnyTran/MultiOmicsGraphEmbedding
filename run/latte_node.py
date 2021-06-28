@@ -104,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument('--sparse', type=bool, default=False)
     parser.add_argument('-a', '--accelerator', type=str, default="ddp|horovod")
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
-    parser.add_argument('--lr', type=float, default=0.01)
+    parser.add_argument('--lr', type=float, default=0.03)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--gradient_clip_val', type=float, default=0.0)
     # add all the available options to the trainer
