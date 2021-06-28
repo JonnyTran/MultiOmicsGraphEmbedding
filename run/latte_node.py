@@ -33,8 +33,7 @@ def train(hparams: Namespace):
     dataset = load_node_dataset(hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
                                 dir_path=hparams.dir_path)
 
-    METRICS = ["micro_f1", "macro_f1",
-               dataset.name() if "ogb" in dataset.name() else "accuracy"]
+    METRICS = [dataset.name() if "ogb" in dataset.name() else "accuracy"]
 
     hparams.loss_type = "BCE" if dataset.multilabel else hparams.loss_type
     hparams.n_classes = dataset.n_classes
@@ -105,7 +104,7 @@ if __name__ == "__main__":
     parser.add_argument('--sparse', type=bool, default=False)
     parser.add_argument('-a', '--accelerator', type=str, default="ddp|horovod")
     parser.add_argument('--loss_type', type=str, default="SOFTMAX_CROSS_ENTROPY")
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--gradient_clip_val', type=float, default=0.0)
     # add all the available options to the trainer
