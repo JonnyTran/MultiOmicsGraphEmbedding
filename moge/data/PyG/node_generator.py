@@ -186,29 +186,34 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         batch_size, n_id, adjs = self.graph_sampler.sample(local_seed_nids)
 
         # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
-        local_nodes_nids, n_id = self.graph_sampler.get_local_nodes(n_id,
+        local_nodes_dict, n_id = self.graph_sampler.get_local_nodes(n_id,
                                                                     filter_nodes=allowed_nodes if do_filter else None)
 
         # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
-        X = {"global_node_index": local_nodes_nids,
+        X = {"global_node_index": local_nodes_dict,
              # "adjs": adjs,
              "x_dict": {}}
 
         X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
                                                                        n_id=n_id,
-                                                                       local_nodes_nids=local_nodes_nids)
+                                                                       local_nodes_dict=local_nodes_dict)
         X["sizes"] = self.get_adjs_sizes(X["edge_index"])
+
+        X["adj_sizes"] = [{} for i in range(len(adjs))]
+        for adj in adjs:
+            for source_target in [0, 1]:
+                self.graph_sampler.global2local[n_id[: adj.size[source_target]]]
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
-            X["x_dict"] = {node_type: self.x_dict[node_type][local_nodes_nids[node_type]] \
-                           for node_type in self.x_dict if node_type in local_nodes_nids}
+            X["x_dict"] = {node_type: self.x_dict[node_type][local_nodes_dict[node_type]] \
+                           for node_type in self.x_dict if node_type in local_nodes_dict}
 
         # assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
-
+        assert torch.isclose(local_nodes_dict[self.head_node_type][:batch_size], local_seed_nids).all()
         # y_dict
         if hasattr(self, "y_dict"):
-            y = self.y_dict[self.head_node_type][local_seed_nids]
+            y = self.y_dict[self.head_node_type][local_nodes_dict[self.head_node_type][:batch_size]]
         else:
             y = None
 

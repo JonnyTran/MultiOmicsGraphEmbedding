@@ -147,12 +147,12 @@ class NeighborSampler(Sampler):
                                                    sizes=neighbor_sizes, batch_size=128,
                                                    shuffle=True)
 
-    def sample(self, node_ids: dict):
+    def sample(self, local_seed_node_ids: dict):
         """
         Args:
-            node_ids (dict):
+            local_seed_node_ids (dict):
         """
-        local_node_idx = self.get_global_nidx(node_ids)
+        local_node_idx = self.get_global_nidx(local_seed_node_ids)
 
         batch_size, n_id, adjs = self.neighbor_sampler.sample(batch=local_node_idx)
         if not isinstance(adjs, list):
@@ -249,16 +249,16 @@ class NeighborSampler(Sampler):
 
         return edge_index_dict
 
-    def get_multi_edge_index_dict(self, adjs: List[EdgeIndex], n_id, local_nodes_nids: dict):
+    def get_multi_edge_index_dict(self, adjs: List[EdgeIndex], n_id, local_nodes_dict: dict):
         """Conbine all edge_index's across multiple layers and convert local node id to "batch node
         index" that aligns with `x_dict` and `global_node_index`
 
         Args:
             adjs: global_batched edge index (local indices for the hetero graph sampler's global index, not original local index)
             n_id: global nodes ordering for adjs
-            local_nodes_nids (dict): local nodes (original node ids)
+            local_nodes_dict (dict): local nodes (original node ids)
         """
-        local2batch = self.get_local2batch_dict(local_nodes_nids)
+        local2batch = self.get_local2batch_dict(local_nodes_dict)
         local_edges_dict = [{} for i in range(len(adjs))]
 
         for i, adj in enumerate(adjs):

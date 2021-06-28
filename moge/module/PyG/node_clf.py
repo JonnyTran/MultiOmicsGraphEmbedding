@@ -20,7 +20,7 @@ from moge.module.cogdl.conv import GTN as Gtn
 from moge.module.cogdl.conv import HAN as Han
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples
+from moge.module.utils import filter_samples, tensor_sizes
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -110,8 +110,12 @@ class LATTENodeClf(NodeClfTrainer):
         y_pred, proximity_loss = self.forward(X)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        # print(tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
-        loss = self.criterion.forward(y_pred, y_true, weights=weights)
+        try:
+            loss = self.criterion.forward(y_pred, y_true, weights=weights)
+        except Exception as e:
+            print(tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
+            print(X["sizes"])
+            raise e
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
 
@@ -131,6 +135,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
+
         y_pred, proximity_loss = self.forward(X)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
