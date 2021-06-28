@@ -1,5 +1,5 @@
 import logging
-import sys
+import sys, random
 from argparse import ArgumentParser, Namespace
 
 logger = logging.getLogger("wandb")
@@ -44,10 +44,9 @@ def train(hparams: Namespace):
     logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
 
     trainer = Trainer(
-        gpus=NUM_GPUS,
+        gpus=random.sample([0, 1, 2], NUM_GPUS),
         accelerator='ddp' if NUM_GPUS > 1 else None,
         gradient_clip_val=hparams.gradient_clip_val,
-
         auto_lr_find=False,
         auto_scale_batch_size=True if hparams.n_layers > 2 else False,
         max_epochs=MAX_EPOCHS,
