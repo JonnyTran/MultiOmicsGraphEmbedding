@@ -58,7 +58,7 @@ def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bi
             print('added features')
 
         else:
-            print("features.pk not found")
+            print(f"features.pk not found in {ogbn.processed_dir}")
 
     elif dataset == "ACM":
         if method == "HAN" or method == "MetaPath2Vec":
