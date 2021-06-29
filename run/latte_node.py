@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     # Dataset
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
-    parser.add_argument('--dir_path', type=str, default="/home/jonny/Bioinformatics_ExternalData/OGB/")
+    parser.add_argument('--dir_path', type=str, default="~/Bioinformatics_ExternalData/OGB/")
     parser.add_argument('--inductive', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
     parser.add_argument('--trainable_embedding', type=bool, default=False)
