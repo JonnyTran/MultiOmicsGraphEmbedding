@@ -9,6 +9,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
 from torch.nn import functional as F
+from torch import nn
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 from torch_geometric.nn import DNAConv
 
@@ -27,6 +28,7 @@ class LATTENodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
+        self.node_types = list(dataset.num_nodes_dict.keys())
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
@@ -36,7 +38,6 @@ class LATTENodeClf(NodeClfTrainer):
         self.embedder = LATTE(n_layers=hparams.n_layers,
                               t_order=hparams.t_order,
                               embedding_dim=hparams.embedding_dim,
-                              in_channels_dict=dataset.node_attr_shape,
                               num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(khop=True if "khop" in collate_fn else None),
                               activation=hparams.activation,
@@ -46,9 +47,26 @@ class LATTENodeClf(NodeClfTrainer):
                               use_proximity=hparams.use_proximity,
                               neg_sampling_ratio=hparams.neg_sampling_ratio,
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
-                              cpu_embeddings=hparams.cpu_embedding if "cpu_embedding" in hparams else False,
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
+
+        self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
+                                                     dataset.num_nodes_dict,
+                                                     dataset.node_attr_shape,
+                                                     pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None)
+
+        # align the dimension of different types of nodes
+        self.feature_projection = nn.ModuleDict({
+            ntype: nn.Linear(
+                dataset.node_attr_shape[ntype] if ntype not in self.embeddings else self.embeddings[ntype].weight.size(
+                    1), hparams.embedding_dim) \
+            for ntype in self.node_types
+        })
+        if hparams.batchnorm:
+            self.batchnorm = nn.ModuleDict({
+                ntype: nn.BatchNorm1d(hparams.embedding_dim) for ntype in self.node_types
+            })
+        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         if hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":
@@ -71,14 +89,66 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.val_moving_loss = torch.tensor([2.5, ] * 5, dtype=torch.float)
 
-    def forward(self, inputs: dict, **kwargs):
-        if not self.training:
-            self._node_ids = inputs["global_node_index"]
+        self.reset_parameters()
 
-        embeddings, proximity_loss, edge_index_dict = self.embedder(inputs["x_dict"],
-                                                                    inputs["edge_index"],
-                                                                    inputs["sizes"],
-                                                                    inputs["global_node_index"], **kwargs)
+    def reset_parameters(self):
+        gain = nn.init.calculate_gain('relu')
+        for ntype in self.feature_projection:
+            nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
+
+    def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict, pretrain_embeddings):
+        # If some node type are not attributed, instantiate nn.Embedding for them
+        if isinstance(in_channels_dict, dict):
+            non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
+        else:
+            non_attr_node_types = []
+
+        if len(non_attr_node_types) > 0:
+            embeddings = nn.ModuleDict(
+                {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
+                                     embedding_dim=embedding_dim if not pretrain_embeddings else pretrain_embeddings[
+                                         ntype].size(1),
+                                     scale_grad_by_freq=True,
+                                     sparse=False,
+                                     _weight=pretrain_embeddings[ntype] if pretrain_embeddings else None) \
+                 for ntype in non_attr_node_types})
+        else:
+            embeddings = None
+
+        return embeddings
+
+    def transform_inp_feats(self, node_feats, global_node_idx, grad_emb=True):
+        h_dict = {}
+        for ntype in global_node_idx:
+            if ntype in node_feats:
+                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
+            else:
+                if grad_emb:
+                    embedding = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
+                else:
+                    embedding = self.embeddings[ntype](global_node_idx[ntype]).detach().to(self.device)
+
+                h_dict[ntype] = self.feature_projection[ntype](embedding)
+
+            if hasattr(self, "batchnorm"):
+                h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+
+            h_dict[ntype] = F.relu(h_dict[ntype])
+            if self.dropout:
+                h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+
+        return h_dict
+
+    def forward(self, X: dict, grad_emb=True, **kwargs):
+        if not self.training:
+            self._node_ids = X["global_node_index"]
+
+        h_out = self.transform_inp_feats(X["x_dict"], X["global_node_index"], grad_emb=grad_emb)
+
+        embeddings, proximity_loss, edge_index_dict = self.embedder(h_out,
+                                                                    X["edge_index"],
+                                                                    X["sizes"],
+                                                                    X["global_node_index"], **kwargs)
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
 
@@ -107,7 +177,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X)
+        y_pred, proximity_loss = self.forward(X, grad_emb=True if self.current_epoch > 5 else False)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         try:
