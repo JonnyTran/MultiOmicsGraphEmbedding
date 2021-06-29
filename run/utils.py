@@ -40,11 +40,14 @@ def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bi
 
             for ntype, ndata in node_emb.items():
                 if ntype not in dataset.x_dict:
-                    node_emb_init[ntype] = ndata
-                    print(f"added hparams.node_emb_init for {ntype}")
+                    if hparams.trainable_embedding:
+                        node_emb_init[ntype] = ndata
+                        print(f"added hparams.node_emb_init for {ntype}")
+                    else:
+                        dataset.x_dict[ntype] = ndata
+                        print(f'added features for {ntype}')
 
-            if hparams.trainable_embedding:
-                hparams.node_emb_init = node_emb_init
+            hparams.node_emb_init = node_emb_init
 
 
     elif dataset == "ACM":
