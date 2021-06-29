@@ -31,6 +31,9 @@ def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bi
                 for ntype, ndata in preprocess_input(features, device="cpu", dtype=torch.float).items():
                     if ntype not in dataset.x_dict:
                         node_emb_init[ntype] = ndata
+                    else:
+                        dataset.x_dict[ntype] = ndata
+                hparams.embedding_dim = ndata.size(1)
                 hparams.node_emb_init = node_emb_init
                 print("added hparams.node_emb_init")
             else:

@@ -86,24 +86,25 @@ class LATTE(nn.Module):
         if len(non_attr_node_types) > 0:
             print("num_nodes_dict", num_nodes_dict)
 
+            pretrain_embeddings = hparams.node_emb_init if "node_emb_init" in hparams else {ntype: None for ntype in
+                                                                                            non_attr_node_types}
+
             if cpu_embeddings:
-                print("Embedding.device = 'cpu'")
+                print("Embedding.device = 'cpu'", non_attr_node_types)
                 self.embeddings = {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                                        embedding_dim=embedding_dim,
                                                        sparse=True,
-                                                       _weight=hparams.node_emb_init[
-                                                           ntype] if "node_emb_init" in hparams else None).cpu() \
+                                                       _weight=pretrain_embeddings[ntype]).cpu() \
                                    for ntype in non_attr_node_types}
             else:
-                print("Embedding.device = 'gpu'")
-                use_sparse = hparams.sparse if "sparse" in hparams else False
+                print("Embedding.device = 'gpu'", non_attr_node_types)
 
                 self.embeddings = nn.ModuleDict(
                     {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                          embedding_dim=embedding_dim,
                                          scale_grad_by_freq=True,
-                                         sparse=use_sparse,
-                                         _weight=hparams.node_emb_init[ntype] if "node_emb_init" in hparams else None) \
+                                         sparse=False,
+                                         _weight=pretrain_embeddings[ntype]) \
                      for ntype in non_attr_node_types})
         else:
             self.embeddings = None
@@ -115,9 +116,6 @@ class LATTE(nn.Module):
         for ntype in self.feature_projection:
             nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
 
-        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
-            for ntype in self.embeddings:
-                self.embeddings[ntype].reset_parameters()
 
     def transform_inp_feats(self, node_feats, global_node_idx):
         h_dict = {}
