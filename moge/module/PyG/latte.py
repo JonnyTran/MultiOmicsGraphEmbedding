@@ -15,34 +15,26 @@ from .utils import *
 from ..utils import tensor_sizes
 
 class LATTE(nn.Module):
-    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict,
+    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict,
                  metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
-                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True, cpu_embeddings=False,
+                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
                  layer_pooling=False, hparams=None):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
-        self.embedding_dim = embedding_dim * n_layers
-        self.use_proximity = use_proximity
-        self.t_order = t_order
-        self.n_layers = n_layers
-        self.neg_sampling_ratio = neg_sampling_ratio
-        self.edge_sampling = edge_sampling
-        self.edge_threshold = hparams.edge_threshold
         self.head_node_type = hparams.head_node_type
 
+        self.embedding_dim = embedding_dim * n_layers
         self.layer_pooling = layer_pooling
 
-        # align the dimension of different types of nodes
-        self.feature_projection = nn.ModuleDict({
-            ntype: nn.Linear(in_channels_dict[ntype], embedding_dim) for ntype in in_channels_dict
-        })
-        if hparams.batchnorm:
-            self.batchnorm = nn.ModuleDict({
-                ntype: nn.BatchNorm1d(embedding_dim) for ntype in in_channels_dict
-            })
-        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+        self.t_order = t_order
+        self.n_layers = n_layers
+
+        self.edge_sampling = edge_sampling
+        self.edge_threshold = hparams.edge_threshold
+        self.use_proximity = use_proximity
+        self.neg_sampling_ratio = neg_sampling_ratio
 
         layers = []
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize a nother set of
@@ -58,7 +50,7 @@ class LATTE(nn.Module):
             layers.append(
                 LATTEConv(input_dim=embedding_dim,
                           output_dim=hparams.n_classes if is_output_layer else embedding_dim,
-                          num_nodes_dict=num_nodes_dict,
+                          node_types=list(num_nodes_dict.keys()),
                           metapaths=l_layer_metapaths,
                           activation=None if is_output_layer else activation,
                           batchnorm=False if not hasattr(hparams,
@@ -78,63 +70,9 @@ class LATTE(nn.Module):
 
         self.layers = nn.ModuleList(layers)
 
-        self.embeddings = self.initialize_embeddings(embedding_dim, num_nodes_dict, in_channels_dict, cpu_embeddings,
-                                                     hparams)
 
-        self.reset_parameters()
 
-    def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict, cpu_embeddings, hparams):
-        # If some node type are not attributed, instantiate nn.Embedding for them
-        if isinstance(in_channels_dict, dict):
-            non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
-        else:
-            non_attr_node_types = []
-        if len(non_attr_node_types) > 0:
-            pretrain_embeddings = hparams.node_emb_init if "node_emb_init" in hparams else {ntype: None for ntype in
-                                                                                            non_attr_node_types}
-            if cpu_embeddings:
-                print("Embedding.device = 'cpu'", non_attr_node_types)
-                embeddings = {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
-                                                  embedding_dim=embedding_dim,
-                                                  sparse=False,
-                                                  _weight=pretrain_embeddings[ntype]).cpu() \
-                              for ntype in non_attr_node_types}
-            else:
-                print("Embedding.device = 'gpu'", non_attr_node_types)
 
-                embeddings = nn.ModuleDict(
-                    {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
-                                         embedding_dim=embedding_dim,
-                                         scale_grad_by_freq=True,
-                                         sparse=False,
-                                         _weight=pretrain_embeddings[ntype]) \
-                     for ntype in non_attr_node_types})
-        else:
-            embeddings = None
-
-        return embeddings
-
-    def reset_parameters(self):
-        gain = nn.init.calculate_gain('relu')
-        for ntype in self.feature_projection:
-            nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
-
-    def transform_inp_feats(self, node_feats, global_node_idx):
-        h_dict = {}
-        for ntype in self.node_types:
-            if ntype in node_feats:
-                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
-                if hasattr(self, "batchnorm"):
-                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
-
-                h_dict[ntype] = F.relu(h_dict[ntype])
-                if self.dropout:
-                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
-
-            else:
-                h_dict[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(
-                    global_node_idx[self.node_types[0]].device)
-        return h_dict
 
     def forward(self, node_feats: dict, adjs: List[Dict[Tuple, torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: dict, save_betas=False):
@@ -149,7 +87,7 @@ class LATTE(nn.Module):
         proximity_loss = torch.tensor(0.0,
                                       device=global_node_idx[self.node_types[0]].device) if self.use_proximity else None
 
-        h_out = self.transform_inp_feats(node_feats, global_node_idx)
+        h_out = node_feats
 
         edge_pred_dicts = [None for l in range(self.n_layers)]
         edge_pred_dict = None
@@ -276,16 +214,15 @@ class LATTE(nn.Module):
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
-    def __init__(self, input_dim: Dict[str, int], output_dim: int,
-                 num_nodes_dict: Dict[str, int], metapaths: list,
+    def __init__(self, input_dim: int, output_dim: int,
+                 node_types: list, metapaths: list,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0,
                  attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  edge_threshold=0.0,
                  use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
-        self.node_types = list(num_nodes_dict.keys())
+        self.node_types = node_types
         self.metapaths = list(metapaths)
-        self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = output_dim
         self.use_proximity = use_proximity
         self.neg_sampling_ratio = neg_sampling_ratio
