@@ -42,13 +42,14 @@ def train(hparams: Namespace):
         gpus=random.sample([0, 1, 2], NUM_GPUS),
         accelerator='ddp' if NUM_GPUS > 1 else None,
         gradient_clip_val=hparams.gradient_clip_val,
+        stochastic_weight_avg=hparams.stochastic_weight_avg,
         auto_lr_find=False,
         auto_scale_batch_size=True if hparams.n_layers > 2 else False,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_moving_loss', patience=2, min_delta=0.001, strict=False)],
         logger=logger,
         # plugins='deepspeed' if NUM_GPUS > 1 else None,
-        # amp_level='O1' if USE_AMP else None,
+        amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32
     )
     trainer.tune(model)
@@ -103,6 +104,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=0.03)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--gradient_clip_val', type=float, default=0.0)
+    parser.add_argument('--stochastic_weight_avg', type=bool, default=False)
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
 
