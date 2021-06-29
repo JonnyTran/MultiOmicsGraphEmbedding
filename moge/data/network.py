@@ -487,7 +487,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.split_train_val_test(train_ratio,
                                       sample_indices=self.y_index_dict[self.head_node_type])
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
@@ -495,7 +495,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                  **kwargs)
         return loader
 
-    def valtrain_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+    def valtrain_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(torch.cat([self.training_idx, self.validation_idx]), batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
@@ -503,7 +503,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                                                         ), **kwargs)
         return loader
 
-    def trainvalidtest_dataloader(self, collate_fn=None, batch_size=None, num_workers=12, **kwargs):
+    def trainvalidtest_dataloader(self, collate_fn=None, batch_size=None, num_workers=0, **kwargs):
         all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
         loader = data.DataLoader(all_idx, batch_size=all_idx.shape[0],
                                  shuffle=True, num_workers=num_workers,
@@ -512,7 +512,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                                                         ), **kwargs)
         return loader
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
@@ -520,7 +520,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                                                         ), **kwargs)
         return loader
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
