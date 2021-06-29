@@ -26,6 +26,24 @@ def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bi
         if os.path.exists(ogbn.processed_dir + "/features.pk"):
             features = dill.load(open(ogbn.processed_dir + "/features.pk", 'rb'))
 
+            for ntype, ndata in preprocess_input(features, device="cpu", dtype=torch.float).items():
+                if ntype in dataset.x_dict:
+                    dataset.x_dict[ntype] = ndata
+
+            node_emb_path = os.path.join(ogbn.root, "nodes_embedding.pkl")
+            if os.path.exists(node_emb_path):
+                node_emb = torch.load(node_emb_path)
+                for ntype, ndata in node_emb.items():
+                    if ntype not in dataset.x_dict:
+                        if hparams.trainable_embedding:
+                            emb = torch.nn.Embedding(num_embeddings=ndata.size(0),
+                                                     embedding_dim=ndata.size(1),
+                                                     _weight=ndata,
+                                                     scale_grad_by_freq=True)
+                            dataset.x_dict[ntype] = emb.weight
+                        else:
+                            dataset.x_dict[ntype] = ndata
+
             # if (hparams.trainable_embedding if "trainable_embedding" in hparams else False):
             #     node_emb_init = {}
             #     for ntype, ndata in preprocess_input(features, device="cpu", dtype=torch.float).items():
@@ -37,7 +55,6 @@ def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bi
             #     hparams.node_emb_init = node_emb_init
             #     print("added hparams.node_emb_init")
             # else:
-            dataset.x_dict = preprocess_input(features, device="cpu", dtype=torch.float)
             print('added features')
 
         else:
