@@ -18,7 +18,7 @@ from run.utils import load_node_dataset
 def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = True  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 50
+    MAX_EPOCHS = 100
 
     neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.n_layers):
