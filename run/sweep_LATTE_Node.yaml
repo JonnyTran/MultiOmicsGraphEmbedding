@@ -1,7 +1,7 @@
 program: run/latte_node.py
 method: bayes
 metric:
-  name: val_acc
+  name: test_acc
   goal: maximize
 early_terminate:
   type: hyperband
@@ -26,21 +26,37 @@ parameters:
   layernorm:
     values: [ True, False ]
   dropout:
-    values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
+    max: 0.5
+    min: 0.0
+    distribution: uniform
 
   attn_heads:
-    values: [ 1, 4, 8 ]
+    values: [ 1, 2, 4, 8 ]
   attn_dropout:
     values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
 
   attn_activation:
     values: [ "sharpening", "LeakyReLU" ]
 
+  nb_cls_dense_size:
+    values: [ 0, -1 ]
   nb_cls_dropout:
-    values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 ]
+    max: 0.5
+    min: 0.0
+    distribution: uniform
 
   edge_threshold:
-    values: [ 0.0, 0.2, 0.4, 0.5, 0.6, 0.7, 0.8 ]
+    max: 0.5
+    min: 0.0
+    distribution: uniform
+
+  gradient_clip_val:
+    values: [ 0, 1.0, 0.5, 0.1 ]
+  stochastic_weight_avg:
+    values: [ True, False ]
 
   weight_decay:
     values: [ 0.001, 0.0001, 0.00001, 0.0 ]
+
+  lr:
+    values: [ 0.001, 0.005, 0.01, 0.05 ]

@@ -144,20 +144,19 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             return super().get_collate_fn(collate_fn, mode=mode)
 
     def get_allowed_nodes(self, mode):
+        filter = True if self.inductive and "test" not in mode else False
+
         if "train" in mode:
-            filter = True if self.inductive else False
             if self.inductive and hasattr(self, "training_subgraph_idx"):
                 allowed_nodes = self.training_subgraph_idx
             else:
                 allowed_nodes = self.training_idx
         elif "valid" in mode:
-            filter = True if self.inductive else False
             if self.inductive and hasattr(self, "training_subgraph_idx"):
                 allowed_nodes = torch.cat([self.validation_idx, self.training_subgraph_idx])
             else:
                 allowed_nodes = self.validation_idx
         elif "test" in mode:
-            filter = False
             allowed_nodes = self.testing_idx
         else:
             raise Exception(f"Must set `mode` to either 'training', 'validation', or 'testing'. mode={mode}")
@@ -191,11 +190,9 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         # `global_node_index` here actually refers to the 'local' type-specific index of the original graph
         X = {"global_node_index": local_nodes_dict,
-             # "adjs": adjs,
              "x_dict": {}}
 
-        X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs,
-                                                                       n_id=n_id,
+        X["edge_index"] = self.graph_sampler.get_multi_edge_index_dict(adjs=adjs, n_id=n_id,
                                                                        local_nodes_dict=local_nodes_dict)
         X["sizes"] = self.get_adjs_sizes(adjs, n_id)
 
@@ -205,7 +202,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
                            for node_type in self.x_dict if node_type in local_nodes_dict}
 
         # assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
-        assert torch.isclose(local_nodes_dict[self.head_node_type][:batch_size], local_seed_nids).all()
+        # assert torch.isclose(local_nodes_dict[self.head_node_type][:batch_size], local_seed_nids).all()
         # y_dict
         if hasattr(self, "y_dict"):
             y = self.y_dict[self.head_node_type][local_nodes_dict[self.head_node_type][:batch_size]]
