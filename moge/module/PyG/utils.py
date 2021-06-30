@@ -179,15 +179,12 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
 
     deg_A = A.sum(0)
     deg_B = B.sum(1)
-    # if deg_A.dim() > deg_B.dim():
-    #     deg_B = deg_B.unsqueeze(1)
-    #     B.storage._value = B.storage._value.expand(deg_A.size(1), B.storage._value.numel()).T
     deg_normalized = 1.0 / (deg_A + deg_B)
 
     D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
                      col=torch.arange(deg_normalized.size(0), device=valueA.device),
                      value=deg_normalized.type_as(valueA),
-                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
+                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)), is_sorted=True)
 
     # print("A", A.sizes(), "D", D.sizes(), "B", B.sizes(), )
     out = A @ D @ B
