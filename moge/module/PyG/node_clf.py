@@ -177,7 +177,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X, grad_emb=True if self.current_epoch > 5 else False)
+        y_pred, proximity_loss = self.forward(X, grad_emb=True if self.current_epoch > 3 else False)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         try:

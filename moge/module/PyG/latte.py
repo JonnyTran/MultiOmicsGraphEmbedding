@@ -87,12 +87,12 @@ class LATTE(nn.Module):
         proximity_loss = torch.tensor(0.0,
                                       device=global_node_idx[self.node_types[0]].device) if self.use_proximity else None
 
-        h_out = node_feats
 
         edge_pred_dicts = [None for l in range(self.n_layers)]
         edge_pred_dict = None
         h_in_layers = {ntype: [] for ntype in global_node_idx}
         h_out_layers = {ntype: [] for ntype in global_node_idx}
+        h_out = node_feats
         for l in range(self.n_layers):
             # if l == 0:
             #     edge_index_dict = adjs[l]
