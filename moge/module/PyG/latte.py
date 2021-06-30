@@ -121,7 +121,6 @@ class LATTE(nn.Module):
                                                                            edge_index_dict=adjs[l],
                                                                            prev_edge_index_dict=edge_pred_dict,
                                                                            sizes=sizes,
-                                                                           layer=l,
                                                                            global_node_idx=global_node_idx,
                                                                            save_betas=save_betas)
 
@@ -253,6 +252,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 node_type: nn.LayerNorm(output_dim) \
                 for node_type in self.node_types})
 
+        self.conv = torch.nn.ModuleDict(
+            {node_type: torch.nn.Conv1d(
+                in_channels=input_dim,
+                out_channels=self.attn_heads * self.num_head_relations(node_type),
+                kernel_size=1) \
+                for node_type in self.node_types})  # W_phi.shape (D x F)
+
         self.linear_l = nn.ModuleDict(
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F)
@@ -263,12 +269,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.out_channels = self.embedding_dim // attn_heads
         self.attn = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels * 2))
 
-        self.rel_attn_l = nn.ParameterDict({
-            ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
-            for ntype in self.node_types})
-        self.rel_attn_r = nn.ParameterDict({
-            ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
-            for ntype in self.node_types})
+        # self.rel_attn_l = nn.ParameterDict({
+        #     ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
+        #     for ntype in self.node_types})
+        # self.rel_attn_r = nn.ParameterDict({
+        #     ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
+        #     for ntype in self.node_types})
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -292,19 +298,30 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             nn.init.xavier_normal_(self.linear_l[ntype].weight, gain=gain)
             nn.init.xavier_normal_(self.linear_r[ntype].weight, gain=gain)
 
-        gain = nn.init.calculate_gain('leaky_relu', 0.2)
-        for ntype in self.rel_attn_l:
-            nn.init.xavier_normal_(self.rel_attn_l[ntype], gain=gain)
-            nn.init.xavier_normal_(self.rel_attn_r[ntype], gain=gain)
+        # gain = nn.init.calculate_gain('leaky_relu', 0.2)
+        # for ntype in self.rel_attn_l:
+        #     nn.init.xavier_normal_(self.rel_attn_l[ntype], gain=gain)
+        #     nn.init.xavier_normal_(self.rel_attn_r[ntype], gain=gain)
 
-    def get_beta_weights(self, query, key, ntype: str):
-        alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
-        alpha_r = (key * self.rel_attn_r[ntype][:, None, :]).sum(dim=-1)
+        for node_type in self.conv:
+            nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
-        beta = alpha_l[:, :, None] + alpha_r
-        beta = F.leaky_relu(beta, negative_slope=0.2)
-        beta = F.softmax(beta, dim=2)
-        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+    # def get_beta_weights(self, query, key, ntype: str):
+    #     alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
+    #     alpha_r = (key * self.rel_attn_r[ntype][:, None, :]).sum(dim=-1)
+    #
+    #     beta = alpha_l[:, :, None] + alpha_r
+    #     beta = F.leaky_relu(beta, negative_slope=0.2)
+    #     beta = F.softmax(beta, dim=2)
+    #     # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+    #     return beta
+
+    def get_beta_weights(self, h_dict, global_node_idx):
+        beta = {}
+        for node_type in global_node_idx:
+            beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
+            beta[node_type] = torch.softmax(beta[node_type], dim=1)
+
         return beta
 
     def forward(self, x: Dict[str, torch.Tensor],
@@ -329,9 +346,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         l_dict = self.get_h_dict(x, source_target="source")
         r_dict = self.get_h_dict(x_r, source_target="target")
 
+        beta = self.get_beta_weights(x_r, global_node_idx)
+
+        # Save beta weights from testing samples
+        if not self.training:
+            # beta = {ntype: beta[ntype].max(1).values for ntype in beta}
+            self.save_relation_weights(beta, global_node_idx)
+
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
-        beta = {}
         alpha_dict = {}
         for ntype in global_node_idx:
             h_out[ntype], alphas = self.agg_relation_neighbors(node_type=ntype,
@@ -344,10 +367,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             h_out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
 
             # Predict relations attention coefficients
-            beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
+            # beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
+            h_out[ntype] = h_out[ntype] * beta[ntype].view(beta[ntype].size(0), self.attn_heads,
+                                                           self.num_head_relations(ntype), 1)
             h_out[ntype] = h_out[ntype].sum(2).view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "layernorm"):
@@ -361,11 +385,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             if alphas:
                 alpha_dict.update(alphas)
-
-        # Save beta weights from testing samples
-        if not self.training:
-            beta = {ntype: beta[ntype].max(1).values for ntype in beta}
-            self.save_relation_weights(beta, global_node_idx)
 
         proximity_loss, edge_pred_dict = None, {}
         if self.use_proximity:
