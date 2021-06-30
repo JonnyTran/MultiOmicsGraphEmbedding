@@ -59,12 +59,13 @@ class LATTENodeClf(NodeClfTrainer):
         self.proj_ntypes = [ntype for ntype in self.node_types \
                             if (ntype in dataset.node_attr_shape
                                 and dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
-                            or self.embeddings[ntype].weight.size(1) != hparams.embedding_dim]
+                            or (self.embeddings and self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
 
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(
                 in_features=dataset.node_attr_shape[ntype] \
-                    if ntype not in self.embeddings else self.embeddings[ntype].weight.size(1),
+                    if not self.embeddings or ntype not in self.embeddings \
+                    else self.embeddings[ntype].weight.size(1),
                 out_features=hparams.embedding_dim) \
             for ntype in self.proj_ntypes})
 

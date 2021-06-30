@@ -348,11 +348,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         beta = self.get_beta_weights(x_r, global_node_idx)
 
-        # Save beta weights from testing samples
-        if not self.training:
-            # beta = {ntype: beta[ntype].max(1).values for ntype in beta}
-            self.save_relation_weights(beta, global_node_idx)
-
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
         alpha_dict = {}
@@ -385,6 +380,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             if alphas:
                 alpha_dict.update(alphas)
+
+        # Save beta weights from testing samples
+        if not self.training:
+            self.save_relation_weights({ntype: beta[ntype].view(beta[ntype].size(0), self.attn_heads,
+                                                                self.num_head_relations(ntype)).max(1).values \
+                                        for ntype in beta},
+                                       global_node_idx)
 
         proximity_loss, edge_pred_dict = None, {}
         if self.use_proximity:
@@ -419,18 +421,25 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         alpha = {}
         edge_pred_dict = {}
-        for i, metapath in enumerate(self.get_head_relations(node_type)):
+        for i, metapath in enumerate(self.get_head_relations(node_type, order=1)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
-            head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
+
+            order = len(metapath[1::2])
+            if order == 1:
+                h_source = l_dict[head]
+                head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
+            # else:
+            #     h_source = prev_l_dict[head][-(order - 1)]
+            #     head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
 
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(l_dict[head], r_dict[tail]),
+                x=(h_source, r_dict[tail]),
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
                 values=None)
