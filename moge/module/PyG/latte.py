@@ -95,13 +95,13 @@ class LATTE(nn.Module):
         h_out_layers = {ntype: [] for ntype in global_node_idx}
         h_out = node_feats
         for l in range(self.n_layers):
-            # if l == 0:
-            #     edge_index_dict = adjs[l]
-            # else:
-            #     edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict, edge_index_dict_B=adjs[l],
-            #                                         sizes=sizes, layer=l, metapaths=self.layers[l].metapaths,
-            #                                         edge_threshold=self.edge_threshold,
-            #                                         edge_sampling=self.edge_sampling)
+            if l == 0:
+                edge_index_dict = adjs[l]
+            else:
+                edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict, edge_index_dict_B=adjs[l],
+                                                    sizes=sizes, layer=l, metapaths=self.layers[l].metapaths,
+                                                    edge_threshold=self.edge_threshold,
+                                                    edge_sampling=self.edge_sampling)
 
             # print("\n", l, "\t METAPATHS", [".".join([d[0] for d in k]) for k in self.layers[l].metapaths],
             #       "\n\t LOCAL NODES",
@@ -118,8 +118,8 @@ class LATTE(nn.Module):
                 if sizes[l][ntype][1] is not None}
             (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
                                                                            prev_h_in=h_in_layers,
-                                                                           edge_index_dict=adjs[l],
-                                                                           prev_edge_index_dict=edge_pred_dict,
+                                                                           edge_index_dict=edge_index_dict,
+                                                                           # prev_edge_index_dict=edge_pred_dict,
                                                                            sizes=sizes,
                                                                            global_node_idx=global_node_idx,
                                                                            save_betas=save_betas)
@@ -327,7 +327,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def forward(self, x: Dict[str, torch.Tensor],
                 prev_h_in: Dict[str, List[torch.Tensor]],
                 edge_index_dict: Dict[Tuple, torch.Tensor],
-                prev_edge_index_dict: Dict[Tuple, torch.Tensor],
+                # prev_edge_index_dict: Dict[Tuple, torch.Tensor],
                 sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: Dict[str, torch.Tensor],
                 save_betas=False):
@@ -357,7 +357,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                r_dict=r_dict,
                                                                edge_index_dict=edge_index_dict,
                                                                prev_l_dict=prev_h_in,
-                                                               prev_edge_index_dict=prev_edge_index_dict,
+                                                               # prev_edge_index_dict=prev_edge_index_dict,
                                                                sizes=sizes)
             h_out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
 
@@ -409,7 +409,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                r_dict: Dict[str, torch.Tensor],
                                edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
                                prev_l_dict: Dict[str, List[torch.Tensor]],
-                               prev_edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
+                               # prev_edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
                                sizes: List[Dict[str, Tuple[int]]]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
@@ -417,12 +417,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                   self.attn_heads,
                   self.num_head_relations(node_type),
                   self.out_channels)).type_as(r_dict[node_type])
-        relations = self.get_head_relations(node_type)
 
         alpha = {}
         edge_pred_dict = {}
         for i, metapath in enumerate(self.get_head_relations(node_type, order=1)):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
+            if metapath not in edge_index_dict or edge_index_dict[metapath] is None: continue
             head, tail = metapath[0], metapath[-1]
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
@@ -432,9 +431,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if order == 1:
                 h_source = l_dict[head]
                 head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
-            # else:
-            #     h_source = prev_l_dict[head][-(order - 1)]
-            #     head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
+            else:
+                h_source = prev_l_dict[head][-(order - 1)]  # order is 1-based indexing
+                head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
 
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
@@ -445,49 +444,49 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 values=None)
             emb_relations[:, :, i, :] = out
 
-            alpha[metapath] = self._alpha
+            alpha[metapath] = self._alpha.max(1).values
             edge_pred_dict[metapath] = (edge_index, alpha[metapath])
             self._alpha = None
 
-        remaining_orders = range(2, self.layer + 1)
-        if self.layer == 0 or (prev_edge_index_dict is None) or len(remaining_orders) == 0:
-            return emb_relations, alpha
-
-        higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
-                                                    edge_index_dict_B=edge_pred_dict,
-                                                    sizes=sizes, layer=self.layer,
-                                                    metapaths=self.get_head_relations(node_type,
-                                                                                      order=remaining_orders),
-                                                    edge_threshold=self.edge_threshold,
-                                                    edge_sampling=False)
-
-        for metapath in self.get_head_relations(node_type, order=range(2, self.layer + 1)):
-            if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
-            head, tail = metapath[0], metapath[-1]
-
-            edge_index, values = get_edge_index_values(higher_order_edge_index[metapath], filter_edge=False)
-            if edge_index is None: continue
-
-            # Select the right t-order context node presentations based on the order of the metapath
-            order = len(metapath[1::2])
-            h_source = prev_l_dict[head][-(order - 1)]
-            head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
-
-            # Propapate flows from higher order source nodes to target nodes
-            try:
-                out = self.propagate(
-                    edge_index=edge_index,
-                    x=(h_source, r_dict[tail]),
-                    size=(head_size_in, tail_size_out),
-                    metapath_idx=self.metapaths.index(metapath),
-                    values=values)
-                emb_relations[:, relations.index(metapath)] = out.view(-1, self.embedding_dim)
-            except Exception as e:
-                print(e.__class__, metapath, edge_index.max(1).values, head_size_in, tail_size_out)
-                raise e
-
-            alpha[metapath] = self._alpha
-            self._alpha = None
+        # remaining_orders = range(2, self.layer + 1)
+        # if self.layer == 0 or (prev_edge_index_dict is None) or len(remaining_orders) == 0:
+        #     return emb_relations, alpha
+        #
+        # higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
+        #                                             edge_index_dict_B=edge_pred_dict,
+        #                                             sizes=sizes, layer=self.layer,
+        #                                             metapaths=self.get_head_relations(node_type,
+        #                                                                               order=remaining_orders),
+        #                                             edge_threshold=self.edge_threshold,
+        #                                             edge_sampling=False)
+        #
+        # for metapath in self.get_head_relations(node_type, order=range(2, self.layer + 1)):
+        #     if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
+        #     head, tail = metapath[0], metapath[-1]
+        #
+        #     edge_index, values = get_edge_index_values(higher_order_edge_index[metapath], filter_edge=False)
+        #     if edge_index is None: continue
+        #
+        #     # Select the right t-order context node presentations based on the order of the metapath
+        #     order = len(metapath[1::2])
+        #     h_source = prev_l_dict[head][-(order - 1)]
+        #     head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
+        #
+        #     # Propapate flows from higher order source nodes to target nodes
+        #     try:
+        #         out = self.propagate(
+        #             edge_index=edge_index,
+        #             x=(h_source, r_dict[tail]),
+        #             size=(head_size_in, tail_size_out),
+        #             metapath_idx=self.metapaths.index(metapath),
+        #             values=values)
+        #         emb_relations[:, relations.index(metapath)] = out.view(-1, self.embedding_dim)
+        #     except Exception as e:
+        #         print(e.__class__, metapath, edge_index.max(1).values, head_size_in, tail_size_out)
+        #         raise e
+        #
+        #     alpha[metapath] = self._alpha
+        #     self._alpha = None
 
         return emb_relations, alpha
 

@@ -72,7 +72,10 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
         edge_index, edge_values = edge_index_tup
 
         if filter_edge and threshold > 0.0:
-            mask = (edge_values >= threshold).any(dim=1)
+            mask = edge_values >= threshold
+            if mask.dim() > 1:
+                mask = mask.any(dim=1)
+
             edge_index = edge_index[:, mask]
             edge_values = edge_values[mask]
 
@@ -153,16 +156,15 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              indexB=edge_index_b, valueB=values_b,
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
-                                                             coalesced=True)
+                                                             coalesced=False)
 
                 if new_edge_index.size(1) == 0: continue
                 output_edge_index[new_metapath] = (new_edge_index, new_values)
 
             except Exception as e:
-                print(
-                    f"{e} \n {metapath_a}: {edge_index_a.max(1).values, edge_index_a.size(1)}, {metapath_b}: {edge_index_b.max(1).values, edge_index_b.size(1)}")
-                print("sizes: ",
-                      {"m": m, "k": k, "n": n, })
+                print(f"{e} \n {metapath_a}: {edge_index_a.max(1).values, values_a.shape}, "
+                      f"{metapath_b}: {edge_index_b.max(1).values, values_b.shape}")
+                print("sizes: ", {"m": m, "k": k, "n": n, })
                 raise e
                 continue
 
