@@ -112,14 +112,20 @@ class LATTENodeClf(NodeClfTrainer):
             non_attr_node_types = []
 
         if len(non_attr_node_types) > 0:
-            embeddings = nn.ModuleDict(
-                {ntype: nn.Embedding(num_embeddings=num_nodes_dict[ntype],
-                                     embedding_dim=embedding_dim if not pretrain_embeddings else pretrain_embeddings[
-                                         ntype].size(1),
-                                     scale_grad_by_freq=True,
-                                     sparse=False,
-                                     _weight=pretrain_embeddings[ntype] if pretrain_embeddings else None) \
-                 for ntype in non_attr_node_types})
+            module_dict = {}
+
+            for ntype in non_attr_node_types:
+                if pretrain_embeddings is None or ntype not in pretrain_embeddings:
+                    module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
+                                                      embedding_dim=embedding_dim,
+                                                      scale_grad_by_freq=True,
+                                                      sparse=False)
+                else:
+                    module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
+                                                                      freeze=False,
+                                                                      scale_grad_by_freq=True)
+
+            embeddings = nn.ModuleDict(module_dict)
         else:
             embeddings = None
 
@@ -187,15 +193,10 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X, grad_emb=False)
+        y_pred, proximity_loss = self.forward(X, grad_emb=True)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        try:
-            loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        except Exception as e:
-            print(tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
-            print(X["sizes"])
-            raise e
+        loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
 

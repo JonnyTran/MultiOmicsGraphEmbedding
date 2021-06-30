@@ -330,38 +330,38 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                for ntype in x if sizes[layer][ntype][1] is not None}
 
         l_dict = self.get_h_dict(x, source_target="source")
-        r_dict = self.get_h_dict(x_r, source_target="source")
+        r_dict = self.get_h_dict(x_r, source_target="target")
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
-        out = {}
+        h_out = {}
         beta = {}
         alpha_dict = {}
         for ntype in global_node_idx:
-            out[ntype], alphas = self.agg_relation_neighbors(node_type=ntype,
-                                                             l_dict=l_dict,
-                                                             r_dict=r_dict,
-                                                             edge_index_dict=edge_index_dict,
-                                                             prev_l_dict=prev_h_in,
-                                                             prev_edge_index_dict=prev_edge_index_dict,
-                                                             sizes=sizes,
-                                                             layer=layer)
-            out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
+            h_out[ntype], alphas = self.agg_relation_neighbors(node_type=ntype,
+                                                               l_dict=l_dict,
+                                                               r_dict=r_dict,
+                                                               edge_index_dict=edge_index_dict,
+                                                               prev_l_dict=prev_h_in,
+                                                               prev_edge_index_dict=prev_edge_index_dict,
+                                                               sizes=sizes,
+                                                               layer=layer)
+            h_out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
 
             # Predict relations attention coefficients
-            beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=out[ntype], ntype=ntype)
+            beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[ntype] = out[ntype] * beta[ntype].unsqueeze(-1)
-            out[ntype] = out[ntype].sum(2).view(out[ntype].size(0), self.embedding_dim)
+            h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
+            h_out[ntype] = h_out[ntype].sum(2).view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "layernorm"):
-                out[ntype] = self.layernorm[ntype](out[ntype])
+                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
 
             if hasattr(self, "activation"):
-                out[ntype] = self.activation(out[ntype])
+                h_out[ntype] = self.activation(h_out[ntype])
 
             if self.dropout:
-                out[ntype] = F.dropout(out[ntype], p=self.dropout, training=self.training)
+                h_out[ntype] = F.dropout(h_out[ntype], p=self.dropout, training=self.training)
 
             if alphas:
                 alpha_dict.update(alphas)
@@ -385,7 +385,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             else:
                 edge_pred_dict[metapath] = edge_index
 
-        return (l_dict, out), proximity_loss, edge_pred_dict
+        return (l_dict, h_out), proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type: str,
                                l_dict: Dict[str, torch.Tensor],
