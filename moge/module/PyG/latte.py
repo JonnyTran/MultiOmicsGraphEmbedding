@@ -252,11 +252,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 for node_type in self.node_types})
 
         self.linear_l = nn.ModuleDict(
-            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+            {node_type: nn.Linear(input_dim, output_dim, bias=False) \
              for node_type in self.node_types})  # W.shape (F x F)
 
         self.linear_r = nn.ModuleDict(
-            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+            {node_type: nn.Linear(input_dim, output_dim, bias=False) \
              for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
@@ -330,22 +330,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                for ntype in x if sizes[layer][ntype][1] is not None}
 
         l_dict = self.get_h_dict(x, source_target="source")
-        r_dict = self.get_h_dict(x_r, source_target="target")
-
-        # prev_dict = prev_h_in
-        # for head in {m[0] for m in edge_index_dict}:
-        #     for metapath in filter_metapaths(edge_index_dict, head_type=head):
-        #         order = len(metapath[1::2])
-        #         if order == 1: continue
-        #
-        #         h_source = prev_dict[head][-(order - 1)]
-        #         orig_shape = h_source.shape
-        #         h_source = self.linear_prev[head].forward(h_source.view(orig_shape[0], self.embedding_dim))
-        #
-        #         prev_dict[head][-(order - 1)] = h_source.view(orig_shape)
-
-        # Save beta weights from testing samples
-        # if save_betas and not self.training: self.save_relation_weights(beta, global_node_idx)
+        r_dict = self.get_h_dict(x_r, source_target="source")
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
@@ -363,7 +348,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
 
             # Predict relations attention coefficients
-            beta[ntype] = self.get_beta_weights(r_dict[ntype], out[ntype], ntype=ntype)
+            beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=out[ntype], ntype=ntype)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             out[ntype] = out[ntype] * beta[ntype].unsqueeze(-1)
@@ -381,9 +366,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if alphas:
                 alpha_dict.update(alphas)
 
-            beta[ntype] = beta[ntype].mean(1)
-
-        if not self.training: self.save_relation_weights(beta, global_node_idx)
+        # Save beta weights from testing samples
+        if not self.training:
+            beta = {ntype: beta[ntype].max(1).values for ntype in beta}
+            self.save_relation_weights(beta, global_node_idx)
 
         proximity_loss, edge_pred_dict = None, {}
         if self.use_proximity:

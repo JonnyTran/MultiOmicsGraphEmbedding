@@ -49,6 +49,8 @@ def train(hparams: Namespace):
         callbacks=[EarlyStopping(monitor='val_moving_loss', patience=2, min_delta=0.001, strict=False)],
         logger=logger,
         # plugins='deepspeed' if NUM_GPUS > 1 else None,
+        #     accelerator='ddp_spawn',
+        #     plugins='ddp_sharded'
         amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32
     )

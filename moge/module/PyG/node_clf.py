@@ -55,17 +55,25 @@ class LATTENodeClf(NodeClfTrainer):
                                                      dataset.node_attr_shape,
                                                      pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None)
 
-        # align the dimension of different types of nodes
+        # node types that needs a projection to align to the embedding_dim
+        self.proj_ntypes = [ntype for ntype in self.node_types \
+                            if (ntype in dataset.node_attr_shape
+                                and dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
+                            or self.embeddings[ntype].weight.size(1) != hparams.embedding_dim]
+
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(
-                dataset.node_attr_shape[ntype] if ntype not in self.embeddings else self.embeddings[ntype].weight.size(
-                    1), hparams.embedding_dim) \
-            for ntype in self.node_types
-        })
+                in_features=dataset.node_attr_shape[ntype] \
+                    if ntype not in self.embeddings else self.embeddings[ntype].weight.size(1),
+                out_features=hparams.embedding_dim) \
+            for ntype in self.proj_ntypes})
+
         if hparams.batchnorm:
             self.batchnorm = nn.ModuleDict({
-                ntype: nn.BatchNorm1d(hparams.embedding_dim) for ntype in self.node_types
+                ntype: nn.BatchNorm1d(hparams.embedding_dim) \
+                for ntype in self.proj_ntypes
             })
+
         self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         if hparams.nb_cls_dense_size >= 0:
@@ -117,23 +125,25 @@ class LATTENodeClf(NodeClfTrainer):
 
         return embeddings
 
-    def transform_inp_feats(self, node_feats, global_node_idx, grad_emb=True):
+    def transform_inp_feats(self, node_feats, global_node_idx, grad_emb=False):
         h_dict = {}
         for ntype in global_node_idx:
-            if ntype in node_feats:
-                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
-            else:
+            if ntype not in node_feats:
                 if grad_emb:
-                    embedding = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
+                    node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
                 else:
-                    embedding = self.embeddings[ntype](global_node_idx[ntype]).detach().to(self.device)
+                    node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).detach().to(self.device)
 
-                h_dict[ntype] = self.feature_projection[ntype](embedding)
+            if ntype in self.proj_ntypes:
+                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
 
-            if hasattr(self, "batchnorm"):
-                h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+                if hasattr(self, "batchnorm"):
+                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+                h_dict[ntype] = F.relu(h_dict[ntype])
 
-            h_dict[ntype] = F.relu(h_dict[ntype])
+            else:
+                h_dict[ntype] = node_feats[ntype]
+
             if self.dropout:
                 h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
