@@ -252,11 +252,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 for node_type in self.node_types})
 
         self.linear_l = nn.ModuleDict(
-            {node_type: nn.Linear(input_dim, output_dim, bias=False) \
+            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F)
-
         self.linear_r = nn.ModuleDict(
-            {node_type: nn.Linear(input_dim, output_dim, bias=False) \
+            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
