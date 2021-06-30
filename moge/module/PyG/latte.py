@@ -51,6 +51,7 @@ class LATTE(nn.Module):
                 LATTEConv(input_dim=embedding_dim,
                           output_dim=hparams.n_classes if is_output_layer else embedding_dim,
                           node_types=list(num_nodes_dict.keys()),
+                          layer=l,
                           metapaths=l_layer_metapaths,
                           activation=None if is_output_layer else activation,
                           batchnorm=False if not hasattr(hparams,
@@ -215,12 +216,13 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: int, output_dim: int,
-                 node_types: list, metapaths: list,
+                 node_types: list, metapaths: list, layer: int,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0,
                  attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  edge_threshold=0.0,
                  use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
+        self.layer = layer
         self.node_types = node_types
         self.metapaths = list(metapaths)
         self.embedding_dim = output_dim
@@ -296,9 +298,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             nn.init.xavier_normal_(self.rel_attn_r[ntype], gain=gain)
 
     def get_beta_weights(self, query, key, ntype: str):
-        # print(tensor_sizes({"node_emb": node_emb, "rel_embs": rel_embs}))
-        # print(tensor_sizes({"self.rel_attn_l[ntype]": self.rel_attn_l[ntype], "self.rel_attn_r[ntype]": self.rel_attn_r[
-        #     ntype]}))
         alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
         alpha_r = (key * self.rel_attn_r[ntype][:, None, :]).sum(dim=-1)
 
@@ -313,7 +312,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 edge_index_dict: Dict[Tuple, torch.Tensor],
                 prev_edge_index_dict: Dict[Tuple, torch.Tensor],
                 sizes: List[Dict[str, Tuple[int]]],
-                layer: int,
                 global_node_idx: Dict[str, torch.Tensor],
                 save_betas=False):
         """
@@ -325,8 +323,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         :return: output_emb, loss
         """
-        x_r = {ntype: x[ntype][: sizes[layer][ntype][1]] \
-               for ntype in x if sizes[layer][ntype][1] is not None}
+        x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
+               for ntype in x if sizes[self.layer][ntype][1] is not None}
 
         l_dict = self.get_h_dict(x, source_target="source")
         r_dict = self.get_h_dict(x_r, source_target="target")
@@ -342,8 +340,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                edge_index_dict=edge_index_dict,
                                                                prev_l_dict=prev_h_in,
                                                                prev_edge_index_dict=prev_edge_index_dict,
-                                                               sizes=sizes,
-                                                               layer=layer)
+                                                               sizes=sizes)
             h_out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
 
             # Predict relations attention coefficients
@@ -392,8 +389,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
                                prev_l_dict: Dict[str, List[torch.Tensor]],
                                prev_edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
-                               sizes: List[Dict[str, Tuple[int]]],
-                               layer: int):
+                               sizes: List[Dict[str, Tuple[int]]]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
             size=(r_dict[node_type].size(0),
@@ -410,7 +406,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
-            head_size_in, tail_size_out = sizes[layer][head][0], sizes[layer][tail][1]
+            head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
 
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
@@ -425,19 +421,19 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             edge_pred_dict[metapath] = (edge_index, alpha[metapath])
             self._alpha = None
 
-        remaining_orders = range(2, layer + 1)
-        if layer == 0 or (prev_edge_index_dict is None) or len(remaining_orders) == 0:
+        remaining_orders = range(2, self.layer + 1)
+        if self.layer == 0 or (prev_edge_index_dict is None) or len(remaining_orders) == 0:
             return emb_relations, alpha
 
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
                                                     edge_index_dict_B=edge_pred_dict,
-                                                    sizes=sizes, layer=layer,
+                                                    sizes=sizes, layer=self.layer,
                                                     metapaths=self.get_head_relations(node_type,
                                                                                       order=remaining_orders),
                                                     edge_threshold=self.edge_threshold,
                                                     edge_sampling=False)
 
-        for metapath in self.get_head_relations(node_type, order=range(2, layer + 1)):
+        for metapath in self.get_head_relations(node_type, order=range(2, self.layer + 1)):
             if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
 
@@ -447,7 +443,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Select the right t-order context node presentations based on the order of the metapath
             order = len(metapath[1::2])
             h_source = prev_l_dict[head][-(order - 1)]
-            head_size_in, tail_size_out = h_source.size(0), sizes[layer][tail][1]
+            head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
 
             # Propapate flows from higher order source nodes to target nodes
             try:
