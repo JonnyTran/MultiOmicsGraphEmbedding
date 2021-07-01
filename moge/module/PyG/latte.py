@@ -208,6 +208,10 @@ class LATTE(nn.Module):
                 links.setdefault("value", []).extend([value, ])
                 links.setdefault("label", []).extend([metapath, ])
 
+        node_group = [int(node[0]) for node, nid in all_nodes.items()]
+        groups = [[nid for nid, node in enumerate(node_group) if node == group] for group in np.unique(node_group)]
+        data["groups"] = groups
+
         data["links"] = links
         data.setdefault("nodes", {})["labels"] = [node[1:] for node in all_nodes.keys()]
         return data
