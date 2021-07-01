@@ -420,7 +420,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         alpha = {}
         edge_pred_dict = {}
-        for i, metapath in enumerate(self.get_head_relations(node_type, order=1)):
+        for i, metapath in enumerate(self.get_head_relations(node_type)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None: continue
             head, tail = metapath[0], metapath[-1]
 
@@ -442,7 +442,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
                 values=None)
-            emb_relations[:, :, i, :] = out
+            emb_relations[:, :, i, :] = F.relu(out)
 
             alpha[metapath] = self._alpha.max(1).values
             edge_pred_dict[metapath] = (edge_index, alpha[metapath])

@@ -194,8 +194,7 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
 
     num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
     if sampling and values.numel() > num_samples:
-        idx = torch.multinomial(values, num_samples=num_samples,
-                                replacement=False)
+        idx = torch.multinomial(values, num_samples=num_samples, replacement=False)
         row, col, values = row[idx], col[idx], values[idx]
 
     return torch.stack([row, col], dim=0), values
