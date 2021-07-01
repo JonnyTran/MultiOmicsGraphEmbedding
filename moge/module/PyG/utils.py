@@ -92,9 +92,12 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
 
 
 def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
-                      edge_index_dict_B: Dict[Tuple, Tuple[torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
+                      edge_index_dict_B: Dict[Tuple, Tuple[torch.Tensor]],
+                      sizes: List[Dict[str, Tuple[int]]],
                       layer: int,
-                      metapaths: List[Tuple[str]] = None, edge_threshold: float = None, edge_sampling: bool = False):
+                      metapaths: List[Tuple[str]] = None,
+                      edge_threshold: float = None,
+                      edge_sampling: bool = False):
     """
     Return a cartesian product from two set of adjacency matrices, such that the output adjacency matricees are
     relation-matching.
@@ -114,7 +117,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
     output_edge_index = {}
     for metapath_b, edge_index_b in edge_index_dict_B.items():
         edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False)
-        if edge_index_b is None: continue
+        if edge_index_b is None or edge_index_b.size(1) == 0: continue
 
         # In the current LATTE layer that calls this method, a metapath is not higher-order
         if metapaths and metapath_b in metapaths:
@@ -159,6 +162,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              coalesced=False)
 
                 if new_edge_index.size(1) == 0: continue
+
                 output_edge_index[new_metapath] = (new_edge_index, new_values)
 
             except Exception as e:
@@ -172,8 +176,11 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=False):
-    if valueA.dim() > 1:
+    if valueA.dim() > 1 and valueA.size(1) == 1:
         valueA = valueA.squeeze(-1)
+    if valueB.dim() > 1 and valueB.size(1) == 1:
+        valueB = valueB.squeeze(-1)
+
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
                      sparse_sizes=(m, k), is_sorted=coalesced)
     B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
