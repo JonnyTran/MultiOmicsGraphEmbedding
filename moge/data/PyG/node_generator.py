@@ -110,7 +110,9 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
             self.metapaths = list(self.edge_index_dict.keys())
             self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
-
+            if hasattr(data, "node_species"):
+                self.node_species = data.node_species
+                self.node_species_mapping = {species.item(): i for i, species in enumerate(self.node_species.unique())}
         else:
             raise Exception("Something wrong here")
 
@@ -200,6 +202,10 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
             X["x_dict"] = {node_type: self.x_dict[node_type][local_nodes_dict[node_type]] \
                            for node_type in self.x_dict if node_type in local_nodes_dict}
+
+        if hasattr(self, "node_species"):
+            X["node_species"] = self.node_species[local_nodes_dict[self.head_node_type]].apply_(
+                lambda x: self.node_species_mapping.get(x, -1))
 
         # assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
         # assert torch.isclose(local_nodes_dict[self.head_node_type][:batch_size], local_seed_nids).all()

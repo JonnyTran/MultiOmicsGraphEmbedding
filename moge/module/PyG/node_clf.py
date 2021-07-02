@@ -50,6 +50,9 @@ class LATTENodeClf(NodeClfTrainer):
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
 
+        if dataset.name() == 'ogbn-proteins':
+            self.species_embedding = nn.Embedding(8, hparams.embedding_dim)
+
         self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
                                                      dataset.num_nodes_dict,
                                                      dataset.node_attr_shape,
@@ -132,7 +135,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         return embeddings
 
-    def transform_inp_feats(self, node_feats, global_node_idx, grad_emb=False):
+    def transform_inp_feats(self, node_feats, global_node_idx, node_species=None, grad_emb=False):
         h_dict = {}
         for ntype in global_node_idx:
             if ntype not in node_feats:
@@ -141,18 +144,24 @@ class LATTENodeClf(NodeClfTrainer):
                 else:
                     node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).detach().to(self.device)
 
+            # project to embedding_dim if node features are not same same dimension
             if ntype in self.proj_ntypes:
                 h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
 
+                if node_species is not None:
+                    h_dict[ntype] = h_dict[ntype] + self.species_embedding(node_species.squeeze(-1))
+
                 if hasattr(self, "batchnorm"):
                     h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
-                h_dict[ntype] = F.relu(h_dict[ntype])
 
+                h_dict[ntype] = F.relu(h_dict[ntype])
+                if self.dropout:
+                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+
+            # Skips projection
             else:
                 h_dict[ntype] = node_feats[ntype]
 
-            if self.dropout:
-                h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
         return h_dict
 
@@ -160,7 +169,9 @@ class LATTENodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = X["global_node_index"]
 
-        h_out = self.transform_inp_feats(X["x_dict"], X["global_node_index"], grad_emb=grad_emb)
+        h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"],
+                                         node_species=X["node_species"] if "node_species" in X else None,
+                                         grad_emb=grad_emb)
 
         embeddings, proximity_loss, edge_index_dict = self.embedder(h_out,
                                                                     X["edge_index"],
