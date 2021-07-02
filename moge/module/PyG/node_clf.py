@@ -149,8 +149,8 @@ class LATTENodeClf(NodeClfTrainer):
                     h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
 
                 h_dict[ntype] = F.relu(h_dict[ntype])
-                if self.dropout:
-                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+                # if self.dropout:
+                #     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
             # Skips projection
             else:
