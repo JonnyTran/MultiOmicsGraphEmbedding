@@ -377,8 +377,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])
 
-            if self.dropout:
-                h_out[ntype] = F.dropout(h_out[ntype], p=self.dropout, training=self.training)
+            # if self.dropout:
+            #     h_out[ntype] = F.dropout(h_out[ntype], p=self.dropout, training=self.training)
 
             if alphas:
                 alpha_dict.update(alphas)
@@ -443,7 +443,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
                 values=None)
-            emb_relations[:, :, relations.index(metapath), :] = F.relu(out)
+            emb_relations[:, :, relations.index(metapath), :] = out
 
             alpha[metapath] = self._alpha  # .max(1).values
 
@@ -483,7 +483,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
                 values=values)
-            emb_relations[:, :, relations.index(metapath), :] = F.relu(out)
+            emb_relations[:, :, relations.index(metapath), :] = out
 
             alpha[metapath] = self._alpha
             self._alpha = None
@@ -518,7 +518,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             elif source_target == "target":
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
-            h_dict[ntype] = h_dict[ntype].view(-1, self.attn_heads, self.out_channels)
+            h_dict[ntype] = F.tanh(h_dict[ntype].view(-1, self.attn_heads, self.out_channels))
+            if self.dropout:
+                h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
         return h_dict
 

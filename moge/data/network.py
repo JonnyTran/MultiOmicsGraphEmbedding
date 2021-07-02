@@ -16,10 +16,11 @@ from scipy.io import loadmat
 from sklearn.cluster import KMeans
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
+from torch_geometric.utils import is_undirected
 from torch_sparse import transpose
 
 import moge.module.PyG.utils
-from moge.module.PyG.utils import is_negative
+from moge.module.PyG.utils import is_negative, get_edge_index_values
 
 
 class Network:
@@ -197,6 +198,11 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.process_BlogCatalog6k(dataset, train_ratio=0.5)
         else:
             raise Exception(f"Unsupported dataset {dataset}")
+
+        if hasattr(self, "edge_index_dict") and self.edge_index_dict:
+            for m, edge_index in self.edge_index_dict.items():
+                e_index, e_values = get_edge_index_values(edge_index)
+                print(m, "is_undirected:", is_undirected(edge_index=e_index))
 
         # Node classifications
         if hasattr(self, "y_dict") and self.y_dict:

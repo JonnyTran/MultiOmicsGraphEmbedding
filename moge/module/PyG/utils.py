@@ -148,7 +148,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              indexB=edge_index_b, valueB=values_b[:, d],
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
-                                                             coalesced=True)
+                                                             coalesced=False)
                         new_values.append(values)
 
                     new_values = torch.stack(new_values, dim=1)
@@ -161,7 +161,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              indexB=edge_index_b, valueB=values_b,
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
-                                                             coalesced=True)
+                                                             coalesced=False)
 
                 if new_edge_index.size(1) == 0: continue
 
@@ -178,10 +178,10 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=False):
-    # if valueA.dim() > 1 and valueA.size(1) == 1:
-    #     valueA = valueA.squeeze(-1)
-    # if valueB.dim() > 1 and valueB.size(1) == 1:
-    #     valueB = valueB.squeeze(-1)
+    if valueA.dim() > 1 and valueA.size(1) == 1:
+        valueA = valueA.squeeze(-1)
+    if valueB.dim() > 1 and valueB.size(1) == 1:
+        valueB = valueB.squeeze(-1)
 
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
                      sparse_sizes=(m, k), is_sorted=coalesced)
