@@ -117,7 +117,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
     output_edge_index = {}
     for metapath_b, edge_index_b in edge_index_dict_B.items():
         edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False)
-        if edge_index_b is None or edge_index_b.size(1) == 0: continue
+        if edge_index_b is None or edge_index_b.size(1) < 5: continue
 
         # In the current LATTE layer that calls this method, a metapath is not higher-order
         if metapaths and metapath_b in metapaths:
@@ -132,7 +132,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
             edge_index_a, values_a = get_edge_index_values(edge_index_a,
                                                            filter_edge=True if edge_threshold else False,
                                                            threshold=edge_threshold)
-            if edge_index_a is None or edge_index_a.size(1) == 0 or is_negative(metapath_a): continue
+            if edge_index_a is None or edge_index_a.size(1) < 5 or is_negative(metapath_a): continue
+
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
             a_order = len(metapath_a[1::2])
             m = sizes[layer - a_order][head][0]
@@ -148,7 +149,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
                                                              coalesced=True)
-                    new_values.append(values)
+                        new_values.append(values)
+
                     new_values = torch.stack(new_values, dim=1)
 
                 else:
@@ -159,7 +161,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              indexB=edge_index_b, valueB=values_b,
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
-                                                             coalesced=False)
+                                                             coalesced=True)
 
                 if new_edge_index.size(1) == 0: continue
 
@@ -176,10 +178,10 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=False):
-    if valueA.dim() > 1 and valueA.size(1) == 1:
-        valueA = valueA.squeeze(-1)
-    if valueB.dim() > 1 and valueB.size(1) == 1:
-        valueB = valueB.squeeze(-1)
+    # if valueA.dim() > 1 and valueA.size(1) == 1:
+    #     valueA = valueA.squeeze(-1)
+    # if valueB.dim() > 1 and valueB.size(1) == 1:
+    #     valueB = valueB.squeeze(-1)
 
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
                      sparse_sizes=(m, k), is_sorted=coalesced)
