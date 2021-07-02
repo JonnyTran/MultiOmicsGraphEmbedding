@@ -443,7 +443,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             out = self.propagate(
                 edge_index=edge_index,
                 x=(h_source, r_dict[tail]),
-                size=(head_size_in, tail_size_out),
+                # size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
                 values=None)
             emb_relations[:, :, i, :] = F.relu(out)

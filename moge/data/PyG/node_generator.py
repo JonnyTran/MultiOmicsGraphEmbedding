@@ -174,6 +174,20 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             weights[seed_node_idx] = weights[seed_node_idx] * 0.2 if "train" in mode else 0.0
         return weights
 
+    def get_adjs_sizes(self, adjs, n_id):
+        sizes = [{} for _ in range(len(adjs))]
+
+        for layer, adj in enumerate(adjs):
+            for source_target in [0, 1]:
+                node_types = self.graph_sampler.node_type[n_id][: adj.size[source_target]]
+                for ntype_id, ntype_count in enumerate(torch.bincount(node_types)):
+                    ntype = self.graph_sampler.int2node_type[ntype_id]
+                    sizes[layer].setdefault(ntype, [None, None])[
+                        source_target] = ntype_count if ntype_count > 0 else None
+
+            sizes[layer] = {ntype: tuple(sizes) for ntype, sizes in sizes[layer].items()}
+        return sizes
+
     def sample(self, local_seed_nids, mode):
         if not isinstance(local_seed_nids, torch.Tensor) and not isinstance(local_seed_nids, dict):
             local_seed_nids = torch.tensor(local_seed_nids)
@@ -219,20 +233,6 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         #                                allowed_nodes=allowed_nodes, mode=mode)
         weights = None
         return X, y, weights
-
-    def get_adjs_sizes(self, adjs, n_id):
-        sizes = [{} for _ in range(len(adjs))]
-
-        for layer, adj in enumerate(adjs):
-            for source_target in [0, 1]:
-                node_types = self.graph_sampler.node_type[n_id][: adj.size[source_target]]
-                for ntype_id, ntype_count in enumerate(torch.bincount(node_types)):
-                    ntype = self.graph_sampler.int2node_type[ntype_id]
-                    sizes[layer].setdefault(ntype, [None, None])[
-                        source_target] = ntype_count if ntype_count > 0 else None
-
-            sizes[layer] = {ntype: tuple(sizes) for ntype, sizes in sizes[layer].items()}
-        return sizes
 
     def khop_sampler(self, n_idx, mode):
         if not isinstance(n_idx, torch.Tensor) and not isinstance(n_idx, dict):
