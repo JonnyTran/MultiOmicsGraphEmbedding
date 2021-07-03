@@ -91,6 +91,7 @@ class LATTE(nn.Module):
 
         edge_pred_dicts = [None for l in range(self.n_layers)]
         edge_pred_dict = None
+
         h_in_layers = {ntype: [] for ntype in global_node_idx}
         h_out_layers = {ntype: [] for ntype in global_node_idx}
         h_out = node_feats
@@ -352,18 +353,17 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         r_dict = self.get_h_dict(x_r, source_target="target")
 
         beta = self.get_beta_weights(x_r, global_node_idx)
-
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
-        alpha_dict = {}
+        edge_pred_dict = {}
         for ntype in global_node_idx:
-            h_out[ntype], alphas = self.agg_relation_neighbors(node_type=ntype,
-                                                               l_dict=l_dict,
-                                                               r_dict=r_dict,
-                                                               edge_index_dict=edge_index_dict,
-                                                               prev_l_dict=prev_h_in,
-                                                               prev_edge_index_dict=prev_edge_index_dict,
-                                                               sizes=sizes)
+            h_out[ntype], edge_attn_dict = self.agg_relation_neighbors(node_type=ntype,
+                                                                       l_dict=l_dict,
+                                                                       r_dict=r_dict,
+                                                                       edge_index_dict=edge_index_dict,
+                                                                       prev_l_dict=prev_h_in,
+                                                                       prev_edge_index_dict=prev_edge_index_dict,
+                                                                       sizes=sizes)
             h_out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
 
             # Predict relations attention coefficients
@@ -380,33 +380,34 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])
 
-            # if self.dropout:
-            #     h_out[ntype] = F.dropout(h_out[ntype], p=self.dropout, training=self.training)
+            if self.dropout:
+                h_out[ntype] = F.dropout(h_out[ntype], p=self.dropout, training=self.training)
 
-            if alphas:
-                alpha_dict.update(alphas)
+            if edge_attn_dict:
+                edge_pred_dict.update(edge_attn_dict)
 
         # Save beta weights from testing samples
         if not self.training:
-            self.save_relation_weights({ntype: beta[ntype].view(beta[ntype].size(0), self.attn_heads,
+            self.save_relation_weights({ntype: beta[ntype].view(beta[ntype].size(0),
+                                                                self.attn_heads,
                                                                 self.num_head_relations(ntype)).max(1).values \
                                         for ntype in beta},
                                        global_node_idx)
 
-        proximity_loss, edge_pred_dict = None, {}
+        proximity_loss = None
         if self.use_proximity:
             proximity_loss, _ = self.proximity_loss(edge_index_dict,
                                                     l_dict=l_dict, r_dict=r_dict,
                                                     global_node_idx=global_node_idx)
 
-        for metapath, edge_index in edge_index_dict.items():
-            if metapath in alpha_dict:
-                edge_pred_dict[metapath] = (edge_index[0] \
-                                                if isinstance(edge_index, tuple) else edge_index,
-                                            alpha_dict[metapath])
-            else:
-                edge_pred_dict[metapath] = edge_index
-
+        # for metapath, attn_values in alpha_dict.items():
+        #     if metapath in edge_index_dict:
+        #         edge_pred_dict[metapath] = (edge_index_dict[metapath][0] \
+        #                                         if isinstance(edge_index_dict[metapath], tuple) else edge_index_dict[
+        #             metapath],
+        #                                     attn_values)
+        #     else:
+        #         raise Exception(f"Attn for {metapath} in alpha_dict doesn't exist in edge_index_dict")
         return (l_dict, h_out), proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type: str,
@@ -425,7 +426,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         relations = self.get_head_relations(node_type)
 
-        alpha = {}
         edge_pred_dict = {}
         for metapath in self.get_head_relations(node_type, order=1):
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None: continue
@@ -433,7 +433,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
-
             head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
             # else:
             #     h_source = prev_l_dict[head][-(order - 1)]  # order is 1-based indexing
@@ -449,16 +448,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 values=None)
             emb_relations[:, :, relations.index(metapath), :] = out
 
-            alpha[metapath] = self._alpha  # .max(1).values
-
-            edge_pred_dict[metapath] = (edge_index, alpha[metapath])
+            edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
 
         remaining_orders = range(2, self.layer + 2)
-
-        if self.layer == 0 or (prev_edge_index_dict is None) or len(remaining_orders) == 0:
-            return emb_relations, alpha
-
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
                                                     edge_index_dict_B=edge_pred_dict,
                                                     sizes=sizes, layer=self.layer,
@@ -473,6 +466,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
 
             edge_index, values = get_edge_index_values(higher_order_edge_index[metapath], filter_edge=False)
+
             if edge_index is None: continue
 
             # Select the right t-order context node presentations based on the order of the metapath
@@ -490,10 +484,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 values=values)
             emb_relations[:, :, relations.index(metapath), :] = out
 
-            alpha[metapath] = self._alpha
+            edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
 
-        return emb_relations, alpha
+        return emb_relations, edge_pred_dict
 
     def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
         if values is None:
