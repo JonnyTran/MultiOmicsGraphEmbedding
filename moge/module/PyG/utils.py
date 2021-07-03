@@ -138,7 +138,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              indexB=edge_index_b, valueB=values_b[:, d],
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
-                                                             coalesced=False)
+                                                             coalesced=True)
                         new_values.append(values)
 
                     new_values = torch.stack(new_values, dim=1)
@@ -151,7 +151,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              indexB=edge_index_b, valueB=values_b,
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
-                                                             coalesced=False)
+                                                             coalesced=True)
 
                 if new_edge_index.size(1) == 0: continue
 

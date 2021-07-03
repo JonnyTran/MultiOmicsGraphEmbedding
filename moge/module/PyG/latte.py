@@ -52,6 +52,7 @@ class LATTE(nn.Module):
                           output_dim=hparams.n_classes if is_output_layer else embedding_dim,
                           node_types=list(num_nodes_dict.keys()),
                           layer=l,
+                          t_order=self.t_order,
                           metapaths=l_layer_metapaths,
                           activation=None if is_output_layer else activation,
                           batchnorm=False if not hasattr(hparams,
@@ -218,13 +219,14 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: int, output_dim: int,
-                 node_types: list, metapaths: list, layer: int,
+                 node_types: list, metapaths: list, layer: int, t_order: int,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0,
                  attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
                  edge_threshold=0.0,
                  use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
+        self.t_order = t_order
         self.node_types = node_types
         self.metapaths = list(metapaths)
         self.embedding_dim = output_dim
@@ -364,7 +366,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                        prev_l_dict=prev_h_in,
                                                                        prev_edge_index_dict=prev_edge_index_dict,
                                                                        sizes=sizes)
-            h_out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
+            try:
+                h_out[ntype][:, :, -1, :] = r_dict[ntype]  # .view(-1, self.embedding_dim)
+            except Exception as e:
+                print(e)
+                print(ntype, {"h_out[ntype]": h_out[ntype].shape, "r_dict[ntype]": r_dict[ntype].shape},
+                      tensor_sizes(global_node_idx))
 
             # Predict relations attention coefficients
             # beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
@@ -400,14 +407,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                     l_dict=l_dict, r_dict=r_dict,
                                                     global_node_idx=global_node_idx)
 
-        # for metapath, attn_values in alpha_dict.items():
-        #     if metapath in edge_index_dict:
-        #         edge_pred_dict[metapath] = (edge_index_dict[metapath][0] \
-        #                                         if isinstance(edge_index_dict[metapath], tuple) else edge_index_dict[
-        #             metapath],
-        #                                     attn_values)
-        #     else:
-        #         raise Exception(f"Attn for {metapath} in alpha_dict doesn't exist in edge_index_dict")
         return (l_dict, h_out), proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type: str,
@@ -439,19 +438,26 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             #     head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
 
             # Propapate flows from target nodes to source nodes
-            out = self.propagate(
-                edge_index=edge_index,
-                x=(l_dict[head], r_dict[tail]),
-                size=(head_size_in, tail_size_out),
-                metapath_idx=self.metapaths.index(metapath),
-                metapath=str(metapath),
-                values=None)
-            emb_relations[:, :, relations.index(metapath), :] = out
+            try:
+                out = self.propagate(
+                    edge_index=edge_index,
+                    x=(l_dict[head], r_dict[tail]),
+                    size=(head_size_in, tail_size_out),
+                    metapath_idx=self.metapaths.index(metapath),
+                    metapath=str(metapath),
+                    values=None)
+                emb_relations[:, :, relations.index(metapath), :] = out
+
+            except Exception as e:
+                print(e)
+                print(metapath, edge_index.max(1).values, {"values": values.shape, "self._alpha": self._alpha.shape},
+                      {"head_size_in": head_size_in, "tail_size_out": tail_size_out},
+                      {"l_dict[head]": l_dict[head].shape, "r_dict[tail]": r_dict[tail].shape})
 
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
 
-        remaining_orders = range(2, self.layer + 2)
+        remaining_orders = range(2, min(self.layer + 1, self.t_order) + 1)
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
                                                     edge_index_dict_B=edge_pred_dict,
                                                     sizes=sizes, layer=self.layer,
@@ -475,14 +481,20 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
 
             # Propapate flows from higher order source nodes to target nodes
-            out = self.propagate(
-                edge_index=edge_index,
-                x=(h_source, r_dict[tail]),
-                size=(head_size_in, tail_size_out),
-                metapath_idx=self.metapaths.index(metapath),
-                metapath=str(metapath),
-                values=values)
-            emb_relations[:, :, relations.index(metapath), :] = out
+            try:
+                out = self.propagate(
+                    edge_index=edge_index,
+                    x=(h_source, r_dict[tail]),
+                    size=(head_size_in, tail_size_out),
+                    metapath_idx=self.metapaths.index(metapath),
+                    metapath=str(metapath),
+                    values=values)
+                emb_relations[:, :, relations.index(metapath), :] = out
+            except Exception as e:
+                print(e)
+                print(metapath, edge_index.max(1).values, {"values": values.shape, "self._alpha": self._alpha.shape},
+                      {"head_size_in": head_size_in, "tail_size_out": tail_size_out},
+                      {"l_dict[head]": l_dict[head].shape, "r_dict[tail]": r_dict[tail].shape})
 
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
@@ -500,8 +512,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             alpha = (x * self.attn[metapath]).sum(dim=-1)
             alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         else:
-            # if values.dim() == 1:
-            #     values = values.unsqueeze(-1)
+            if values.dim() == 1:
+                values = values.unsqueeze(-1)
             alpha = values
 
         self._alpha = alpha
@@ -518,8 +530,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
             h_dict[ntype] = F.tanh(h_dict[ntype].view(-1, self.attn_heads, self.out_channels))
-            if self.dropout:
-                h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+            # if self.dropout:
+            #     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
         return h_dict
 
