@@ -332,7 +332,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
             beta[node_type] = beta[node_type].view(num_nodes,
                                                    self.attn_heads,
-                                                   self.num_head_relations(node_type), 1)
+                                                   self.num_head_relations(node_type))
             beta[node_type] = torch.softmax(beta[node_type], dim=1)
 
 
@@ -383,7 +383,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            h_out[ntype] = h_out[ntype] * beta[ntype]
+            h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
             h_out[ntype] = h_out[ntype].sum(2).view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "layernorm"):
