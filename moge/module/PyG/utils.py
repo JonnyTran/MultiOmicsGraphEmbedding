@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from typing import Union, Tuple, Iterable, List, Dict
-
+import pandas as pd
 import torch
 from torch_sparse import SparseTensor, spspmm, matmul
 
@@ -65,6 +65,25 @@ def filter_metapaths(metapaths: List[Tuple[str]],
 
     return [m for m in sorted(OrderedDict.fromkeys(metapaths)) if filter_func(m)]
 
+
+def edge_index2matrix(edge_index_dict, metapath, describe=True):
+    edge_idx, edge_values = get_edge_index_values(edge_index_dict[metapath])
+    if edge_values.dim() > 1:
+        edge_values = edge_values.mean(1)
+
+    st = SparseTensor.from_edge_index(edge_index=edge_idx,
+                                      edge_attr=edge_values)
+
+    if describe:
+        print("sizes", st.sizes(), "max", st.storage.value().max(), "min", st.storage.value().min())
+        axis = 0
+        row_sum = st.sum(axis)  # [st.sum(axis).nonzero()]
+        if row_sum.dim() > 2:
+            row_sum = row_sum.max(-1).values
+        print(f"sum on {axis}-axis", pd.Series(row_sum.detach().numpy().flatten()).describe().to_dict())
+
+    mtx = st.detach().to_dense().numpy()
+    return mtx
 
 def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor],
                           filter_edge=False, threshold=0.5):
