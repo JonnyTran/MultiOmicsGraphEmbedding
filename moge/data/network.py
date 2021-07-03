@@ -199,11 +199,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
-        if hasattr(self, "edge_index_dict") and self.edge_index_dict:
-            for m, edge_index in self.edge_index_dict.items():
-                e_index, e_values = get_edge_index_values(edge_index)
-                print(m, "is_undirected:", is_undirected(edge_index=e_index))
-
         # Node classifications
         if hasattr(self, "y_dict") and self.y_dict:
             if self.y_dict[self.head_node_type].dim() > 1 and self.y_dict[self.head_node_type].size(-1) != 1:
@@ -260,6 +255,12 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         else:
             print("train_ratio", self.get_train_ratio())
         self.train_ratio = self.get_train_ratio()
+
+    def is_undirected(self):
+        if hasattr(self, "edge_index_dict") and self.edge_index_dict:
+            for m, edge_index in self.edge_index_dict.items():
+                e_index, e_values = get_edge_index_values(edge_index)
+                print(m, "is_undirected:", is_undirected(edge_index=e_index))
 
     def name(self):
         if not hasattr(self, "_name"):

@@ -269,7 +269,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
              for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
-        self.attn = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels * 2))
+        # self.attn = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels * 2))
+        self.attn = nn.ParameterDict(
+            {str(metapath): nn.Parameter(torch.rand((attn_heads, self.out_channels * 2))) \
+             for metapath in filter_metapaths(self.metapaths, order=1)})
 
         # self.rel_attn_l = nn.ParameterDict({
         #     ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
@@ -292,8 +295,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
-        for i in range(self.attn.size(0)):
-            nn.init.xavier_normal_(self.attn[i], gain=gain)
+        for metapath in self.attn:
+            nn.init.xavier_normal_(self.attn[metapath], gain=gain)
 
         gain = nn.init.calculate_gain('relu')
         for ntype in self.linear_l:
@@ -442,6 +445,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 x=(l_dict[head], r_dict[tail]),
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
+                metapath=str(metapath),
                 values=None)
             emb_relations[:, :, relations.index(metapath), :] = out
 
@@ -482,6 +486,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 x=(h_source, r_dict[tail]),
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
+                metapath=str(metapath),
                 values=values)
             emb_relations[:, :, relations.index(metapath), :] = out
 
@@ -490,7 +495,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return emb_relations, alpha
 
-    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, values=None):
+    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
         if values is None:
             x = torch.cat([x_i, x_j], dim=2)
             if isinstance(self.alpha_activation, nn.Module):
@@ -498,7 +503,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             else:
                 x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
 
-            alpha = (x * self.attn[metapath_idx]).sum(dim=-1)
+            alpha = (x * self.attn[metapath]).sum(dim=-1)
             alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         else:
             if values.dim() == 1:
