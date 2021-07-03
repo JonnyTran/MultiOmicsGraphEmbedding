@@ -173,7 +173,7 @@ class LATTENodeClf(NodeClfTrainer):
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
 
-        return y_hat, proximity_loss
+        return y_hat, proximity_loss, edge_index_dict
 
     def on_test_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
@@ -198,7 +198,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X, grad_emb=True)
+        y_pred, proximity_loss, _ = self.forward(X, grad_emb=True)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
@@ -222,7 +222,7 @@ class LATTENodeClf(NodeClfTrainer):
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
 
-        y_pred, proximity_loss = self.forward(X)
+        y_pred, proximity_loss, _ = self.forward(X)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
 
@@ -238,7 +238,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X, save_betas=True)
+        y_pred, proximity_loss, _ = self.forward(X, save_betas=True)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         test_loss = self.criterion(y_pred, y_true, weights=weights)

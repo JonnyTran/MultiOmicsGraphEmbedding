@@ -115,6 +115,9 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
 
     """
     output_edge_index = {}
+    if not edge_index_dict_A or not edge_index_dict_B:
+        return {}
+
     for metapath_b, edge_index_b in edge_index_dict_B.items():
         edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False)
         if edge_index_b is None or edge_index_b.size(1) < 5: continue
