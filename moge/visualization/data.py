@@ -10,7 +10,25 @@ from sklearn.metrics import classification_report
 import plotly.express as px
 import datashader as ds
 from datashader import reductions as rd
+import holoviews as hv
+from holoviews.operation.datashader import datashade, shade, dynspread, rasterize
 import xarray as xr
+
+hv.extension('plotly')
+
+
+def rasterize_matrix(mtx: np.array, x_label="X", y_label="Y", size=1000):
+    x_size = max(int(size * mtx.shape[0] / sum(mtx.shape)), 500)
+    y_size = max(int(size * mtx.shape[1] / sum(mtx.shape)), 500)
+
+    img = hv.Image((np.arange(mtx.shape[1]), np.arange(mtx.shape[0]), mtx))
+    rasterized_img = rasterize(img, width=x_size, height=y_size)
+
+    rasterized_img.opts(width=x_size, height=y_size, xlabel=x_label, ylabel=y_label)
+    rasterized_img.opts(invert_yaxis=True, cmap=px.colors.sequential.Plasma, logz=True,
+                        show_legend=True)
+    fig = hv.render(rasterized_img, backend="plotly")
+    return go.Figure(fig)
 
 
 def heatmap_fast(mtx, x_label, y_label, size=1000):

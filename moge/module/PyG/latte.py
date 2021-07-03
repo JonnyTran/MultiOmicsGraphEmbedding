@@ -500,8 +500,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             alpha = (x * self.attn[metapath]).sum(dim=-1)
             alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
         else:
-            if values.dim() == 1:
-                values = values.unsqueeze(-1)
+            # if values.dim() == 1:
+            #     values = values.unsqueeze(-1)
             alpha = values
 
         self._alpha = alpha
