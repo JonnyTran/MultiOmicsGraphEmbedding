@@ -66,25 +66,6 @@ def filter_metapaths(metapaths: List[Tuple[str]],
     return [m for m in sorted(OrderedDict.fromkeys(metapaths)) if filter_func(m)]
 
 
-def edge_index2matrix(edge_index_dict, metapath, describe=True):
-    edge_idx, edge_values = get_edge_index_values(edge_index_dict[metapath])
-    if edge_values.dim() > 1:
-        edge_values = edge_values.mean(1)
-
-    st = SparseTensor.from_edge_index(edge_index=edge_idx,
-                                      edge_attr=edge_values)
-
-    if describe:
-        print("sizes", st.sizes(), "max", st.storage.value().max(), "min", st.storage.value().min())
-        axis = 0
-        row_sum = st.sum(axis)  # [st.sum(axis).nonzero()]
-        if row_sum.dim() > 2:
-            row_sum = row_sum.max(-1).values
-        print(f"sum on {axis}-axis", pd.Series(row_sum.detach().numpy().flatten()).describe().to_dict())
-
-    mtx = st.detach().to_dense().numpy()
-    return mtx
-
 def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor],
                           filter_edge=False, threshold=0.5):
     if isinstance(edge_index_tup, tuple):
@@ -109,7 +90,6 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
 
     return edge_index, edge_values
 
-
 def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                       edge_index_dict_B: Dict[Tuple, Tuple[torch.Tensor]],
                       sizes: List[Dict[str, Tuple[int]]],
@@ -120,18 +100,6 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
     """
     Return a cartesian product from two set of adjacency matrices, such that the output adjacency matricees are
     relation-matching.
-
-    Args:
-        edge_index_dict_A ():
-        edge_index_dict_B ():
-        sizes ():
-        layer ():
-        metapaths ():
-        edge_threshold ():
-        edge_sampling ():
-
-    Returns:
-
     """
     output_edge_index = {}
     if not edge_index_dict_A or not edge_index_dict_B:
@@ -170,7 +138,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              indexB=edge_index_b, valueB=values_b[:, d],
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
-                                                             coalesced=False)
+                                                             coalesced=True)
                         new_values.append(values)
 
                     new_values = torch.stack(new_values, dim=1)
@@ -183,7 +151,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                                                              indexB=edge_index_b, valueB=values_b,
                                                              m=m, k=k, n=n,
                                                              sampling=edge_sampling,
-                                                             coalesced=False)
+                                                             coalesced=True)
 
                 if new_edge_index.size(1) == 0: continue
 
@@ -206,9 +174,9 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
         valueB = valueB.squeeze(-1)
 
     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=coalesced)
+                     sparse_sizes=(m, k), is_sorted=not coalesced)
     B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=coalesced)
+                     sparse_sizes=(k, n), is_sorted=not coalesced)
 
     deg_A = A.sum(0)
     deg_B = B.sum(1)
@@ -229,3 +197,23 @@ def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampli
         row, col, values = row[idx], col[idx], values[idx]
 
     return torch.stack([row, col], dim=0), values
+
+
+def edge_index2matrix(edge_index_dict, metapath, describe=True):
+    edge_idx, edge_values = get_edge_index_values(edge_index_dict[metapath])
+    if edge_values.dim() > 1:
+        edge_values = edge_values.mean(1)
+
+    st = SparseTensor.from_edge_index(edge_index=edge_idx,
+                                      edge_attr=edge_values)
+
+    if describe:
+        print("sizes", st.sizes(), "max", st.storage.value().max(), "min", st.storage.value().min())
+        axis = 0
+        row_sum = st.sum(axis)  # [st.sum(axis).nonzero()]
+        if row_sum.dim() > 2:
+            row_sum = row_sum.max(-1).values
+        print(f"sum on {axis}-axis", pd.Series(row_sum.detach().numpy().flatten()).describe().to_dict())
+
+    mtx = st.detach().to_dense().numpy()
+    return mtx
