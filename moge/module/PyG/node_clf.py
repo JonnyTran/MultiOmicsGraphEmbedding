@@ -132,7 +132,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         return embeddings
 
-    def transform_inp_feats(self, node_feats, global_node_idx, grad_emb=False):
+    def transform_inp_feats(self, node_feats, global_node_idx, grad_emb=True):
         h_dict = {}
         for ntype in global_node_idx:
             if ntype not in node_feats:
@@ -159,7 +159,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         return h_dict
 
-    def forward(self, X: dict, grad_emb=False, **kwargs):
+    def forward(self, X: dict, grad_emb=True, **kwargs):
         if not self.training:
             self._node_ids = X["global_node_index"]
 

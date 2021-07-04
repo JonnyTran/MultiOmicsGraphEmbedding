@@ -222,8 +222,11 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         else:
             y = None
 
+        weights = None
         if y.dim() == 2 and y.size(1) == 1:
             y = y.squeeze(-1)
+        elif y.dim() == 1:
+            weights = (y >= 0).to(torch.float)
 
         # batch_seed_ids = self.graph_sampler.get_nid_relabel_dict(sampled_local_nodes)[self.head_node_type][self.graph_sampler.get_global_nidx(n_idx)]
         # print("node_ids_dict", node_ids_dict)
@@ -231,7 +234,6 @@ class HeteroNeighborGenerator(HeteroNetDataset):
 
         # weights = self.compute_weights(y, batch_node_ids=batch_nodes, batch_seed_ids=None,
         #                                allowed_nodes=allowed_nodes, mode=mode)
-        weights = None
         return X, y, weights
 
     def khop_sampler(self, n_idx, mode):
