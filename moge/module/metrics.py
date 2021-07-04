@@ -45,9 +45,9 @@ class Metrics(torch.nn.Module):
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
             elif "macro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="macro", multilabel=multilabel)
+                self.metrics[metric] = F1(num_classes=n_classes, average="macro")
             elif "micro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="micro", multilabel=multilabel)
+                self.metrics[metric] = F1(num_classes=n_classes, average="micro")
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
