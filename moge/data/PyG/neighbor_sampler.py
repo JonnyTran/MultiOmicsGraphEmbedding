@@ -218,8 +218,7 @@ class NeighborSampler(Sampler):
                 edge_index = adj.edge_index[:, edge_mask]
 
                 # convert from "sampled_edge_index" to global index
-                edge_index[0] = n_id[edge_index[0]]
-                edge_index[1] = n_id[edge_index[1]]
+                edge_index = n_id[edge_index]
 
                 # Convert node global index -> local index -> batch index
                 if head == tail:

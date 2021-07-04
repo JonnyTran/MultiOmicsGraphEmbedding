@@ -164,6 +164,10 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
                 # raise e
                 continue
 
+        if metapaths and metapath_a in metapaths:
+            # In the current LATTE layer that calls this method, a metapath is repeated (i.e. not higher-order), so we return the edges to it again.
+            output_edge_index[metapath_a] = (edge_index_a, values_a)
+
     return output_edge_index
 
 

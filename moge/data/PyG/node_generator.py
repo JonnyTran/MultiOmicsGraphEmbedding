@@ -277,18 +277,18 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             X["x_dict"] = {node_type: self.x_dict[node_type][X["global_node_index"][node_type]] \
                            for node_type in self.x_dict if node_type in X["global_node_index"]}
 
-        # y_dict
-        node_ids_dict = self.get_unique_nodes(X["edge_index"][1], source=False, target=True)
-
+        # assert torch.isclose(self.graph_sampler.global2local[n_id][:batch_size], local_seed_nids).all()
+        # assert torch.isclose(local_nodes_dict[self.head_node_type][:batch_size], local_seed_nids).all()
         if hasattr(self, "y_dict"):
             y = self.y_dict[self.head_node_type][n_idx].squeeze(-1)
         else:
             y = None
 
+        weights = None
         if y.dim() == 2 and y.size(1) == 1:
             y = y.squeeze(-1)
 
-        weights = self.compute_weights(y, batch_node_ids=node_ids_dict, batch_seed_ids=n_idx,
-                                       allowed_nodes=allowed_nodes, mode=mode)
+        # weights = self.compute_weights(y, batch_node_ids=node_ids_dict, batch_seed_ids=n_idx,
+        #                                allowed_nodes=allowed_nodes, mode=mode)
 
         return X, y, weights
