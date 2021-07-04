@@ -197,7 +197,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         # Sample subgraph
         batch_size, n_id, adjs = self.graph_sampler.sample(local_seed_nids)
 
-        # Sample neighbors and return `sampled_local_nodes` as the set of all nodes traversed (in local index)
+        # Sample neighbors and return `local_nodes_dict` as the set of all heterogeneous nodes traversed (in local index)
         local_nodes_dict, n_id = self.graph_sampler.get_local_nodes(n_id,
                                                                     filter_nodes=allowed_nodes if do_filter else None)
 
