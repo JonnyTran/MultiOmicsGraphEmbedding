@@ -124,7 +124,7 @@ class NodeClfTrainer(ClusteringEvaluator):
                 self.val_moving_loss = self.val_moving_loss.to(self.device)
             self.val_moving_loss[self.current_epoch % self.val_moving_loss.numel()] = val_loss
             self.log("val_moving_loss", self.val_moving_loss.mean(),
-                     logger=True, prog_bar=False, on_epoch=True)
+                     logger=True, prog_bar=True, on_epoch=True)
 
         self.log_dict(logs, prog_bar=True)
 
