@@ -373,15 +373,17 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                        prev_edge_index_dict=prev_edge_index_dict,
                                                                        sizes=sizes)
             try:
-                h_out[ntype][:, :, -1, :] = l_dict[ntype][:sizes[self.layer][ntype][1]]  # .view(-1, self.embedding_dim)
+                h_out[ntype][:, :, -1, :] = r_dict[
+                    ntype]  # [:sizes[self.layer][ntype][1]]  # .view(-1, self.embedding_dim)
                 h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
                 h_out[ntype] = h_out[ntype].sum(2).view(h_out[ntype].size(0), self.embedding_dim)
 
             except Exception as e:
                 print(e)
+                print(self.layer, "sizes", sizes)
                 print(ntype, {"h_out[ntype]": h_out[ntype].shape, "r_dict[ntype]": r_dict[ntype].shape},
                       tensor_sizes(global_node_idx))
-                return (l_dict, h_out), None, edge_pred_dict
+                raise e
 
             # Predict relations attention coefficients
             # beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
