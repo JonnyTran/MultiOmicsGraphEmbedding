@@ -18,8 +18,8 @@ hv.extension('plotly')
 
 
 def rasterize_matrix(mtx: np.array, x_label="X", y_label="Y", size=1000):
-    x_size = max(int(size * mtx.shape[0] / sum(mtx.shape)), 500)
-    y_size = max(int(size * mtx.shape[1] / sum(mtx.shape)), 500)
+    x_size = max(int(size * mtx.shape[1] / sum(mtx.shape)), 500)
+    y_size = max(int(size * mtx.shape[0] / sum(mtx.shape)), 500)
 
     img = hv.Image((np.arange(mtx.shape[1]), np.arange(mtx.shape[0]), mtx))
     rasterized_img = rasterize(img, width=x_size, height=y_size)

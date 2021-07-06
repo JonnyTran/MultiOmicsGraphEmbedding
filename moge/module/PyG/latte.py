@@ -333,7 +333,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             beta[node_type] = beta[node_type].view(num_nodes,
                                                    self.attn_heads,
                                                    self.num_head_relations(node_type))
-            beta[node_type] = torch.softmax(beta[node_type], dim=1)
+            beta[node_type] = torch.softmax(beta[node_type], dim=2)
 
 
         return beta
