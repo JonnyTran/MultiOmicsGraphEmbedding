@@ -21,7 +21,7 @@ from moge.module.cogdl.conv import GTN as Gtn
 from moge.module.cogdl.conv import HAN as Han
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples, tensor_sizes
+from moge.module.utils import filter_samples, tensor_sizes, preprocess_input
 
 
 class LATTENodeClf(NodeClfTrainer):

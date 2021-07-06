@@ -12,7 +12,7 @@ from torch_geometric.utils import softmax
 
 from moge.module.sampling import negative_sample
 from .utils import *
-from ..utils import tensor_sizes
+from ..utils import tensor_sizes, preprocess_input
 
 class LATTE(nn.Module):
     def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict,
@@ -71,8 +71,6 @@ class LATTE(nn.Module):
             higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
         self.layers = nn.ModuleList(layers)
-
-
 
 
 
@@ -497,7 +495,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     size=(head_size_in, tail_size_out),
                     metapath_idx=self.metapaths.index(metapath),
                     metapath=str(metapath),
-                    values=values)
+                    values=values.to(self.device))
                 emb_relations[:, :, relations.index(metapath), :] = out
             except Exception as e:
                 print(e)
