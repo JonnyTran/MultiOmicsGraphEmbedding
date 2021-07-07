@@ -223,7 +223,6 @@ class LATTE(nn.Module):
         nodes["label"] = [node[1:] for node in all_nodes.keys()]
         nodes["level"] = [int(node[0]) for node in all_nodes.keys()]
 
-        np.random.shuffle(colors)
         nodes["color"] = nodes[["label", "level"]].apply(
             lambda x: ColorHash(x["label"] + str(x["level"])).hex \
                 if x["level"] % 2 == 0 \
