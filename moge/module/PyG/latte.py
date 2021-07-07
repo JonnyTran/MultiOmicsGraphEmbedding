@@ -340,15 +340,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def get_beta_weights(self, h_dict, global_node_idx):
         beta = {}
-        for node_type in global_node_idx:
-            num_nodes = h_dict[node_type].size(0)
+        for ntype in global_node_idx:
+            num_nodes = h_dict[ntype].size(0)
 
-            beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            beta[node_type] = beta[node_type].view(num_nodes,
-                                                   self.attn_heads,
-                                                   self.num_head_relations(node_type))
-            beta[node_type] = torch.softmax(beta[node_type], dim=2)
-
+            beta[ntype] = self.conv[ntype].forward(h_dict[ntype].unsqueeze(-1))
+            beta[ntype] = beta[ntype].view(num_nodes,
+                                           self.attn_heads,
+                                           self.num_head_relations(ntype))
+            beta[ntype] = torch.softmax(beta[ntype], dim=2)
 
         return beta
 
