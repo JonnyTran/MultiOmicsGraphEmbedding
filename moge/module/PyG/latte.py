@@ -273,7 +273,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # self.attn = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels * 2))
         self.attn = nn.ParameterDict(
             {str(metapath): nn.Parameter(torch.rand((attn_heads, self.out_channels * 2))) \
-             for metapath in filter_metapaths(self.metapaths, order=1)})
+             for metapath in filter_metapaths(self.metapaths, order=None)})
 
         # self.rel_attn_l = nn.ParameterDict({
         #     ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
@@ -465,21 +465,22 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self._alpha = None
 
         remaining_orders = range(2, min(self.layer + 1, self.t_order) + 1)
+        higher_relations = self.get_head_relations(node_type, order=remaining_orders)
+
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
                                                     edge_index_dict_B=edge_pred_dict,
                                                     sizes=sizes, layer=self.layer,
-                                                    metapaths=self.get_head_relations(node_type,
-                                                                                      order=remaining_orders),
+                                                    metapaths=higher_relations,
                                                     edge_threshold=self.edge_threshold,
                                                     edge_sampling=False)
+        # print("remaining_orders", list(remaining_orders), node_type,
+        #       self.get_head_relations(node_type, order=remaining_orders), "edge_index", higher_order_edge_index.keys())
 
-        for metapath in self.get_head_relations(node_type, order=range(2, self.layer + 1)):
-            if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None:
-                continue
+        for metapath in higher_relations:
+            if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
 
             edge_index, values = get_edge_index_values(higher_order_edge_index[metapath], filter_edge=False)
-
             if edge_index is None: continue
 
             # Select the right t-order context node presentations based on the order of the metapath
@@ -495,13 +496,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     size=(head_size_in, tail_size_out),
                     metapath_idx=self.metapaths.index(metapath),
                     metapath=str(metapath),
-                    values=values.to(self.device))
+                    values=values)
                 emb_relations[:, :, relations.index(metapath), :] = out
             except Exception as e:
                 print(e)
-                print(metapath, edge_index.max(1).values, {"values": values.shape, "self._alpha": self._alpha.shape},
+                print(metapath, edge_index.max(1).values,
+                      {"values": values.shape if values is not None else None,
+                       "self._alpha": self._alpha.shape if self._alpha is not None else None},
                       {"head_size_in": head_size_in, "tail_size_out": tail_size_out},
                       {"l_dict[head]": l_dict[head].shape, "r_dict[tail]": r_dict[tail].shape})
+                raise e
 
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
