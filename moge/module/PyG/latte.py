@@ -15,6 +15,7 @@ from moge.module.sampling import negative_sample
 from .utils import *
 from ..utils import tensor_sizes, preprocess_input
 from ...visualization.utils import main_colors as colors
+from colorhash import ColorHash
 
 class LATTE(nn.Module):
     def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict,
@@ -72,7 +73,7 @@ class LATTE(nn.Module):
 
             higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
-        self.layers = nn.ModuleList(layers)
+        self.layers: List[LATTEConv] = nn.ModuleList(layers)
 
 
 
@@ -211,7 +212,7 @@ class LATTE(nn.Module):
                                       "value": value,
                                       "label": metapath}, ignore_index=True)
 
-        links["color"] = links["label"].apply(hash).apply(lambda idx: colors[idx % len(colors)])
+        links["color"] = links["label"].apply(lambda label: ColorHash(label).hex)
         links = links.iloc[::-1]
 
         # Nodes
@@ -224,9 +225,9 @@ class LATTE(nn.Module):
 
         np.random.shuffle(colors)
         nodes["color"] = nodes[["label", "level"]].apply(
-            lambda x: colors[(hash(x["label"])) % len(colors)] \
+            lambda x: ColorHash(x["label"] + str(x["level"])).hex \
                 if x["level"] % 2 == 0 \
-                else colors[-((hash(x["label"])) % len(colors))], axis=1)
+                else ColorHash(x["label"]).hex, axis=1)
 
         return nodes, links
 
@@ -420,7 +421,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if not self.training:
             self.save_relation_weights({ntype: beta[ntype].view(beta[ntype].size(0),
                                                                 self.attn_heads,
-                                                                self.num_head_relations(ntype)).max(1).values \
+                                                                self.num_head_relations(ntype)).mean(1) \
                                         for ntype in beta},
                                        global_node_idx)
 
