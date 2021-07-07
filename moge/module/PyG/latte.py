@@ -496,7 +496,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     size=(head_size_in, tail_size_out),
                     metapath_idx=self.metapaths.index(metapath),
                     metapath=str(metapath),
-                    values=values)
+                    values=None)
                 emb_relations[:, :, relations.index(metapath), :] = out
             except Exception as e:
                 print(e)
