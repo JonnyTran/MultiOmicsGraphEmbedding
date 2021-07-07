@@ -1,4 +1,5 @@
 import logging
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -59,7 +60,8 @@ class LATTENodeClf(NodeClfTrainer):
         self.proj_ntypes = [ntype for ntype in self.node_types \
                             if (ntype in dataset.node_attr_shape
                                 and dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
-                            or (self.embeddings and self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
+                            or (self.embeddings and ntype in self.embeddings and self.embeddings[ntype].weight.size(
+                1) != hparams.embedding_dim)]
 
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(
@@ -105,14 +107,17 @@ class LATTENodeClf(NodeClfTrainer):
         for ntype in self.feature_projection:
             nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
 
-    def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict, pretrain_embeddings):
+    def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict,
+                              pretrain_embeddings: Dict[str, torch.Tensor]):
         # If some node type are not attributed, instantiate nn.Embedding for them
         if isinstance(in_channels_dict, dict):
             non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         else:
             non_attr_node_types = []
 
-        if len(non_attr_node_types) > 0:
+        print("non_attr_node_types", non_attr_node_types)
+
+        if non_attr_node_types:
             module_dict = {}
 
             for ntype in non_attr_node_types:
