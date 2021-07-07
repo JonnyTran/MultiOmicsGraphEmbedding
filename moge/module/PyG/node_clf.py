@@ -77,7 +77,7 @@ class LATTENodeClf(NodeClfTrainer):
                 for ntype in self.proj_ntypes
             })
 
-        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+        # self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         if hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":
