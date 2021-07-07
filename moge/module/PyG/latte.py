@@ -1,3 +1,4 @@
+import random
 from typing import Dict, Tuple, List
 import copy
 import numpy as np
@@ -13,6 +14,7 @@ from torch_geometric.utils import softmax
 from moge.module.sampling import negative_sample
 from .utils import *
 from ..utils import tensor_sizes, preprocess_input
+from ...visualization.utils import main_colors as colors
 
 class LATTE(nn.Module):
     def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict,
@@ -171,48 +173,62 @@ class LATTE(nn.Module):
             df = df[df.notnull().sum(1) >= min_order]
         return df
 
-    def get_sankey_flow(self, t, node_type, self_loop=False, agg="sum"):
-        rel_attn: pd.DataFrame = self.layers[t]._betas[node_type]
+    def get_sankey_flow(self, layer, node_type, self_loop=False, agg="median"):
+        rel_attn: pd.DataFrame = self.layers[layer]._betas[node_type]
         if agg == "sum":
-            rel_attn = rel_attn.sum(0)
-        elif agg == "mean":
-            rel_attn = rel_attn.mean(0)
+            rel_attn = rel_attn.sum(axis=0)
+        elif agg == "median":
+            rel_attn = rel_attn.median(axis=0)
         elif agg == "max":
-            rel_attn = rel_attn.max(0)
+            rel_attn = rel_attn.max(axis=0)
         elif agg == "min":
-            rel_attn = rel_attn.min(0)
+            rel_attn = rel_attn.min(axis=0)
         else:
-            rel_attn = rel_attn.median(0)
+            rel_attn = rel_attn.mean(axis=0)
 
         new_index = rel_attn.index.str.split(".").map(lambda tup: [str(len(tup) - i) + n for i, n in enumerate(tup)])
         all_nodes = {node for nodes in new_index for node in nodes}
         all_nodes = {node: i for i, node in enumerate(all_nodes)}
 
-        data = {}
-        links = {}
+        # Links
+        links = pd.DataFrame(columns=["source", "target", "value", "label", "color"])
         for i, (metapath, value) in enumerate(rel_attn.to_dict().items()):
             if len(metapath.split(".")) > 1:
                 sources = [all_nodes[new_index[i][j]] for j, _ in enumerate(new_index[i][:-1])]
                 targets = [all_nodes[new_index[i][j + 1]] for j, _ in enumerate(new_index[i][:-1])]
 
-                links.setdefault("source", []).extend(sources)
-                links.setdefault("target", []).extend(targets)
-                links.setdefault("value", []).extend([value, ] * len(targets))
-                links.setdefault("label", []).extend([metapath, ] * len(targets))
+                path_links = pd.DataFrame({"source": sources,
+                                           "target": targets,
+                                           "value": [value, ] * len(targets),
+                                           "label": [metapath, ] * len(targets)})
+                links = links.append(path_links, ignore_index=True)
+
+
             elif self_loop:
                 source = all_nodes[new_index[i][0]]
-                links.setdefault("source", []).append(source)
-                links.setdefault("target", []).append(source)
-                links.setdefault("value", []).extend([value, ])
-                links.setdefault("label", []).extend([metapath, ])
+                links = links.append({"source": source,
+                                      "target": source,
+                                      "value": value,
+                                      "label": metapath}, ignore_index=True)
 
+        links["color"] = links["label"].apply(hash).apply(lambda idx: colors[idx % len(colors)])
+        links = links.iloc[::-1]
+
+        # Nodes
         node_group = [int(node[0]) for node, nid in all_nodes.items()]
         groups = [[nid for nid, node in enumerate(node_group) if node == group] for group in np.unique(node_group)]
-        data["groups"] = groups
 
-        data["links"] = links
-        data.setdefault("nodes", {})["labels"] = [node[1:] for node in all_nodes.keys()]
-        return data
+        nodes = pd.DataFrame(columns=["label", "level", "color"])
+        nodes["label"] = [node[1:] for node in all_nodes.keys()]
+        nodes["level"] = [int(node[0]) for node in all_nodes.keys()]
+
+        np.random.shuffle(colors)
+        nodes["color"] = nodes[["label", "level"]].apply(
+            lambda x: colors[(hash(x["label"])) % len(colors)] \
+                if x["level"] % 2 == 0 \
+                else colors[-((hash(x["label"])) % len(colors))], axis=1)
+
+        return nodes, links
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
