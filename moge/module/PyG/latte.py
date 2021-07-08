@@ -40,7 +40,7 @@ class LATTE(nn.Module):
         self.neg_sampling_ratio = neg_sampling_ratio
 
         layers = []
-        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize a nother set of
+        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
 
         layer_t_orders = {
             l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) if (t_order - (n_layers - (l + 1))) > 0 else [1] \
@@ -130,7 +130,8 @@ class LATTE(nn.Module):
                 proximity_loss += t_loss
 
             if self.layer_pooling != "last":
-                h_out_layers[self.head_node_type].append(h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
+                h = h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]]
+                h_out_layers[self.head_node_type].append(h)
 
         if self.layer_pooling == "last" or self.n_layers == 1:
             out = h_out
@@ -431,26 +432,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
             head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
-            # else:
-            #     h_source = prev_l_dict[head][-(order - 1)]  # order is 1-based indexing
-            #     head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
 
             # Propapate flows from target nodes to source nodes
-            try:
-                out = self.propagate(
-                    edge_index=edge_index,
-                    x=(l_dict[head], r_dict[tail]),
-                    size=(head_size_in, tail_size_out),
-                    metapath_idx=self.metapaths.index(metapath),
-                    metapath=str(metapath),
-                    values=None)
-                emb_relations[:, :, relations.index(metapath), :] = out
-
-            except Exception as e:
-                print(e)
-                print(metapath, edge_index.max(1).values, {"values": values.shape, "self._alpha": self._alpha.shape},
-                      {"head_size_in": head_size_in, "tail_size_out": tail_size_out},
-                      {"l_dict[head]": l_dict[head].shape, "r_dict[tail]": r_dict[tail].shape})
+            out = self.propagate(
+                edge_index=edge_index,
+                x=(l_dict[head], r_dict[tail]),
+                size=(head_size_in, tail_size_out),
+                metapath_idx=self.metapaths.index(metapath),
+                metapath=str(metapath),
+                values=None)
+            emb_relations[:, :, relations.index(metapath), :] = out
 
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
