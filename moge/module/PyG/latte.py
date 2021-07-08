@@ -81,10 +81,8 @@ class LATTE(nn.Module):
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
 
-
-
-    def forward(self, node_feats: dict, adjs: List[Dict[Tuple, torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
-                global_node_idx: dict, save_betas=False):
+    def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
+                global_node_idx: List[Dict], save_betas=False):
         """
         This
         :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
@@ -93,28 +91,20 @@ class LATTE(nn.Module):
         :param save_betas: whether to save _beta values for batch
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
-        proximity_loss = torch.tensor(0.0,
-                                      device=global_node_idx[self.node_types[0]].device) if self.use_proximity else None
-
-
+        # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
         edge_pred_dicts = [None for l in range(self.n_layers)]
         edge_pred_dict = None
 
-        h_in_layers = {ntype: [] for ntype in global_node_idx}
-        h_out_layers = {ntype: [] for ntype in global_node_idx}
+        h_in_layers = {ntype: [] for ntype in node_feats}
+        h_out_layers = {ntype: [] for ntype in node_feats}
         h_out = node_feats
         for l in range(self.n_layers):
-            global_node_idx = {
-                ntype: global_node_idx[ntype][: sizes[l][ntype][1]] \
-                for ntype in global_node_idx \
-                if sizes[l][ntype][1] is not None}
-
             (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
                                                                            prev_h_in=h_in_layers,
                                                                            edge_index_dict=adjs[l],
                                                                            prev_edge_index_dict=edge_pred_dict,
                                                                            sizes=sizes,
-                                                                           global_node_idx=global_node_idx,
+                                                                           global_node_idx=global_node_idx[l],
                                                                            save_betas=save_betas)
 
             edge_pred_dicts[l] = edge_pred_dict
@@ -126,8 +116,8 @@ class LATTE(nn.Module):
                     if len(h_in_layers[ntype]) > self.t_order:
                         h_in_layers[ntype].pop(0)
 
-            if self.use_proximity and t_loss is not None:
-                proximity_loss += t_loss
+            # if self.use_proximity and t_loss is not None:
+            #     proximity_loss += t_loss
 
             if self.layer_pooling != "last":
                 h_out_layers[self.head_node_type].append(h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
@@ -149,7 +139,7 @@ class LATTE(nn.Module):
                    for ntype, h_list in h_out_layers.items() \
                    if len(h_list) > 0}
 
-        return out, proximity_loss, edge_pred_dicts
+        return out, None, edge_pred_dicts
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
