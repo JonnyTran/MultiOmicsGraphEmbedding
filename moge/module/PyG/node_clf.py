@@ -131,6 +131,7 @@ class LATTENodeClf(NodeClfTrainer):
                 else:
                     module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
                                                                       freeze=freeze,
+                                                                      max_norm=3 if freeze else None,
                                                                       scale_grad_by_freq=True)
 
             embeddings = nn.ModuleDict(module_dict)
