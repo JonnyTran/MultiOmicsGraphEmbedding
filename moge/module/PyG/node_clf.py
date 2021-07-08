@@ -133,9 +133,9 @@ class LATTENodeClf(NodeClfTrainer):
 
         return embeddings
 
-    def transform_inp_feats(self, node_feats: Dict[str], global_node_idx: Dict[str]):
+    def transform_inp_feats(self, node_feats: Dict[str, torch.Tensor], global_node_idx: Dict[str, torch.Tensor]):
         h_dict = {}
-        print("node_feats", node_feats)
+        # print("node_feats", node_feats)
 
         for ntype in global_node_idx:
             if global_node_idx[ntype].numel() == 0: continue
