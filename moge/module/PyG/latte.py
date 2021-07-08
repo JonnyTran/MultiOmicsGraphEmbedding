@@ -276,7 +276,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
              for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
-        # self.attn = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels * 2))
         self.attn = nn.ParameterDict(
             {str(metapath): nn.Parameter(torch.rand((attn_heads, self.out_channels * 2))) \
              for metapath in filter_metapaths(self.metapaths, order=None)})
@@ -518,6 +517,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if values.dim() == 1:
                 values = values.unsqueeze(-1)
             alpha = values
+            # alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
 
         self._alpha = alpha
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
