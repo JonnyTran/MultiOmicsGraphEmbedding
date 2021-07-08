@@ -60,7 +60,7 @@ def tensor_sizes(input):
     elif isinstance(input, list):
         return [tensor_sizes(v) for v in input]
     else:
-        return list(input.shape) if input is not None and hasattr(input, "shape") else None
+        return list(input.shape) if input is not None and hasattr(input, "shape") else input
 
 
 def preprocess_input(input, device, dtype=None, half=False):
