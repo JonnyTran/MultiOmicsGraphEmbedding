@@ -1,5 +1,6 @@
 import itertools
 import logging
+import numpy as np
 
 import pandas as pd
 import torch
@@ -176,15 +177,17 @@ class NodeClfTrainer(ClusteringEvaluator):
                                                batch_size=self.hparams.batch_size, batch_sampler=train_sampler)
         return dataset
 
-
     def get_n_params(self):
-        size = 0
-        for name, param in dict(self.named_parameters()).items():
-            nn = 1
-            for s in list(param.size()):
-                nn = nn * s
-            size += nn
-        return size
+        # size = 0
+        # for name, param in dict(self.named_parameters()).items():
+        #     nn = 1
+        #     for s in list(param.size()):
+        #         nn = nn * s
+        #     size += nn
+        # return size
+        model_parameters = filter(lambda p: p.requires_grad, self.parameters())
+        params = sum([np.prod(p.size()) for p in model_parameters])
+        return params
 
 
 class LinkPredTrainer(NodeClfTrainer):

@@ -130,21 +130,19 @@ class LATTE(nn.Module):
                 proximity_loss += t_loss
 
             if self.layer_pooling != "last":
-                h = h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]]
-                h_out_layers[self.head_node_type].append(h)
+                h_out_layers[self.head_node_type].append(h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
 
         if self.layer_pooling == "last" or self.n_layers == 1:
             out = h_out
 
         elif self.layer_pooling == "max":
-            out = {ntype: torch.stack(h_list, dim=1) for ntype, h_list in h_out_layers.items() \
+            out = {ntype: torch.stack(h_list, dim=1).max(1).values \
+                   for ntype, h_list in h_out_layers.items() \
                    if len(h_list) > 0}
-            out = {ntype: h_s.max(1).values for ntype, h_s in out.items()}
 
         elif self.layer_pooling == "mean":
-            out = {ntype: torch.stack(h_list, dim=1) for ntype, h_list in h_out_layers.items() \
-                   if len(h_list) > 0}
-            out = {ntype: torch.mean(h_s, dim=1) for ntype, h_s in out.items()}
+            out = {ntype: torch.stack(h_list, dim=1).mean(dim=1) \
+                   for ntype, h_list in h_out_layers.items() if len(h_list) > 0}
 
         elif self.layer_pooling == "concat":
             out = {ntype: torch.cat(h_list, dim=1) \
