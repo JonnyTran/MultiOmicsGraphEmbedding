@@ -1,3 +1,4 @@
+from typing import List, Dict
 from collections import defaultdict
 import dgl
 import numpy as np
@@ -252,7 +253,7 @@ class DGLNodeSampler(HeteroNetDataset):
             edge_attr_shape = {etype: self.G.edata["feat"].size(1) for etype in self.G.etypes}
         return edge_attr_shape
 
-    def get_metapaths(self):
+    def get_metapaths(self, **kwargs):
         return self.G.canonical_etypes
 
     def get_collate_fn(self, collate_fn: str, mode=None):
@@ -274,8 +275,13 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
-        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
-                                                block_sampler=self.neighbor_sampler)
+        if collate_fn == "neighbor_sampler":
+            collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.training_idx},
+                                        block_sampler=self.neighbor_sampler)
+        else:
+            collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
+                                                    block_sampler=self.neighbor_sampler)
+
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
@@ -294,8 +300,12 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
-        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
-                                                block_sampler=self.neighbor_sampler)
+        if collate_fn == "neighbor_sampler":
+            collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.validation_idx},
+                                        block_sampler=self.neighbor_sampler)
+        else:
+            collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
+                                                    block_sampler=self.neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
 
@@ -308,8 +318,12 @@ class DGLNodeSampler(HeteroNetDataset):
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
 
-        collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
-                                                block_sampler=self.neighbor_sampler)
+        if collate_fn == "neighbor_sampler":
+            collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.testing_idx},
+                                        block_sampler=self.neighbor_sampler)
+        else:
+            collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
+                                                    block_sampler=self.neighbor_sampler)
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
 
@@ -329,22 +343,25 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
         else:
             items = _prepare_tensor(self.g, items, 'items', self._is_distributed)
 
-        blocks = self.block_sampler.sample_blocks(self.g, items)
-        # output_nodes = blocks[-1].dstdata[dgl.NID]
-        # input_nodes = blocks[0].srcdata[dgl.NID]
+        blocks: List[dgl.DGLHeteroGraph] = self.block_sampler.sample_blocks(self.g, items)
+        output_nodes = blocks[-1].dstdata[dgl.NID]
+        input_nodes = blocks[0].srcdata[dgl.NID]
 
-        layer_dicts = []
-        for b in blocks:
-            X = {}
-            X["edge_index_dict"] = {}
+        X = {}
+        for i, b in enumerate(blocks):
+            edge_index_dict = {}
             for metapath in b.canonical_etypes:
                 if b.num_edges(etype=metapath) == 0:
                     continue
-                X["edge_index_dict"][metapath] = torch.stack(b.all_edges(etype=b.canonical_etypes[1]), dim=0)
+                edge_index_dict[metapath] = torch.stack(b.all_edges(etype=b.canonical_etypes[1]), dim=0)
 
-            X["x_dict"] = {k: v for k, v in b.ndata["feat"].items() if v.size(0) != 0}
-            X["global_node_index"] = {ntype: b.nodes(ntype) for ntype in b.ntypes}
+            X.setdefault("edge_index", []).append(edge_index_dict)
 
-            layer_dicts.append(X)
+            X.setdefault("sizes", []).append(
+                {ntype: (b.num_src_nodes(ntype), b.num_dst_nodes(ntype)) for ntype in b.ntypes})
 
-        return layer_dicts
+        X["x_dict"] = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"].items() if feat.size(0) != 0}
+        X["global_node_index"] = blocks[0].srcdata[dgl.NID]
+
+        y = blocks[-1].dstdata["labels"]
+        return X, y, None
