@@ -373,10 +373,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         l_dict = self.get_h_dict(x, source_target="source")
         r_dict = self.get_h_dict(x_r, source_target="target")
 
+        # Predict relations attention coefficients
         beta = self.get_beta_weights(x_r, global_node_idx)
-        # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
+
         h_out = {}
         edge_pred_dict = {}
+        # For each metapath in a node_type, use GAT message passing to aggregate l_dict neighbors
         for ntype in global_node_idx:
             h_out[ntype], edge_attn_dict = self.agg_relation_neighbors(node_type=ntype,
                                                                        l_dict=l_dict,
@@ -385,23 +387,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                        prev_l_dict=prev_h_in,
                                                                        prev_edge_index_dict=prev_edge_index_dict,
                                                                        sizes=sizes)
-            try:
-                h_out[ntype][:, :, -1, :] = r_dict[
-                    ntype]  # [:sizes[self.layer][ntype][1]]  # .view(-1, self.embedding_dim)
-                h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
-                h_out[ntype] = h_out[ntype].sum(2).view(h_out[ntype].size(0), self.embedding_dim)
+            h_out[ntype][:, :, -1, :] = r_dict[
+                ntype]  # [:sizes[self.layer][ntype][1]]  # .view(-1, self.embedding_dim)
 
-            except Exception as e:
-                print(e)
-                print(self.layer, "sizes", sizes)
-                print(ntype, {"h_out[ntype]": h_out[ntype].shape, "r_dict[ntype]": r_dict[ntype].shape},
-                      tensor_sizes(global_node_idx))
-                raise e
-
-            # Predict relations attention coefficients
             # beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
-
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
+            h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
+            h_out[ntype] = h_out[ntype].sum(2).view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
@@ -416,10 +408,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 edge_pred_dict.update(edge_attn_dict)
 
         # Save beta weights from testing samples
-        if not self.training:
-            self.save_relation_weights({ntype: beta[ntype].view(beta[ntype].size(0),
-                                                                self.attn_heads,
-                                                                self.num_head_relations(ntype)).mean(1) \
+        if save_betas and not self.training:
+            self.save_relation_weights({ntype: beta[ntype].mean(1) \
                                         for ntype in beta},
                                        global_node_idx)
 
@@ -587,8 +577,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         with torch.no_grad():
             for ntype in global_node_idx:
                 relations = self.get_head_relations(ntype, str_form=True) + [ntype, ]
-
-                df = pd.DataFrame(betas[ntype].squeeze(-1).cpu().numpy(),
+                df = pd.DataFrame(betas[ntype].cpu().numpy(),
                                   columns=relations,
                                   index=global_node_idx[ntype].cpu().numpy(),
                                   dtype=np.float16)
