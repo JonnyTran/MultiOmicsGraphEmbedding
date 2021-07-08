@@ -51,7 +51,7 @@ class LATTE(nn.Module):
             is_output_layer = is_last_layer and (hparams.nb_cls_dense_size < 0)
 
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
-                                                 order=range(1, t_order + 1),  # Select only up to t-order
+                                                 order=layer_t_orders[l],  # Select only up to t-order
                                                  # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
                                                  tail_type=self.head_node_type if is_last_layer else None)
 
@@ -76,7 +76,8 @@ class LATTE(nn.Module):
                           use_proximity=use_proximity,
                           neg_sampling_ratio=neg_sampling_ratio))
 
-            higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
+            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
+                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
 
