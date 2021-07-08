@@ -264,7 +264,8 @@ class DGLNodeSampler(HeteroNetDataset):
         return outputs
 
     def sample(self, iloc, mode):
-        raise NotImplementedError()
+        loader = self.train_dataloader(collate_fn="neighbor_sampler")
+        return next(iter(loader))
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         if self.inductive:
