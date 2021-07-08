@@ -349,20 +349,21 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
         input_nodes = blocks[0].srcdata[dgl.NID]
 
         X = {}
-        for i, b in enumerate(blocks):
+        for i, block in enumerate(blocks):
             edge_index_dict = {}
-            for metapath in b.canonical_etypes:
-                if b.num_edges(etype=metapath) == 0:
+            for metapath in block.canonical_etypes:
+                if block.num_edges(etype=metapath) == 0:
                     continue
-                edge_index_dict[metapath] = torch.stack(b.all_edges(etype=b.canonical_etypes[1]), dim=0)
+                edge_index_dict[metapath] = torch.stack(block.all_edges(etype=block.canonical_etypes[1]), dim=0)
 
             X.setdefault("edge_index", []).append(edge_index_dict)
 
             X.setdefault("sizes", []).append(
-                {ntype: (b.num_src_nodes(ntype), b.num_dst_nodes(ntype)) for ntype in b.ntypes})
+                {ntype: (block.num_src_nodes(ntype), block.num_dst_nodes(ntype)) for ntype in block.ntypes})
+
+            X.setdefault("global_node_index", []).append(block.srcdata[dgl.NID])
 
         X["x_dict"] = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"].items() if feat.size(0) != 0}
-        X["global_node_index"] = blocks[0].srcdata[dgl.NID]
 
         y = blocks[-1].dstdata["labels"]
         return X, y, None

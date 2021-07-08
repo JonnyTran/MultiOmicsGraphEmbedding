@@ -133,9 +133,13 @@ class LATTENodeClf(NodeClfTrainer):
 
         return embeddings
 
-    def transform_inp_feats(self, node_feats, global_node_idx):
+    def transform_inp_feats(self, node_feats: Dict[str], global_node_idx: Dict[str]):
         h_dict = {}
+        print("node_feats", node_feats)
+
         for ntype in global_node_idx:
+            if global_node_idx[ntype].numel() == 0: continue
+
             if ntype not in node_feats:
                 node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
 
@@ -161,7 +165,7 @@ class LATTENodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = X["global_node_index"]
 
-        h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"])
+        h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"][0])
 
         embeddings, proximity_loss, edge_index_dict = self.embedder(h_out,
                                                                     X["edge_index"],
