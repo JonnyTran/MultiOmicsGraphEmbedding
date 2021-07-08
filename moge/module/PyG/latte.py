@@ -41,6 +41,11 @@ class LATTE(nn.Module):
 
         layers = []
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize a nother set of
+
+        layer_t_orders = {
+            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) if (t_order - (n_layers - (l + 1))) > 0 else [1] \
+            for l in reversed(range(n_layers))}
+
         for l in range(n_layers):
             is_last_layer = (l + 1 == n_layers)
             is_output_layer = is_last_layer and (hparams.nb_cls_dense_size < 0)
@@ -98,27 +103,11 @@ class LATTE(nn.Module):
         h_out_layers = {ntype: [] for ntype in global_node_idx}
         h_out = node_feats
         for l in range(self.n_layers):
-            # if l == 0:
-            #     edge_index_dict = adjs[l]
-            # else:
-            #     edge_index_dict = join_edge_indexes(edge_index_dict_A=edge_pred_dict, edge_index_dict_B=adjs[l],
-            #                                         sizes=sizes, layer=l, metapaths=self.layers[l].metapaths,
-            #                                         edge_threshold=self.edge_threshold,
-            #                                         edge_sampling=self.edge_sampling)
-
-            # print("\n", l, "\t METAPATHS", [".".join([d[0] for d in k]) for k in self.layers[l].metapaths],
-            #       "\n\t LOCAL NODES",
-            #       {ntype: list(nids.shape) for ntype, nids in global_node_idx.items()})
-            # print("\t EDGE_INDEX_DICT",
-            #       {".".join([k[0] for k in m]): (eid[0].max(1).values, eid[1].shape) if isinstance(eid,
-            #                                                                                        tuple) else eid.max(
-            #           1).values
-            #        for m, eid in edge_index_dict.items()})
-
             global_node_idx = {
                 ntype: global_node_idx[ntype][: sizes[l][ntype][1]] \
                 for ntype in global_node_idx \
                 if sizes[l][ntype][1] is not None}
+
             (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
                                                                            prev_h_in=h_in_layers,
                                                                            edge_index_dict=adjs[l],
@@ -387,8 +376,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                        prev_l_dict=prev_h_in,
                                                                        prev_edge_index_dict=prev_edge_index_dict,
                                                                        sizes=sizes)
-            h_out[ntype][:, :, -1, :] = r_dict[
-                ntype]  # [:sizes[self.layer][ntype][1]]  # .view(-1, self.embedding_dim)
+            h_out[ntype][:, :, -1, :] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
 
             # beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
@@ -409,9 +397,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         # Save beta weights from testing samples
         if save_betas and not self.training:
-            self.save_relation_weights({ntype: beta[ntype].mean(1) \
-                                        for ntype in beta},
-                                       global_node_idx)
+            self.save_relation_weights({ntype: beta[ntype].mean(1) for ntype in beta}, global_node_idx)
 
         proximity_loss = None
         if self.use_proximity:
