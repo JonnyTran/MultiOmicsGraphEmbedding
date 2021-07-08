@@ -19,7 +19,7 @@ from ..utils import one_hot_encoder
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
-                 sampler: str,
+                 sampler: str = "ImportanceSampler",
                  embedding_dim=None,
                  neighbor_sizes=None,
                  node_types=None,
@@ -359,9 +359,12 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
             X.setdefault("edge_index", []).append(edge_index_dict)
 
             X.setdefault("sizes", []).append(
-                {ntype: (block.num_src_nodes(ntype), block.num_dst_nodes(ntype)) for ntype in block.ntypes})
+                {ntype: (None if block.num_src_nodes(ntype) == 0 else block.num_src_nodes(ntype),
+                         None if block.num_dst_nodes(ntype) == 0 else block.num_dst_nodes(ntype)) \
+                 for ntype in block.ntypes})
 
-            X.setdefault("global_node_index", []).append(block.srcdata[dgl.NID])
+            X.setdefault("global_node_index", []).append(
+                {ntype: nid for ntype, nid in block.srcdata[dgl.NID].items() if nid.numel() > 0})
 
         X["x_dict"] = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"].items() if feat.size(0) != 0}
 
