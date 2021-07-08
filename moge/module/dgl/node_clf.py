@@ -14,8 +14,7 @@ from moge.module.losses import ClassificationLoss
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 
 from moge.module.dgl.latte import LATTE
-from ..utils import tensor_sizes
-from ...models.HGConv.utils.utils import set_random_seed, load_dataset
+from moge.module.dgl.HGConv.utils.utils import set_random_seed, load_dataset
 
 
 class LATTENodeClassifier(NodeClfTrainer):
