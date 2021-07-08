@@ -51,6 +51,7 @@ class LATTENodeClf(NodeClfTrainer):
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
 
+        self.freeze_embeddings = hparams.freeze_embeddings if "freeze_embeddings" in hparams else True
         self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
                                                      dataset.num_nodes_dict,
                                                      dataset.node_attr_shape,
@@ -128,7 +129,7 @@ class LATTENodeClf(NodeClfTrainer):
                                                       sparse=False)
                 else:
                     module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
-                                                                      freeze=False,
+                                                                      freeze=self.freeze_embeddings,
                                                                       scale_grad_by_freq=True)
 
             embeddings = nn.ModuleDict(module_dict)
@@ -137,14 +138,11 @@ class LATTENodeClf(NodeClfTrainer):
 
         return embeddings
 
-    def transform_inp_feats(self, node_feats, global_node_idx, grad_emb=True):
+    def transform_inp_feats(self, node_feats, global_node_idx):
         h_dict = {}
         for ntype in global_node_idx:
             if ntype not in node_feats:
-                if grad_emb:
-                    node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
-                else:
-                    node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).detach().to(self.device)
+                node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
 
             # project to embedding_dim if node features are not same same dimension
             if ntype in self.proj_ntypes:
@@ -164,12 +162,11 @@ class LATTENodeClf(NodeClfTrainer):
 
         return h_dict
 
-    def forward(self, X: dict, grad_emb=True, **kwargs):
+    def forward(self, X: dict, **kwargs):
         if not self.training:
             self._node_ids = X["global_node_index"]
 
-        h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"],
-                                         grad_emb=grad_emb)
+        h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"])
 
         embeddings, proximity_loss, edge_index_dict = self.embedder(h_out,
                                                                     X["edge_index"],
@@ -203,7 +200,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss, _ = self.forward(X, grad_emb=True)
+        y_pred, proximity_loss, _ = self.forward(X)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
@@ -227,7 +224,7 @@ class LATTENodeClf(NodeClfTrainer):
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
 
-        y_pred, proximity_loss, _ = self.forward(X)
+        y_pred, proximity_loss, _ = self.forward(X, save_betas=False)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
 
