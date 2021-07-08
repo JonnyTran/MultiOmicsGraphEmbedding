@@ -51,18 +51,18 @@ class LATTENodeClf(NodeClfTrainer):
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
 
-        self.freeze_embeddings = hparams.freeze_embeddings if "freeze_embeddings" in hparams else True
         self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
                                                      dataset.num_nodes_dict,
                                                      dataset.node_attr_shape,
-                                                     pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None)
+                                                     pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
+                                                     freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True)
 
         # node types that needs a projection to align to the embedding_dim
         self.proj_ntypes = [ntype for ntype in self.node_types \
                             if (ntype in dataset.node_attr_shape
                                 and dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
-                            or (self.embeddings and ntype in self.embeddings and self.embeddings[ntype].weight.size(
-                1) != hparams.embedding_dim)]
+                            or (self.embeddings and ntype in self.embeddings and
+                                self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
 
         self.feature_projection = nn.ModuleDict({
             ntype: nn.Linear(
@@ -109,7 +109,8 @@ class LATTENodeClf(NodeClfTrainer):
             nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
 
     def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict,
-                              pretrain_embeddings: Dict[str, torch.Tensor]):
+                              pretrain_embeddings: Dict[str, torch.Tensor],
+                              freeze=True):
         # If some node type are not attributed, instantiate nn.Embedding for them
         if isinstance(in_channels_dict, dict):
             non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
@@ -129,7 +130,7 @@ class LATTENodeClf(NodeClfTrainer):
                                                       sparse=False)
                 else:
                     module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
-                                                                      freeze=self.freeze_embeddings,
+                                                                      freeze=freeze,
                                                                       scale_grad_by_freq=True)
 
             embeddings = nn.ModuleDict(module_dict)
