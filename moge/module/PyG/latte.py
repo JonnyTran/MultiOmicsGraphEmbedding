@@ -241,7 +241,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
-        self.dropout = dropout
+        if dropout:
+            self.dropout = nn.Dropout(p=dropout)
+
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(output_dim) \
@@ -349,10 +351,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         """
         x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
                for ntype in x if sizes[self.layer][ntype][1]}
-        # print("\n", self.layer)
-        # pprint.pprint(tensor_sizes({"x_l": x, "x_r": x_r}))
-        # pprint.pprint(tensor_sizes({"global_node_idx": global_node_idx}))
-        # print("sizes", sizes[self.layer])
+
+        if hasattr(self, "dropout"):
+            x = {ntype: self.dropout(x[ntype]) for ntype in x}
+            x_r = {ntype: self.dropout(x_r[ntype]) for ntype in x_r}
 
         l_dict = self.get_h_dict(x, source_target="source")
         r_dict = self.get_h_dict(x_r, source_target="target")
@@ -395,9 +397,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])
-
-            if self.dropout:
-                h_out[ntype] = F.dropout(h_out[ntype], p=self.dropout, training=self.training)
 
             if edge_attn_dict:
                 edge_pred_dict.update(edge_attn_dict)
@@ -546,7 +545,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             elif source_target == "target":
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
-            h_dict[ntype] = F.tanh(h_dict[ntype].view(-1, self.attn_heads, self.out_channels))
+            h_dict[ntype] = h_dict[ntype].view(-1, self.attn_heads, self.out_channels)
 
         return h_dict
 

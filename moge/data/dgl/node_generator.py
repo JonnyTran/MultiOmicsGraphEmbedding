@@ -45,18 +45,23 @@ class DGLNodeSampler(HeteroNetDataset):
 
         self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
 
-        if sampler is None:
-            print("Using Full Multilayer sampler")
-            self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
+        fanouts = []
+        for layer, fanout in enumerate(self.neighbor_sizes):
+            fanouts.append({etype: fanout + layer for etype in self.G.canonical_etypes})
+
+        if sampler == "MultiLayerNeighborSampler":
+            print("Using MultiLayerNeighborSampler", fanouts)
+            self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
 
         elif sampler == "ImportanceSampler":
-            print("Using ImportanceSampler")
-            self.neighbor_sampler = ImportanceSampler(fanouts=neighbor_sizes,
+            print("Using ImportanceSampler", fanouts)
+            self.neighbor_sampler = ImportanceSampler(fanouts=fanouts,
                                                       metapaths=self.get_metapaths(),  # Original metapaths only
                                                       degree_counts=self.degree_counts,
                                                       edge_dir=edge_dir)
         else:
-            raise Exception("Use one of", ["ImportanceSampler"])
+            print("Using MultiLayerFullNeighborSampler")
+            self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
 
     def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False, decompose_etypes=False):
         reversed_g = g.reverse(copy_edata=True, share_edata=True)
