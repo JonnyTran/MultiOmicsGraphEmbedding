@@ -44,7 +44,9 @@ class LATTE(nn.Module):
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
 
         layer_t_orders = {
-            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) if (t_order - (n_layers - (l + 1))) > 0 else [1] \
+            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
+                if (t_order - (n_layers - (l + 1))) > 0 \
+                else [1] \
             for l in reversed(range(n_layers))}
 
         for l in range(n_layers):
@@ -70,7 +72,7 @@ class LATTE(nn.Module):
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           dropout=False if not hasattr(hparams,
                                                        "dropout") or is_output_layer else hparams.dropout,
-                          attn_heads=attn_heads,
+                          attn_heads=attn_heads if not is_output_layer else 1,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout,
                           edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,

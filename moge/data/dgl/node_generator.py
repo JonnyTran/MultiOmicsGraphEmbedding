@@ -16,6 +16,7 @@ from dgl.init import zero_initializer
 from moge.data.network import HeteroNetDataset
 from .samplers import ImportanceSampler, MultiLayerNeighborSampler
 from ..utils import one_hot_encoder
+from moge.module.utils import tensor_sizes
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
@@ -50,11 +51,11 @@ class DGLNodeSampler(HeteroNetDataset):
             fanouts.append({etype: fanout + layer for etype in self.G.canonical_etypes})
 
         if sampler == "MultiLayerNeighborSampler":
-            print("Using MultiLayerNeighborSampler", fanouts)
+            print("Using MultiLayerNeighborSampler", tensor_sizes(fanouts))
             self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
 
         elif sampler == "ImportanceSampler":
-            print("Using ImportanceSampler", fanouts)
+            print("Using ImportanceSampler", tensor_sizes(fanouts))
             self.neighbor_sampler = ImportanceSampler(fanouts=fanouts,
                                                       metapaths=self.get_metapaths(),  # Original metapaths only
                                                       degree_counts=self.degree_counts,
@@ -359,7 +360,7 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
             for metapath in block.canonical_etypes:
                 if block.num_edges(etype=metapath) == 0:
                     continue
-                edge_index_dict[metapath] = torch.stack(block.edges(etype=metapath, order="srcdst"), dim=0)
+                edge_index_dict[metapath] = torch.stack(block.edges(etype=metapath), dim=0)
 
             X.setdefault("edge_index", []).append(edge_index_dict)
 
