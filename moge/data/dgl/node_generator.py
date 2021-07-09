@@ -354,7 +354,7 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
             for metapath in block.canonical_etypes:
                 if block.num_edges(etype=metapath) == 0:
                     continue
-                edge_index_dict[metapath] = torch.stack(block.all_edges(etype=metapath, order="srcdst"), dim=0)
+                edge_index_dict[metapath] = torch.stack(block.edges(etype=metapath, order="srcdst"), dim=0)
 
             X.setdefault("edge_index", []).append(edge_index_dict)
 
