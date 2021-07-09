@@ -135,7 +135,6 @@ class LATTENodeClf(NodeClfTrainer):
 
     def transform_inp_feats(self, node_feats: Dict[str, torch.Tensor], global_node_idx: Dict[str, torch.Tensor]):
         h_dict = {}
-        # print("node_feats", node_feats)
 
         for ntype in global_node_idx:
             if global_node_idx[ntype].numel() == 0: continue
@@ -154,8 +153,8 @@ class LATTENodeClf(NodeClfTrainer):
                 # if self.dropout:
                 #     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
-            # Skips projection
             else:
+                # Skips projection
                 h_dict[ntype] = node_feats[ntype]
 
 
