@@ -7,7 +7,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-import moge.models
+import moge
 from moge.data import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
@@ -257,13 +257,14 @@ class HGConv(NodeClfTrainer):
         print("sample_nodes_num", sample_nodes_num)
         self.sampler = dgl.dataloading.MultiLayerNeighborSampler(sample_nodes_num)
 
-        self.hgconv = moge.models.HGConv.HGConv(graph=self.graph,
-                                                input_dim_dict={ntype: self.graph.nodes[ntype].data['feat'].shape[1] for
-                                                                ntype in self.graph.ntypes},
-                                                hidden_dim=args['hidden_units'],
-                                                num_layers=args['n_layers'], n_heads=args['num_heads'],
-                                                dropout=args['dropout'],
-                                                residual=args['residual'])
+        self.hgconv = moge.module.dgl.HGConv.HGConv(graph=self.graph,
+                                                    input_dim_dict={ntype: self.graph.nodes[ntype].data['feat'].shape[1]
+                                                                    for
+                                                                    ntype in self.graph.ntypes},
+                                                    hidden_dim=args['hidden_units'],
+                                                    num_layers=args['n_layers'], n_heads=args['num_heads'],
+                                                    dropout=args['dropout'],
+                                                    residual=args['residual'])
 
         self.classifier = nn.Linear(args['hidden_units'] * args['num_heads'], num_classes)
 

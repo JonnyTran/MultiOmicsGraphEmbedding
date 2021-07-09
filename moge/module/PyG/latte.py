@@ -427,6 +427,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
 
             # Propapate flows from target nodes to source nodes
+            print(self.layer, node_type, metapath)
+            print(edge_index.max(1).values, values)
+            print("sizes", head_size_in, tail_size_out)
+            print(tensor_sizes({head: l_dict[head], tail: r_dict[tail]}))
             try:
                 out = self.propagate(
                     edge_index=edge_index,
