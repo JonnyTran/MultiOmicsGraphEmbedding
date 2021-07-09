@@ -354,9 +354,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
                for ntype in x if sizes[self.layer][ntype][1]}
 
-        if hasattr(self, "dropout"):
-            x = {ntype: self.dropout(x[ntype]) for ntype in x}
-            x_r = {ntype: self.dropout(x_r[ntype]) for ntype in x_r}
+        # if hasattr(self, "dropout"):
+        #     x = {ntype: self.dropout(x[ntype]) for ntype in x}
+        #     x_r = {ntype: self.dropout(x_r[ntype]) for ntype in x_r}
 
         l_dict = self.get_h_dict(x, source_target="source")
         r_dict = self.get_h_dict(x_r, source_target="target")
@@ -367,16 +367,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         h_out = {}
         edge_pred_dict = {}
 
-        for m, eid in edge_pred_dict.items():
-            src, dst = eid.max(1).values
-            assert src < sizes[self.layer][m[0]][0], f"{m[0]}, edge {src}, size {sizes[self.layer][m[0]][0]}"
-            assert dst < sizes[self.layer][m[-1]][1], f"{m[-1]}, edge {dst}, size {sizes[self.layer][m[-1]][1]}"
-
-            assert src < l_dict[m[0]].size(0), f"{m[0]}, edge {src}, l_dict {l_dict[m[0]].shape}"
-            assert dst < r_dict[m[-1]].size(0), f"{m[-1]}, edge {dst}, l_dict {l_dict[m[-1]].shape}"
-
-            assert global_node_idx[m[0]].size(0) == sizes[self.layer][m[0]][
-                0], f"global node idx {global_node_idx[m[0]].size(0)}"
+        # for m, eid in edge_pred_dict.items():
+        #     src, dst = eid.max(1).values
+        #     assert src < sizes[self.layer][m[0]][0], f"{m[0]}, edge {src}, size {sizes[self.layer][m[0]][0]}"
+        #     assert dst < sizes[self.layer][m[-1]][1], f"{m[-1]}, edge {dst}, size {sizes[self.layer][m[-1]][1]}"
+        #
+        #     assert src < l_dict[m[0]].size(0), f"{m[0]}, edge {src}, l_dict {l_dict[m[0]].shape}"
+        #     assert dst < r_dict[m[-1]].size(0), f"{m[-1]}, edge {dst}, l_dict {l_dict[m[-1]].shape}"
+        #
+        #     assert global_node_idx[m[0]].size(0) == sizes[self.layer][m[0]][
+        #         0], f"global node idx {global_node_idx[m[0]].size(0)}"
 
         # For each metapath in a node_type, use GAT message passing to aggregate l_dict neighbors
         for ntype in x_r:
@@ -399,6 +399,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])
+
+            if hasattr(self, "dropout"):
+                h_out[ntype] = self.dropout(h_out[ntype])
 
             if edge_attn_dict:
                 edge_pred_dict.update(edge_attn_dict)
