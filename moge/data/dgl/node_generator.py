@@ -19,7 +19,7 @@ from ..utils import one_hot_encoder
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
-                 sampler: str = "ImportanceSampler",
+                 sampler: str,
                  embedding_dim=None,
                  neighbor_sizes=None,
                  node_types=None,
@@ -38,9 +38,8 @@ class DGLNodeSampler(HeteroNetDataset):
 
         if add_reverse_metapaths:
             self.G = self.create_heterograph(self.G, add_reverse=True)
-        elif "feat" in self.G.edata:
+        elif "feat" in self.G.edata and self.G.edata["feat"]:
             self.G = self.create_heterograph(self.G, decompose_etypes=True, add_reverse=add_reverse_metapaths)
-
 
         self.init_node_embeddings(self.G)
 
@@ -51,6 +50,7 @@ class DGLNodeSampler(HeteroNetDataset):
             self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(n_layers=len(self.neighbor_sizes))
 
         elif sampler == "ImportanceSampler":
+            print("Using ImportanceSampler")
             self.neighbor_sampler = ImportanceSampler(fanouts=neighbor_sizes,
                                                       metapaths=self.get_metapaths(),  # Original metapaths only
                                                       degree_counts=self.degree_counts,
@@ -356,6 +356,11 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
                     continue
                 edge_index_dict[metapath] = torch.stack(block.all_edges(etype=block.canonical_etypes[1]), dim=0)
 
+            #     print(metapath, edge_index_dict[metapath].max(1).values)
+            #
+            # print("source", {ntype: block.num_src_nodes(ntype) for ntype in block.ntypes})
+            # print("target", {ntype: block.num_dst_nodes(ntype) for ntype in block.ntypes})
+
             X.setdefault("edge_index", []).append(edge_index_dict)
 
             X.setdefault("sizes", []).append(
@@ -366,7 +371,9 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
             X.setdefault("global_node_index", []).append(
                 {ntype: nid for ntype, nid in block.srcdata[dgl.NID].items() if nid.numel() > 0})
 
-        X["x_dict"] = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"].items() if feat.size(0) != 0}
+        X["x_dict"] = {ntype: feat \
+                       for ntype, feat in blocks[0].srcdata["feat"].items() \
+                       if feat.size(0) != 0}
 
         y = blocks[-1].dstdata["labels"]
         return X, y, None
