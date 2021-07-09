@@ -209,11 +209,11 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         X["sizes"] = self.get_adjs_sizes(adjs, n_id)
 
         for l in range(len(adjs)):
-            layer_local_nodes = {
-                ntype: local_nodes_dict[ntype][: X["sizes"][l][ntype][1]] \
+            layer_node_index = {
+                ntype: local_nodes_dict[ntype][: X["sizes"][l][ntype][0]] \
                 for ntype in local_nodes_dict \
                 if X["sizes"][l][ntype][1]}
-            X.setdefault("global_node_index", []).append(layer_local_nodes)
+            X.setdefault("global_node_index", []).append(layer_node_index)
 
         # x_dict attributes
         if hasattr(self, "x_dict") and len(self.x_dict) > 0:
