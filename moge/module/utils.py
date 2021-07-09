@@ -1,3 +1,5 @@
+from collections import Iterable
+
 import numpy as np
 import torch
 
@@ -60,7 +62,13 @@ def tensor_sizes(input):
     elif isinstance(input, list):
         return [tensor_sizes(v) for v in input]
     else:
-        return list(input.shape) if input is not None and hasattr(input, "shape") else input
+        if input is not None and hasattr(input, "shape"):
+            if isinstance(input, torch.Tensor) and input.dim() == 0:
+                return input.item()
+
+            return list(input.shape)
+        else:
+            return input
 
 
 def preprocess_input(input, device, dtype=None, half=False):
