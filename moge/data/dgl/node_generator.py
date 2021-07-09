@@ -372,4 +372,7 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
                        if feat.size(0) != 0}
 
         y = blocks[-1].dstdata["labels"]
+        if len(y) == 1:
+            y = y[list(y.keys())[0]]
+
         return X, y, None
