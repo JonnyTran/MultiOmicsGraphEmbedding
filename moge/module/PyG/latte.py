@@ -428,9 +428,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             # Propapate flows from target nodes to source nodes
             print(self.layer, node_type, metapath)
-            print(edge_index.max(1).values, values)
-            print("sizes", head_size_in, tail_size_out)
-            print(tensor_sizes({head: l_dict[head], tail: r_dict[tail]}))
+            print(
+                {metapath: (edge_index.max(1).values, \
+                            [metapath[0], self.sizes[self.layer][m[0]][0], metapath[-1],
+                             self.sizes[self.layer][m[-1]][1]])}
+            )
             try:
                 out = self.propagate(
                     edge_index=edge_index,

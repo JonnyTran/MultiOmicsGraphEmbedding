@@ -241,12 +241,12 @@ class HGConv(NodeClfTrainer):
         self.head_node_type = args['predict_category']
         self.graph.nodes[self.head_node_type].data["label"] = labels
 
-        dataset = Namespace()
-        dataset.n_classes = num_classes
-        dataset.multilabel = True if labels.dim() > 2 and labels.size(1) > 1 else False
-        dataset.inductive = False
-        args["loss_type"] = "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
-        super().__init__(Namespace(**args), dataset, metrics)
+        self.dataset = Namespace()
+        self.dataset.n_classes = num_classes
+        self.dataset.multilabel = True if labels.dim() > 2 and labels.size(1) > 1 else False
+        self.dataset.inductive = False
+        args["loss_type"] = "BCE" if self.dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
+        super().__init__(Namespace(**args), self.dataset, metrics)
 
         sample_nodes_num = []
         for layer in range(args['n_layers']):
@@ -259,8 +259,7 @@ class HGConv(NodeClfTrainer):
 
         self.hgconv = moge.module.dgl.HGConv.HGConv(graph=self.graph,
                                                     input_dim_dict={ntype: self.graph.nodes[ntype].data['feat'].shape[1]
-                                                                    for
-                                                                    ntype in self.graph.ntypes},
+                                                                    for ntype in self.graph.ntypes},
                                                     hidden_dim=args['hidden_units'],
                                                     num_layers=args['n_layers'], n_heads=args['num_heads'],
                                                     dropout=args['dropout'],
@@ -382,11 +381,11 @@ class HGConv(NodeClfTrainer):
 
     def configure_optimizers(self):
         if self.hparams['optimizer'] == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['learning_rate'], weight_decay=self.hparams[
-                'weight_decay'])
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['learning_rate'],
+                                         weight_decay=self.hparams['weight_decay'])
         elif self.hparams['optimizer'] == 'sgd':
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['learning_rate'], weight_decay=self.hparams[
-                'weight_decay'])
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['learning_rate'],
+                                        weight_decay=self.hparams['weight_decay'])
         else:
             raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
 
