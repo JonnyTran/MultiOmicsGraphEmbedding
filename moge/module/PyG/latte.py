@@ -1,3 +1,4 @@
+import pprint
 import random
 from typing import Dict, Tuple, List
 import copy
@@ -348,10 +349,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         """
         x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
                for ntype in x if sizes[self.layer][ntype][1]}
-        print("x_l", tensor_sizes(x))
-        print("global_node_idx", tensor_sizes(global_node_idx))
-        print("sizes", sizes[self.layer])
-        print("x_r", tensor_sizes(x_r))
+        print(self.layer)
+        pprint.pprint(tensor_sizes({"x_l": x, "x_r": x_r}))
+        pprint.pprint(tensor_sizes({"global_node_idx": global_node_idx}))
+        pprint.pprint(sizes[self.layer])
 
         l_dict = self.get_h_dict(x, source_target="source")
         r_dict = self.get_h_dict(x_r, source_target="target")
@@ -428,11 +429,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             # Propapate flows from target nodes to source nodes
             print(self.layer, node_type, metapath)
-            print(
-                {metapath: (edge_index.max(1).values, \
-                            [metapath[0], self.sizes[self.layer][m[0]][0], metapath[-1],
-                             self.sizes[self.layer][m[-1]][1]])}
-            )
+            print({metapath: (edge_index.max(1).values, \
+                              [head, sizes[self.layer][head][0],
+                               tail, sizes[self.layer][tail][1]])})
             try:
                 out = self.propagate(
                     edge_index=edge_index,
