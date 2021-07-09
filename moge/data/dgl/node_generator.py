@@ -354,19 +354,15 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
             for metapath in block.canonical_etypes:
                 if block.num_edges(etype=metapath) == 0:
                     continue
-                edge_index_dict[metapath] = torch.stack(block.all_edges(etype=block.canonical_etypes[1]), dim=0)
-
-            #     print(metapath, edge_index_dict[metapath].max(1).values)
-            #
-            # print("source", {ntype: block.num_src_nodes(ntype) for ntype in block.ntypes})
-            # print("target", {ntype: block.num_dst_nodes(ntype) for ntype in block.ntypes})
+                edge_index_dict[metapath] = torch.stack(block.all_edges(etype=metapath, order="srcdst"), dim=0)
 
             X.setdefault("edge_index", []).append(edge_index_dict)
 
-            X.setdefault("sizes", []).append(
-                {ntype: (None if block.num_src_nodes(ntype) == 0 else block.num_src_nodes(ntype),
-                         None if block.num_dst_nodes(ntype) == 0 else block.num_dst_nodes(ntype)) \
-                 for ntype in block.ntypes})
+            size = {}
+            for ntype in block.ntypes:
+                size[ntype] = (None if block.num_src_nodes(ntype) == 0 else block.num_src_nodes(ntype),
+                               None if block.num_dst_nodes(ntype) == 0 else block.num_dst_nodes(ntype))
+            X.setdefault("sizes", []).append(size)
 
             X.setdefault("global_node_index", []).append(
                 {ntype: nid for ntype, nid in block.srcdata[dgl.NID].items() if nid.numel() > 0})
