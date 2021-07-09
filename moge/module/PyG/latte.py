@@ -72,7 +72,7 @@ class LATTE(nn.Module):
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           dropout=False if not hasattr(hparams,
                                                        "dropout") or is_output_layer else hparams.dropout,
-                          attn_heads=attn_heads if not is_output_layer else 1,
+                          attn_heads=attn_heads,
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout,
                           edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
@@ -405,7 +405,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         # Save beta weights from testing samples
         if save_betas and not self.training:
-            self.save_relation_weights({ntype: beta[ntype].mean(1) for ntype in beta}, global_node_idx)
+            beta_mean = {ntype: beta[ntype].mean(1) for ntype in beta}
+            global_node_idx_out = {ntype: nid[:sizes[self.layer][ntype][1]] for ntype, nid in global_node_idx.items()}
+            self.save_relation_weights(beta_mean, global_node_idx_out)
 
         proximity_loss = None
         if self.use_proximity:
@@ -547,7 +549,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             elif source_target == "target":
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
-            h_dict[ntype] = h_dict[ntype].view(-1, self.attn_heads, self.out_channels)
+            h_dict[ntype] = F.tanh(h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels))
 
         return h_dict
 
@@ -575,8 +577,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if not hasattr(self, "_betas"): return
 
         with torch.no_grad():
-            for ntype in global_node_idx:
-                if global_node_idx[ntype].numel() == 0: continue
+            for ntype in betas:
+                if ntype not in global_node_idx or global_node_idx[ntype].numel() == 0: continue
                 relations = self.get_head_relations(ntype, str_form=True) + [ntype, ]
                 df = pd.DataFrame(betas[ntype].cpu().numpy(),
                                   columns=relations,
