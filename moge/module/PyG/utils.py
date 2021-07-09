@@ -127,9 +127,9 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
 
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]
             a_order = len(metapath_a[1::2])
-            m = sizes[layer - a_order][head][0].item()
-            k = sizes[layer - a_order][middle][1].item()
-            n = sizes[layer][tail][1].item()
+            m = sizes[layer - a_order][head][0]
+            k = sizes[layer - a_order][middle][1]
+            n = sizes[layer][tail][1]
 
             try:
                 if values_a.dim() > 1 and values_a.size(1) > 1:
