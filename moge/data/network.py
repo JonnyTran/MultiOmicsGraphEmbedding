@@ -2,6 +2,7 @@ import logging
 from abc import abstractmethod
 from typing import Union, List, Tuple
 
+import dgl
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -140,7 +141,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset, DglNodePropPredDataset, DglLinkPropPredDataset],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
-                 inductive: bool = True):
+                 inductive: bool = True, **kwargs):
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
@@ -194,8 +195,12 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             print(f"{dataset.__class__.__name__}")
             self.process_COGDLdataset(dataset, metapaths, node_types, reshuffle_train)
-        elif "blogcatalog6k" in dataset:
+        elif isinstance(dataset, str) and "blogcatalog6k" in dataset:
             self.process_BlogCatalog6k(dataset, train_ratio=0.5)
+
+        elif isinstance(dataset, dgl.DGLGraph):
+            self.G = dataset
+            self.num_nodes_dict = {ntype: self.G.num_nodes(ntype) for ntype in self.G.ntypes}
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
@@ -253,8 +258,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if reshuffle_train is not None and reshuffle_train > 0:
             self.resample_training_idx(reshuffle_train)
         else:
-            print("train_ratio", self.get_train_ratio())
-        self.train_ratio = self.get_train_ratio()
+            if hasattr(self, "training_idx"):
+                self.train_ratio = self.get_train_ratio()
+                print("train_ratio", self.train_ratio)
 
     def is_undirected(self):
         if hasattr(self, "edge_index_dict") and self.edge_index_dict:
