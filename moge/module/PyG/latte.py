@@ -30,7 +30,6 @@ class LATTE(nn.Module):
         self.head_node_type = hparams.head_node_type
 
         self.embedding_dim = embedding_dim * n_layers
-        self.layer_pooling = layer_pooling
 
         self.t_order = t_order
         self.n_layers = n_layers
@@ -59,30 +58,28 @@ class LATTE(nn.Module):
                                                  tail_type=self.head_node_type if is_last_layer else None)
 
             layers.append(
-                LATTEConv(input_dim=embedding_dim,
-                          output_dim=hparams.n_classes if is_output_layer else embedding_dim,
-                          node_types=list(num_nodes_dict.keys()),
-                          layer=l,
-                          t_order=self.t_order,
-                          metapaths=l_layer_metapaths,
-                          activation=None if is_output_layer else activation,
+                LATTEConv(input_dim=embedding_dim, output_dim=hparams.n_classes if is_output_layer else embedding_dim,
+                          node_types=list(num_nodes_dict.keys()), metapaths=l_layer_metapaths, layer=l,
+                          t_order=self.t_order, activation=None if is_output_layer else activation,
                           batchnorm=False if not hasattr(hparams,
                                                          "batchnorm") or is_output_layer else hparams.batchnorm,
                           layernorm=False if not hasattr(hparams,
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           dropout=False if not hasattr(hparams,
                                                        "dropout") or is_output_layer else hparams.dropout,
-                          attn_heads=attn_heads,
-                          attn_activation=attn_activation,
-                          attn_dropout=attn_dropout,
+                          attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
                           edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
-                          use_proximity=use_proximity,
-                          neg_sampling_ratio=neg_sampling_ratio))
+                          use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
+                          layer_pooling=layer_pooling))
 
             if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
                 higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
+        if layer_pooling == "rel_concat":
+            self.layer_pooling = "last"
+        else:
+            self.layer_pooling = layer_pooling
 
     def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: List[Dict], save_betas=False):
@@ -214,12 +211,10 @@ class LATTE(nn.Module):
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
-    def __init__(self, input_dim: int, output_dim: int,
-                 node_types: list, metapaths: list, layer: int, t_order: int,
-                 activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0,
-                 attn_heads=4, attn_activation="sharpening", attn_dropout=0.2,
-                 edge_threshold=0.0,
-                 use_proximity=False, neg_sampling_ratio=1.0) -> None:
+    def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
+                 activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, attn_heads=4,
+                 attn_activation="sharpening", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
+                 neg_sampling_ratio=1.0, layer_pooling=None) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.t_order = t_order
@@ -231,6 +226,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
         self.edge_threshold = edge_threshold
+        self.layer_pooling = layer_pooling
+
         print("\n LATTE", [".".join([k[0].upper() if i % 2 == 0 else k[0].lower() for i, k in enumerate(m)]) for m in
                            sorted(metapaths)])
 
@@ -375,10 +372,23 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                        prev_l_dict=prev_h_in,
                                                                        prev_edge_index_dict=prev_edge_index_dict,
                                                                        sizes=sizes)
+            if edge_attn_dict:
+                edge_pred_dict.update(edge_attn_dict)
+
             h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
 
             # beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
+            if self.layer_pooling == "rel_concat" and self.layer + 1 == len(sizes):
+                h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0),
+                                                 self.embedding_dim * self.num_head_relations(ntype))
+                if hasattr(self, "activation"):
+                    h_out[ntype] = self.activation(h_out[ntype])
+
+                if hasattr(self, "dropout"):
+                    h_out[ntype] = self.dropout(h_out[ntype])
+                continue
+
             h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
             h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
@@ -391,8 +401,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if hasattr(self, "dropout"):
                 h_out[ntype] = self.dropout(h_out[ntype])
 
-            if edge_attn_dict:
-                edge_pred_dict.update(edge_attn_dict)
 
         # Save beta weights from testing samples
         if save_betas and not self.training:
