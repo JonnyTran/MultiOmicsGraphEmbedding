@@ -64,7 +64,7 @@ def gen_rel_subset_feature(g, rel_subset, args, device):
                 deg = deg + new_g.in_degrees(etype=etype)
         norm = 1.0 / deg.float()
         norm[torch.isinf(norm)] = 0
-        new_g.nodes[ntype].data["norm"] = norm.view(-1, 1).to(device)
+        new_g.nodes[ntype].data["norm"] = norm.view(-1, 1)
 
     res = []
 
@@ -111,7 +111,7 @@ def load_data(device, args):
             raise RuntimeError(f"Dataset {args.dataset} not supported")
 
 
-def load_acm(device, args):
+def load_acm(args):
     g, labels, n_classes, train_nid, val_nid, test_nid = load_acm_raw()
 
     features = g.nodes["paper"].data["feat"]
@@ -120,9 +120,9 @@ def load_acm(device, args):
     author_emb = torch.load(os.path.join(path, "author.pt")).float()
     field_emb = torch.load(os.path.join(path, "field.pt")).float()
 
-    g.nodes["author"].data["feat"] = author_emb.to(device)
-    g.nodes["field"].data["feat"] = field_emb.to(device)
-    g.nodes["paper"].data["feat"] = features.to(device)
+    g.nodes["author"].data["feat"] = author_emb
+    g.nodes["field"].data["feat"] = field_emb
+    g.nodes["paper"].data["feat"] = features
     paper_dim = g.nodes["paper"].data["feat"].shape[1]
     author_dim = g.nodes["author"].data["feat"].shape[1]
     assert (paper_dim >= author_dim)
@@ -130,11 +130,11 @@ def load_acm(device, args):
         print(f"Randomly embedding features from dimension {author_dim} to {paper_dim}")
         author_feat = g.nodes["author"].data.pop("feat")
         field_feat = g.nodes["field"].data.pop("feat")
-        rand_weight = torch.Tensor(author_dim, paper_dim).uniform_(-0.5, 0.5).to(device)
+        rand_weight = torch.Tensor(author_dim, paper_dim).uniform_(-0.5, 0.5)
         g.nodes["author"].data["feat"] = torch.matmul(author_feat, rand_weight)
         g.nodes["field"].data["feat"] = torch.matmul(field_feat, rand_weight)
 
-    labels = labels.to(device)
+    labels = labels
     train_nid, val_nid, test_nid = np.array(train_nid), np.array(val_nid), np.array(test_nid)
 
     return g, labels, n_classes, train_nid, val_nid, test_nid
@@ -156,19 +156,19 @@ def load_mag(device, args):
     topic_emb = torch.load(os.path.join(path, "field_of_study.pt")).float()
     institution_emb = torch.load(os.path.join(path, "institution.pt")).float()
 
-    g.nodes["author"].data["feat"] = author_emb.to(device)
-    g.nodes["institution"].data["feat"] = institution_emb.to(device)
-    g.nodes["field_of_study"].data["feat"] = topic_emb.to(device)
-    g.nodes["paper"].data["feat"] = features.to(device)
+    g.nodes["author"].data["feat"] = author_emb
+    g.nodes["institution"].data["feat"] = institution_emb
+    g.nodes["field_of_study"].data["feat"] = topic_emb
+    g.nodes["paper"].data["feat"] = features
     paper_dim = g.nodes["paper"].data["feat"].shape[1]
     author_dim = g.nodes["author"].data["feat"].shape[1]
     if paper_dim != author_dim:
         paper_feat = g.nodes["paper"].data.pop("feat")
         rand_weight = torch.Tensor(paper_dim, author_dim).uniform_(-0.5, 0.5)
-        g.nodes["paper"].data["feat"] = torch.matmul(paper_feat, rand_weight.to(device))
+        g.nodes["paper"].data["feat"] = torch.matmul(paper_feat, rand_weight)
         print(f"Randomly project paper feature from dimension {paper_dim} to {author_dim}")
 
-    labels = labels['paper'].to(device).squeeze()
+    labels = labels['paper'].squeeze()
     n_classes = int(labels.max() - labels.min()) + 1
     train_nid, val_nid, test_nid = np.array(train_nid), np.array(val_nid), np.array(test_nid)
     return g, labels, n_classes, train_nid, val_nid, test_nid
@@ -193,18 +193,18 @@ def load_oag(device, args):
 
     # use relational embedding that we generate
     path = args.use_emb
-    author_emb = torch.load(os.path.join(path, "author.pt")).float().to(device)
-    field_emb = torch.load(os.path.join(path, "field.pt")).float().to(device)
-    venue_emb = torch.load(os.path.join(path, "venue.pt")).float().to(device)
-    affiliation_emb = torch.load(os.path.join(path, "affiliation.pt")).float().to(device)
+    author_emb = torch.load(os.path.join(path, "author.pt")).float()
+    field_emb = torch.load(os.path.join(path, "field.pt")).float()
+    venue_emb = torch.load(os.path.join(path, "venue.pt")).float()
+    affiliation_emb = torch.load(os.path.join(path, "affiliation.pt")).float()
     with open(os.path.join(args.data_dir, "paper.npy"), "rb") as f:
         # loading lang features of paper provided by HGT author
-        paper_feat = torch.from_numpy(np.load(f)).float().to(device)
+        paper_feat = torch.from_numpy(np.load(f)).float()
     author_dim = author_emb.shape[1]
     paper_dim = paper_feat.shape[1]
     if author_dim < paper_dim:
         print(f"Randomly project paper feature from dimension {author_dim} to {paper_dim}")
-        rand_weight = torch.Tensor(author_dim, paper_dim).uniform_(-0.5, 0.5).to(device)
+        rand_weight = torch.Tensor(author_dim, paper_dim).uniform_(-0.5, 0.5)
         author_emb = torch.matmul(author_emb, rand_weight)
         field_emb = torch.matmul(field_emb, rand_weight)
         venue_emb = torch.matmul(venue_emb, rand_weight)
