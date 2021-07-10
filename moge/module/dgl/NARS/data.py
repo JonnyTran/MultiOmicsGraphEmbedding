@@ -10,7 +10,6 @@ import torch
 import dgl
 import dgl.function as fn
 
-
 ###############################################################################
 # Loading Relation Subsets
 ###############################################################################
@@ -119,12 +118,9 @@ def load_acm(**kwargs):
     path = kwargs["use_emb"]
     author_emb = torch.load(os.path.join(path, "author.pt")).float()
     field_emb = torch.load(os.path.join(path, "field.pt")).float()
-    print("author", author_emb.shape, g.number_of_nodes("author"))
-    print("field", field_emb.shape, g.number_of_nodes("field"))
-    print("paper", g.nodes["paper"].data["feat"].shape, g.number_of_nodes("paper"))
 
-    g.nodes["author"].data["feat"] = author_emb
-    g.nodes["field"].data["feat"] = field_emb
+    g.nodes["author"].data["feat"] = author_emb[:g.number_of_nodes("author")]
+    g.nodes["field"].data["feat"] = field_emb[:g.number_of_nodes("field")]
     g.nodes["paper"].data["feat"] = features
     paper_dim = g.nodes["paper"].data["feat"].shape[1]
     author_dim = g.nodes["author"].data["feat"].shape[1]
