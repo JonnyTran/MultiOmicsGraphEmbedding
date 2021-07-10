@@ -48,7 +48,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
         fanouts = []
         for layer, fanout in enumerate(self.neighbor_sizes):
-            fanouts.append({etype: fanout + layer for etype in self.G.canonical_etypes})
+            fanouts.append({etype: fanout for etype in self.G.canonical_etypes})
 
         if sampler == "MultiLayerNeighborSampler":
             print("Using MultiLayerNeighborSampler", tensor_sizes(fanouts))
@@ -63,6 +63,28 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             print("Using MultiLayerFullNeighborSampler")
             self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
+
+    @classmethod
+    def from_dgl_heterograph(cls, g: dgl.DGLHeteroGraph, labels, num_classes, train_idx, val_idx, test_idx,
+                             **kwargs):
+
+        dataset = cls(dataset=g, metapaths=g.canonical_etypes, **kwargs)
+
+        dataset.y_dict = {}
+        if not isinstance(labels, dict):
+            dataset.y_dict[dataset.head_node_type] = labels
+            dataset.G.nodes[dataset.head_node_type].data["label"] = labels
+        else:
+            dataset.y_dict = labels
+            dataset.G.nodes[dataset.head_node_type].data["label"] = labels[dataset.head_node_type]
+
+        dataset.n_classes = num_classes
+        dataset.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
+
+        dataset.training_idx = train_idx
+        dataset.validation_idx = val_idx
+        dataset.testing_idx = test_idx
+        return dataset
 
     def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False, decompose_etypes=False):
         reversed_g = g.reverse(copy_edata=True, share_edata=True)
@@ -162,7 +184,7 @@ class DGLNodeSampler(HeteroNetDataset):
         for ntype, labels in self.y_dict.items():
             if labels.dim() == 2 and labels.shape[1] == 1:
                 labels = labels.squeeze(1)
-            graph.nodes[ntype].data["labels"] = labels
+            graph.nodes[ntype].data["label"] = labels
 
         # Process head_node_type for classification
         if self.head_node_type is None:
@@ -203,7 +225,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
         self.x_dict = {self.head_node_type: graph.ndata["feat"]} if "feat" in graph.ndata else {}
 
-        graph.nodes[self.head_node_type].data["labels"] = labels
+        graph.nodes[self.head_node_type].data["label"] = labels
         self.y_dict = {self.head_node_type: labels}
 
         self.metapaths = graph.canonical_etypes
@@ -377,7 +399,7 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
                        for ntype, feat in blocks[0].srcdata["feat"].items() \
                        if feat.size(0) != 0}
 
-        y = blocks[-1].dstdata["labels"]
+        y = blocks[-1].dstdata["label"]
         if len(y) == 1:
             y = y[list(y.keys())[0]]
 

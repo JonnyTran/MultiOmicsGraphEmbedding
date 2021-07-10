@@ -17,6 +17,7 @@ from moge.module.PyG.latte import LATTE
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
+from moge.module.utils import tensor_sizes
 
 
 class LATTENodeClf(NodeClfTrainer):

@@ -247,7 +247,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
-
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(output_dim) \
