@@ -70,7 +70,9 @@ class LATTE(nn.Module):
                           attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
                           edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
                           use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
-                          layer_pooling=layer_pooling))
+                          layer_pooling=layer_pooling,
+                          input_dropout=hparams.input_dropout if "input_dropout" in hparams else False
+                          ))
 
             if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
                 higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
@@ -214,7 +216,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, attn_heads=4,
                  attn_activation="sharpening", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
-                 neg_sampling_ratio=1.0, layer_pooling=None) -> None:
+                 neg_sampling_ratio=1.0, layer_pooling=None, input_dropout=True) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.t_order = t_order
@@ -227,6 +229,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.attn_dropout = attn_dropout
         self.edge_threshold = edge_threshold
         self.layer_pooling = layer_pooling
+        self.input_dropout = input_dropout
 
         print("\n LATTE", [".".join([k[0].upper() if i % 2 == 0 else k[0].lower() for i, k in enumerate(m)]) for m in
                            sorted(metapaths)])
@@ -351,9 +354,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
                for ntype in x if sizes[self.layer][ntype][1]}
 
-        # if hasattr(self, "dropout"):
-        #     x = {ntype: self.dropout(x[ntype]) for ntype in x}
-        #     x_r = {ntype: self.dropout(x_r[ntype]) for ntype in x_r}
+        if hasattr(self, "dropout") and self.input_dropout:
+            x = {ntype: self.dropout(x[ntype]) for ntype in x}
+            x_r = {ntype: self.dropout(x_r[ntype]) for ntype in x_r}
 
         l_dict = self.get_h_dict(x, source_target="source")
         r_dict = self.get_h_dict(x_r, source_target="target")
@@ -543,7 +546,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             elif source_target == "target":
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
-            h_dict[ntype] = F.tanh(h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels))
+            h_dict[ntype] = h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels)
 
         return h_dict
 
