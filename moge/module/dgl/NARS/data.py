@@ -235,7 +235,8 @@ def load_acm_raw():
     from scipy import io as sio
     url = 'dataset/ACM.mat'
     data_path = get_download_dir() + '/ACM.mat'
-    download(_get_dgl_url(url), path=data_path)
+    if not os.path.exists(data_path):
+        download(_get_dgl_url(url), path=data_path)
 
     data = sio.loadmat(data_path)
     p_vs_l = data['PvsL']  # paper-field?

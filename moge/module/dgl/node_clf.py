@@ -228,47 +228,22 @@ class LATTENodeClassifier(NodeClfTrainer):
 
 
 class HGConv(NodeClfTrainer):
-    def __init__(self, args: Dict, metrics: List[str]):
-        set_random_seed(args['seed'])
+    def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+        super().__init__(Namespace(**args), dataset, metrics)
+        self.dataset = dataset
 
-        print(f'loading dataset {args["dataset"]}...')
-        self.graph, labels, num_classes, self.train_idx, self.valid_idx, self.test_idx = load_dataset(
-            data_path=args['data_path'],
-            predict_category=args[
-                'predict_category'],
-            data_split_idx_path=args[
-                'data_split_idx_path'])
-        self.head_node_type = args['predict_category']
-        self.graph.nodes[self.head_node_type].data["label"] = labels
-
-        self.dataset = Namespace()
-        self.dataset.n_classes = num_classes
-        self.dataset.multilabel = True if labels.dim() > 2 and labels.size(1) > 1 else False
-        self.dataset.inductive = False
-        args["loss_type"] = "BCE" if self.dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
-        super().__init__(Namespace(**args), self.dataset, metrics)
-
-        sample_nodes_num = []
-        for layer in range(args['n_layers']):
-            sample_nodes_num.append(
-                {etype: args['node_neighbors_min_num'] + layer for etype in self.graph.canonical_etypes})
-
-        # neighbor sampler
-        print("sample_nodes_num", sample_nodes_num)
-        self.sampler = dgl.dataloading.MultiLayerNeighborSampler(sample_nodes_num)
-
-        self.hgconv = moge.module.dgl.HGConv.HGConv(graph=self.graph,
-                                                    input_dim_dict={ntype: self.graph.nodes[ntype].data['feat'].shape[1]
-                                                                    for ntype in self.graph.ntypes},
+        self.hgconv = moge.module.dgl.HGConv.HGConv(graph=dataset.G,
+                                                    input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
+                                                                    for ntype in dataset.G.ntypes},
                                                     hidden_dim=args['hidden_units'],
-                                                    num_layers=args['n_layers'], n_heads=args['num_heads'],
+                                                    num_layers=len(dataset.neighbor_sizes),
+                                                    n_heads=args['num_heads'],
                                                     dropout=args['dropout'],
                                                     residual=args['residual'])
 
-        self.classifier = nn.Linear(args['hidden_units'] * args['num_heads'], num_classes)
+        self.classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
 
         self.model = nn.Sequential(self.hgconv, self.classifier)
-
         self.criterion = nn.CrossEntropyLoss()
 
         args["n_params"] = self.get_n_params()
@@ -279,14 +254,14 @@ class HGConv(NodeClfTrainer):
 
     def forward(self, blocks, input_features):
         nodes_representation = self.model[0](blocks, copy.deepcopy(input_features))
-        train_y_predict = self.model[1](nodes_representation[self.hparams['predict_category']])
+        train_y_predict = self.model[1](nodes_representation[self.hparams['head_node_type']])
 
         return train_y_predict
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         input_features = {ntype: blocks[0].srcnodes[ntype].data['feat'] for ntype in input_nodes.keys()}
-        y_true = blocks[-1].dstnodes[self.head_node_type].data["label"]
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
 
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
@@ -306,7 +281,7 @@ class HGConv(NodeClfTrainer):
     def validation_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         input_features = {ntype: blocks[0].srcnodes[ntype].data['feat'] for ntype in input_nodes.keys()}
-        y_true = blocks[-1].dstnodes[self.head_node_type].data["label"]
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
 
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
@@ -321,7 +296,7 @@ class HGConv(NodeClfTrainer):
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         input_features = {ntype: blocks[0].srcnodes[ntype].data['feat'] for ntype in input_nodes.keys()}
-        y_true = blocks[-1].dstnodes[self.head_node_type].data["label"]
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
 
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
@@ -336,48 +311,20 @@ class HGConv(NodeClfTrainer):
         self.log("test_loss", test_loss, logger=True)
         return test_loss
 
-    def train_dataloader(self, num_workers=0):
-        collator = dgl.dataloading.NodeCollator(self.graph, nids={self.head_node_type: self.train_idx},
-                                                block_sampler=self.sampler)
-        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=self.hparams["batch_size"], shuffle=True, drop_last=False,
-                                num_workers=num_workers)
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=None,
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=0)
 
-        return dataloader
+    def val_dataloader(self, batch_size=None):
+        return self.dataset.valid_dataloader(collate_fn=None,
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=0)
 
-    def val_dataloader(self, num_workers=0):
-        collator = dgl.dataloading.NodeCollator(self.graph, nids={self.head_node_type: self.valid_idx},
-                                                block_sampler=self.sampler)
-        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=self.hparams["batch_size"], shuffle=False, drop_last=False,
-                                num_workers=num_workers)
-
-        return dataloader
-
-    def test_dataloader(self, num_workers=0):
-        collator = dgl.dataloading.NodeCollator(self.graph, nids={self.head_node_type: self.test_idx},
-                                                block_sampler=self.sampler)
-        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=self.hparams["batch_size"], shuffle=False, drop_last=False,
-                                num_workers=num_workers)
-        return dataloader
-
-    @property
-    def num_training_steps(self) -> int:
-        """Total training steps inferred from datamodule and devices."""
-        if self.trainer.max_steps:
-            return self.trainer.max_steps
-
-        limit_batches = self.trainer.limit_train_batches
-        batches = len(self.train_dataloader())
-        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
-
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
-
-        effective_accum = self.trainer.accumulate_grad_batches * num_devices
-        return (batches // effective_accum) * self.trainer.max_epochs
+    def test_dataloader(self, batch_size=None):
+        return self.dataset.test_dataloader(collate_fn=None,
+                                            batch_size=self.hparams.batch_size,
+                                            num_workers=0)
 
     def configure_optimizers(self):
         if self.hparams['optimizer'] == 'adam':
@@ -396,3 +343,20 @@ class HGConv(NodeClfTrainer):
 
         return {"optimizer": optimizer,
                 "scheduler": scheduler}
+
+    @property
+    def num_training_steps(self) -> int:
+        """Total training steps inferred from datamodule and devices."""
+        if self.trainer.max_steps:
+            return self.trainer.max_steps
+
+        limit_batches = self.trainer.limit_train_batches
+        batches = len(self.train_dataloader())
+        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
+
+        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+        if self.trainer.tpu_cores:
+            num_devices = max(num_devices, self.trainer.tpu_cores)
+
+        effective_accum = self.trainer.accumulate_grad_batches * num_devices
+        return (batches // effective_accum) * self.trainer.max_epochs
