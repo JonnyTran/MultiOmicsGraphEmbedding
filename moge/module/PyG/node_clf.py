@@ -273,7 +273,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'embedding', 'batchnorm', 'layernorm',
+        no_decay = ['bias', 'alpha_activation', 'embedding', 'batchnorm', 'layernorm', "activation",
                     'LayerNorm.bias', 'LayerNorm.weight',
                     'BatchNorm.bias', 'BatchNorm.weight']
         optimizer_grouped_parameters = [
