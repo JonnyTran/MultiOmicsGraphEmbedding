@@ -111,14 +111,17 @@ def load_data(device, args):
             raise RuntimeError(f"Dataset {args.dataset} not supported")
 
 
-def load_acm(args):
+def load_acm(**kwargs):
     g, labels, n_classes, train_nid, val_nid, test_nid = load_acm_raw()
-
+    g: dgl.DGLHeteroGraph
     features = g.nodes["paper"].data["feat"]
 
-    path = args.use_emb
+    path = kwargs["use_emb"]
     author_emb = torch.load(os.path.join(path, "author.pt")).float()
     field_emb = torch.load(os.path.join(path, "field.pt")).float()
+    print("author", author_emb.shape, g.number_of_nodes("author"))
+    print("field", field_emb.shape, g.number_of_nodes("field"))
+    print("paper", g.nodes["paper"].data["feat"].shape, g.number_of_nodes("paper"))
 
     g.nodes["author"].data["feat"] = author_emb
     g.nodes["field"].data["feat"] = field_emb
