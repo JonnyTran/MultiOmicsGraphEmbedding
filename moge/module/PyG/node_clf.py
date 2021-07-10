@@ -116,18 +116,19 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             non_attr_node_types = []
 
-        print("non_attr_node_types", non_attr_node_types)
 
         if non_attr_node_types:
             module_dict = {}
 
             for ntype in non_attr_node_types:
                 if pretrain_embeddings is None or ntype not in pretrain_embeddings:
+                    print("Initialized trainable embeddings", ntype)
                     module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                                       embedding_dim=embedding_dim,
                                                       scale_grad_by_freq=True,
                                                       sparse=False)
                 else:
+                    print(f"Pretrained embeddings freeze={freeze}", ntype)
                     module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
                                                                       freeze=freeze,
                                                                       scale_grad_by_freq=True)
