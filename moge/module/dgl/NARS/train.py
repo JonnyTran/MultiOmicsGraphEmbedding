@@ -10,9 +10,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 import logging
-from data import load_data, read_relation_subsets, gen_rel_subset_feature
-from model import SIGN, WeightedAggregator
-from utils import get_n_params, get_evaluator, train, test
+from .data import load_data, read_relation_subsets, gen_rel_subset_feature
+from .model import SIGN, WeightedAggregator
+from .utils import get_n_params, get_evaluator, train, test
 
 
 def preprocess_features(g, rel_subsets, args, device):

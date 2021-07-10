@@ -39,8 +39,9 @@ class LATTENodeClf(NodeClfTrainer):
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout,
-                              use_proximity=hparams.use_proximity,
-                              neg_sampling_ratio=hparams.neg_sampling_ratio,
+                              use_proximity=hparams.use_proximity if hasattr(hparams, "use_proximity") else False,
+                              neg_sampling_ratio=hparams.neg_sampling_ratio if hasattr(hparams,
+                                                                                       "neg_sampling_ratio") else None,
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
@@ -202,7 +203,6 @@ class LATTENodeClf(NodeClfTrainer):
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
-
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
 
         if batch_nb % 100 == 0:
@@ -211,7 +211,7 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             logs = {}
 
-        if self.hparams.use_proximity:
+        if proximity_loss is not None:
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
 
@@ -225,11 +225,10 @@ class LATTENodeClf(NodeClfTrainer):
         y_pred, proximity_loss, _ = self.forward(X, save_betas=False)
 
         # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
 
-        if self.hparams.use_proximity:
+        if proximity_loss is not None:
             val_loss = val_loss + proximity_loss
 
         self.log("val_loss", val_loss)
@@ -248,7 +247,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
 
-        if self.hparams.use_proximity:
+        if proximity_loss is not None:
             test_loss = test_loss + proximity_loss
 
         self.log("test_loss", test_loss)
