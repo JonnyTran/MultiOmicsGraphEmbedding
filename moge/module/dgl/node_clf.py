@@ -15,7 +15,7 @@ from ..trainer import NodeClfTrainer, print_pred_class_counts
 
 from moge.module.dgl.latte import LATTE
 from moge.module.dgl.HGConv.utils.utils import set_random_seed, load_dataset
-from moge.module.dgl.RHGNN.model import R_HGNN as RHGNN
+from moge.module.dgl.RHGNN.model.R_HGNN import R_HGNN as RHGNN
 
 class LATTENodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
@@ -390,14 +390,15 @@ class R_HGNN(NodeClfTrainer):
         self._set_hparams(args)
 
     def forward(self, blocks, input_features):
-        nodes_representation = self.model[0](blocks, copy.deepcopy(input_features))
+        nodes_representation, _ = self.model[0](blocks, input_features)
         train_y_predict = self.model[1](nodes_representation[self.hparams['head_node_type']])
 
         return train_y_predict
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        input_features = {ntype: blocks[0].srcnodes[ntype].data['feat'] for ntype in input_nodes.keys()}
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
         y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
 
         for i, block in enumerate(blocks):
@@ -417,7 +418,8 @@ class R_HGNN(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        input_features = {ntype: blocks[0].srcnodes[ntype].data['feat'] for ntype in input_nodes.keys()}
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
         y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
 
         for i, block in enumerate(blocks):
@@ -432,7 +434,8 @@ class R_HGNN(NodeClfTrainer):
 
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        input_features = {ntype: blocks[0].srcnodes[ntype].data['feat'] for ntype in input_nodes.keys()}
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
         y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
 
         for i, block in enumerate(blocks):

@@ -108,7 +108,7 @@ class NodeClfTrainer(ClusteringEvaluator):
         if hasattr(self, "_name"):
             return self._name
         else:
-            return self.__class__.__name__
+            return self.__class__.__name__.replace("_", "-")
 
     def training_epoch_end(self, outputs):
         logs = self.train_metrics.compute_metrics()
