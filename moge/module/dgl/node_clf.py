@@ -1,21 +1,21 @@
 import copy
+import logging
 from argparse import Namespace
 from typing import Dict, List
 
-import dgl
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
 
 import moge
 from moge.data import DGLNodeSampler
 from moge.module.classifier import DenseClassification
+from moge.module.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features
+from moge.module.dgl.RHGNN.model.R_HGNN import R_HGNN as RHGNN
+from moge.module.dgl.latte import LATTE
 from moge.module.losses import ClassificationLoss
 from ..trainer import NodeClfTrainer, print_pred_class_counts
+from ..utils import tensor_sizes
 
-from moge.module.dgl.latte import LATTE
-from moge.module.dgl.HGConv.utils.utils import set_random_seed, load_dataset
-from moge.module.dgl.RHGNN.model.R_HGNN import R_HGNN as RHGNN
 
 class LATTENodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
@@ -209,23 +209,6 @@ class LATTENodeClassifier(NodeClfTrainer):
                 "lr_scheduler": scheduler,
                 "monitor": "val_loss"}
 
-    @property
-    def num_training_steps(self) -> int:
-        """Total training steps inferred from datamodule and devices."""
-        if self.trainer.max_steps:
-            return self.trainer.max_steps
-
-        limit_batches = self.trainer.limit_train_batches
-        batches = len(self.train_dataloader())
-        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
-
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
-
-        effective_accum = self.trainer.accumulate_grad_batches * num_devices
-        return (batches // effective_accum) * self.trainer.max_epochs
-
 
 class HGConv(NodeClfTrainer):
     def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
@@ -344,22 +327,6 @@ class HGConv(NodeClfTrainer):
         return {"optimizer": optimizer,
                 "scheduler": scheduler}
 
-    @property
-    def num_training_steps(self) -> int:
-        """Total training steps inferred from datamodule and devices."""
-        if self.trainer.max_steps:
-            return self.trainer.max_steps
-
-        limit_batches = self.trainer.limit_train_batches
-        batches = len(self.train_dataloader())
-        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
-
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
-
-        effective_accum = self.trainer.accumulate_grad_batches * num_devices
-        return (batches // effective_accum) * self.trainer.max_epochs
 
 
 class R_HGNN(NodeClfTrainer):
@@ -484,19 +451,136 @@ class R_HGNN(NodeClfTrainer):
         return {"optimizer": optimizer,
                 "scheduler": scheduler}
 
-    @property
-    def num_training_steps(self) -> int:
-        """Total training steps inferred from datamodule and devices."""
-        if self.trainer.max_steps:
-            return self.trainer.max_steps
 
-        limit_batches = self.trainer.limit_train_batches
-        batches = len(self.train_dataloader())
-        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
+class NARS(NodeClfTrainer):
+    def __init__(self, args: Namespace, dataset: DGLNodeSampler, metrics: List[str]):
+        super(NARS, self).__init__(Namespace(**args), dataset, metrics)
+        self.dataset = dataset
 
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
+        subsets = sample_relation_subsets(self.dataset.G.metagraph(), args)
+        self.rel_subsets = []
+        for relation in subsets:
+            etypes = []
+            for u, v, e in relation:
+                etypes.append(e)
+                if u == args.head_node_type or v == args.head_node_type:
+                    self.rel_subsets.append(etypes)
 
-        effective_accum = self.trainer.accumulate_grad_batches * num_devices
-        return (batches // effective_accum) * self.trainer.max_epochs
+        with torch.no_grad():
+            feats = preprocess_features(self.dataset.G, self.rel_subsets, args)
+            print("feats", tensor_sizes(feats))
+            print("Done preprocessing")
+
+        _, num_feats, in_feats = feats[0].shape
+        logging.info(f"new input size: {num_feats} {in_feats}")
+
+        num_hops = args.R + 1  # include self feature hop 0
+        self.model = nn.Sequential(
+            WeightedAggregator(num_feats, in_feats, num_hops),
+            SIGN(in_feats, args.num_hidden, dataset.n_classes, num_hops,
+                 args.ff_layer, args.dropout, args.input_dropout)
+        )
+
+        args["loss_type"] = "NEGATIVE_LOG_LIKELIHOOD"
+        self.criterion = nn.NLLLoss()
+
+        args["n_params"] = self.get_n_params()
+        print(f'Model #Params: {self.get_n_params()}')
+
+        print(f'configuration is {args}')
+        self._set_hparams(args)
+
+    def forward(self, blocks, input_features):
+        nodes_representation, _ = self.model[0](blocks, input_features)
+        train_y_predict = self.model[1](nodes_representation[self.hparams['head_node_type']])
+
+        return train_y_predict
+
+    def training_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
+        y_pred = self.forward(blocks, input_features)
+        loss = self.criterion.forward(y_pred, y_true)
+
+        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
+
+        self.log("loss", loss, logger=True, on_step=True)
+        if batch_nb % 25 == 0:
+            logs = self.train_metrics.compute_metrics()
+            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+
+        return loss
+
+    def validation_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
+        y_pred = self.forward(blocks, input_features)
+        val_loss = self.criterion.forward(y_pred, y_true)
+
+        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.log("val_loss", val_loss, prog_bar=True, logger=True)
+        return val_loss
+
+    def test_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
+        y_pred = self.forward(blocks, input_features)
+        test_loss = self.criterion.forward(y_pred, y_true)
+
+        if batch_nb == 0:
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+
+        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.log("test_loss", test_loss, logger=True)
+        return test_loss
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=None,
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=0)
+
+    def val_dataloader(self, batch_size=None):
+        return self.dataset.valid_dataloader(collate_fn=None,
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=0)
+
+    def test_dataloader(self, batch_size=None):
+        return self.dataset.test_dataloader(collate_fn=None,
+                                            batch_size=self.hparams.batch_size,
+                                            num_workers=0)
+
+    def configure_optimizers(self):
+        if self.hparams['optimizer'] == 'adam':
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['learning_rate'],
+                                         weight_decay=self.hparams['weight_decay'])
+        elif self.hparams['optimizer'] == 'sgd':
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['learning_rate'],
+                                        weight_decay=self.hparams['weight_decay'])
+        else:
+            raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
+
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                               T_max=len(self.train_dataloader()) * self.hparams[
+                                                                   "epochs"],
+                                                               eta_min=self.hparams['learning_rate'] / 100)
+
+        return {"optimizer": optimizer,
+                "scheduler": scheduler}

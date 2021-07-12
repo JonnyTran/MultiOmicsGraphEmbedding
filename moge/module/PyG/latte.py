@@ -1,22 +1,18 @@
-import pprint
-import random
-from typing import Dict, Tuple, List
 import copy
+import copy
+
 import numpy as np
-import pandas as pd
 import pytorch_lightning as pl
-import torch
+from colorhash import ColorHash
 from torch import nn as nn
 from torch.nn import functional as F
-from torch_geometric.data.sampler import EdgeIndex
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
 from moge.module.sampling import negative_sample
 from .utils import *
-from ..utils import tensor_sizes, preprocess_input
-from ...visualization.utils import main_colors as colors
-from colorhash import ColorHash
+from ..utils import tensor_sizes
+
 
 class LATTE(nn.Module):
     def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict,
@@ -315,11 +311,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
     def get_beta_weights(self, query, key, ntype: str):
-        alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
-        alpha_r = (key * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
-
+        alpha_l = (F.leaky_relu(query, 0.2) * self.rel_attn_l[ntype]).sum(dim=-1)
+        alpha_r = (F.leaky_relu(key, 0.2) * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
+        # print(self.layer)
+        # print(ntype, self.get_head_relations(ntype))
+        #
+        # print("alpha_l", alpha_l.shape, "alpha_r", alpha_r.shape)
         beta = alpha_l[:, None, :] + alpha_r
-        beta = F.leaky_relu(beta, negative_slope=0.2)
+        # beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = F.softmax(beta, dim=1)
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
@@ -388,6 +387,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
             h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
+
+            # print("h_out[ntype]", h_out[ntype].shape)
             h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "layernorm"):

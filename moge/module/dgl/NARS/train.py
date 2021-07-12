@@ -5,25 +5,28 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
+import logging
 import time
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-import logging
+
 from .data import load_data, read_relation_subsets, gen_rel_subset_feature
 from .model import SIGN, WeightedAggregator
 from .utils import get_n_params, get_evaluator, train, test
+from ...utils import tensor_sizes
 
 
-def preprocess_features(g, rel_subsets, args, device):
+def preprocess_features(g, rel_subsets, args):
     # pre-process heterogeneous graph g to generate neighbor-averaged features
     # for each relation subsets
-    num_paper, feat_size = g.nodes["paper"].data["feat"].shape
+    num_paper, feat_size = g.nodes[args.head_node_type].data["feat"].shape
     new_feats = [torch.zeros(num_paper, len(rel_subsets), feat_size) for _ in range(args.R + 1)]
     print("Start generating features for each sub-metagraph:")
     for subset_id, subset in enumerate(rel_subsets):
         print(subset)
-        feats = gen_rel_subset_feature(g, subset, args, device)
+        feats = gen_rel_subset_feature(g, subset, args)
         for i in range(args.R + 1):
             feat = feats[i]
             new_feats[i][:feat.shape[0], subset_id, :] = feat
@@ -50,6 +53,7 @@ def main(args):
     rel_subsets = read_relation_subsets(args.use_relation_subsets)
     with torch.no_grad():
         feats = preprocess_features(g, rel_subsets, args, device)
+        print("feats", tensor_sizes(feats))
         print("Done preprocessing")
     labels = labels.to(device)
     # Release the graph since we are not going to use it later

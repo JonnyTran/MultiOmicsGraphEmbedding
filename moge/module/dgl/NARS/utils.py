@@ -4,8 +4,10 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import torch
 import numpy as np
+import torch
+
+from moge.module.utils import tensor_sizes
 
 
 def get_n_params(model):
@@ -27,11 +29,14 @@ def train(model, feats, labels, train_nid, loss_fcn, optimizer, batch_size, hist
     device = labels.device
     dataloader = torch.utils.data.DataLoader(
         train_nid, batch_size=batch_size, shuffle=True, drop_last=False)
+
     for batch in dataloader:
         batch_feats = [x[batch].to(device) for x in feats]
         if history is not None:
             # Train aggregator partially using history
             batch_feats = (batch_feats, [x[batch].to(device) for x in history])
+        print("batch_feats", tensor_sizes(batch_feats))
+
         loss = loss_fcn(model(batch_feats), labels[batch])
         optimizer.zero_grad()
         loss.backward()

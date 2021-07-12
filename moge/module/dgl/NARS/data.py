@@ -5,10 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
-import numpy as np
-import torch
+from argparse import Namespace
+
 import dgl
 import dgl.function as fn
+import numpy as np
+import torch
+
 
 ###############################################################################
 # Loading Relation Subsets
@@ -29,13 +32,11 @@ def read_relation_subsets(fname):
 # Generate multi-hop neighbor-averaged feature for each relation subset
 ###############################################################################
 
-def gen_rel_subset_feature(g, rel_subset, args, device):
+def gen_rel_subset_feature(g, rel_subset, args: Namespace):
     """
     Build relation subgraph given relation subset and generate multi-hop
     neighbor-averaged feature on this subgraph
     """
-    if args.cpu_preprocess:
-        device = "cpu"
     new_edges = {}
     ntypes = set()
     for etype in rel_subset:

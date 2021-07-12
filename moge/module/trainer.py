@@ -1,12 +1,11 @@
 import itertools
 import logging
-import numpy as np
 
+import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data.distributed import DistributedSampler
-
 from pytorch_lightning import LightningModule
+from torch.utils.data.distributed import DistributedSampler
 
 from .metrics import Metrics
 from .utils import tensor_sizes, preprocess_input
@@ -188,6 +187,23 @@ class NodeClfTrainer(ClusteringEvaluator):
         model_parameters = filter(lambda p: p.requires_grad, self.parameters())
         params = sum([np.prod(p.size()) for p in model_parameters])
         return params
+
+    @property
+    def num_training_steps(self) -> int:
+        """Total training steps inferred from datamodule and devices."""
+        if self.trainer.max_steps:
+            return self.trainer.max_steps
+
+        limit_batches = self.trainer.limit_train_batches
+        batches = len(self.train_dataloader())
+        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
+
+        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+        if self.trainer.tpu_cores:
+            num_devices = max(num_devices, self.trainer.tpu_cores)
+
+        effective_accum = self.trainer.accumulate_grad_batches * num_devices
+        return (batches // effective_accum) * self.trainer.max_epochs
 
 
 class LinkPredTrainer(NodeClfTrainer):

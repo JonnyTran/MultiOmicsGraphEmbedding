@@ -1,22 +1,22 @@
-from typing import List, Dict
-from collections import defaultdict
+from typing import List
+
 import dgl
 import numpy as np
 import pandas as pd
 import torch
+from dgl import backend as F
+from dgl import utils
+from dgl import utils as dglutils
+from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
+from dgl.init import zero_initializer
 from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
 
-from dgl.dataloading import BlockSampler, NodeCollator
-from dgl import convert, utils, batch
-from dgl import backend as F
-from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
-from dgl import utils as dglutils
-from dgl.init import zero_initializer
 from moge.data.network import HeteroNetDataset
-from .samplers import ImportanceSampler, MultiLayerNeighborSampler
-from ..utils import one_hot_encoder
 from moge.module.utils import tensor_sizes
+from .samplers import ImportanceSampler
+from ..utils import one_hot_encoder
+
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
@@ -86,7 +86,8 @@ class DGLNodeSampler(HeteroNetDataset):
         dataset.testing_idx = test_idx
         return dataset
 
-    def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False, decompose_etypes=False):
+    def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,
+                           decompose_etypes=False) -> dgl.DGLHeteroGraph:
         reversed_g = g.reverse(copy_edata=True, share_edata=True)
 
         relations = {}
