@@ -15,7 +15,7 @@ from ..trainer import NodeClfTrainer, print_pred_class_counts
 
 from moge.module.dgl.latte import LATTE
 from moge.module.dgl.HGConv.utils.utils import set_random_seed, load_dataset
-
+from moge.module.dgl.RHGNN.model.R_HGNN import R_HGNN as RHGNN
 
 class LATTENodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
@@ -296,6 +296,146 @@ class HGConv(NodeClfTrainer):
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         input_features = {ntype: blocks[0].srcnodes[ntype].data['feat'] for ntype in input_nodes.keys()}
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
+        y_pred = self.forward(blocks, input_features)
+        test_loss = self.criterion.forward(y_pred, y_true)
+
+        if batch_nb == 0:
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+
+        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.log("test_loss", test_loss, logger=True)
+        return test_loss
+
+    def train_dataloader(self):
+        return self.dataset.train_dataloader(collate_fn=None,
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=0)
+
+    def val_dataloader(self, batch_size=None):
+        return self.dataset.valid_dataloader(collate_fn=None,
+                                             batch_size=self.hparams.batch_size,
+                                             num_workers=0)
+
+    def test_dataloader(self, batch_size=None):
+        return self.dataset.test_dataloader(collate_fn=None,
+                                            batch_size=self.hparams.batch_size,
+                                            num_workers=0)
+
+    def configure_optimizers(self):
+        if self.hparams['optimizer'] == 'adam':
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['learning_rate'],
+                                         weight_decay=self.hparams['weight_decay'])
+        elif self.hparams['optimizer'] == 'sgd':
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['learning_rate'],
+                                        weight_decay=self.hparams['weight_decay'])
+        else:
+            raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
+
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                               T_max=len(self.train_dataloader()) * self.hparams[
+                                                                   "epochs"],
+                                                               eta_min=self.hparams['learning_rate'] / 100)
+
+        return {"optimizer": optimizer,
+                "scheduler": scheduler}
+
+    @property
+    def num_training_steps(self) -> int:
+        """Total training steps inferred from datamodule and devices."""
+        if self.trainer.max_steps:
+            return self.trainer.max_steps
+
+        limit_batches = self.trainer.limit_train_batches
+        batches = len(self.train_dataloader())
+        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
+
+        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+        if self.trainer.tpu_cores:
+            num_devices = max(num_devices, self.trainer.tpu_cores)
+
+        effective_accum = self.trainer.accumulate_grad_batches * num_devices
+        return (batches // effective_accum) * self.trainer.max_epochs
+
+
+class R_HGNN(NodeClfTrainer):
+    def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+        super(R_HGNN, self).__init__(Namespace(**args), dataset, metrics)
+        self.dataset = dataset
+
+        self.r_hgnn = RHGNN(graph=dataset.G,
+                            input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
+                                            for ntype in dataset.G.ntypes},
+                            hidden_dim=args['hidden_units'],
+                            relation_input_dim=args['relation_hidden_units'],
+                            relation_hidden_dim=args['relation_hidden_units'],
+                            num_layers=len(dataset.neighbor_sizes),
+                            n_heads=args['num_heads'],
+                            dropout=args['dropout'],
+                            residual=args['residual'])
+
+        self.classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
+
+        self.model = nn.Sequential(self.r_hgnn, self.classifier)
+        self.criterion = nn.CrossEntropyLoss()
+
+        args["n_params"] = self.get_n_params()
+        print(f'Model #Params: {self.get_n_params()}')
+
+        print(f'configuration is {args}')
+        self._set_hparams(args)
+
+    def forward(self, blocks, input_features):
+        nodes_representation, _ = self.model[0](blocks, input_features)
+        train_y_predict = self.model[1](nodes_representation[self.hparams['head_node_type']])
+
+        return train_y_predict
+
+    def training_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
+        y_pred = self.forward(blocks, input_features)
+        loss = self.criterion.forward(y_pred, y_true)
+
+        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
+
+        self.log("loss", loss, logger=True, on_step=True)
+        if batch_nb % 25 == 0:
+            logs = self.train_metrics.compute_metrics()
+            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+
+        return loss
+
+    def validation_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+
+        y_pred = self.forward(blocks, input_features)
+        val_loss = self.criterion.forward(y_pred, y_true)
+
+        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.log("val_loss", val_loss, prog_bar=True, logger=True)
+        return val_loss
+
+    def test_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
+                          blocks[0].canonical_etypes}
         y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
 
         for i, block in enumerate(blocks):
