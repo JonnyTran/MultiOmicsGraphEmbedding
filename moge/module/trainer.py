@@ -110,30 +110,32 @@ class NodeClfTrainer(ClusteringEvaluator):
             return self.__class__.__name__.replace("_", "-")
 
     def training_epoch_end(self, outputs):
-        logs = self.train_metrics.compute_metrics()
-        self.log_dict(logs, prog_bar=True)
+        metrics = self.train_metrics.compute_metrics()
+        self.log_dict(metrics, prog_bar=True)
         self.train_metrics.reset_metrics()
         return None
 
     def validation_epoch_end(self, outputs):
-        logs = self.valid_metrics.compute_metrics()
+        metrics = self.valid_metrics.compute_metrics()
 
         if hasattr(self, "val_moving_loss"):
             val_loss = torch.stack([l for l in outputs]).mean()
             if self.val_moving_loss.device != val_loss.device:
                 self.val_moving_loss = self.val_moving_loss.to(self.device)
             self.val_moving_loss[self.current_epoch % self.val_moving_loss.numel()] = val_loss
-            self.log("val_moving_loss", self.val_moving_loss.mean(),
-                     logger=True, prog_bar=True, on_epoch=True)
 
-        self.log_dict(logs, prog_bar=True)
+            self.log("val_moving_loss", self.val_moving_loss.mean(),
+                     logger=True, prog_bar=False, on_epoch=True)
+            self.log("val_loss", val_loss, prog_bar=True)
+
+        self.log_dict(metrics, prog_bar=True)
 
         self.valid_metrics.reset_metrics()
         return None
 
     def test_epoch_end(self, outputs):
-        logs = self.test_metrics.compute_metrics()
-        self.log_dict(logs, prog_bar=True)
+        metrics = self.test_metrics.compute_metrics()
+        self.log_dict(metrics, prog_bar=True)
         self.test_metrics.reset_metrics()
         return None
 

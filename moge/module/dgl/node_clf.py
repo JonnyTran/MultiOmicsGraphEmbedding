@@ -457,7 +457,9 @@ class R_HGNN(NodeClfTrainer):
 
 class NARS(NodeClfTrainer):
     def __init__(self, args: Namespace, dataset: DGLNodeSampler, metrics: List[str]):
+        args.loss_type = "KL_DIVERGENCE" if dataset.multilabel else "NEGATIVE_LOG_LIKELIHOOD"
         super(NARS, self).__init__(args, dataset, metrics)
+
         self.dataset = dataset
 
         if "use_relation_subsets" in args and os.path.exists(args.use_relation_subsets):
@@ -474,6 +476,7 @@ class NARS(NodeClfTrainer):
                     etypes.append(e)
                     if u == args.head_node_type or v == args.head_node_type:
                         target_touched = True
+
                 print(etypes, target_touched and "touched" or "not touched")
                 if target_touched:
                     rel_subsets.append(etypes)
@@ -493,7 +496,6 @@ class NARS(NodeClfTrainer):
         _, num_feats, in_feats = feats[0].shape
         logging.info(f"new input size: {num_feats} {in_feats}")
 
-        self.R = args.R
         num_hops = args.R + 1  # include self feature hop 0
         self.model = nn.Sequential(
             WeightedAggregator(num_feats, in_feats, num_hops),
@@ -501,7 +503,7 @@ class NARS(NodeClfTrainer):
                  args.ff_layer, args.dropout, args.input_dropout)
         )
 
-        self.criterion = nn.NLLLoss()
+        self.criterion = nn.KLDivLoss(reduction='batchmean') if dataset.multilabel else nn.NLLLoss()
 
         args.n_params = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')

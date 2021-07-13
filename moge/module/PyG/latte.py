@@ -367,6 +367,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         # # Predict relations attention coefficients
         # beta = self.get_beta_weights(x_r)
+
         beta = {}
         h_out = {}
         edge_pred_dict = {}
