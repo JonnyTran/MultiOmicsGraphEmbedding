@@ -188,7 +188,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             sizes[layer] = {ntype: tuple(sizes) for ntype, sizes in sizes[layer].items()}
         return sizes
 
-    def sample(self, local_seed_nids, mode=None):
+    def sample(self, local_seed_nids, mode=None, **kwargs):
         if not isinstance(local_seed_nids, torch.Tensor) and not isinstance(local_seed_nids, dict):
             local_seed_nids = torch.tensor(local_seed_nids)
 
