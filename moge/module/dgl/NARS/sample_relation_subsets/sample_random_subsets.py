@@ -8,7 +8,7 @@ import argparse
 import os
 import random
 import time
-
+import dgl
 
 def sample_relation_subsets(g, args):
     # each relation has prob 0.5 to be kept
@@ -40,6 +40,7 @@ if __name__ == '__main__':
     parser.add_argument("--num-subsets", type=int, required=True)
     parser.add_argument("--output", type=str, default=None, help="Output file name")
     parser.add_argument("--dataset", type=str, required=True)
+    parser.add_argument("--root_path", type=str, default="/home/jonny/Bioinformatics_ExternalData/OGB/")
     parser.add_argument(
         "--target-node-type",
         type=str,
@@ -56,9 +57,9 @@ if __name__ == '__main__':
 
         home_dir = os.getenv("HOME")
         dataset = DglNodePropPredDataset(
-            name="ogbn-mag", root=os.path.join(home_dir, ".ogb", "dataset")
+            name="ogbn-mag", root=args.root_path if "root_path" in args else os.path.join(home_dir, ".ogb", "dataset")
         )
-        g = dataset[0][0].metagraph
+        g = dataset[0][0].metagraph()
     elif args.dataset == "acm":
         import sys
 
@@ -66,7 +67,7 @@ if __name__ == '__main__':
         from data import load_acm_raw
 
         dataset = load_acm_raw()
-        g = dataset[0].metagraph
+        g = dataset[0].metagraph()
     elif args.dataset.startswith("oag"):
         import pickle
         import dgl
@@ -79,7 +80,7 @@ if __name__ == '__main__':
             assert 0
         with open(graph_file, "rb") as f:
             dataset = pickle.load(f)
-        g = dgl.heterograph(dataset["edges"]).metagraph
+        g = dgl.heterograph(dataset["edges"]).metagraph()
     else:
         print(f"Dataset {args.dataset} not supported")
         exit(-1)

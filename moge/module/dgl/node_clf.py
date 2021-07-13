@@ -1,5 +1,6 @@
 import copy
 import logging
+import os
 from argparse import Namespace
 from typing import Dict, List
 
@@ -9,12 +10,14 @@ from torch import nn
 import moge
 from moge.data import DGLNodeSampler
 from moge.module.classifier import DenseClassification
-from moge.module.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features
+from moge.module.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
+    read_relation_subsets
 from moge.module.dgl.RHGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.module.dgl.latte import LATTE
 from moge.module.losses import ClassificationLoss
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes
+from ...data.dgl.node_generator import NARSDataLoader
 
 
 class LATTENodeClassifier(NodeClfTrainer):
@@ -457,17 +460,26 @@ class NARS(NodeClfTrainer):
         super(NARS, self).__init__(args, dataset, metrics)
         self.dataset = dataset
 
-        self.rel_subsets = []
-        subsets = sample_relation_subsets(self.dataset.G.metagraph(), args)
-        for relation in set(subsets):
-            etypes = []
-            for u, v, e in relation:
-                etypes.append(e)
-                if u == args.head_node_type or v == args.head_node_type:
-                    self.rel_subsets.append(etypes)
-        print("rel_subsets", self.rel_subsets)
+        if "use_relation_subsets" in args and os.path.exists(args.use_relation_subsets):
+            rel_subsets = read_relation_subsets(args.use_relation_subsets)
+        else:
+            rel_subsets = []
+            subsets = sample_relation_subsets(self.dataset.G.metagraph(), args)
+            for relation in set(subsets):
+                etypes = []
 
-        self.dataset.rel_subsets = self.rel_subsets
+                # only save subsets that touches target node type
+                target_touched = False
+                for u, v, e in relation:
+                    etypes.append(e)
+                    if u == args.head_node_type or v == args.head_node_type:
+                        target_touched = True
+                print(etypes, target_touched and "touched" or "not touched")
+                if target_touched:
+                    rel_subsets.append(etypes)
+
+        print("rel_subsets", rel_subsets)
+        self.rel_subsets = rel_subsets
 
         with torch.no_grad():
             feats = preprocess_features(self.dataset.G, self.rel_subsets, args)
@@ -539,22 +551,30 @@ class NARS(NodeClfTrainer):
         return test_loss
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn="NARS",
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0, feats=self.dataset.feats, labels=self.dataset.labels)
+        dataloader = NARSDataLoader(self.dataset.training_idx, batch_size=self.hparams.batch_size,
+                                    feats=self.dataset.feats,
+                                    labels=self.dataset.labels, shuffle=True)
+
+        return dataloader
 
     def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn="NARS",
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0, feats=self.dataset.feats, labels=self.dataset.labels)
+        dataloader = NARSDataLoader(self.dataset.validation_idx, batch_size=self.hparams.batch_size,
+                                    feats=self.dataset.feats,
+                                    labels=self.dataset.labels, shuffle=False)
+
+        return dataloader
 
     def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn="NARS",
-                                            batch_size=self.hparams.batch_size,
-                                            num_workers=0, feats=self.dataset.feats, labels=self.dataset.labels)
+        dataloader = NARSDataLoader(self.dataset.testing_idx, batch_size=self.hparams.batch_size,
+                                    feats=self.dataset.feats,
+                                    labels=self.dataset.labels, shuffle=False)
+
+        return dataloader
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['lr'],
-                                     weight_decay=self.hparams['weight_decay'])
+        optimizer = torch.optim.Adam(self.parameters(),
+                                     lr=self.hparams['lr'],
+                                     weight_decay=self.hparams[
+                                         'weight_decay'] if "weight_decay" in self.hparams else 0.0)
 
         return optimizer
