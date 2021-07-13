@@ -454,26 +454,34 @@ class R_HGNN(NodeClfTrainer):
 
 class NARS(NodeClfTrainer):
     def __init__(self, args: Namespace, dataset: DGLNodeSampler, metrics: List[str]):
-        super(NARS, self).__init__(Namespace(**args), dataset, metrics)
+        super(NARS, self).__init__(args, dataset, metrics)
         self.dataset = dataset
 
-        subsets = sample_relation_subsets(self.dataset.G.metagraph(), args)
         self.rel_subsets = []
-        for relation in subsets:
+        subsets = sample_relation_subsets(self.dataset.G.metagraph(), args)
+        for relation in set(subsets):
             etypes = []
             for u, v, e in relation:
                 etypes.append(e)
                 if u == args.head_node_type or v == args.head_node_type:
                     self.rel_subsets.append(etypes)
+        print("rel_subsets", self.rel_subsets)
+
+        self.dataset.rel_subsets = self.rel_subsets
 
         with torch.no_grad():
             feats = preprocess_features(self.dataset.G, self.rel_subsets, args)
-            print("feats", tensor_sizes(feats))
             print("Done preprocessing")
+
+            self.dataset.feats = feats
+            self.dataset.labels = self.dataset.G.nodes[args.head_node_type].data["label"]
+            print("feats", tensor_sizes(feats))
+            print("labels", tensor_sizes(self.dataset.labels))
 
         _, num_feats, in_feats = feats[0].shape
         logging.info(f"new input size: {num_feats} {in_feats}")
 
+        self.R = args.R
         num_hops = args.R + 1  # include self feature hop 0
         self.model = nn.Sequential(
             WeightedAggregator(num_feats, in_feats, num_hops),
@@ -481,31 +489,21 @@ class NARS(NodeClfTrainer):
                  args.ff_layer, args.dropout, args.input_dropout)
         )
 
-        args["loss_type"] = "NEGATIVE_LOG_LIKELIHOOD"
         self.criterion = nn.NLLLoss()
 
-        args["n_params"] = self.get_n_params()
+        args.n_params = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
 
         print(f'configuration is {args}')
         self._set_hparams(args)
 
-    def forward(self, blocks, input_features):
-        nodes_representation, _ = self.model[0](blocks, input_features)
-        train_y_predict = self.model[1](nodes_representation[self.hparams['head_node_type']])
-
-        return train_y_predict
+    def forward(self, batch_feats):
+        return self.model(batch_feats)
 
     def training_step(self, batch, batch_nb):
-        input_nodes, seeds, blocks = batch
-        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
-                          blocks[0].canonical_etypes}
-        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+        input_features, y_true = batch
 
-        for i, block in enumerate(blocks):
-            blocks[i] = block.to(self.device)
-
-        y_pred = self.forward(blocks, input_features)
+        y_pred = self.forward(input_features)
         loss = self.criterion.forward(y_pred, y_true)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=None)
@@ -518,15 +516,9 @@ class NARS(NodeClfTrainer):
         return loss
 
     def validation_step(self, batch, batch_nb):
-        input_nodes, seeds, blocks = batch
-        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
-                          blocks[0].canonical_etypes}
-        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+        input_features, y_true = batch
 
-        for i, block in enumerate(blocks):
-            blocks[i] = block.to(self.device)
-
-        y_pred = self.forward(blocks, input_features)
+        y_pred = self.forward(input_features)
         val_loss = self.criterion.forward(y_pred, y_true)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
@@ -534,15 +526,9 @@ class NARS(NodeClfTrainer):
         return val_loss
 
     def test_step(self, batch, batch_nb):
-        input_nodes, seeds, blocks = batch
-        input_features = {(stype, etype, dtype): blocks[0].srcnodes[dtype].data['feat'] for stype, etype, dtype in
-                          blocks[0].canonical_etypes}
-        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+        input_features, y_true = batch
 
-        for i, block in enumerate(blocks):
-            blocks[i] = block.to(self.device)
-
-        y_pred = self.forward(blocks, input_features)
+        y_pred = self.forward(input_features)
         test_loss = self.criterion.forward(y_pred, y_true)
 
         if batch_nb == 0:
@@ -553,34 +539,22 @@ class NARS(NodeClfTrainer):
         return test_loss
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=None,
+        return self.dataset.train_dataloader(collate_fn="NARS",
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=0)
+                                             num_workers=0, feats=self.dataset.feats, labels=self.dataset.labels)
 
     def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=None,
+        return self.dataset.valid_dataloader(collate_fn="NARS",
                                              batch_size=self.hparams.batch_size,
-                                             num_workers=0)
+                                             num_workers=0, feats=self.dataset.feats, labels=self.dataset.labels)
 
     def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=None,
+        return self.dataset.test_dataloader(collate_fn="NARS",
                                             batch_size=self.hparams.batch_size,
-                                            num_workers=0)
+                                            num_workers=0, feats=self.dataset.feats, labels=self.dataset.labels)
 
     def configure_optimizers(self):
-        if self.hparams['optimizer'] == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['learning_rate'],
-                                         weight_decay=self.hparams['weight_decay'])
-        elif self.hparams['optimizer'] == 'sgd':
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['learning_rate'],
-                                        weight_decay=self.hparams['weight_decay'])
-        else:
-            raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['lr'],
+                                     weight_decay=self.hparams['weight_decay'])
 
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                               T_max=len(self.train_dataloader()) * self.hparams[
-                                                                   "epochs"],
-                                                               eta_min=self.hparams['learning_rate'] / 100)
-
-        return {"optimizer": optimizer,
-                "scheduler": scheduler}
+        return optimizer

@@ -292,8 +292,8 @@ class DGLNodeSampler(HeteroNetDataset):
         print(outputs)
         return outputs
 
-    def sample(self, iloc, mode):
-        loader = self.train_dataloader(collate_fn="neighbor_sampler")
+    def sample(self, iloc, **kwargs):
+        loader = self.train_dataloader(**kwargs)
         return next(iter(loader))
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
@@ -308,6 +308,9 @@ class DGLNodeSampler(HeteroNetDataset):
         if collate_fn == "neighbor_sampler":
             collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.training_idx},
                                         block_sampler=self.neighbor_sampler)
+        elif collate_fn == "NARS":
+            dataloader = NARSDataLoader(self.training_idx, batch_size=batch_size, **kwargs)
+            return dataloader
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
                                                     block_sampler=self.neighbor_sampler)
@@ -333,6 +336,9 @@ class DGLNodeSampler(HeteroNetDataset):
         if collate_fn == "neighbor_sampler":
             collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.validation_idx},
                                         block_sampler=self.neighbor_sampler)
+        elif collate_fn == "NARS":
+            dataloader = NARSDataLoader(self.validation_idx, batch_size=batch_size, **kwargs)
+            return dataloader
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
                                                     block_sampler=self.neighbor_sampler)
@@ -351,6 +357,9 @@ class DGLNodeSampler(HeteroNetDataset):
         if collate_fn == "neighbor_sampler":
             collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.testing_idx},
                                         block_sampler=self.neighbor_sampler)
+        elif collate_fn == "NARS":
+            dataloader = NARSDataLoader(self.testing_idx, batch_size=batch_size, **kwargs)
+            return dataloader
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
                                                     block_sampler=self.neighbor_sampler)
@@ -405,3 +414,26 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
             y = y[list(y.keys())[0]]
 
         return X, y, None
+
+
+class NARSDataLoader(DataLoader):
+    def __init__(self, dataset, batch_size, feats: torch.Tensor, labels: torch.Tensor):
+        self.feats = feats
+        self.labels = labels
+
+        super().__init__(dataset, batch_size, collate_fn=self.collate)
+
+    # def __init__(self, feats, R, rel_subsets, args):
+    #     self.rel_subsets = rel_subsets
+    #     self.R = R
+    #     self.args = args
+    #     super().__init__(g, nids, block_sampler)
+
+    def collate(self, batch, history=None):
+        batch_feats = [x[batch] for x in self.feats]
+        if history is not None:
+            # Train aggregator partially using history
+            batch_feats = (batch_feats, [x[batch] for x in history])
+
+        y_true = self.labels[batch]
+        return batch_feats, y_true

@@ -7,9 +7,6 @@
 import numpy as np
 import torch
 
-from moge.module.utils import tensor_sizes
-
-
 def get_n_params(model):
     pp = 0
     for p in list(model.parameters()):
@@ -35,7 +32,6 @@ def train(model, feats, labels, train_nid, loss_fcn, optimizer, batch_size, hist
         if history is not None:
             # Train aggregator partially using history
             batch_feats = (batch_feats, [x[batch].to(device) for x in history])
-        print("batch_feats", tensor_sizes(batch_feats))
 
         loss = loss_fcn(model(batch_feats), labels[batch])
         optimizer.zero_grad()

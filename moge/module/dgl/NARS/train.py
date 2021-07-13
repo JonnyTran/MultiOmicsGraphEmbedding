@@ -12,10 +12,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from moge.module.utils import tensor_sizes
 from .data import load_data, read_relation_subsets, gen_rel_subset_feature
 from .model import SIGN, WeightedAggregator
 from .utils import get_n_params, get_evaluator, train, test
-from ...utils import tensor_sizes
 
 
 def preprocess_features(g, rel_subsets, args):
@@ -52,7 +52,7 @@ def main(args):
     # Preprocess neighbor-averaged features over sampled relation subgraphs
     rel_subsets = read_relation_subsets(args.use_relation_subsets)
     with torch.no_grad():
-        feats = preprocess_features(g, rel_subsets, args, device)
+        feats = preprocess_features(g, rel_subsets, args)
         print("feats", tensor_sizes(feats))
         print("Done preprocessing")
     labels = labels.to(device)
@@ -121,6 +121,8 @@ if __name__ == "__main__":
                         help="number of hops")
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--dataset", type=str, default="oag")
+    parser.add_argument("--root-dir", type=str, default="/home/jonny/Bioinformatics_ExternalData/OGB/")
+    parser.add_argument("--head_node_type", type=str, default="paper")
     parser.add_argument("--data-dir", type=str, default=None, help="path to dataset, only used for OAG")
     parser.add_argument("--dropout", type=float, default=0.5)
     parser.add_argument("--gpu", type=int, default=0)

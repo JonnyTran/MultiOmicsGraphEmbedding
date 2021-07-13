@@ -32,7 +32,7 @@ def read_relation_subsets(fname):
 # Generate multi-hop neighbor-averaged feature for each relation subset
 ###############################################################################
 
-def gen_rel_subset_feature(g, rel_subset, args: Namespace):
+def gen_rel_subset_feature(g: dgl.DGLHeteroGraph, rel_subset, args: Namespace):
     """
     Build relation subgraph given relation subset and generate multi-hop
     neighbor-averaged feature on this subgraph
@@ -140,12 +140,12 @@ def load_acm(**kwargs):
     return g, labels, n_classes, train_nid, val_nid, test_nid
 
 
-def load_mag(device, args):
+def load_mag(device, args: Namespace):
     from ogb.nodeproppred import DglNodePropPredDataset
     path = args.use_emb
     home_dir = os.getenv("HOME")
     dataset = DglNodePropPredDataset(
-        name="ogbn-mag", root=os.path.join(home_dir, ".ogb", "dataset"))
+        name="ogbn-mag", root=args.root_dir if "root_dir" in args else os.path.join(home_dir, ".ogb", "dataset"))
     g, labels = dataset[0]
     splitted_idx = dataset.get_idx_split()
     train_nid = splitted_idx["train"]['paper']
