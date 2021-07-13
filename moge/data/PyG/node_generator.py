@@ -142,10 +142,10 @@ class HeteroNeighborGenerator(HeteroNetDataset):
         else:
             return super().get_collate_fn(collate_fn, mode=mode)
 
-    def get_allowed_nodes(self, mode):
+    def get_allowed_nodes(self, mode=None):
         filter = True if self.inductive and "test" not in mode else False
 
-        if "train" in mode:
+        if mode is None or "train" in mode:
             if self.inductive and hasattr(self, "training_subgraph_idx"):
                 allowed_nodes = self.training_subgraph_idx
             else:
@@ -188,7 +188,7 @@ class HeteroNeighborGenerator(HeteroNetDataset):
             sizes[layer] = {ntype: tuple(sizes) for ntype, sizes in sizes[layer].items()}
         return sizes
 
-    def sample(self, local_seed_nids, mode):
+    def sample(self, local_seed_nids, mode=None):
         if not isinstance(local_seed_nids, torch.Tensor) and not isinstance(local_seed_nids, dict):
             local_seed_nids = torch.tensor(local_seed_nids)
 

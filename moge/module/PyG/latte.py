@@ -3,6 +3,7 @@ import copy
 
 import numpy as np
 import pytorch_lightning as pl
+import torch
 from colorhash import ColorHash
 from torch import nn as nn
 from torch.nn import functional as F
@@ -311,14 +312,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
     def get_beta_weights(self, query, key, ntype: str):
-        alpha_l = (F.leaky_relu(query, 0.2) * self.rel_attn_l[ntype]).sum(dim=-1)
-        alpha_r = (F.leaky_relu(key, 0.2) * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
-        # print(self.layer)
-        # print(ntype, self.get_head_relations(ntype))
-        #
+        alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
+        alpha_r = (key * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
+
         # print("alpha_l", alpha_l.shape, "alpha_r", alpha_r.shape)
         beta = alpha_l[:, None, :] + alpha_r
-        # beta = F.leaky_relu(beta, negative_slope=0.2)
+        beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = F.softmax(beta, dim=1)
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta

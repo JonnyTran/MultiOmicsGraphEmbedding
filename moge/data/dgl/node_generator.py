@@ -68,23 +68,24 @@ class DGLNodeSampler(HeteroNetDataset):
     def from_dgl_heterograph(cls, g: dgl.DGLHeteroGraph, labels, num_classes, train_idx, val_idx, test_idx,
                              **kwargs):
 
-        dataset = cls(dataset=g, metapaths=g.canonical_etypes, **kwargs)
+        self = cls(dataset=g, metapaths=g.canonical_etypes, **kwargs)
 
-        dataset.y_dict = {}
+        self.y_dict = {}
         if not isinstance(labels, dict):
-            dataset.y_dict[dataset.head_node_type] = labels
-            dataset.G.nodes[dataset.head_node_type].data["label"] = labels
+            self.y_dict[self.head_node_type] = labels
+            self.G.nodes[self.head_node_type].data["label"] = labels[:self.G.num_nodes(self.head_node_type)]
         else:
-            dataset.y_dict = labels
-            dataset.G.nodes[dataset.head_node_type].data["label"] = labels[dataset.head_node_type]
+            self.y_dict = labels
+            self.G.nodes[self.head_node_type].data["label"] = labels[self.head_node_type][
+                                                              :self.G.num_nodes(self.head_node_type)]
 
-        dataset.n_classes = num_classes
-        dataset.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
+        self.n_classes = num_classes
+        self.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
 
-        dataset.training_idx = train_idx
-        dataset.validation_idx = val_idx
-        dataset.testing_idx = test_idx
-        return dataset
+        self.training_idx = train_idx
+        self.validation_idx = val_idx
+        self.testing_idx = test_idx
+        return self
 
     def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,
                            decompose_etypes=False) -> dgl.DGLHeteroGraph:
@@ -397,7 +398,13 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
         if len(y) == 1:
             y = y[list(y.keys())[0]]
 
-        return X, y, None
+        weights = None
+        if y.dim() == 2 and y.size(1) == 1:
+            y = y.squeeze(-1)
+        elif y.dim() == 1:
+            weights = (y >= 0).to(torch.float)
+
+        return X, y, weights
 
 
 class NARSDataLoader(DataLoader):

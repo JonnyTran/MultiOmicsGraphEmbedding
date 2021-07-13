@@ -1,3 +1,4 @@
+import copy
 import logging
 from abc import abstractmethod
 from typing import Union, List, Tuple
@@ -378,10 +379,21 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             reverse_metapaths.append(reverse)
         return reverse_metapaths
 
-    def reverse_metapath_name(self, metapath: Tuple[str, str, str], edge_index_dict: dict = None):
+    def reverse_metapath_name(self, metapath: Tuple[str], edge_index_dict: dict = None):
         if isinstance(metapath, tuple):
-            reverse_metapath = tuple(etype + "_by" if i == 1 else etype \
-                                     for i, etype in enumerate(reversed(metapath)))
+            tokens = []
+            for i, token in enumerate(reversed(copy.deepcopy(metapath))):
+                if i == 1:
+                    if len(token) == 2:
+                        reverse_etype = reversed(reverse_etype)
+                    else:
+                        reverse_etype = token + "_"
+                    tokens.append(reverse_etype)
+                else:
+                    tokens.append(token)
+
+            reverse_metapath = tuple(tokens)
+
         elif isinstance(metapath, str):
             reverse_metapath = "".join(reversed(metapath))
             if reverse_metapath in self.edge_index_dict:
