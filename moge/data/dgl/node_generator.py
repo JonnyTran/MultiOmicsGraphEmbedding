@@ -1,9 +1,11 @@
+from collections import defaultdict
 from typing import List
 
 import dgl
 import numpy as np
 import pandas as pd
 import torch
+from cogdl.datasets.gtn_data import GTNDataset
 from dgl import backend as F
 from dgl import utils
 from dgl import utils as dglutils
@@ -15,6 +17,7 @@ from torch.utils.data import DataLoader
 from moge.data.network import HeteroNetDataset
 from moge.module.utils import tensor_sizes
 from .samplers import ImportanceSampler
+from .. import HeteroNeighborGenerator
 from ..utils import one_hot_encoder
 
 
@@ -85,6 +88,55 @@ class DGLNodeSampler(HeteroNetDataset):
         self.training_idx = train_idx
         self.validation_idx = val_idx
         self.testing_idx = test_idx
+        return self
+
+    @classmethod
+    def from_cogdl_graph(cls, gtn_dataset: GTNDataset, **kwargs):
+        dataset = HeteroNeighborGenerator(gtn_dataset, neighbor_sizes=kwargs["neighbor_sizes"],
+                                          node_types=kwargs["node_types"],
+                                          head_node_type=kwargs["head_node_type"],
+                                          metapaths=kwargs["metapaths"],
+                                          add_reverse_metapaths=False,
+                                          inductive=kwargs["inductive"])
+        for ntype in kwargs["node_types"]:
+            if ntype != dataset.head_node_type:
+                dataset.x_dict[ntype] = dataset.x_dict[dataset.head_node_type]
+
+        # Relabel node IDS based on node type
+        node_idx = {}
+        for ntype in dataset.node_types:
+            for m, eid in dataset.edge_index_dict.items():
+                if m[0] == ntype:
+                    node_idx.setdefault(ntype, []).append(eid[0].unique())
+                elif m[-1] == ntype:
+                    node_idx.setdefault(ntype, []).append(eid[1].unique())
+            node_idx[ntype] = torch.cat(node_idx[ntype]).unique().sort().values
+
+        relabel_nodes = {node_type: defaultdict(lambda: -1,
+                                                dict(zip(node_idx[node_type].numpy(),
+                                                         range(node_idx[node_type].size(0))))) \
+                         for node_type in node_idx}
+
+        # Create heterograph
+        g = dgl.heterograph({m: (eid[0].apply_(relabel_nodes[m[0]].get).numpy(),
+                                 eid[1].apply_(relabel_nodes[m[-1]].get).numpy()) \
+                             for m, eid in dataset.edge_index_dict.items()})
+
+        for ntype, ndata in dataset.x_dict.items():
+            if ntype in g.ntypes:
+                print(ntype)
+                g.nodes[ntype].data["feat"] = ndata[node_idx[ntype]]
+
+        self = cls.from_dgl_heterograph(g=g, labels=dataset.y_dict[dataset.head_node_type],
+                                        num_classes=dataset.n_classes,
+                                        train_idx=dataset.training_idx,
+                                        val_idx=dataset.validation_idx,
+                                        test_idx=dataset.testing_idx,
+                                        sampler=kwargs["sampler"],
+                                        neighbor_sizes=kwargs["neighbor_sizes"],
+                                        head_node_type=dataset.head_node_type,
+                                        add_reverse_metapaths=kwargs["add_reverse_metapaths"],
+                                        inductive=kwargs["inductive"])
         return self
 
     def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,

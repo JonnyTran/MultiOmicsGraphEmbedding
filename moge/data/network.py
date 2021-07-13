@@ -245,7 +245,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         else:
             self.multilabel = False
             self.n_classes = None
-            print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
         if hasattr(self, "class_counts"):
             self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
@@ -385,7 +384,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             for i, token in enumerate(reversed(copy.deepcopy(metapath))):
                 if i == 1:
                     if len(token) == 2:
-                        reverse_etype = reversed(reverse_etype)
+                        reverse_etype = str(reversed(token))
                     else:
                         reverse_etype = token + "_"
                     tokens.append(reverse_etype)
