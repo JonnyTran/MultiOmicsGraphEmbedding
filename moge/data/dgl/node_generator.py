@@ -1,3 +1,4 @@
+import copy
 from collections import defaultdict
 from typing import List
 
@@ -353,7 +354,7 @@ class DGLNodeSampler(HeteroNetDataset):
             nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
             nodes[self.head_node_type] = self.training_idx
 
-            graph = dgl.node_subgraph(self.G, nodes)
+            graph = dgl.node_subgraph(self.G, nodes).clone()
         else:
             graph = self.G
 
