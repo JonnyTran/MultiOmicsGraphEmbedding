@@ -74,6 +74,8 @@ class DGLNodeSampler(HeteroNetDataset):
 
         self = cls(dataset=g, metapaths=g.canonical_etypes, **kwargs)
 
+        self.node_types = g.ntypes
+
         self.y_dict = {}
         if not isinstance(labels, dict):
             self.y_dict[self.head_node_type] = labels

@@ -24,6 +24,7 @@ from ...data.dgl.node_generator import NARSDataLoader
 from .conv import HAN as Han
 from moge.data.dgl.node_generator import HANSampler
 
+from .hgt import HGT
 
 class LATTENodeClassifier(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:

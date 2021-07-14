@@ -203,13 +203,13 @@ class HGT(NodeClfTrainer):
 
         self.n_layers = len(self.dataset.neighbor_sizes)
 
-        self.embedder = Hgt(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                            n_inp=self.dataset.node_attr_shape[self.head_node_type],
-                            n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-                            n_layers=self.n_layers,
-                            n_heads=hparams.attn_heads,
-                            use_norm=hparams.use_norm)
+        self.model = Hgt(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+                         edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
+                         n_inp=self.dataset.node_attr_shape[self.head_node_type],
+                         n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
+                         n_layers=self.n_layers,
+                         n_heads=hparams.attn_heads,
+                         use_norm=hparams.use_norm)
 
         self.classifier = DenseClassification(hparams)
 
@@ -222,17 +222,17 @@ class HGT(NodeClfTrainer):
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, blocks, batch_inputs: dict, **kwargs):
-        embeddings = self.embedder(blocks, batch_inputs)
+        embeddings = self.model(blocks, batch_inputs)
 
         y_pred = self.classifier(embeddings[self.head_node_type])
         return y_pred
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        batch_inputs = blocks[0].srcdata['feat'].requires_grad_(True)
+        batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['labels']
+        y_true = blocks[-1].dstdata['label']
         y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
         y_pred = self.forward(blocks, batch_inputs)
@@ -252,7 +252,7 @@ class HGT(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['labels']
+        y_true = blocks[-1].dstdata['label']
         y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
         y_pred = self.forward(blocks, batch_inputs)
@@ -268,7 +268,7 @@ class HGT(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['labels']
+        y_true = blocks[-1].dstdata['label']
         y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
         y_pred = self.forward(blocks, batch_inputs)
@@ -302,19 +302,7 @@ class HGT(NodeClfTrainer):
                                             num_workers=0)
 
     def configure_optimizers(self):
-        param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation']
-        optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
-             'weight_decay': 0.01},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
-        ]
-
-        # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
-
-        optimizer = torch.optim.Adam(optimizer_grouped_parameters,
-                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=self.hparams.weight_decay)
-        scheduler = ReduceLROnPlateau(optimizer)
+        optimizer = torch.optim.AdamW(self.parameters())
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, total_steps=100, max_lr=1e-3, pct_start=0.05)
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
