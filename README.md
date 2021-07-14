@@ -1,7 +1,7 @@
 # MultiOmicsGraphEmbedding
 
 ## Installation
-pip install git+https://github.com/JonnyTran/MultiOmicsGraphEmbedding
+`pip install git+https://github.com/JonnyTran/MultiOmicsGraphEmbedding`
 
 ## Package structure:
 moge
