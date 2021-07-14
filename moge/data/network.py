@@ -365,17 +365,17 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         reverse_edge_index_dict = {}
         for metapath in edge_index_dict:
             if is_negative(metapath) or edge_index_dict[metapath] == None: continue
-            reverse_metapath = self.reverse_metapath_name(metapath, edge_index_dict)
+            reverse_metapath = self.reverse_metapath_name(metapath)
 
             reverse_edge_index_dict[reverse_metapath] = transpose(index=edge_index_dict[metapath], value=None,
                                                                   m=self.num_nodes_dict[metapath[0]],
                                                                   n=self.num_nodes_dict[metapath[-1]])[0]
         edge_index_dict.update(reverse_edge_index_dict)
 
-    def get_reverse_metapaths(self, metapaths, edge_index_dict) -> list:
+    def get_reverse_metapaths(self, metapaths) -> list:
         reverse_metapaths = []
         for metapath in metapaths:
-            reverse = self.reverse_metapath_name(metapath, edge_index_dict)
+            reverse = self.reverse_metapath_name(metapath)
             reverse_metapaths.append(reverse)
         return reverse_metapaths
 

@@ -594,7 +594,7 @@ class HAN(NodeClfTrainer):
 
         self.features = dataset.G.nodes[dataset.head_node_type].data["feat"]
         self.labels = dataset.G.nodes[dataset.head_node_type].data["label"]
-        self.model = Han(meta_paths=metapath_list,
+        self.model = Han(num_metapath=len(metapath_list),
                          in_size=set(dataset.node_attr_shape.values()).pop(),
                          hidden_size=args['hidden_units'],
                          out_size=dataset.n_classes,
@@ -621,9 +621,11 @@ class HAN(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         seeds, blocks = batch
-        y_true = self.labels[seeds]
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+        y_true = self.labels[seeds].to(self.device)
 
-        h_list = self.load_subtensors(blocks, self.features)
+        h_list = self.load_subtensors(blocks, self.features.to(self.device))
 
         y_pred = self.forward(blocks, h_list)
         loss = self.criterion.forward(y_pred, y_true)
@@ -639,10 +641,11 @@ class HAN(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         seeds, blocks = batch
-        y_true = self.labels[seeds]
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+        y_true = self.labels[seeds].to(self.device)
 
-        h_list = self.load_subtensors(blocks, self.features)
-        print("h_list", tensor_sizes(h_list))
+        h_list = self.load_subtensors(blocks, self.features.to(self.device))
 
         y_pred = self.forward(blocks, h_list)
         val_loss = self.criterion.forward(y_pred, y_true)
@@ -653,13 +656,11 @@ class HAN(NodeClfTrainer):
 
     def test_step(self, batch, batch_nb):
         seeds, blocks = batch
+        for i, block in enumerate(blocks):
+            blocks[i] = block.to(self.device)
+        y_true = self.labels[seeds].to(self.device)
 
-        h_list = self.load_subtensors(blocks, self.features)
-
-        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
-
-        # for i, block in enumerate(blocks):
-        #     blocks[i] = block.to(self.device)
+        h_list = self.load_subtensors(blocks, self.features.to(self.device))
 
         y_pred = self.forward(blocks, h_list)
         test_loss = self.criterion.forward(y_pred, y_true)

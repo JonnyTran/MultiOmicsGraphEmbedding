@@ -485,7 +485,7 @@ class NARSDataLoader(DataLoader):
 
 class HANSampler(object):
     def __init__(self, g, metapath_list, num_neighbors):
-        self.sampler_list = []
+        self.sampler_list: List[RandomWalkNeighborSampler] = []
         for metapath in metapath_list:
             # note: random walk may get same route(same edge), which will be removed in the sampled graph.
             # So the sampled graph's edges may be less than num_random_walks(num_neighbors).

@@ -158,9 +158,9 @@ class HGTLayer(nn.Module):
             return new_h
 
 
-class HGT(nn.Module):
+class Hgt(nn.Module):
     def __init__(self, node_dict, edge_dict, n_inp, n_hid, n_out, n_layers, n_heads, use_norm=True):
-        super(HGT, self).__init__()
+        super(Hgt, self).__init__()
         self.node_dict = node_dict
         self.edge_dict = edge_dict
         self.n_inp = n_inp
@@ -188,14 +188,13 @@ class HGT(nn.Module):
         return h
 
 
-class HGTNodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
-        super(HGTNodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+class HGT(NodeClfTrainer):
+    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"]) -> None:
+        super(HGT, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self.collate_fn = collate_fn
 
         if "fanouts" in hparams:
             self.dataset.neighbor_sizes = hparams.fanouts
@@ -204,7 +203,7 @@ class HGTNodeClf(NodeClfTrainer):
 
         self.n_layers = len(self.dataset.neighbor_sizes)
 
-        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+        self.embedder = Hgt(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                             edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
                             n_inp=self.dataset.node_attr_shape[self.head_node_type],
                             n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
