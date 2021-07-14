@@ -11,6 +11,7 @@ from dgl import utils
 from dgl import utils as dglutils
 from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
 from dgl.init import zero_initializer
+from dgl.sampling import RandomWalkNeighborSampler
 from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
 
@@ -480,3 +481,29 @@ class NARSDataLoader(DataLoader):
 
         y_true = self.labels[batch]
         return batch_feats, y_true
+
+
+class HANSampler(object):
+    def __init__(self, g, metapath_list, num_neighbors):
+        self.sampler_list = []
+        for metapath in metapath_list:
+            # note: random walk may get same route(same edge), which will be removed in the sampled graph.
+            # So the sampled graph's edges may be less than num_random_walks(num_neighbors).
+            self.sampler_list.append(RandomWalkNeighborSampler(G=g,
+                                                               num_traversals=1,
+                                                               termination_prob=0,
+                                                               num_random_walks=num_neighbors,
+                                                               num_neighbors=num_neighbors,
+                                                               metapath=metapath))
+
+    def sample_blocks(self, seeds):
+        block_list = []
+        for sampler in self.sampler_list:
+            frontier = sampler(seeds)
+            # add self loop
+            frontier = dgl.remove_self_loop(frontier)
+            frontier.add_edges(torch.tensor(seeds), torch.tensor(seeds))
+            block = dgl.to_block(frontier, seeds)
+            block_list.append(block)
+
+        return seeds, block_list

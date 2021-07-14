@@ -4,7 +4,7 @@ from cogdl.models.emb.hin2vec import Hin2vec, RWgraph, Hin2vec_layer
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from moge.data import HeteroNetDataset
+from moge.data.network import HeteroNetDataset
 from moge.module.PyG.hgt import HGTModel
 from moge.module.classifier import DenseClassification
 from moge.module.cogdl.conv import GTN as Gtn, HAN as Han

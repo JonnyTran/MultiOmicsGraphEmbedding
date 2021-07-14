@@ -23,6 +23,7 @@ from torch_sparse import transpose
 
 import moge.module.PyG.utils
 from moge.module.PyG.utils import is_negative, get_edge_index_values
+from moge.module.utils import tensor_sizes
 
 
 class Network:
@@ -378,13 +379,13 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             reverse_metapaths.append(reverse)
         return reverse_metapaths
 
-    def reverse_metapath_name(self, metapath: Tuple[str], edge_index_dict: dict = None):
+    def reverse_metapath_name(self, metapath: Tuple[str]):
         if isinstance(metapath, tuple):
             tokens = []
             for i, token in enumerate(reversed(copy.deepcopy(metapath))):
                 if i == 1:
                     if len(token) == 2:
-                        reverse_etype = str(reversed(token))
+                        reverse_etype = token[::-1]
                     else:
                         reverse_etype = token + "_"
                     tokens.append(reverse_etype)
@@ -392,6 +393,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                     tokens.append(token)
 
             reverse_metapath = tuple(tokens)
+            print(metapath, reverse_metapath)
 
         elif isinstance(metapath, str):
             reverse_metapath = "".join(reversed(metapath))
@@ -633,6 +635,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             iloc = torch.tensor(iloc)
 
         X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
+        print("X_batch", tensor_sizes(X_batch))
 
         X = {}
         X["adj"] = [(X_batch["edge_index_dict"][metapath], torch.ones(X_batch["edge_index_dict"][metapath].size(1))) \

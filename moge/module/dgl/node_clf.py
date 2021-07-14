@@ -4,8 +4,10 @@ import os
 from argparse import Namespace
 from typing import Dict, List
 
+import dgl
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 
 import moge
 from moge.data import DGLNodeSampler
@@ -18,6 +20,9 @@ from moge.module.losses import ClassificationLoss
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes
 from ...data.dgl.node_generator import NARSDataLoader
+
+from .conv import HAN as Han
+from moge.data.dgl.node_generator import HANSampler
 
 
 class LATTENodeClassifier(NodeClfTrainer):
@@ -298,19 +303,13 @@ class HGConv(NodeClfTrainer):
         return test_loss
 
     def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
+        return self.dataset.train_dataloader(collate_fn=None, batch_size=self.hparams.batch_size, num_workers=0)
 
     def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
+        return self.dataset.valid_dataloader(collate_fn=None, batch_size=self.hparams.batch_size, num_workers=0)
 
     def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=None,
-                                            batch_size=self.hparams.batch_size,
-                                            num_workers=0)
+        return self.dataset.test_dataloader(collate_fn=None, batch_size=self.hparams.batch_size, num_workers=0)
 
     def configure_optimizers(self):
         if self.hparams['optimizer'] == 'adam':
@@ -578,5 +577,119 @@ class NARS(NodeClfTrainer):
                                      lr=self.hparams['lr'],
                                      weight_decay=self.hparams[
                                          'weight_decay'] if "weight_decay" in self.hparams else 0.0)
+
+        return optimizer
+
+
+class HAN(NodeClfTrainer):
+    def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+        super(HAN, self).__init__(Namespace(**args), dataset, metrics)
+        self.dataset = dataset
+
+        if dataset.name() == "ACM":
+            metapath_list = [['pa', 'ap'], ['pf', 'fp']]
+
+        num_neighbors = args['num_neighbors']
+        self.han_sampler = HANSampler(dataset.G, metapath_list, num_neighbors)
+
+        self.features = dataset.G.nodes[dataset.head_node_type].data["feat"]
+        self.labels = dataset.G.nodes[dataset.head_node_type].data["label"]
+        self.model = Han(meta_paths=metapath_list,
+                         in_size=set(dataset.node_attr_shape.values()).pop(),
+                         hidden_size=args['hidden_units'],
+                         out_size=dataset.n_classes,
+                         num_heads=args['num_heads'],
+                         dropout=args['dropout'])
+
+        self.criterion = nn.CrossEntropyLoss()
+
+        args["n_params"] = self.get_n_params()
+        print(f'Model #Params: {self.get_n_params()}')
+
+        print(f'configuration is {args}')
+        self._set_hparams(args)
+
+    def forward(self, blocks, input_features):
+        return self.model(blocks, input_features)
+
+    def load_subtensors(self, blocks, features):
+        h_list = []
+        for block in blocks:
+            input_nodes = block.srcdata[dgl.NID]
+            h_list.append(features[input_nodes])
+        return h_list
+
+    def training_step(self, batch, batch_nb):
+        seeds, blocks = batch
+        y_true = self.labels[seeds]
+
+        h_list = self.load_subtensors(blocks, self.features)
+
+        y_pred = self.forward(blocks, h_list)
+        loss = self.criterion.forward(y_pred, y_true)
+
+        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
+
+        self.log("loss", loss, logger=True, on_step=True)
+        if batch_nb % 25 == 0:
+            logs = self.train_metrics.compute_metrics()
+            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+
+        return loss
+
+    def validation_step(self, batch, batch_nb):
+        seeds, blocks = batch
+        y_true = self.labels[seeds]
+
+        h_list = self.load_subtensors(blocks, self.features)
+        print("h_list", tensor_sizes(h_list))
+
+        y_pred = self.forward(blocks, h_list)
+        val_loss = self.criterion.forward(y_pred, y_true)
+
+        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.log("val_loss", val_loss, prog_bar=True, logger=True)
+        return val_loss
+
+    def test_step(self, batch, batch_nb):
+        seeds, blocks = batch
+
+        h_list = self.load_subtensors(blocks, self.features)
+
+        y_true = blocks[-1].dstnodes[self.dataset.head_node_type].data["label"]
+
+        # for i, block in enumerate(blocks):
+        #     blocks[i] = block.to(self.device)
+
+        y_pred = self.forward(blocks, h_list)
+        test_loss = self.criterion.forward(y_pred, y_true)
+
+        if batch_nb == 0:
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+
+        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
+        self.log("test_loss", test_loss, logger=True)
+        return test_loss
+
+    def train_dataloader(self):
+        return DataLoader(
+            dataset=self.dataset.training_idx,
+            batch_size=self.hparams['batch_size'], collate_fn=self.han_sampler.sample_blocks, shuffle=True, )
+
+    def val_dataloader(self, batch_size=None):
+        return DataLoader(
+            dataset=self.dataset.validation_idx,
+            batch_size=self.hparams['batch_size'], collate_fn=self.han_sampler.sample_blocks, shuffle=False,
+        )
+
+    def test_dataloader(self, batch_size=None):
+        return DataLoader(
+            dataset=self.dataset.testing_idx,
+            batch_size=self.hparams['batch_size'], collate_fn=self.han_sampler.sample_blocks, shuffle=False,
+        )
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['lr'],
+                                     weight_decay=self.hparams['weight_decay'])
 
         return optimizer

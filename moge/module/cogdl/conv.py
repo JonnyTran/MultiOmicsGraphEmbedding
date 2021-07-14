@@ -85,7 +85,7 @@ class GTLayer(nn.Module):
         return H, W
 
 
-class GTN(BaseModel):
+class GTN():
     @staticmethod
     def add_args(parser):
         """Add model-specific arguments to the parser."""
