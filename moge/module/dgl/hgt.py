@@ -1,21 +1,12 @@
-import dgl
 import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-import dgl.function as fn
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
 
-from dgl.heterograph import DGLHeteroGraph, DGLBlock
-
-from moge.data import DGLNodeSampler
-from moge.module.classifier import DenseClassification
-from moge.module.losses import ClassificationLoss
-from ...module.utils import tensor_sizes
-from ..trainer import NodeClfTrainer, print_pred_class_counts
+from dgl.heterograph import DGLBlock
 
 
 class HGTLayer(nn.Module):
@@ -188,121 +179,3 @@ class Hgt(nn.Module):
         return h
 
 
-class HGT(NodeClfTrainer):
-    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"]) -> None:
-        super(HGT, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
-        self.head_node_type = dataset.head_node_type
-        self.dataset = dataset
-        self.multilabel = dataset.multilabel
-        self.y_types = list(dataset.y_dict.keys())
-
-        if "fanouts" in hparams:
-            self.dataset.neighbor_sizes = hparams.fanouts
-            self.dataset.neighbor_sampler.fanouts = hparams.fanouts
-            self.dataset.neighbor_sampler.num_layers = len(hparams.fanouts)
-
-        self.n_layers = len(self.dataset.neighbor_sizes)
-
-        self.model = Hgt(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                         edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                         n_inp=self.dataset.node_attr_shape[self.head_node_type],
-                         n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-                         n_layers=self.n_layers,
-                         n_heads=hparams.attn_heads,
-                         use_norm=hparams.use_norm)
-
-        self.classifier = DenseClassification(hparams)
-
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
-                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                                                 hparams.use_class_weights else None,
-                                            multilabel=dataset.multilabel)
-
-        self._name = f"HGT-{self.n_layers}"
-        self.hparams.n_params = self.get_n_params()
-
-    def forward(self, blocks, batch_inputs: dict, **kwargs):
-        embeddings = self.model(blocks, batch_inputs)
-
-        y_pred = self.classifier(embeddings[self.head_node_type])
-        return y_pred
-
-    def training_step(self, batch, batch_nb):
-        input_nodes, seeds, blocks = batch
-        batch_inputs = blocks[0].srcdata['feat']
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['label']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
-
-        y_pred = self.forward(blocks, batch_inputs)
-        loss = self.criterion.forward(y_pred, y_true)
-
-        self.train_metrics.update_metrics(y_pred, y_true, weights=None)
-
-        self.log("loss", loss, logger=True, on_step=True)
-        if batch_nb % 25 == 0:
-            logs = self.train_metrics.compute_metrics()
-            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
-
-        return loss
-
-    def validation_step(self, batch, batch_nb):
-        input_nodes, seeds, blocks = batch
-        batch_inputs = blocks[0].srcdata['feat']
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['label']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
-
-        y_pred = self.forward(blocks, batch_inputs)
-
-        val_loss = self.criterion.forward(y_pred, y_true)
-
-        self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
-        self.log("val_loss", val_loss, prog_bar=True, logger=True)
-        return val_loss
-
-    def test_step(self, batch, batch_nb):
-        input_nodes, seeds, blocks = batch
-        batch_inputs = blocks[0].srcdata['feat']
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['label']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
-
-        y_pred = self.forward(blocks, batch_inputs)
-        test_loss = self.criterion.forward(y_pred, y_true)
-
-        if batch_nb == 0:
-            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
-
-        self.test_metrics.update_metrics(y_pred, y_true, weights=None)
-        self.log("test_loss", test_loss, logger=True)
-        return test_loss
-
-    def train_dataloader(self):
-        return self.dataset.train_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
-
-    def val_dataloader(self, batch_size=None):
-        return self.dataset.valid_dataloader(collate_fn=None,
-                                             batch_size=self.hparams.batch_size,
-                                             num_workers=0)
-
-    def valtrain_dataloader(self):
-        return self.dataset.valtrain_dataloader(collate_fn=None,
-                                                batch_size=self.hparams.batch_size,
-                                                num_workers=0)
-
-    def test_dataloader(self, batch_size=None):
-        return self.dataset.test_dataloader(collate_fn=None,
-                                            batch_size=self.hparams.batch_size,
-                                            num_workers=0)
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters())
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, total_steps=100, max_lr=1e-3, pct_start=0.05)
-
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}

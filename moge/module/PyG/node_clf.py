@@ -12,7 +12,7 @@ from torch import nn
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 from torch.utils.data import DataLoader
 
-from moge.data import HeteroNetDataset
+from moge.data.network import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
@@ -287,14 +287,15 @@ class LATTENodeClf(NodeClfTrainer):
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                               T_max=self.num_training_steps,
-                                                               eta_min=self.lr / 100
-                                                               )
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+        #                                                        T_max=self.num_training_steps,
+        #                                                        eta_min=self.lr / 100
+        #                                                        )
 
         return {"optimizer": optimizer,
-                "lr_scheduler": scheduler,
-                "monitor": "val_loss"}
+                # "lr_scheduler": scheduler,
+                # "monitor": "val_loss"
+                }
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):
