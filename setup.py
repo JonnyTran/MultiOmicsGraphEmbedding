@@ -13,7 +13,7 @@ setup(
     packages=find_packages("moge",
                            include=['moge', 'moge.module', 'moge.network', 'moge.evaluation', 'moge.visualization',
                                     'moge.data'],
-                           exclude=["*data*", "moge.data*"]),
+                           exclude=["/data*", ]),
     install_requires=requirements,
     url='',
     license='',
