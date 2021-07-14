@@ -1,9 +1,11 @@
+from collections import Iterable
+
 import numpy as np
 import torch
 
 
-def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights, max_mode=False):
-    if weights is None or weights.shape == None:
+def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights: torch.Tensor, max_mode=False):
+    if weights is None or weights.shape == None or weights.numel() == 0:
         return Y_hat, Y
 
     if not isinstance(weights, torch.Tensor):
@@ -51,13 +53,22 @@ def filter_samples_weights(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
 
 def tensor_sizes(input):
     if isinstance(input, dict):
-        return {k if not isinstance(k, tuple) else ".".join(k[1::2]): tensor_sizes(v) for k, v in input.items()}
+        return {metapath if not isinstance(metapath, tuple) else \
+                    ".".join([type[0].upper() if i % 2 == 0 else type[0].lower() for i, type in
+                              enumerate(metapath)]): tensor_sizes(v) \
+                for metapath, v in input.items()}
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)
     elif isinstance(input, list):
         return [tensor_sizes(v) for v in input]
     else:
-        return input.shape if input is not None and hasattr(input, "shape") else None
+        if input is not None and hasattr(input, "shape"):
+            if isinstance(input, torch.Tensor) and input.dim() == 0:
+                return input.item()
+
+            return list(input.shape)
+        else:
+            return input
 
 
 def preprocess_input(input, device, dtype=None, half=False):

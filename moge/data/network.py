@@ -1,7 +1,9 @@
+import copy
 import logging
 from abc import abstractmethod
 from typing import Union, List, Tuple
 
+import dgl
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -16,10 +18,12 @@ from scipy.io import loadmat
 from sklearn.cluster import KMeans
 from torch.utils import data
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
-
+from torch_geometric.utils import is_undirected
 from torch_sparse import transpose
 
-from moge.module.PyG.latte import LATTE, is_negative
+import moge.module.PyG.utils
+from moge.module.PyG.utils import is_negative, get_edge_index_values
+from moge.module.utils import tensor_sizes
 
 
 class Network:
@@ -60,28 +64,28 @@ class Network:
                 self.node_degrees.loc[(tail, name)] = (
                         self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
 
-        if order >= 2:
-            global_node_idx = self.get_node_id_dict(self.edge_index_dict)
-            new_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict_A=self.edge_index_dict,
-                                                          edge_index_dict_B=self.edge_index_dict,
-                                                          global_node_idx=global_node_idx)
-
-            metapaths = list(new_edge_index_dict.keys())
-            metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
-                              metapaths]
-            for metapath, name in zip(metapaths, metapath_names):
-                edge_index = new_edge_index_dict[metapath]
-                head, tail = metapath[0], metapath[-1]
-
-            D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
-                                          sparse_sizes=(self.num_nodes_dict[head],
-                                                        self.num_nodes_dict[tail]))
-
-            self.node_degrees.loc[(head, name)] = (
-                    self.node_degrees.loc[(head, name)] + D.storage.rowcount().numpy()).values
-            if not directed:
-                self.node_degrees.loc[(tail, name)] = (
-                        self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
+        # if order >= 2:
+        #     global_node_idx = self.get_node_id_dict(self.edge_index_dict)
+        #     new_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict_A=self.edge_index_dict,
+        #                                                   edge_index_dict_B=self.edge_index_dict,
+        #                                                   global_node_idx=global_node_idx)
+        #
+        #     metapaths = list(new_edge_index_dict.keys())
+        #     metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
+        #                       metapaths]
+        #     for metapath, name in zip(metapaths, metapath_names):
+        #         edge_index = new_edge_index_dict[metapath]
+        #         head, tail = metapath[0], metapath[-1]
+        #
+        #     D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
+        #                                   sparse_sizes=(self.num_nodes_dict[head],
+        #                                                 self.num_nodes_dict[tail]))
+        #
+        #     self.node_degrees.loc[(head, name)] = (
+        #             self.node_degrees.loc[(head, name)] + D.storage.rowcount().numpy()).values
+        #     if not directed:
+        #         self.node_degrees.loc[(tail, name)] = (
+        #                 self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
 
         return self.node_degrees
 
@@ -139,7 +143,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset, DglNodePropPredDataset, DglLinkPropPredDataset],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
-                 inductive: bool = True):
+                 inductive: bool = True, **kwargs):
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
@@ -193,8 +197,12 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
             print(f"{dataset.__class__.__name__}")
             self.process_COGDLdataset(dataset, metapaths, node_types, reshuffle_train)
-        elif "blogcatalog6k" in dataset:
+        elif isinstance(dataset, str) and "blogcatalog6k" in dataset:
             self.process_BlogCatalog6k(dataset, train_ratio=0.5)
+
+        elif isinstance(dataset, dgl.DGLGraph):
+            self.G = dataset
+            self.num_nodes_dict = {ntype: self.G.num_nodes(ntype) for ntype in self.G.ntypes}
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
@@ -238,7 +246,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         else:
             self.multilabel = False
             self.n_classes = None
-            print("WARNING: Dataset doesn't have node label (y_dict attribute).")
 
         if hasattr(self, "class_counts"):
             self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
@@ -252,8 +259,15 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if reshuffle_train is not None and reshuffle_train > 0:
             self.resample_training_idx(reshuffle_train)
         else:
-            print("train_ratio", self.get_train_ratio())
-        self.train_ratio = self.get_train_ratio()
+            if hasattr(self, "training_idx"):
+                self.train_ratio = self.get_train_ratio()
+                print("train_ratio", self.train_ratio)
+
+    def is_undirected(self):
+        if hasattr(self, "edge_index_dict") and self.edge_index_dict:
+            for m, edge_index in self.edge_index_dict.items():
+                e_index, e_values = get_edge_index_values(edge_index)
+                print(m, "is_undirected:", is_undirected(edge_index=e_index))
 
     def name(self):
         if not hasattr(self, "_name"):
@@ -316,7 +330,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if khop:
             t_order_metapaths = metapaths
             for k in range(len(self.neighbor_sizes) - 1):
-                t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths)
+                t_order_metapaths = moge.module.PyG.utils.join_metapaths(t_order_metapaths, metapaths)
                 metapaths = metapaths + t_order_metapaths
 
         return metapaths
@@ -334,7 +348,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         return num_nodes_dict
 
     @staticmethod
-    def get_node_id_dict(edge_index_dict, source=True, target=True):
+    def get_unique_nodes(edge_index_dict, source=True, target=True):
         node_ids_dict = {}
         for metapath, edge_index in edge_index_dict.items():
             if source:
@@ -351,24 +365,36 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         reverse_edge_index_dict = {}
         for metapath in edge_index_dict:
             if is_negative(metapath) or edge_index_dict[metapath] == None: continue
-            reverse_metapath = self.reverse_metapath_name(metapath, edge_index_dict)
+            reverse_metapath = self.reverse_metapath_name(metapath)
 
             reverse_edge_index_dict[reverse_metapath] = transpose(index=edge_index_dict[metapath], value=None,
                                                                   m=self.num_nodes_dict[metapath[0]],
                                                                   n=self.num_nodes_dict[metapath[-1]])[0]
         edge_index_dict.update(reverse_edge_index_dict)
 
-    def get_reverse_metapaths(self, metapaths, edge_index_dict) -> list:
+    def get_reverse_metapaths(self, metapaths) -> List[Tuple[str]]:
         reverse_metapaths = []
         for metapath in metapaths:
-            reverse = self.reverse_metapath_name(metapath, edge_index_dict)
+            reverse = self.reverse_metapath_name(metapath)
             reverse_metapaths.append(reverse)
         return reverse_metapaths
 
-    def reverse_metapath_name(self, metapath: Tuple[str, str, str], edge_index_dict: dict = None):
+    def reverse_metapath_name(self, metapath: Tuple[str]) -> Tuple[str]:
         if isinstance(metapath, tuple):
-            reverse_metapath = tuple(etype + "_by" if i == 1 else etype \
-                                     for i, etype in enumerate(reversed(metapath)))
+            tokens = []
+            for i, token in enumerate(reversed(copy.deepcopy(metapath))):
+                if i == 1:
+                    if len(token) == 2:
+                        reverse_etype = token[::-1]
+                    else:
+                        reverse_etype = token + "_"
+                    tokens.append(reverse_etype)
+                else:
+                    tokens.append(token)
+
+            reverse_metapath = tuple(tokens)
+            print(metapath, reverse_metapath)
+
         elif isinstance(metapath, str):
             reverse_metapath = "".join(reversed(metapath))
             if reverse_metapath in self.edge_index_dict:
@@ -487,7 +513,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.split_train_val_test(train_ratio,
                                       sample_indices=self.y_index_dict[self.head_node_type])
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
@@ -495,7 +521,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                  **kwargs)
         return loader
 
-    def valtrain_dataloader(self, collate_fn=None, batch_size=128, num_workers=12, **kwargs):
+    def valtrain_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(torch.cat([self.training_idx, self.validation_idx]), batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
@@ -503,7 +529,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                                                         ), **kwargs)
         return loader
 
-    def trainvalidtest_dataloader(self, collate_fn=None, batch_size=None, num_workers=12, **kwargs):
+    def trainvalidtest_dataloader(self, collate_fn=None, batch_size=None, num_workers=0, **kwargs):
         all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
         loader = data.DataLoader(all_idx, batch_size=all_idx.shape[0],
                                  shuffle=True, num_workers=num_workers,
@@ -512,7 +538,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                                                         ), **kwargs)
         return loader
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
@@ -520,7 +546,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                                                                                                         ), **kwargs)
         return loader
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
                                  collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
@@ -609,6 +635,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             iloc = torch.tensor(iloc)
 
         X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
+        print("X_batch", tensor_sizes(X_batch))
 
         X = {}
         X["adj"] = [(X_batch["edge_index_dict"][metapath], torch.ones(X_batch["edge_index_dict"][metapath].size(1))) \

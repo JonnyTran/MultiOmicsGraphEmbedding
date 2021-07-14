@@ -6,7 +6,7 @@ from ogb.linkproppred import PygLinkPropPredDataset
 from moge.data.PyG.node_generator import HeteroNeighborGenerator
 from moge.data.network import HeteroNetDataset
 from moge.data.utils import merge_node_index
-from moge.module.PyG.latte import is_negative
+from moge.module.PyG.utils import is_negative
 
 
 class TripletDataset(HeteroNetDataset):
@@ -313,7 +313,7 @@ class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
 
         # Neighbor sampling with global_node_index
         batch_size, n_id, adjs = self.graph_sampler.sample(triplets_node_index)
-        sampled_local_nodes = self.graph_sampler.get_nodes_dict(adjs, n_id)
+        sampled_local_nodes = self.graph_sampler.get_local_nodes(n_id)
 
         # Merge triplets_node_index + sampled_local_nodes = global_node_index, while ensuring index order in triplets_node_index
         global_node_index = merge_node_index(old_node_index=triplets_node_index,

@@ -1,280 +1,237 @@
 import copy
-from typing import Union, Dict
+import copy
 
-import numpy as np
-import pandas as pd
+import numpy as np, pandas as pd
 import pytorch_lightning as pl
-
 import torch
+from colorhash import ColorHash
 from torch import nn as nn
 from torch.nn import functional as F
-from torch_geometric.nn import MessagePassing, GATConv
+from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
-from torch_sparse.tensor import SparseTensor
-import torch_sparse
+from typing import Dict, List, Tuple
 
 from moge.module.sampling import negative_sample
+from .utils import is_negative, get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, \
+    tag_negative, untag_negative
 from ..utils import tensor_sizes
 
 
 class LATTE(nn.Module):
-    def __init__(self, n_layers: int, embedding_dim: int, in_channels_dict: dict, num_nodes_dict: dict, metapaths: list,
+    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict,
+                 metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
-                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True, cpu_embeddings=False,
+                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
                  layer_pooling=False, hparams=None):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
+        self.head_node_type = hparams.head_node_type
+
         self.embedding_dim = embedding_dim * n_layers
-        self.use_proximity = use_proximity
+
+        self.t_order = t_order
         self.n_layers = n_layers
-        self.neg_sampling_ratio = neg_sampling_ratio
+
         self.edge_sampling = edge_sampling
-
-        self.layer_pooling = layer_pooling
-
-        # align the dimension of different types of nodes
-        self.feature_projection = nn.ModuleDict({
-            ntype: nn.Linear(in_channels_dict[ntype], embedding_dim) for ntype in in_channels_dict
-        })
-        if hparams.batchnorm:
-            self.batchnorm = nn.ModuleDict({
-                ntype: nn.BatchNorm1d(embedding_dim) for ntype in in_channels_dict
-            })
-        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+        self.edge_threshold = hparams.edge_threshold
+        self.use_proximity = use_proximity
+        self.neg_sampling_ratio = neg_sampling_ratio
 
         layers = []
-        t_order_metapaths = copy.deepcopy(metapaths)
+        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
+
+        layer_t_orders = {
+            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
+                if (t_order - (n_layers - (l + 1))) > 0 \
+                else [1] \
+            for l in reversed(range(n_layers))}
+
         for l in range(n_layers):
-            is_output_layer = (l + 1 == n_layers) and (hparams.nb_cls_dense_size < 0)
-            print("\n", l, t_order_metapaths)
+            is_last_layer = (l + 1 == n_layers)
+            is_output_layer = is_last_layer and (hparams.nb_cls_dense_size < 0)
+
+            l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
+                                                 order=layer_t_orders[l],  # Select only up to t-order
+                                                 # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
+                                                 tail_type=self.head_node_type if is_last_layer else None)
+
             layers.append(
-                LATTEConv(input_dim=embedding_dim,
-                          output_dim=hparams.n_classes if is_output_layer else embedding_dim,
-                          num_nodes_dict=num_nodes_dict,
-                          metapaths=t_order_metapaths,
-                          activation=None if is_output_layer else activation,
+                LATTEConv(input_dim=embedding_dim, output_dim=hparams.n_classes if is_output_layer else embedding_dim,
+                          node_types=list(num_nodes_dict.keys()), metapaths=l_layer_metapaths, layer=l,
+                          t_order=self.t_order, activation=None if is_output_layer else activation,
                           batchnorm=False if not hasattr(hparams,
                                                          "batchnorm") or is_output_layer else hparams.batchnorm,
                           layernorm=False if not hasattr(hparams,
                                                          "layernorm") or is_output_layer else hparams.layernorm,
-                          attn_heads=attn_heads,
-                          attn_activation=attn_activation,
-                          attn_dropout=attn_dropout,
-                          use_proximity=use_proximity,
-                          neg_sampling_ratio=neg_sampling_ratio))
-            t_order_metapaths = LATTE.join_metapaths(t_order_metapaths, metapaths,
-                                                     head_ntype_only=hparams.head_ntype_only if "head_ntype_only" in hparams else None)
-        self.layers = nn.ModuleList(layers)
+                          dropout=False if not hasattr(hparams,
+                                                       "dropout") or is_output_layer else hparams.dropout,
+                          attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
+                          edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
+                          use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
+                          layer_pooling=layer_pooling,
+                          input_dropout=hparams.input_dropout if "input_dropout" in hparams else False
+                          ))
 
-        # If some node type are not attributed, instantiate nn.Embedding for them. Only used in first layer
-        if isinstance(in_channels_dict, dict):
-            non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
+            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
+                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
+
+        self.layers: List[LATTEConv] = nn.ModuleList(layers)
+        if layer_pooling == "rel_concat":
+            self.layer_pooling = "last"
         else:
-            non_attr_node_types = []
-        if len(non_attr_node_types) > 0:
-            print("num_nodes_dict", num_nodes_dict)
+            self.layer_pooling = layer_pooling
 
-            if cpu_embeddings:
-                print("Embedding.device = 'cpu'")
-                self.embeddings = {node_type: nn.Embedding(num_embeddings=num_nodes_dict[node_type],
-                                                           embedding_dim=embedding_dim,
-                                                           sparse=True).cpu() for node_type in non_attr_node_types}
-            else:
-                print("Embedding.device = 'gpu'")
-                self.embeddings = nn.ModuleDict(
-                    {node_type: nn.Embedding(num_embeddings=num_nodes_dict[node_type],
-                                             embedding_dim=embedding_dim,
-                                             sparse=False) for node_type in non_attr_node_types})
-        else:
-            self.embeddings = None
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        gain = nn.init.calculate_gain('relu')
-        for ntype in self.feature_projection:
-            nn.init.xavier_normal_(self.feature_projection[ntype].weight, gain=gain)
-
-        if self.embeddings is not None and len(self.embeddings.keys()) > 0:
-            for ntype in self.embeddings:
-                self.embeddings[ntype].reset_parameters()
-
-    @staticmethod
-    def join_metapaths(metapath_A, metapath_B, head_ntype_only=None):
-        metapaths = []
-        for relation_a in metapath_A:
-            if head_ntype_only and relation_a[0] != head_ntype_only:
-                metapaths.append(relation_a)
-                continue
-
-            for relation_b in metapath_B:
-                if relation_a[-1] == relation_b[0]:
-                    new_relation = relation_a + relation_b[1:]
-                    metapaths.append(new_relation)
-        return metapaths
-
-    @staticmethod
-    def get_edge_index_values(edge_index_tup: Union[tuple, torch.Tensor], filter_edge=False, threshold=0.5):
-        if isinstance(edge_index_tup, tuple):
-            edge_index, edge_values = edge_index_tup
-
-            if filter_edge:
-                mask = edge_values >= threshold
-                # print("edge_values", edge_values.shape, edge_values[:5], "filtered", (~mask).sum().item())
-
-                if mask.sum(0) == 0:
-                    mask[torch.argmax(edge_values)] = True
-
-                edge_index = edge_index[:, mask]
-                edge_values = edge_values[mask]
-
-        elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
-            edge_index = edge_index_tup
-            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float64, device=edge_index_tup.device)
-        else:
-            return None, None
-
-        if edge_values.dtype != torch.float:
-            edge_values = edge_values.to(torch.float)
-
-        return edge_index, edge_values
-
-    @staticmethod
-    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, metapaths=None, edge_sampling=False):
-        output_edge_index = {}
-        for metapath_a, edge_index_a in edge_index_dict_A.items():
-            if is_negative(metapath_a): continue
-            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a, filter_edge=False)
-            if edge_index_a is None: continue
-
-            for metapath_b, edge_index_b in edge_index_dict_B.items():
-                if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
-
-                new_metapath = metapath_a + metapath_b[1:]
-                if metapaths and new_metapath not in metapaths: continue
-                edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b, filter_edge=False)
-                if edge_index_b is None: continue
-
-                try:
-                    new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                             indexB=edge_index_b, valueB=values_b,
-                                                             m=global_node_idx[metapath_a[0]].size(0),
-                                                             k=global_node_idx[metapath_b[0]].size(0),
-                                                             n=global_node_idx[metapath_b[-1]].size(0),
-                                                             coalesced=True,
-                                                             sampling=edge_sampling)
-                    if new_edge_index.size(1) == 0: continue
-                    output_edge_index[new_metapath] = (new_edge_index, new_values)
-
-                except Exception as e:
-                    print(f"{e} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
-                    print("\t", {"m": global_node_idx[metapath_a[0]].size(0),
-                                 "k": global_node_idx[metapath_a[-1]].size(0),
-                                 "n": global_node_idx[metapath_b[-1]].size(0), })
-                    continue
-
-            if metapaths and metapath_a in metapaths:
-                # In the current LATTE layer that calls this method, a metapath is repeated (i.e. not higher-order), so we return the edges to it again.
-                output_edge_index[metapath_a] = (edge_index_a, values_a)
-
-        return output_edge_index
-
-    def forward(self, node_feats: dict, edge_index_dict: dict, global_node_idx: dict, save_betas=False):
+    def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
+                global_node_idx: List[Dict], save_betas=False):
         """
         This
         :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
         :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
-        :param edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
+        :param adjs: Dict of <metapath>:<tensor size (2, num_edge_index)>
         :param save_betas: whether to save _beta values for batch
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
-        proximity_loss = torch.tensor(0.0,
-                                      device=global_node_idx[self.node_types[0]].device) if self.use_proximity else None
+        # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
+        edge_pred_dicts = [None for l in range(self.n_layers)]
+        edge_pred_dict = None
 
-        h_dict = {}
-        for ntype in self.node_types:
-            if ntype in node_feats:
-                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
-                if hasattr(self, "batchnorm"):
-                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
-
-                h_dict[ntype] = F.relu(h_dict[ntype])
-                if self.dropout:
-                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
-
-            else:
-                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(
-                    global_node_idx[self.node_types[0]].device)
-
-        h_layers = {ntype: [] for ntype in global_node_idx}
+        prev_h_in = {ntype: [] for ntype in node_feats}
+        h_out_layers = {ntype: [] for ntype in node_feats}
+        h_out = node_feats
         for l in range(self.n_layers):
-            if l == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
-                                                                        edge_index_dict=edge_index_dict,
-                                                                        global_node_idx=global_node_idx,
-                                                                        save_betas=save_betas)
-                next_edge_index_dict = edge_index_dict
-            else:
-                next_edge_index_dict = LATTE.join_edge_indexes(next_edge_index_dict, edge_index_dict, global_node_idx,
-                                                               metapaths=self.layers[l].metapaths,
-                                                               edge_sampling=self.edge_sampling)
-                h_dict, t_loss, _ = self.layers[l].forward(x_l=h_dict, x_r=h_dict,
-                                                           edge_index_dict=next_edge_index_dict,
-                                                           global_node_idx=global_node_idx,
-                                                           save_betas=save_betas)
+            (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
+                                                                           prev_h_in=prev_h_in,
+                                                                           edge_index_dict=adjs[l],
+                                                                           prev_edge_index_dict=edge_pred_dict,
+                                                                           sizes=sizes,
+                                                                           global_node_idx=global_node_idx[l],
+                                                                           save_betas=save_betas)
 
-            if self.dropout:
-                h_dict = {ntype: F.dropout(emb, p=self.dropout, training=self.training) for ntype, emb in
-                          h_dict.items()}
+            edge_pred_dicts[l] = edge_pred_dict
 
-            for ntype in global_node_idx:
-                h_layers[ntype].append(h_dict[ntype])
+            # Add the h_in embeddings to
+            if l < self.n_layers and self.t_order > 1:
+                for ntype in h_in:
+                    prev_h_in[ntype].append(h_in[ntype])
+                    if len(prev_h_in[ntype]) > self.t_order:
+                        prev_h_in[ntype].pop(0)
 
-            if self.use_proximity:
-                proximity_loss += t_loss
+            # if self.use_proximity and t_loss is not None:
+            #     proximity_loss += t_loss
+
+            if self.layer_pooling != "last":
+                h_out_layers[self.head_node_type].append(h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
 
         if self.layer_pooling == "last" or self.n_layers == 1:
-            out = h_dict
+            out = h_out
 
         elif self.layer_pooling == "max":
-            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
+            out = {ntype: torch.stack(h_list, dim=1).max(1).values \
+                   for ntype, h_list in h_out_layers.items() \
                    if len(h_list) > 0}
-            out = {ntype: h_s.max(1).values for ntype, h_s in out.items()}
 
         elif self.layer_pooling == "mean":
-            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                   if len(h_list) > 0}
-            out = {ntype: torch.mean(h_s, dim=1) for ntype, h_s in out.items()}
+            out = {ntype: torch.stack(h_list, dim=1).mean(dim=1) \
+                   for ntype, h_list in h_out_layers.items() if len(h_list) > 0}
 
         elif self.layer_pooling == "concat":
-            out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+            out = {ntype: torch.cat(h_list, dim=1) \
+                   for ntype, h_list in h_out_layers.items() \
                    if len(h_list) > 0}
-        else:
-            raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
 
-        return out, proximity_loss, edge_pred_dict
+        return out, None, edge_pred_dicts
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
 
-    def get_relation_weights(self, t):
-        return self.layers[t].get_relation_weights()
+    def get_relation_weights(self, t, **kwargs):
+        return self.layers[t].get_relation_weights(**kwargs)
+
+    def get_top_relations(self, t, node_type, min_order=None):
+        df = self.layers[t].get_top_relations(ntype=node_type)
+        if min_order:
+            df = df[df.notnull().sum(1) >= min_order]
+        return df
+
+    def get_sankey_flow(self, layer, node_type, self_loop=False, agg="median"):
+        rel_attn: pd.DataFrame = self.layers[layer]._betas[node_type]
+        if agg == "sum":
+            rel_attn = rel_attn.sum(axis=0)
+        elif agg == "median":
+            rel_attn = rel_attn.median(axis=0)
+        elif agg == "max":
+            rel_attn = rel_attn.max(axis=0)
+        elif agg == "min":
+            rel_attn = rel_attn.min(axis=0)
+        else:
+            rel_attn = rel_attn.mean(axis=0)
+
+        new_index = rel_attn.index.str.split(".").map(lambda tup: [str(len(tup) - i) + n for i, n in enumerate(tup)])
+        all_nodes = {node for nodes in new_index for node in nodes}
+        all_nodes = {node: i for i, node in enumerate(all_nodes)}
+
+        # Links
+        links = pd.DataFrame(columns=["source", "target", "value", "label", "color"])
+        for i, (metapath, value) in enumerate(rel_attn.to_dict().items()):
+            if len(metapath.split(".")) > 1:
+                sources = [all_nodes[new_index[i][j]] for j, _ in enumerate(new_index[i][:-1])]
+                targets = [all_nodes[new_index[i][j + 1]] for j, _ in enumerate(new_index[i][:-1])]
+
+                path_links = pd.DataFrame({"source": sources,
+                                           "target": targets,
+                                           "value": [value, ] * len(targets),
+                                           "label": [metapath, ] * len(targets)})
+                links = links.append(path_links, ignore_index=True)
+
+
+            elif self_loop:
+                source = all_nodes[new_index[i][0]]
+                links = links.append({"source": source,
+                                      "target": source,
+                                      "value": value,
+                                      "label": metapath}, ignore_index=True)
+
+        links["color"] = links["label"].apply(lambda label: ColorHash(label).hex)
+        links = links.iloc[::-1]
+
+        # Nodes
+        node_group = [int(node[0]) for node, nid in all_nodes.items()]
+        groups = [[nid for nid, node in enumerate(node_group) if node == group] for group in np.unique(node_group)]
+
+        nodes = pd.DataFrame(columns=["label", "level", "color"])
+        nodes["label"] = [node[1:] for node in all_nodes.keys()]
+        nodes["level"] = [int(node[0]) for node in all_nodes.keys()]
+
+        nodes["color"] = nodes[["label", "level"]].apply(
+            lambda x: ColorHash(x["label"] + str(x["level"])).hex \
+                if x["level"] % 2 == 0 \
+                else ColorHash(x["label"]).hex, axis=1)
+
+        return nodes, links
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
-    def __init__(self, input_dim: {str: int}, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", batchnorm=False, layernorm=False, attn_heads=4, attn_activation="sharpening",
-                 attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0) -> None:
-        super(LATTEConv, self).__init__(aggr="add", flow="target_to_source", node_dim=0)
-        self.node_types = list(num_nodes_dict.keys())
+    def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
+                 activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, attn_heads=4,
+                 attn_activation="sharpening", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
+                 neg_sampling_ratio=1.0, layer_pooling=None, input_dropout=True) -> None:
+        super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
+        self.layer = layer
+        self.t_order = t_order
+        self.node_types = node_types
         self.metapaths = list(metapaths)
-        self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = output_dim
         self.use_proximity = use_proximity
         self.neg_sampling_ratio = neg_sampling_ratio
         self.attn_heads = attn_heads
         self.attn_dropout = attn_dropout
+        self.edge_threshold = edge_threshold
+        self.layer_pooling = layer_pooling
+        self.input_dropout = input_dropout
+
+        print("\n LATTE", [".".join([k[0].upper() if i % 2 == 0 else k[0].lower() for i, k in enumerate(m)]) for m in
+                           sorted(metapaths)])
 
         if activation == "sigmoid":
             self.activation = F.sigmoid
@@ -282,9 +239,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self.activation = F.tanh
         elif activation == "relu":
             self.activation = F.relu
+        elif activation == "prelu":
+            self.activation = nn.PReLU()
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
+        if dropout:
+            self.dropout = nn.Dropout(p=dropout)
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(output_dim) \
@@ -294,12 +255,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 node_type: nn.LayerNorm(output_dim) \
                 for node_type in self.node_types})
 
-        self.conv = torch.nn.ModuleDict(
-            {node_type: torch.nn.Conv1d(
-                in_channels=input_dim,
-                out_channels=self.num_head_relations(node_type),
-                kernel_size=1) \
-                for node_type in self.node_types})  # W_phi.shape (D x F)
+        # self.conv = torch.nn.ModuleDict(
+        #     {node_type: torch.nn.Conv1d(
+        #         in_channels=input_dim,
+        #         out_channels=self.attn_heads * self.num_head_relations(node_type),
+        #         kernel_size=1) \
+        #         for node_type in self.node_types})  # W_phi.shape (D x F)
 
         self.linear_l = nn.ModuleDict(
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
@@ -309,8 +270,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
              for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
-        self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
-        self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
+        self.attn = nn.ParameterDict(
+            {str(metapath): nn.Parameter(torch.rand((attn_heads, self.out_channels * 2))) \
+             for metapath in filter_metapaths(self.metapaths, order=None)})
+
+        self.rel_attn_l = nn.ParameterDict({
+            ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
+            for ntype in self.node_types})
+        self.rel_attn_r = nn.ParameterDict({
+            ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
+            for ntype in self.node_types})
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
@@ -326,143 +295,360 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
-        for i, metapath in enumerate(self.metapaths):
-            nn.init.xavier_normal_(self.attn_l[i], gain=gain)
-            nn.init.xavier_normal_(self.attn_r[i], gain=gain)
+        for metapath in self.attn:
+            nn.init.xavier_normal_(self.attn[metapath], gain=gain)
 
         gain = nn.init.calculate_gain('relu')
-        for node_type in self.linear_l:
-            nn.init.xavier_normal_(self.linear_l[node_type].weight, gain=gain)
-        for node_type in self.linear_r:
-            nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
+        for ntype in self.linear_l:
+            nn.init.xavier_normal_(self.linear_l[ntype].weight, gain=gain)
+            nn.init.xavier_normal_(self.linear_r[ntype].weight, gain=gain)
 
-        for node_type in self.conv:
-            nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
+        if hasattr(self, "rel_attn_l"):
+            gain = nn.init.calculate_gain('leaky_relu', 0.2)
+            for ntype in self.rel_attn_l:
+                nn.init.xavier_normal_(self.rel_attn_l[ntype], gain=gain)
+                nn.init.xavier_normal_(self.rel_attn_r[ntype], gain=gain)
 
-    def forward(self, x_l, edge_index_dict, global_node_idx, x_r=None, save_betas=False):
+        if hasattr(self, "conv"):
+            for node_type in self.conv:
+                nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
+
+    def get_beta_weights(self, query, key, ntype: str):
+        alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
+        alpha_r = (key * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
+
+        # print("alpha_l", alpha_l.shape, "alpha_r", alpha_r.shape)
+        beta = alpha_l[:, None, :] + alpha_r
+        beta = F.leaky_relu(beta, negative_slope=0.2)
+        beta = F.softmax(beta, dim=1)
+        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        return beta
+
+    # def get_beta_weights(self, h_dict):
+    #     beta = {}
+    #
+    #     for ntype in h_dict:
+    #         num_nodes = h_dict[ntype].size(0)
+    #
+    #         beta[ntype] = self.conv[ntype].forward(h_dict[ntype].unsqueeze(-1))
+    #         beta[ntype] = beta[ntype].view(num_nodes,
+    #                                        self.num_head_relations(ntype),
+    #                                        self.attn_heads)
+    #         beta[ntype] = torch.softmax(beta[ntype], dim=1)
+    #
+    #     return beta
+
+    def forward(self, x: Dict[str, torch.Tensor],
+                prev_h_in: Dict[str, List[torch.Tensor]],
+                edge_index_dict: Dict[Tuple, torch.Tensor],
+                prev_edge_index_dict: Dict[Tuple, torch.Tensor],
+                sizes: List[Dict[str, Tuple[int]]],
+                global_node_idx: Dict[str, torch.Tensor],
+                save_betas=False):
         """
 
-        :param x_l: a dict of node attributes indexed node_type
+        :param x: a dict of "source" node representations
+        :param prev_h_in: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
         :param global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
         :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
-        :param x_r: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
+
         :return: output_emb, loss
         """
-        l_dict = self.get_h_dict(x_l, global_node_idx, left_right="left")
-        r_dict = self.get_h_dict(x_r, global_node_idx, left_right="right")
+        x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
+               for ntype in x if sizes[self.layer][ntype][1]}
 
-        # Predict relations attention coefficients
-        beta = self.get_beta_weights(x_l, global_node_idx=global_node_idx)
-        # Save beta weights from testing samples
-        if not self.training: self.save_relation_weights(beta, global_node_idx)
+        if hasattr(self, "dropout") and self.input_dropout:
+            x = {ntype: self.dropout(x[ntype]) for ntype in x}
+            x_r = {ntype: self.dropout(x_r[ntype]) for ntype in x_r}
+            # if prev_h_in:
+            #     prev_h_in = {ntype: [self.dropout(h) for h in h_list] for ntype, h_list in prev_h_in.items()}
 
-        # Compute node-level attention coefficients
-        alpha_l, alpha_r = self.get_alphas(edge_index_dict, l_dict, r_dict)
+        l_dict = self.get_h_dict(x, source_target="source")
+        r_dict = self.get_h_dict(x_r, source_target="target")
 
-        # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
-        out = {}
-        for ntype in global_node_idx:
-            out[ntype] = self.agg_relation_neighbors(node_type=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
-                                                     l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict,
-                                                     global_node_idx=global_node_idx)
-            out[ntype][:, -1] = l_dict[ntype].view(-1, self.embedding_dim)
+        # # Predict relations attention coefficients
+        # beta = self.get_beta_weights(x_r)
+
+        beta = {}
+        h_out = {}
+        edge_pred_dict = {}
+        # For each metapath in a node_type, use GAT message passing to aggregate l_dict neighbors
+        for ntype in x_r:
+            h_out[ntype], edge_attn_dict = self.agg_relation_neighbors(node_type=ntype,
+                                                                       l_dict=l_dict,
+                                                                       r_dict=r_dict,
+                                                                       edge_index_dict=edge_index_dict,
+                                                                       prev_l_dict=prev_h_in,
+                                                                       prev_edge_index_dict=prev_edge_index_dict,
+                                                                       sizes=sizes)
+            if edge_attn_dict:
+                edge_pred_dict.update(edge_attn_dict)
+
+            h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[ntype] = torch.bmm(out[ntype].permute(0, 2, 1), beta[ntype]).squeeze(-1)
+            beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
+            h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
+
+            # print("h_out[ntype]", h_out[ntype].shape)
+            h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "layernorm"):
-                out[ntype] = self.layernorm[ntype](out[ntype])
+                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
 
             if hasattr(self, "activation"):
-                out[ntype] = self.activation(out[ntype])
+                h_out[ntype] = self.activation(h_out[ntype])
 
-        proximity_loss, edge_pred_dict = None, None
+            if hasattr(self, "dropout"):
+                h_out[ntype] = self.dropout(h_out[ntype])
+
+
+        # Save beta weights from testing samples
+        if save_betas and not self.training:
+            beta_mean = {ntype: beta[ntype].mean(2) for ntype in beta}
+            global_node_idx_out = {ntype: nid[:sizes[self.layer][ntype][1]] for ntype, nid in global_node_idx.items()}
+            self.save_relation_weights(beta_mean, global_node_idx_out)
+
+        proximity_loss = None
         if self.use_proximity:
-            proximity_loss, edge_pred_dict = self.proximity_loss(edge_index_dict,
-                                                                 alpha_l=alpha_l, alpha_r=alpha_r,
-                                                                 global_node_idx=global_node_idx)
-        return out, proximity_loss, edge_pred_dict
+            proximity_loss, _ = self.proximity_loss(edge_index_dict,
+                                                    l_dict=l_dict, r_dict=r_dict,
+                                                    global_node_idx=global_node_idx)
 
-    def agg_relation_neighbors(self, node_type, alpha_l, alpha_r, l_dict, r_dict, edge_index_dict, global_node_idx):
+        return (l_dict, h_out), proximity_loss, edge_pred_dict
+
+    def agg_relation_neighbors(self, node_type: str,
+                               l_dict: Dict[str, torch.Tensor],
+                               r_dict: Dict[str, torch.Tensor],
+                               edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
+                               prev_l_dict: Dict[str, List[torch.Tensor]],
+                               prev_edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
+                               sizes: List[Dict[str, Tuple[int]]]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
+        # print(node_type, tensor_sizes(r_dict))
         emb_relations = torch.zeros(
-            size=(global_node_idx[node_type].size(0),
+            size=(r_dict[node_type].size(0),
                   self.num_head_relations(node_type),
-                  self.embedding_dim)).type_as(self.conv[node_type].weight)
+                  self.attn_heads,
+                  self.out_channels)).type_as(r_dict[node_type])
 
-        for i, metapath in enumerate(self.get_head_relations(node_type)):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
+        relations = self.get_head_relations(node_type)
+
+        edge_pred_dict = {}
+        for metapath in self.get_head_relations(node_type, order=1):
+            if metapath not in edge_index_dict or edge_index_dict[metapath] is None: continue
             head, tail = metapath[0], metapath[-1]
-            num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
-            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
+            edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
+            head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
 
             # Propapate flows from target nodes to source nodes
-            out = self.propagate(
-                edge_index=edge_index,
-                x=(r_dict[tail], l_dict[head]),
-                alpha=(alpha_r[metapath], alpha_l[metapath]),
-                size=(num_node_tail, num_node_head),
-                metapath_idx=self.metapaths.index(metapath))
-            emb_relations[:, i] = out.view(-1, self.embedding_dim)
+            try:
+                out = self.propagate(
+                    edge_index=edge_index,
+                    x=(l_dict[head], r_dict[tail]),
+                    size=(head_size_in, tail_size_out),
+                    metapath_idx=self.metapaths.index(metapath),
+                    metapath=str(metapath),
+                    values=None)
+                emb_relations[:, relations.index(metapath)] = out
+            except Exception as e:
+                print({metapath: (edge_index.max(1).values, \
+                                  [head, sizes[self.layer][head][0],
+                                   tail, sizes[self.layer][tail][1]])})
+                print({"head_size_in": head_size_in, "tail_size_out": tail_size_out})
+                print({"l_dict": tensor_sizes(l_dict), "r_dict": tensor_sizes(r_dict)})
+                raise e
 
-        return emb_relations
+            edge_pred_dict[metapath] = (edge_index, self._alpha)
+            self._alpha = None
 
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_activation(alpha, metapath_idx)
-        alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+        remaining_orders = range(2, min(self.layer + 1, self.t_order) + 1)
+        higher_relations = self.get_head_relations(node_type, order=remaining_orders)
+
+        higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
+                                                    edge_index_dict_B=edge_pred_dict,
+                                                    sizes=sizes, layer=self.layer,
+                                                    metapaths=higher_relations,
+                                                    edge_threshold=self.edge_threshold,
+                                                    edge_sampling=False)
+        # print("remaining_orders", list(remaining_orders), node_type,
+        #       self.get_head_relations(node_type, order=remaining_orders), "edge_index", higher_order_edge_index.keys())
+
+        for metapath in higher_relations:
+            if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
+            head, tail = metapath[0], metapath[-1]
+
+            edge_index, values = get_edge_index_values(higher_order_edge_index[metapath], filter_edge=False)
+            if edge_index is None: continue
+
+            # Select the right t-order context node presentations based on the order of the metapath
+            order = len(metapath[1::2])
+            h_source = prev_l_dict[head][-(order - 1)]
+            head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
+
+            # Propapate flows from higher order source nodes to target nodes
+            try:
+                out = self.propagate(
+                    edge_index=edge_index,
+                    x=(h_source, r_dict[tail]),
+                    size=(head_size_in, tail_size_out),
+                    metapath_idx=self.metapaths.index(metapath),
+                    metapath=str(metapath),
+                    values=None)
+                emb_relations[:, relations.index(metapath)] = out
+            except Exception as e:
+                print(metapath, edge_index.max(1).values,
+                      {"values": values.shape if values is not None else None,
+                       "self._alpha": self._alpha.shape if self._alpha is not None else None},
+                      {"head_size_in": head_size_in, "tail_size_out": tail_size_out},
+                      {"l_dict[head]": l_dict[head].shape, "\nr_dict[tail]": r_dict[tail].shape})
+                raise e
+
+            edge_pred_dict[metapath] = (edge_index, self._alpha)
+            self._alpha = None
+
+        return emb_relations, edge_pred_dict
+
+    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
+        if values is None:
+            x = torch.cat([x_i, x_j], dim=2)
+            if isinstance(self.alpha_activation, nn.Module):
+                x = self.alpha_activation(x)
+            else:
+                x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
+
+            alpha = (x * self.attn[metapath]).sum(dim=-1)
+            alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+        else:
+            if values.dim() == 1:
+                values = values.unsqueeze(-1)
+            alpha = values
+            # alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+
+        self._alpha = alpha
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
 
         return x_j * alpha.unsqueeze(-1)
 
-    def get_h_dict(self, input, global_node_idx, left_right="left"):
+    def get_h_dict(self, input, source_target="source"):
         h_dict = {}
-        for ntype in global_node_idx:
-            if left_right == "left":
+        for ntype in input:
+            if source_target == "source":
                 h_dict[ntype] = self.linear_l[ntype].forward(input[ntype])
-            elif left_right == "right":
+            elif source_target == "target":
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
-            h_dict[ntype] = h_dict[ntype].view(-1, self.attn_heads, self.out_channels)
+            h_dict[ntype] = F.tanh(h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels))
 
         return h_dict
 
-    def get_alphas(self, edge_index_dict, l_dict, r_dict):
-        alpha_l, alpha_r = {}, {}
+    def get_head_relations(self, head_node_type, order=None, str_form=False) -> list:
+        relations = filter_metapaths(self.metapaths, order=order, tail_type=head_node_type)
 
-        for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
-                continue
-            head, tail = metapath[0], metapath[-1]
+        if str_form:
+            relations = [".".join(metapath) if isinstance(metapath, tuple) else metapath \
+                         for metapath in relations]
 
-            alpha_l[metapath] = (l_dict[head] * self.attn_l[i]).sum(-1)
-            alpha_r[metapath] = (r_dict[tail] * self.attn_r[i]).sum(-1)
-        return alpha_l, alpha_r
+        return relations
 
-    def get_beta_weights(self, h_dict, global_node_idx):
-        beta = {}
-        for node_type in global_node_idx:
-            beta[node_type] = self.conv[node_type].forward(h_dict[node_type].unsqueeze(-1))
-            beta[node_type] = torch.softmax(beta[node_type], dim=1)
+    def num_head_relations(self, node_type) -> int:
+        """
+        Return the number of metapaths with head node type equals to :param node_type: and plus one for none-selection.
+        :param node_type (str):
+        :return:
+        """
+        relations = self.get_head_relations(node_type)
+        return len(relations) + 1
 
-        return beta
+    def save_relation_weights(self, betas: Dict[str, torch.Tensor],
+                              global_node_idx: Dict[str, torch.Tensor]):
+        # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
+        if not hasattr(self, "_betas"): return
 
-    def predict_scores(self, edge_index, alpha_l, alpha_r, metapath, logits=False):
-        assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
+        with torch.no_grad():
+            for ntype in betas:
+                if ntype not in global_node_idx or global_node_idx[ntype].numel() == 0: continue
+                relations = self.get_head_relations(ntype, str_form=True) + [ntype, ]
+                df = pd.DataFrame(betas[ntype].cpu().numpy(),
+                                  columns=relations,
+                                  index=global_node_idx[ntype].cpu().numpy(),
+                                  dtype=np.float16)
 
-        # e_pred = self.attn_q[self.metapaths.index(metapath)].forward(
-        #     torch.cat([alpha_l[metapath][edge_index[0]], alpha_r[metapath][edge_index[1]]], dim=1)).squeeze(-1)
+                if len(self._betas) == 0 or ntype not in self._betas:
+                    self._betas[ntype] = df
+                else:
+                    self._betas[ntype].update(df, overwrite=True)
 
-        e_pred = self.attn_activation(alpha_l[metapath][edge_index[0]] + alpha_r[metapath][edge_index[1]],
-                                      metapath_id=self.metapaths.index(metapath)).squeeze(-1)
-        if logits:
-            return e_pred
-        else:
-            return F.sigmoid(e_pred)
+    def get_relation_weights(self, std=True, std_minus=True):
+        """
+        Get the mean and std of relation attention weights for all nodes
+        :return:
+        """
+        _beta_avg = {}
+        _beta_std = {}
+        for ntype in self._betas:
+            relations = self.get_head_relations(ntype, str_form=True) + [ntype, ]
+            _beta_avg = np.around(self._betas[ntype].mean(), decimals=3)
+            _beta_std = np.around(self._betas[ntype].std(), decimals=2)
+            self._beta_avg[ntype] = {metapath: _beta_avg[i] for i, metapath in
+                                     enumerate(relations)}
+            self._beta_std[ntype] = {metapath: _beta_std[i] for i, metapath in
+                                     enumerate(relations)}
 
-    def proximity_loss(self, edge_index_dict, alpha_l, alpha_r, global_node_idx):
+        print_output = {}
+        for node_type in self._beta_avg:
+            for metapath, avg in self._beta_avg[node_type].items():
+                if std:
+                    print_output[metapath] = (avg, self._beta_std[node_type][metapath])
+                else:
+                    print_output[metapath] = avg
+        return print_output
+
+    def get_top_relations(self, ntype="paper"):
+        # columns: [..., 2-neighbors, 2-order relations, 1-neighbors, 1-order relations, targets]
+        top_rels: pd.DataFrame = self._betas[ntype].idxmax(axis=1).str.split(".", expand=True)
+
+        # Shift top meta relations to the right if its right value is None
+        for col_idx in top_rels.columns[1::2]:
+            rows2shift = top_rels[top_rels[top_rels.columns[col_idx:]].isnull().all(1)]
+            rows2shift = rows2shift.shift(top_rels.shape[1] - col_idx, axis=1)
+            top_rels.loc[rows2shift.index] = rows2shift
+
+        # Rename columns
+        ordinal = lambda n: str(n) + {1: 'st', 2: 'nd', 3: 'rd'}.get(4 if 10 <= n % 100 < 20 else n % 10, "th")
+        columns = [f"{ordinal(int(np.ceil(i / 2)))} neighbors" \
+                       if i % 2 == 0 \
+                       else f"{int(np.ceil(i / 2))}-order relations"
+                   for i, _ in enumerate(top_rels.columns)]
+        columns[0] = "target"
+        top_rels.columns = reversed(columns)
+
+        return top_rels
+
+    def save_attn_weights(self, node_type: str,
+                          attn_weights: torch.Tensor,
+                          node_idx: torch.Tensor):
+        self._betas = {}
+        self._beta_avg = {}
+        self._beta_std = {}
+
+        betas = attn_weights.sum(1).cpu().numpy()
+        metapaths = self.get_head_relations(node_type, str_form=True) + [node_type, ]
+
+        self._betas[node_type] = pd.DataFrame(betas,
+                                              columns=metapaths,
+                                              index=node_idx.cpu().numpy())
+
+        _beta_avg = np.around(betas.mean(dim=0), decimals=3)
+        _beta_std = np.around(betas.std(dim=0), decimals=2)
+        self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
+                                     enumerate(metapaths)}
+        self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
+                                     enumerate(metapaths)}
+
+    def proximity_loss(self, edge_index_dict, l_dict, r_dict, global_node_idx):
         """
         For each relation/metapath type given in `edge_index_dict`, this function both predict link scores and computes
         the NCE loss for both positive and negative (sampled) links. For each relation type in `edge_index_dict`, if the
@@ -477,7 +663,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         :return loss, edge_pred_dict: NCE loss. edge_pred_dict will contain both positive relations of shape (num_edges,) and negative relations of shape (num_edges*num_neg_edges, )
         """
         loss = torch.tensor(0.0, dtype=torch.float, device=self.conv[self.node_types[0]].weight.device)
-        edge_pred_dict = {}
         for metapath, edge_index in edge_index_dict.items():
             # KL Divergence over observed positive edges or negative edges (if included)
             if isinstance(edge_index, tuple):  # Weighted edges
@@ -487,13 +672,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if edge_index is None: continue
 
             if not is_negative(metapath):
-                e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, metapath, logits=True)
+                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, metapath, logits=True)
                 loss += -torch.mean(values * F.logsigmoid(e_pred_logits), dim=-1)
             elif is_negative(metapath):
-                e_pred_logits = self.predict_scores(edge_index, alpha_l, alpha_r, untag_negative(metapath), logits=True)
+                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, untag_negative(metapath), logits=True)
                 loss += -torch.mean(F.logsigmoid(-e_pred_logits), dim=-1)
-
-            edge_pred_dict[metapath] = F.sigmoid(e_pred_logits.detach())
 
             # Only need to sample for negative edges if negative metapath is not included
             if not is_negative(metapath) and tag_negative(metapath) not in edge_index_dict:
@@ -503,142 +686,29 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                  n_sample_per_edge=self.neg_sampling_ratio)
                 if neg_edge_index is None or neg_edge_index.size(1) <= 1: continue
 
-                e_neg_logits = self.predict_scores(neg_edge_index, alpha_l, alpha_r, metapath, logits=True)
+                e_neg_logits = self.predict_scores(neg_edge_index, l_dict, r_dict, metapath, logits=True)
                 loss += -torch.mean(F.logsigmoid(-e_neg_logits), dim=-1)
-                edge_pred_dict[tag_negative(metapath)] = F.sigmoid(e_neg_logits.detach())
 
         loss = torch.true_divide(loss, max(len(edge_index_dict) * 2, 1))
-        return loss, edge_pred_dict
+        return loss
 
-    def attn_activation(self, alpha, metapath_id):
-        if isinstance(self.alpha_activation, torch.Tensor):
-            return self.alpha_activation[metapath_id] * F.leaky_relu(alpha, negative_slope=0.2)
-        elif isinstance(self.alpha_activation, nn.Module):
-            return self.alpha_activation(alpha)
+    def predict_scores(self, edge_index, l_dict, r_dict, metapath, logits=False):
+        assert metapath in self.metapaths, f"If metapath `{metapath}` is tag_negative()'ed, then pass it with untag_negative()"
+        metapath_idx = self.metapaths.index(metapath)
+        head, tail = metapath[0], metapath[-1]
+
+        x = torch.cat([l_dict[head][edge_index[0]], r_dict[tail][edge_index[1]]], dim=2)
+        if isinstance(self.alpha_activation, nn.Module):
+            x = self.alpha_activation(x)
         else:
-            return alpha
+            x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
 
-    def get_head_relations(self, head_node_type, to_str=False) -> list:
-        relations = [".".join(metapath) if to_str and isinstance(metapath, tuple) else metapath for metapath in
-                     self.metapaths if
-                     metapath[0] == head_node_type]
-        return relations
+        e_pred = (x * self.attn[metapath_idx]).sum(dim=-1)
 
-    def num_head_relations(self, node_type) -> int:
-        """
-        Return the number of metapaths with head node type equals to :param node_type: and plus one for none-selection.
-        :param node_type (str):
-        :return:
-        """
-        relations = self.get_head_relations(node_type)
-        return len(relations) + 1
+        if e_pred.size(1) > 1:
+            e_pred = e_pred.max(1).values
 
-    def save_relation_weights(self, beta, global_node_idx):
-        # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
-        if len(beta) < len(self.node_types): return
-
-        self._betas = {}
-        self._beta_avg = {}
-        self._beta_std = {}
-        for node_type in beta:
-            relations = self.get_head_relations(node_type, True) + [node_type, ]
-
-            with torch.no_grad():
-                self._betas[node_type] = pd.DataFrame(beta[node_type].squeeze(-1).cpu().numpy(),
-                                                      columns=relations,
-                                                      index=global_node_idx[node_type].cpu().numpy())
-
-                _beta_avg = np.around(beta[node_type].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
-                _beta_std = np.around(beta[node_type].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
-                self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                             enumerate(relations)}
-                self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                             enumerate(relations)}
-
-    def save_attn_weights(self, node_type, attn_weights, node_idx):
-        if not hasattr(self, "_betas"):
-            self._betas = {}
-        if not hasattr(self, "_beta_avg"):
-            self._beta_avg = {}
-        if not hasattr(self, "_beta_std"):
-            self._beta_std = {}
-
-        betas = attn_weights.sum(1)
-
-        relations = self.get_head_relations(node_type, True) + [node_type, ]
-
-        with torch.no_grad():
-            self._betas[node_type] = pd.DataFrame(betas.cpu().numpy(),
-                                                  columns=relations,
-                                                  index=node_idx.cpu().numpy())
-
-            _beta_avg = np.around(betas.mean(dim=0).cpu().numpy(), decimals=3)
-            _beta_std = np.around(betas.std(dim=0).cpu().numpy(), decimals=2)
-            self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                         enumerate(relations)}
-            self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                         enumerate(relations)}
-
-    def get_relation_weights(self):
-        """
-        Get the mean and std of relation attention weights for all nodes
-        :return:
-        """
-        return {(metapath if "." in metapath or len(metapath) > 1 else node_type): (avg, std) \
-                for node_type in self._beta_avg for (metapath, avg), (relation_b, std) in
-                zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
-
-
-def tag_negative(metapath):
-    if isinstance(metapath, tuple):
-        return metapath + ("neg",)
-    elif isinstance(metapath, str):
-        return metapath + "_neg"
-    else:
-        return "neg"
-
-
-def untag_negative(metapath):
-    if isinstance(metapath, tuple) and metapath[-1] == "neg":
-        return metapath[:-1]
-    elif isinstance(metapath, str):
-        return metapath.strip("_neg")
-    else:
-        return metapath
-
-
-def is_negative(metapath):
-    if isinstance(metapath, tuple) and "neg" in metapath:
-        return True
-    elif isinstance(metapath, str) and "_neg" in metapath:
-        return True
-    else:
-        return False
-
-
-def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
-    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=not coalesced)
-    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=not coalesced)
-
-    deg_A = A.storage.colcount()
-    deg_B = B.storage.rowcount()
-    deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
-    deg_normalized[deg_normalized == float('inf')] = 0.0
-
-    D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     col=torch.arange(deg_normalized.size(0), device=valueA.device),
-                     value=deg_normalized.type_as(valueA),
-                     sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
-
-    out = A @ D @ B
-    row, col, values = out.coo()
-
-    num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
-    if sampling and values.numel() > num_samples:
-        idx = torch.multinomial(values, num_samples=num_samples,
-                                replacement=False)
-        row, col, values = row[idx], col[idx], values[idx]
-
-    return torch.stack([row, col], dim=0), values
+        if logits:
+            return e_pred
+        else:
+            return F.sigmoid(e_pred)

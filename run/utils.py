@@ -25,10 +25,30 @@ def load_node_dataset(dataset, method, hparams, train_ratio=None, dir_path="~/Bi
                                           add_reverse_metapaths=hparams.use_reverse, inductive=hparams.inductive)
         if os.path.exists(ogbn.processed_dir + "/features.pk"):
             features = dill.load(open(ogbn.processed_dir + "/features.pk", 'rb'))
-            dataset.x_dict = preprocess_input(features, device="cpu", dtype=torch.float)
-            print('added features')
+
+            for ntype, ndata in preprocess_input(features, device="cpu", dtype=torch.float).items():
+                if ntype in dataset.x_dict:
+                    dataset.x_dict[ntype] = ndata
+                    print(f'added features for {ntype}')
         else:
-            print("features.pk not found")
+            print(f"features.pk not found in {ogbn.processed_dir}")
+
+        node_emb_path = os.path.join(ogbn.root, "nodes_embedding.pkl")
+        if os.path.exists(node_emb_path):
+            node_emb = torch.load(node_emb_path)
+            node_emb_init = {}
+
+            for ntype, ndata in node_emb.items():
+                if ntype not in dataset.x_dict:
+                    if hparams.trainable_embedding:
+                        node_emb_init[ntype] = ndata
+                        print(f"added hparams.node_emb_init for {ntype}")
+                    else:
+                        dataset.x_dict[ntype] = ndata
+                        print(f'added features for {ntype}')
+
+            hparams.node_emb_init = node_emb_init
+
 
     elif dataset == "ACM":
         if method == "HAN" or method == "MetaPath2Vec":

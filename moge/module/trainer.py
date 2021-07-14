@@ -1,11 +1,11 @@
 import itertools
 import logging
 
+import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data.distributed import DistributedSampler
-
 from pytorch_lightning import LightningModule
+from torch.utils.data.distributed import DistributedSampler
 
 from .metrics import Metrics
 from .utils import tensor_sizes, preprocess_input
@@ -107,31 +107,35 @@ class NodeClfTrainer(ClusteringEvaluator):
         if hasattr(self, "_name"):
             return self._name
         else:
-            return self.__class__.__name__
+            return self.__class__.__name__.replace("_", "-")
 
     def training_epoch_end(self, outputs):
-        logs = self.train_metrics.compute_metrics()
-        self.log_dict(logs, prog_bar=True)
+        metrics = self.train_metrics.compute_metrics()
+        self.log_dict(metrics, prog_bar=True)
         self.train_metrics.reset_metrics()
         return None
 
     def validation_epoch_end(self, outputs):
-        logs = self.valid_metrics.compute_metrics()
+        metrics = self.valid_metrics.compute_metrics()
 
         if hasattr(self, "val_moving_loss"):
             val_loss = torch.stack([l for l in outputs]).mean()
+            if self.val_moving_loss.device != val_loss.device:
+                self.val_moving_loss = self.val_moving_loss.to(self.device)
             self.val_moving_loss[self.current_epoch % self.val_moving_loss.numel()] = val_loss
+
             self.log("val_moving_loss", self.val_moving_loss.mean(),
                      logger=True, prog_bar=False, on_epoch=True)
+            self.log("val_loss", val_loss, prog_bar=True)
 
-        self.log_dict(logs, prog_bar=True)
+        self.log_dict(metrics, prog_bar=True)
 
         self.valid_metrics.reset_metrics()
         return None
 
     def test_epoch_end(self, outputs):
-        logs = self.test_metrics.compute_metrics()
-        self.log_dict(logs, prog_bar=True)
+        metrics = self.test_metrics.compute_metrics()
+        self.log_dict(metrics, prog_bar=True)
         self.test_metrics.reset_metrics()
         return None
 
@@ -174,15 +178,34 @@ class NodeClfTrainer(ClusteringEvaluator):
                                                batch_size=self.hparams.batch_size, batch_sampler=train_sampler)
         return dataset
 
-
     def get_n_params(self):
-        size = 0
-        for name, param in dict(self.named_parameters()).items():
-            nn = 1
-            for s in list(param.size()):
-                nn = nn * s
-            size += nn
-        return size
+        # size = 0
+        # for name, param in dict(self.named_parameters()).items():
+        #     nn = 1
+        #     for s in list(param.size()):
+        #         nn = nn * s
+        #     size += nn
+        # return size
+        model_parameters = filter(lambda p: p.requires_grad, self.parameters())
+        params = sum([np.prod(p.size()) for p in model_parameters])
+        return params
+
+    @property
+    def num_training_steps(self) -> int:
+        """Total training steps inferred from datamodule and devices."""
+        if self.trainer.max_steps:
+            return self.trainer.max_steps
+
+        limit_batches = self.trainer.limit_train_batches
+        batches = len(self.train_dataloader())
+        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
+
+        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
+        if self.trainer.tpu_cores:
+            num_devices = max(num_devices, self.trainer.tpu_cores)
+
+        effective_accum = self.trainer.accumulate_grad_batches * num_devices
+        return (batches // effective_accum) * self.trainer.max_epochs
 
 
 class LinkPredTrainer(NodeClfTrainer):

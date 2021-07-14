@@ -1,1 +1,1 @@
-from .latte import LATTE, tag_negative, untag_negative, is_negative, LATTEConv
+from .utils import is_negative, filter_metapaths, tag_negative

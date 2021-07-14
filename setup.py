@@ -11,7 +11,7 @@ setup(
     name='MultiOmicsGraphEmbedding',
     version='0.2',
     packages=find_packages("moge",
-                           include=['moge', 'moge.model', 'moge.network', 'moge.evaluation', 'moge.visualization',
+                           include=['moge', 'moge.module', 'moge.network', 'moge.evaluation', 'moge.visualization',
                                     'moge.data'],
                            exclude=["*data*", "moge.data*"]),
     install_requires=requirements,

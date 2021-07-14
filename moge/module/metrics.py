@@ -2,15 +2,18 @@ from typing import Optional, Any, Callable
 
 import numpy as np
 import torch
-from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy, MetricsLambda
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
-from pytorch_lightning.metrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
+
+from ignite.exceptions import NotComputableError
+from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
 
 import torchmetrics
-from .utils import filter_samples, tensor_sizes
+from torchmetrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
+
+from .utils import filter_samples
+
 
 class Metrics(torch.nn.Module):
     def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
@@ -42,9 +45,9 @@ class Metrics(torch.nn.Module):
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
             elif "macro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="macro", multilabel=multilabel)
+                self.metrics[metric] = F1(num_classes=n_classes, average="macro")
             elif "micro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="micro", multilabel=multilabel)
+                self.metrics[metric] = F1(num_classes=n_classes, average="micro")
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
@@ -79,7 +82,7 @@ class Metrics(torch.nn.Module):
         """
         y_pred = y_hat.detach()
         y_true = y.detach()
-        y_pred, y_true = filter_samples(y_pred, y_true, weights, max_mode=True)
+        y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
 
         # Apply softmax/sigmoid activation if needed
         if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:

@@ -54,52 +54,22 @@ class ClassificationLoss(nn.Module):
         Returns:
 
         """
-        if self.use_hierar:
-            assert self.loss_type in ["BCE_WITH_LOGITS",
-                                      "SIGMOID_FOCAL_CROSS_ENTROPY"]
-            assert dense_weight is not None
-            if not self.multilabel:
-                target = torch.eye(self.n_classes)[target]
-
-            loss = self.criterion(logits, target.type_as(logits)) + \
-                   self.hierar_penalty * self.recursive_regularize(dense_weight, self.hierar_relations)
+        if self.multilabel:
+            assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
+                                      "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
+            target = target.type_as(logits)
         else:
-            if self.multilabel:
-                assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
-                                          "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
-                target = target.type_as(logits)
-            else:
-                if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
-                                          "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
-                    target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
+            if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
+                                      "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
+                target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
 
-            loss = self.criterion.forward(logits, target)
+        loss = self.criterion.forward(logits, target)
 
         if (self.reduction == None or self.reduction == "none") and weights is not None:
             loss = (weights * loss).sum() / weights.sum()
 
         return loss
 
-    def recursive_regularize(self, weight: torch.Tensor, hierar_relations: dict):
-        """ Only support hierarchical text classification with BCELoss
-        references: http://www.cse.ust.hk/~yqsong/papers/2018-WWW-Text-GraphCNN.pdf
-                    http://www.cs.cmu.edu/~sgopal1/papers/KDD13.pdf
-        """
-        recursive_loss = 0.0
-        for i in range(weight.size(0)):
-            if i not in hierar_relations:
-                continue
-            children_ids = hierar_relations[i]
-            if not children_ids:
-                continue
-            children_ids_list = torch.tensor(children_ids, dtype=torch.long, device=weight.device)
-            children_paras = torch.index_select(weight, 0, children_ids_list)
-            parent_para = torch.index_select(weight, 0, torch.tensor(i, device=weight.device))
-            parent_para = parent_para.repeat(children_ids_list.size(0), 1)
-            diff_paras = parent_para - children_paras
-            diff_paras = diff_paras.view(diff_paras.size(0), -1)
-            recursive_loss += 1.0 / 2 * torch.norm(diff_paras, p=2) ** 2
-        return recursive_loss
 
 
 class LinkPredLoss(nn.Module):
