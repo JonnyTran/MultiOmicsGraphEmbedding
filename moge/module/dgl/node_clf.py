@@ -18,6 +18,7 @@ from moge.module.dgl.RHGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.module.dgl.latte import LATTE
 from moge.module.losses import ClassificationLoss
 from .hgt import Hgt
+from .samplers import _all_simple_edge_paths_multigraph
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes
 from ...data.dgl.node_generator import NARSDataLoader
@@ -587,10 +588,16 @@ class HAN(NodeClfTrainer):
         super(HAN, self).__init__(Namespace(**args), dataset, metrics)
         self.dataset = dataset
 
-        if dataset.name() == "ACM":
-            metapath_list = [['pa', 'ap'], ['pf', 'fp']]
-
+        # if dataset.name() == "ACM":
+        #     metapath_list = [['pa', 'ap'], ['pf', 'fp']]
+        # else:
+        edge_paths = _all_simple_edge_paths_multigraph(G=dataset.G.metagraph(),
+                                                       source=self.dataset.head_node_type,
+                                                       targets=self.dataset.head_node_type,
+                                                       cutoff=4)
+        metapath_list = [[etype for srctype, dsttype, etype in metapaths] for metapaths in edge_paths]
         print("metapath_list", metapath_list)
+
         num_neighbors = args['num_neighbors']
         self.han_sampler = HANSampler(dataset.G, metapath_list, num_neighbors)
 

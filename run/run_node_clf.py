@@ -110,7 +110,8 @@ def train(hparams):
 
         model_hparams = {
             "embedding_dim": EMBEDDING_DIM,
-            "n_layers": t_order,
+            "n_layers": len(dataset.neighbor_sizes),
+            "t_order": t_order,
             "batch_size": 2 ** batch_order * max(num_gpus, 1),
             "nb_cls_dense_size": 0,
             "nb_cls_dropout": 0.4,
@@ -152,13 +153,10 @@ def train(hparams):
     )
 
     trainer.fit(model)
-    # trainer.fit(model, train_dataloader=model.valtrain_dataloader(), val_dataloaders=model.test_dataloader())
 
-    model.register_hooks()
-
+    # model.register_hooks()
     trainer.test(model)
-
-    wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
+    # wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
 
 
 if __name__ == "__main__":
@@ -169,7 +167,7 @@ if __name__ == "__main__":
     parser.add_argument('--inductive', type=bool, default=True)
 
     parser.add_argument('--dataset', type=str, default="ACM")
-    parser.add_argument('--method', type=str, default="MetaPath2Vec")
+    parser.add_argument('--method', type=str, default="HAN")
     parser.add_argument('--train_ratio', type=float, default=None)
 
     parser.add_argument('--disable_alpha', type=bool, default=False)
@@ -178,6 +176,9 @@ if __name__ == "__main__":
     parser.add_argument('--attn_activation', type=str, default=None)
 
     parser.add_argument('--num_gpus', type=int, default=1)
+
+    parser.add_argument('--use_emb', type=str,
+                        default="~/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
 
     # add all the available options to the trainer
     args = parser.parse_args()

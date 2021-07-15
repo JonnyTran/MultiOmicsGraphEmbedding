@@ -482,12 +482,6 @@ class NARSDataLoader(DataLoader):
 
         super().__init__(dataset, batch_size, collate_fn=self.collate, **kwargs)
 
-    # def __init__(self, feats, R, rel_subsets, args):
-    #     self.rel_subsets = rel_subsets
-    #     self.R = R
-    #     self.args = args
-    #     super().__init__(g, nids, block_sampler)
-
     def collate(self, batch, history=None):
         batch_feats = [x[batch] for x in self.feats]
         if history is not None:
