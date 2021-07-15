@@ -513,6 +513,7 @@ class HANSampler(object):
             frontier = dgl.remove_self_loop(frontier)
             frontier.add_edges(torch.tensor(seeds), torch.tensor(seeds))
             block = dgl.to_block(frontier, seeds)
+            print("block", block)
             block_list.append(block)
 
         return seeds, block_list
