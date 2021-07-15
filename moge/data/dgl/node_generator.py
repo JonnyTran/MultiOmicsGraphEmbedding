@@ -1,6 +1,6 @@
 import copy
 from collections import defaultdict
-from typing import List
+from typing import List, Dict
 
 import dgl
 import numpy as np
@@ -144,13 +144,18 @@ class DGLNodeSampler(HeteroNetDataset):
         return self
 
     def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,
-                           decompose_etypes=False) -> dgl.DGLHeteroGraph:
-        reversed_g = g.reverse(copy_edata=True, share_edata=True)
+                           decompose_etypes=False, nodes_subset: Dict[str, torch.Tensor] = None) -> dgl.DGLHeteroGraph:
+        if add_reverse:
+            reversed_g = g.reverse(copy_edata=False, share_edata=False)
 
         relations = {}
         for metapath in g.canonical_etypes:
             # Original edges
             src, dst = g.all_edges(etype=metapath[1])
+
+            if nodes_subset is not None:
+                src, dst = self.filter_edges(src, dst, nodes_subset, metapath)
+
             relations[metapath] = (src, dst)
 
             if decompose_etypes:
@@ -173,7 +178,13 @@ class DGLNodeSampler(HeteroNetDataset):
                 src, dst = reversed_g.all_edges(etype=metapath[1])
                 relations[reverse_metapath] = (src, dst)
 
-        new_g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict, idtype=torch.int64)
+        # if nodes_subset:
+        #     print("got here")
+        #     num_nodes_dict = {ntype: nids.size(0) for ntype, nids in nodes_subset.items()}
+        # else:
+        #     num_nodes_dict = self.num_nodes_dict
+
+        new_g: dgl.DGLHeteroGraph = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict)
 
         # copy_ndata:
         for ntype in g.ntypes:
@@ -194,6 +205,19 @@ class DGLNodeSampler(HeteroNetDataset):
         utils.set_new_frames(new_g, edge_frames=edge_frames)
 
         return new_g
+
+    def filter_edges(self, src, dst, nodes_subset, metapath):
+        for i, ntype in enumerate([metapath[0], metapath[-1]]):
+            if ntype in nodes_subset and \
+                    nodes_subset[ntype].size(0) < (src if i == 0 else dst).unique().size(0):
+                if i == 0:
+                    mask = np.isin(src, nodes_subset[ntype])
+                elif i == 1:
+                    mask = np.isin(dst, nodes_subset[ntype])
+
+                src = src[mask]
+                dst = dst[mask]
+        return src, dst
 
     def compute_node_degrees(self, add_reverse_metapaths):
         dfs = []
@@ -352,9 +376,10 @@ class DGLNodeSampler(HeteroNetDataset):
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         if self.inductive:
             nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
-            nodes[self.head_node_type] = self.training_idx
+            nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
 
-            graph = dgl.node_subgraph(self.G, nodes).clone()
+            graph = self.create_heterograph(self.G, nodes_subset=nodes)
+            print("Removed testing nodes from training subgraph: \n", graph)
         else:
             graph = self.G
 
