@@ -3,7 +3,6 @@ import sys
 from argparse import ArgumentParser, Namespace
 import random
 
-from moge.data.dgl.node_generator import DGLNodeSampler
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -17,6 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from moge.module.PyG.node_clf import MetaPath2Vec, LATTENodeClf
 from moge.module.cogdl.node_clf import GTN
 from moge.module.dgl.node_clf import HAN, HGT, NARS, HGConv, R_HGNN
+from moge.data.dgl.node_generator import DGLNodeSampler
 
 from pytorch_lightning.loggers import WandbLogger
 
@@ -252,7 +252,7 @@ def train(hparams):
 
     if trainer.checkpoint_callback is not None:
         model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
-                                                  hparams=Namespace(**args),
+                                                  hparams=model.hparams,
                                                   dataset=dataset,
                                                   metrics=METRICS)
         print(trainer.checkpoint_callback.best_model_path)
