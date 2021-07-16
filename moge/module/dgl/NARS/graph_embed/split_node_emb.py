@@ -56,7 +56,7 @@ elif args.dataset.startswith("oag"):
 node_type = g.ntypes if hasattr(g, "ntypes") else ["_N"]
 node_offset = [0]
 for ntype in node_type:
-    num_nodes = g.number_of_nodes(ntype)
+    num_nodes = g.number_of_nodes(ntype) if isinstance(g, dgl.DGLHeteroGraph) else g.number_of_nodes()
     node_offset.append(num_nodes + node_offset[-1])
 
 # reorder embedding to original node order
