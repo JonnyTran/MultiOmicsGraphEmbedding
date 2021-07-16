@@ -7,7 +7,7 @@ parameters:
   dataset:
     values: [ "ACM", "DBLP", "IMDB", "ogbn-mag" ]
   method:
-    values: [ "LATTE-3", "LATTE-2", "LATTE-1", "HAN", "GTN", "HGT", "NARS", "HGConv", "R_HGNN" ]
+    values: [ "LATTE-3", "LATTE-2", "LATTE-1", "HAN", "HGT", "NARS", "HGConv", "R_HGNN" ]
   train_ratio:
     values: [ 0.0 ]
   run:

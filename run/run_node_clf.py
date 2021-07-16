@@ -3,7 +3,9 @@ import sys
 from argparse import ArgumentParser, Namespace
 import random
 
+from moge.module.cogdl.node_clf import GTN
 from moge.module.dgl import NARS, HGConv, R_HGNN
+from moge.module.dgl.node_clf import HAN, HGT
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -12,10 +14,9 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 from pytorch_lightning.trainer import Trainer
 
-from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from moge.module.PyG.node_clf import MetaPath2Vec, LATTENodeClf
-from moge.module.cogdl.node_clf import HGT, GTN, HAN
 from pytorch_lightning.loggers import WandbLogger
 
 from run.load_data import load_node_dataset
@@ -84,7 +85,7 @@ def train(hparams):
     elif hparams.method == "HGT":
         args = {
             "embedding_dim": 128,
-            "fanouts": [20, 10],
+            "fanouts": [10, 10],
             "batch_size": 2 ** 11,
             "activation": "relu",
             "attn_heads": 4,
@@ -215,8 +216,11 @@ def train(hparams):
 
         args.update(hparams.__dict__)
         model = LATTENodeClf(Namespace(**args), dataset, collate_fn="neighbor_sampler", metrics=METRICS)
+        CALLBACKS = [EarlyStopping(monitor='val_moving_loss', patience=10, min_delta=0.0001, strict=False),
+                     ModelCheckpoint(monitor='val_micro_f1', mode="max",
+                                     filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_micro_f1:.3f}')]
 
-    if "patience" in args:
+    if CALLBACKS is None and "patience" in args:
         CALLBACKS = [EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001, strict=False)]
 
     wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
@@ -239,6 +243,14 @@ def train(hparams):
     # model.register_hooks()
     trainer.test(model)
     # wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
+
+    if trainer.checkpoint_callback is not None:
+        model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
+                                                  hparams=Namespace(**args),
+                                                  dataset=dataset,
+                                                  metrics=METRICS)
+        print(trainer.checkpoint_callback.best_model_path)
+        trainer.test(model)
 
 
 if __name__ == "__main__":

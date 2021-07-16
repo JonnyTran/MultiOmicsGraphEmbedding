@@ -24,20 +24,19 @@ from moge.module.utils import preprocess_input
 def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
                         path: str, skip_ntype: str = None):
     node_emb = {}
-    path = os.path.abspath(path)
-
     if os.path.exists(path) and os.path.isdir(path):
         for file in os.listdir(path):
             ntype = file.split(".")[0]
             ndata = torch.load(os.path.join(path, file)).float()
 
             node_emb[ntype] = ndata
-
     elif os.path.exists(path) and os.path.isfile(path):
         features = dill.load(open(path, 'rb'))  # Assumes .pk file
 
         for ntype, ndata in preprocess_input(features, device="cpu", dtype=torch.float).items():
             node_emb[ntype] = ndata
+    else:
+        logging.warning(f"Failed to import embeddings from {path}")
 
     for ntype, emb in node_emb.items():
         if skip_ntype == ntype:
@@ -66,7 +65,7 @@ def load_node_dataset(dataset: str, method, hparams: Namespace, train_ratio=None
                                  add_reverse_metapaths=True,
                                  inductive=hparams.inductive, reshuffle_train=train_ratio if train_ratio else False)
 
-        if dataset == "obgn_mag":
+        if dataset == "ogbn_mag":
             add_node_embeddings(dataset, path=os.path.join(hparams.use_emb, "TransE_mag/"))
 
     elif dataset == "ACM":
