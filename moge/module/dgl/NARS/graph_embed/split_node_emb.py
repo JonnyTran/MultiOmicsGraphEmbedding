@@ -53,7 +53,7 @@ elif args.dataset.startswith("oag"):
         dataset = pickle.load(f)
     g = dgl.heterograph(dataset["edges"])
 
-node_type = g.ntypes
+node_type = g.ntypes if hasattr(g, "ntypes") else ["_N"]
 node_offset = [0]
 for ntype in node_type:
     num_nodes = g.number_of_nodes(ntype)
