@@ -88,9 +88,9 @@ class DGLNodeSampler(HeteroNetDataset):
         self.n_classes = num_classes
         self.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
 
-        self.training_idx = train_idx
-        self.validation_idx = val_idx
-        self.testing_idx = test_idx
+        self.training_idx = train_idx if isinstance(train_idx, torch.Tensor) else torch.tensor(train_idx)
+        self.validation_idx = val_idx if isinstance(val_idx, torch.Tensor) else torch.tensor(val_idx)
+        self.testing_idx = test_idx if isinstance(test_idx, torch.Tensor) else torch.tensor(test_idx)
         return self
 
     @classmethod
@@ -396,7 +396,8 @@ class DGLNodeSampler(HeteroNetDataset):
         nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
         graph = self.create_heterograph(self.G, nodes_subset=nodes)
 
-        print("Removed testing nodes from training subgraph for inductive: \n", graph)
+        print("Removed edges incident to test nodes from the training subgraph for inductive node classification: \n",
+              graph)
         return graph
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):

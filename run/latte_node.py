@@ -27,7 +27,7 @@ def train(hparams: Namespace):
     hparams.neighbor_sizes = neighbor_sizes
 
     dataset = load_node_dataset(hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
-                                dir_path=hparams.dir_path)
+                                dataset_dir=hparams.dir_path)
 
     METRICS = [dataset.name() if "ogb" in dataset.name() else "accuracy"]
 
