@@ -12,24 +12,26 @@ import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--dataset", required=True, default=str)
+parser.add_argument("--method", required=True, default=str)
 parser.add_argument("--emb-file", type=str, default=None)
+parser.add_argument("--root_path", required=False, default="/home/jonny/Bioinformatics_ExternalData/OGB/")
 args = parser.parse_args()
 
 if args.emb_file is None:
     # default path
     args.emb_file = (
-        f"ckpts/TransE_l2_{args.dataset}_0/{args.dataset}_TransE_l2_entity.npy"
+        f"ckpts/{args.method}_{args.dataset}_0/{args.dataset}_{args.method}_entity.npy"
     )
     print(f"Using default path of node embedding file: {args.emb_file}")
 
 emb = np.load(args.emb_file)
 
-if args.dataset == "mag":
+if "ogbn" in args.dataset:
     from ogb.nodeproppred import DglNodePropPredDataset
 
     home_dir = os.getenv("HOME")
     dataset = DglNodePropPredDataset(
-        name="ogbn-mag", root=os.path.join(home_dir, ".ogb", "dataset")
+        name=args.dataset, root=args.root_path if "root_path" in args else os.path.join(home_dir, ".ogb", "dataset")
     )
     g, _ = dataset[0]
 elif args.dataset == "acm":

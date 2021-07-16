@@ -125,7 +125,7 @@ class DGLNodeSampler(HeteroNetDataset):
         relations = {m: (eid[0].apply_(relabel_nodes[m[0]].get).numpy(),
                          eid[1].apply_(relabel_nodes[m[-1]].get).numpy())
                      for m, eid in dataset.edge_index_dict.items()}
-        print({m: (np.unique(eid[0]), np.unique(eid[1])) for m, eid in relations.items()})
+        print({m: (np.unique(eid[0]).shape, np.unique(eid[1]).shape) for m, eid in relations.items()})
 
         g: dgl.DGLHeteroGraph = dgl.heterograph(relations)
 

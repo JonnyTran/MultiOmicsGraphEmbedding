@@ -16,9 +16,8 @@ elif [ "$dataset" == "oag_venue" ] || [ "$dataset" == "oag_L1" ]; then
 elif [ "$dataset" == "acm" ]; then
     embed_size=128
 else
-    echo "Unsupported dataset ${dataset}!"
-    echo "Usage: bash train_graph_emb.sh [acm|mag|oag_venue|oag_L1]"
-    exit -1
+    echo "Selected dataset ${dataset}, embedding size = 128"
+    embed_size=128
 fi
 
 DGLBACKEND=pytorch dglke_train \
