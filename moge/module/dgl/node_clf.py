@@ -596,15 +596,15 @@ class HAN(NodeClfTrainer):
                                       targets=self.dataset.head_node_type,
                                       cutoff=5)
 
-        metapath_list = [[etype for srctype, dsttype, etype in metapaths] for metapaths in edge_paths]
-        print("metapath_list", metapath_list)
+        self.metapath_list = [[etype for srctype, dsttype, etype in metapaths] for metapaths in edge_paths]
+        print("metapath_list", self.metapath_list)
 
-        num_neighbors = args['num_neighbors']
-        self.han_sampler = HANSampler(dataset.G, metapath_list, num_neighbors)
+        self.num_neighbors = args['num_neighbors']
+        self.han_sampler = HANSampler(dataset.G, self.metapath_list, self.num_neighbors)
 
         self.features = dataset.G.nodes[dataset.head_node_type].data["feat"]
         self.labels = dataset.G.nodes[dataset.head_node_type].data["label"]
-        self.model = Han(num_metapath=len(metapath_list),
+        self.model = Han(num_metapath=len(self.metapath_list),
                          in_size=set(dataset.node_attr_shape.values()).pop(),
                          hidden_size=args['hidden_units'],
                          out_size=dataset.n_classes,
@@ -683,9 +683,14 @@ class HAN(NodeClfTrainer):
         return test_loss
 
     def train_dataloader(self):
+        if self.dataset.inductive:
+            han_sampler = HANSampler(self.dataset.get_training_subgraph(), self.metapath_list, self.num_neighbors)
+        else:
+            han_sampler = self.han_sampler
+
         return DataLoader(
             dataset=self.dataset.training_idx,
-            batch_size=self.hparams['batch_size'], collate_fn=self.han_sampler.sample_blocks, shuffle=True, )
+            batch_size=self.hparams['batch_size'], collate_fn=han_sampler.sample_blocks, shuffle=True, )
 
     def val_dataloader(self, batch_size=None):
         return DataLoader(
@@ -774,7 +779,7 @@ class HGT(NodeClfTrainer):
         y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
         y_pred = self.forward(blocks, batch_inputs)
-
+        assert (y_true < 0).sum() == 0, f"y_true negatives: {(y_true < 0).sum()}"
         val_loss = self.criterion.forward(y_pred, y_true)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)

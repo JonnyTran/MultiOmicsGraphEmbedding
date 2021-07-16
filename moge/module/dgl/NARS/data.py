@@ -84,11 +84,11 @@ def gen_rel_subset_feature(g: dgl.DGLHeteroGraph, rel_subset, args: Namespace):
             assert ntype in ntype2feat  # because subgraph is not directional
             feat_dict = new_g.nodes[ntype].data
             old_feat = feat_dict.pop(f"hop_{hop - 1}")
-            if ntype == "paper":
+            if ntype == args.head_node_type:
                 res.append(old_feat.cpu())
             feat_dict[f"hop_{hop}"] = ntype2feat.pop(ntype).mul_(feat_dict["norm"])
 
-    res.append(new_g.nodes["paper"].data.pop(f"hop_{args.R}").cpu())
+    res.append(new_g.nodes[args.head_node_type].data.pop(f"hop_{args.R}").cpu())
     return res
 
 

@@ -184,12 +184,6 @@ class DGLNodeSampler(HeteroNetDataset):
                 src, dst = reversed_g.all_edges(etype=metapath[1])
                 relations[reverse_metapath] = (src, dst)
 
-        # if nodes_subset:
-        #     print("got here")
-        #     num_nodes_dict = {ntype: nids.size(0) for ntype, nids in nodes_subset.items()}
-        # else:
-        #     num_nodes_dict = self.num_nodes_dict
-
         new_g: dgl.DGLHeteroGraph = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict)
 
         # copy_ndata:
@@ -217,9 +211,9 @@ class DGLNodeSampler(HeteroNetDataset):
             if ntype in nodes_subset and \
                     nodes_subset[ntype].size(0) < (src if i == 0 else dst).unique().size(0):
                 if i == 0:
-                    mask = np.isin(src, nodes_subset[ntype])
+                    mask = np.isin(src, nodes_subset[ntype]) & np.isin(src, [-1], invert=True)
                 elif i == 1:
-                    mask = np.isin(dst, nodes_subset[ntype])
+                    mask = np.isin(dst, nodes_subset[ntype]) & np.isin(dst, [-1], invert=True)
 
                 src = src[mask]
                 dst = dst[mask]
@@ -381,11 +375,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         if self.inductive:
-            nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
-            nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
-
-            graph = self.create_heterograph(self.G, nodes_subset=nodes)
-            print("Removed testing nodes from training subgraph: \n", graph)
+            graph = self.get_training_subgraph()
         else:
             graph = self.G
 
@@ -400,6 +390,14 @@ class DGLNodeSampler(HeteroNetDataset):
                                 batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         return dataloader
+
+    def get_training_subgraph(self):
+        nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
+        nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
+        graph = self.create_heterograph(self.G, nodes_subset=nodes)
+
+        print("Removed testing nodes from training subgraph for inductive: \n", graph)
+        return graph
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
