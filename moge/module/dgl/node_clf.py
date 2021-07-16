@@ -826,6 +826,7 @@ class HGT(NodeClfTrainer):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters())
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, total_steps=100, max_lr=1e-3, pct_start=0.05)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, total_steps=self.num_training_steps,
+                                                        max_lr=1e-3, pct_start=0.05)
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
