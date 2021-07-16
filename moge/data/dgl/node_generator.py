@@ -80,11 +80,10 @@ class DGLNodeSampler(HeteroNetDataset):
         self.y_dict = {}
         if not isinstance(labels, dict):
             self.y_dict[self.head_node_type] = labels
-            self.G.nodes[self.head_node_type].data["label"] = labels[:self.G.num_nodes(self.head_node_type)]
+            self.G.nodes[self.head_node_type].data["label"] = labels  # [:self.G.num_nodes(self.head_node_type)]
         else:
             self.y_dict = labels
-            self.G.nodes[self.head_node_type].data["label"] = labels[self.head_node_type][
-                                                              :self.G.num_nodes(self.head_node_type)]
+            self.G.nodes[self.head_node_type].data["label"] = labels[self.head_node_type]
 
         self.n_classes = num_classes
         self.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
@@ -100,13 +99,12 @@ class DGLNodeSampler(HeteroNetDataset):
                                           node_types=kwargs["node_types"],
                                           head_node_type=kwargs["head_node_type"],
                                           metapaths=kwargs["metapaths"],
-                                          add_reverse_metapaths=False,
-                                          inductive=kwargs["inductive"])
+                                          add_reverse_metapaths=False)
         for ntype in kwargs["node_types"]:
             if ntype != dataset.head_node_type:
                 dataset.x_dict[ntype] = dataset.x_dict[dataset.head_node_type]
 
-        # Relabel node IDS based on node type
+        # # Relabel node IDS based on node type
         node_idx = {}
         for ntype in dataset.node_types:
             for m, eid in dataset.edge_index_dict.items():
@@ -116,22 +114,30 @@ class DGLNodeSampler(HeteroNetDataset):
                     node_idx.setdefault(ntype, []).append(eid[1].unique())
             node_idx[ntype] = torch.cat(node_idx[ntype]).unique().sort().values
 
+        print(tensor_sizes(node_idx))
+
         relabel_nodes = {node_type: defaultdict(lambda: -1,
                                                 dict(zip(node_idx[node_type].numpy(),
                                                          range(node_idx[node_type].size(0))))) \
                          for node_type in node_idx}
 
         # Create heterograph
-        g = dgl.heterograph({m: (eid[0].apply_(relabel_nodes[m[0]].get).numpy(),
-                                 eid[1].apply_(relabel_nodes[m[-1]].get).numpy()) \
-                             for m, eid in dataset.edge_index_dict.items()})
+        relations = {m: (eid[0].apply_(relabel_nodes[m[0]].get).numpy(),
+                         eid[1].apply_(relabel_nodes[m[-1]].get).numpy())
+                     for m, eid in dataset.edge_index_dict.items()}
+        print({m: (np.unique(eid[0]), np.unique(eid[1])) for m, eid in relations.items()})
+
+        g: dgl.DGLHeteroGraph = dgl.heterograph(relations)
 
         for ntype, ndata in dataset.x_dict.items():
             if ntype in g.ntypes:
-                print(ntype)
+                print(ntype, g.num_nodes(ntype), node_idx[ntype].shape)
                 g.nodes[ntype].data["feat"] = ndata[node_idx[ntype]]
 
-        self = cls.from_dgl_heterograph(g=g, labels=dataset.y_dict[dataset.head_node_type],
+        # Labels
+        labels = dataset.y_dict[dataset.head_node_type][g.nodes(dataset.head_node_type)]
+
+        self = cls.from_dgl_heterograph(g=g, labels=labels,
                                         num_classes=dataset.n_classes,
                                         train_idx=dataset.training_idx,
                                         val_idx=dataset.validation_idx,
@@ -513,7 +519,9 @@ class HANSampler(object):
             frontier = dgl.remove_self_loop(frontier)
             frontier.add_edges(torch.tensor(seeds), torch.tensor(seeds))
             block = dgl.to_block(frontier, seeds)
-            print("block", block)
             block_list.append(block)
+
+        if isinstance(seeds, list):
+            seeds = torch.stack(seeds, dim=0)
 
         return seeds, block_list

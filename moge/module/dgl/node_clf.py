@@ -18,7 +18,7 @@ from moge.module.dgl.RHGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.module.dgl.latte import LATTE
 from moge.module.losses import ClassificationLoss
 from .hgt import Hgt
-from .samplers import sample_metapaths
+from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes
 from ...data.dgl.node_generator import NARSDataLoader
@@ -591,10 +591,10 @@ class HAN(NodeClfTrainer):
         # if dataset.name() == "ACM":
         #     metapath_list = [['pa', 'ap'], ['pf', 'fp']]
         # else:
-        edge_paths = sample_metapaths(G=dataset.G.metagraph(),
+        edge_paths = sample_metapaths(metagraph=dataset.G.metagraph(),
                                       source=self.dataset.head_node_type,
                                       targets=self.dataset.head_node_type,
-                                      cutoff=4)
+                                      cutoff=5)
 
         metapath_list = [[etype for srctype, dsttype, etype in metapaths] for metapaths in edge_paths]
         print("metapath_list", metapath_list)
@@ -651,7 +651,6 @@ class HAN(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         seeds, blocks = batch
-        print("seeds, blocks", tensor_sizes({'seeds': seeds, "blocks": blocks}))
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
         y_true = self.labels[seeds].to(self.device)
@@ -691,7 +690,7 @@ class HAN(NodeClfTrainer):
     def val_dataloader(self, batch_size=None):
         return DataLoader(
             dataset=self.dataset.validation_idx,
-            batch_size=self.hparams['batch_size'], collate_fn=self.han_sampler.sample_blocks, shuffle=False,
+            batch_size=self.hparams['batch_size'], collate_fn=self.han_sampler.sample_blocks, shuffle=True,
         )
 
     def test_dataloader(self, batch_size=None):

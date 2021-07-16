@@ -1,7 +1,35 @@
 import random
+from collections import Generator
 
+import networkx as nx
 import numpy as np
 import torch
+
+
+def sample_metapaths(metagraph: nx.MultiDiGraph, source, targets, cutoff) -> Generator:
+    if not cutoff or cutoff < 1:
+        return []
+    visited = [source]
+    stack = [iter(metagraph.edges(source, keys=True))]
+
+    while stack:
+        children = stack[-1]
+        child = next(children, None)
+        if child is None:
+            stack.pop()
+            visited.pop()
+        elif len(visited) < cutoff:
+            if child[1] in targets:
+                yield visited[1:] + [child]
+            else:
+                visited.append(child)
+                stack.append(iter(metagraph.edges(child[1], keys=True)))
+        else:  # len(visited) == cutoff:
+            for (u, v, k) in [child] + list(children):
+                if v in targets:
+                    yield visited[1:] + [(u, v, k)]
+            stack.pop()
+            visited.pop()
 
 
 def negative_sample(edge_index, M: int, N: int, n_sample_per_edge: int):
