@@ -101,7 +101,7 @@ def train(hparams):
             "lr": 0.001,
             "momentum": 0.9,
             "weight_decay": 1e-2,
-            'epochs': 1000,
+            'epochs': 100,
         }
         model = HGT(Namespace(**args), dataset, metrics=METRICS)
 
