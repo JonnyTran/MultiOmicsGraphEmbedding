@@ -250,14 +250,6 @@ def train(hparams):
     trainer.test(model)
     # wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
 
-    if trainer.checkpoint_callback is not None:
-        model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
-                                                  hparams=model.hparams,
-                                                  dataset=dataset,
-                                                  metrics=METRICS)
-        print(trainer.checkpoint_callback.best_model_path)
-        trainer.test(model)
-
 
 if __name__ == "__main__":
     parser = ArgumentParser()
