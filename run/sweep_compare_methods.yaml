@@ -1,4 +1,4 @@
-program: run/run_methods.py
+program: run/run_node_clf.py
 method: grid
 metric:
   name: val_micro_f1
@@ -7,10 +7,10 @@ parameters:
   dataset:
     values: [ "ACM", "DBLP", "IMDB", "ogbn-mag" ]
   method:
-    values: [ "LATTE-3", "HAN", "GTN", "HGT", "NARS", "HGConv", "R_GSN" ]
+    values: [ "LATTE-3", "LATTE-2", "LATTE-1", "HAN", "GTN", "HGT", "NARS", "HGConv", "R_HGNN" ]
   train_ratio:
     values: [ 0.0 ]
   run:
     values: [ 1,2,3,4,5,6,7,8,9,10 ]
   inductive:
-    values: [ True ]
+    values: [ True, False ]

@@ -289,7 +289,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
         else:
             print(f"WARNING: alpha_activation `{attn_activation}` did not match, so used linear activation")
-            self.alpha_activation = None
+            self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
 
         self.reset_parameters()
 
@@ -514,10 +514,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
         if values is None:
             x = torch.cat([x_i, x_j], dim=2)
-            if isinstance(self.alpha_activation, nn.Module):
-                x = self.alpha_activation(x)
-            else:
+            if isinstance(self.alpha_activation, torch.Tensor):
                 x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
+            elif isinstance(self.alpha_activation, nn.Module):
+                x = self.alpha_activation(x)
 
             alpha = (x * self.attn[metapath]).sum(dim=-1)
             alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)

@@ -14,7 +14,7 @@ from moge.data import DGLNodeSampler
 from moge.module.classifier import DenseClassification
 from moge.module.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
     read_relation_subsets
-from moge.module.dgl.RHGNN.model.R_HGNN import R_HGNN as RHGNN
+from moge.module.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.module.dgl.latte import LATTE
 from moge.module.losses import ClassificationLoss
 from .hgt import Hgt

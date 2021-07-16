@@ -24,6 +24,7 @@ from moge.module.utils import preprocess_input
 def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
                         path: str, skip_ntype: str = None):
     node_emb = {}
+    path = os.path.abspath(path)
 
     if os.path.exists(path) and os.path.isdir(path):
         for file in os.listdir(path):
@@ -62,8 +63,8 @@ def load_node_dataset(dataset: str, method, hparams: Namespace, train_ratio=None
                                  neighbor_sizes=[10, 10],
                                  head_node_type="paper",
                                  edge_dir="in",
-                                 add_reverse_metapaths=hparams.use_reverse,
-                                 inductive=hparams.inductive)
+                                 add_reverse_metapaths=True,
+                                 inductive=hparams.inductive, reshuffle_train=train_ratio if train_ratio else False)
 
         if dataset == "obgn_mag":
             add_node_embeddings(dataset, path=os.path.join(hparams.use_emb, "TransE_mag/"))
@@ -75,8 +76,8 @@ def load_node_dataset(dataset: str, method, hparams: Namespace, train_ratio=None
             neighbor_sizes=[10],
             head_node_type="paper",
             edge_dir="in",
-            add_reverse_metapaths=hparams.use_reverse,
-            inductive=hparams.inductive)
+            add_reverse_metapaths=True,
+            inductive=hparams.inductive, reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "ACM"
 
     elif dataset == "DBLP":
@@ -87,7 +88,8 @@ def load_node_dataset(dataset: str, method, hparams: Namespace, train_ratio=None
                                                   head_node_type="A",
                                                   metapaths=[("P", "PA", "A"), ("A", "AP", "P"), ("P", "PC", "C"),
                                                              ("C", "CP", "P")],
-                                                  add_reverse_metapaths=False, inductive=hparams.inductive)
+                                                  add_reverse_metapaths=False, inductive=hparams.inductive,
+                                                  reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "DBLP"
 
     elif dataset == "IMDB":
@@ -101,7 +103,8 @@ def load_node_dataset(dataset: str, method, hparams: Namespace, train_ratio=None
                                                              ("D", "DA", "A"),
                                                              ("A", "AD", "D")
                                                              ],
-                                                  add_reverse_metapaths=False, inductive=hparams.inductive)
+                                                  add_reverse_metapaths=False, inductive=hparams.inductive,
+                                                  reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "IMDB"
 
     elif dataset == "AMiner":

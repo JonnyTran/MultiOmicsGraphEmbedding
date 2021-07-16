@@ -1,8 +1,9 @@
 import logging
 import sys
 from argparse import ArgumentParser, Namespace
+import random
 
-from moge.module.dgl import NARS, HGConv
+from moge.module.dgl import NARS, HGConv, R_HGNN
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -25,7 +26,8 @@ def train(hparams):
     CALLBACKS = None
     NUM_GPUS = hparams.num_gpus
 
-    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio)
+    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
+                                dataset_path=hparams.root_path)
 
     METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
 
@@ -57,7 +59,8 @@ def train(hparams):
             "train_ratio": dataset.train_ratio,
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.0005 * NUM_GPUS,
+            "lr": 0.005 * NUM_GPUS,
+            "epochs": 40,
         }
         model = GTN(Namespace(**args), dataset=dataset, metrics=METRICS)
 
@@ -74,6 +77,7 @@ def train(hparams):
             "train_ratio": dataset.train_ratio,
             "n_classes": dataset.n_classes,
             "lr": 0.01 * NUM_GPUS,
+            "epochs": 100
         }
         model = MetaPath2Vec(Namespace(**args), dataset=dataset, metrics=METRICS)
 
@@ -119,7 +123,7 @@ def train(hparams):
 
     elif hparams.method == "HGConv":
         args = {
-            'seed': 0,
+            'seed': hparams.run,
             'cuda': 0,
             'num_heads': 8,  # Number of attention heads
             'hidden_units': 32,
@@ -137,16 +141,49 @@ def train(hparams):
         }
         model = HGConv(args, dataset, metrics=METRICS)
 
+    elif hparams.method == "R_HGNN":
+        args = {
+            'model_name': 'R_HGNN_lr0.001_dropout0.5_seed_0',
+            "head_node_type": dataset.head_node_type,
+            'seed': hparams.run,
+            'learning_rate': 0.001,
+            'num_heads': 8,
+            'hidden_units': 64,
+            'relation_hidden_units': 8,
+            'dropout': 0.5,
+            'n_layers': 2,
+            'residual': True,
+            'batch_size': 1280,  # the number of nodes to train in each batch
+            'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
+            'optimizer': 'adam',
+            'weight_decay': 0.0,
+            'epochs': 200,
+            'patience': 50,
+            'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+        }
+        model = R_HGNN(args, dataset, metrics=METRICS)
 
     elif "LATTE" in hparams.method:
-        batch_order = 11
+        USE_AMP = True
+
+        if "-1" in hparams.method:
+            t_order = 1
+            batch_order = 12
+        elif "-2" in hparams.method:
+            t_order = 2
+            batch_order = 11
+        elif "-3" in hparams.method:
+            t_order = 3
+            batch_order = 10
+        else:
+            t_order = 2
 
         args = {
             "embedding_dim": 128,
             "layer_pooling": "concat",
 
             "n_layers": len(dataset.neighbor_sizes),
-            "t_order": 2,
+            "t_order": t_order,
             "batch_size": int(2 ** batch_order),
 
             "attn_heads": 4,
@@ -156,7 +193,7 @@ def train(hparams):
             "batchnorm": False,
             "layernorm": False,
             "activation": "relu",
-            "dropout": 0.7,
+            "dropout": 0.5,
             "input_dropout": True,
 
             "nb_cls_dense_size": 0,
@@ -166,15 +203,14 @@ def train(hparams):
             "edge_sampling": False,
 
             "head_node_type": dataset.head_node_type,
-            "freeze_embeddings": True,
 
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
-            #     "reduction": "none",
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "lr": 0.01,
-            "weight_decay": 1e-3,
-            "epochs": 30
+            "epochs": 30,
+            "patience": 10,
+            "weight_decay": 0.0,
         }
 
         args.update(hparams.__dict__)
@@ -187,9 +223,10 @@ def train(hparams):
     wandb_logger.log_hyperparams(args)
 
     trainer = Trainer(
-        gpus=NUM_GPUS, auto_select_gpus=True,
-        distributed_backend='dp' if NUM_GPUS > 1 else None,
-        max_epochs=args["epoch"],
+        gpus=random.sample([0, 1, 2], NUM_GPUS),
+        auto_select_gpus=True,
+        distributed_backend='ddp' if NUM_GPUS > 1 else None,
+        max_epochs=args["epochs"],
         callbacks=CALLBACKS,
         logger=wandb_logger,
         weights_summary='top',
@@ -206,16 +243,22 @@ def train(hparams):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    # parametrize the network
+
+    parser.add_argument('--method', type=str, default="HAN")
 
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--run', type=int, default=0)
     parser.add_argument('--inductive', type=bool, default=True)
 
     parser.add_argument('--dataset', type=str, default="ACM")
-    parser.add_argument('--method', type=str, default="HAN")
+    parser.add_argument('--use_emb', type=str,
+                        default="/home/jonny/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
+    parser.add_argument('--root_path', type=str,
+                        default="/home/jonny/Bioinformatics_ExternalData/OGB/")
+
     parser.add_argument('--train_ratio', type=float, default=None)
 
+    # Ablation study
     parser.add_argument('--disable_alpha', type=bool, default=False)
     parser.add_argument('--disable_beta', type=bool, default=False)
     parser.add_argument('--disable_concat', type=bool, default=False)
@@ -223,8 +266,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--num_gpus', type=int, default=1)
 
-    parser.add_argument('--use_emb', type=str,
-                        default="~/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
 
     # add all the available options to the trainer
     args = parser.parse_args()
