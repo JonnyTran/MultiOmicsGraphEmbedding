@@ -3,6 +3,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 import random
 
+from moge.data.dgl.node_generator import DGLNodeSampler
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -176,6 +177,11 @@ def train(hparams):
         elif "-3" in hparams.method:
             t_order = 3
             batch_order = 10
+
+            dataset.neighbor_sizes = [10, 10, 10]
+            if isinstance(dataset, DGLNodeSampler):
+                dataset.neighbor_sampler.fanouts = [10, 10, 10]
+                dataset.neighbor_sampler.num_layers = len(dataset.neighbor_sizes)
         else:
             t_order = 2
 
@@ -209,7 +215,7 @@ def train(hparams):
             "use_class_weights": False,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "lr": 0.01,
-            "epochs": 30,
+            "epochs": 50,
             "patience": 10,
             "weight_decay": 0.0,
         }

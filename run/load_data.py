@@ -65,8 +65,10 @@ def load_node_dataset(dataset: str, method, hparams: Namespace, train_ratio=None
                                  add_reverse_metapaths=True,
                                  inductive=hparams.inductive, reshuffle_train=train_ratio if train_ratio else False)
 
-        if dataset == "ogbn_mag":
+        if dataset == "ogbn-mag":
             add_node_embeddings(dataset, path=os.path.join(hparams.use_emb, "TransE_mag/"))
+        elif dataset == "ogbn-proteins":
+            add_node_embeddings(dataset, path=os.path.join(hparams.use_emb, "TransE_l2_ogbn-proteins/"))
 
     elif dataset == "ACM":
         dataset = DGLNodeSampler.from_dgl_heterograph(
