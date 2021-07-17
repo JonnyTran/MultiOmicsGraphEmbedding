@@ -109,7 +109,7 @@ def train(hparams):
         args = {
             'R': 2,
             'ff_layer': 2,
-            'num_subsets': min(8, len(dataset.G.etypes) ** len(dataset.G.etypes)),
+            'num_subsets': min(8, len(dataset.G.etypes) ** len(dataset.G.etypes) - 1),
             'num_hidden': 256,
             #     'use_relation_subsets': "../MultiOmicsGraphEmbedding/moge/module/dgl/NARS/sample_relation_subsets/examples/mag",
             'input_dropout': True,
