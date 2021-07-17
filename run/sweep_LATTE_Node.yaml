@@ -38,8 +38,6 @@ parameters:
   attn_activation:
     values: [ "sharpening", "LeakyReLU" ]
 
-  nb_cls_dense_size:
-    values: [ 0, -1 ]
   nb_cls_dropout:
     max: 0.5
     min: 0.0
