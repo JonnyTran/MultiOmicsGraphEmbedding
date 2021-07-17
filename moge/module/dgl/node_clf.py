@@ -17,6 +17,9 @@ from moge.module.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subse
 from moge.module.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.module.dgl.latte import LATTE
 from moge.module.losses import ClassificationLoss
+
+from .HGConv.model.HGConv import HGConv as Hgconv
+
 from .hgt import Hgt
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
@@ -225,14 +228,14 @@ class HGConv(NodeClfTrainer):
         super().__init__(Namespace(**args), dataset, metrics)
         self.dataset = dataset
 
-        self.hgconv = moge.module.dgl.HGConv.HGConv(graph=dataset.G,
-                                                    input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
-                                                                    for ntype in dataset.G.ntypes},
-                                                    hidden_dim=args['hidden_units'],
-                                                    num_layers=len(dataset.neighbor_sizes),
-                                                    n_heads=args['num_heads'],
-                                                    dropout=args['dropout'],
-                                                    residual=args['residual'])
+        self.hgconv = Hgconv(graph=dataset.G,
+                             input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
+                                             for ntype in dataset.G.ntypes},
+                             hidden_dim=args['hidden_units'],
+                             num_layers=len(dataset.neighbor_sizes),
+                             n_heads=args['num_heads'],
+                             dropout=args['dropout'],
+                             residual=args['residual'])
 
         self.classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
 
