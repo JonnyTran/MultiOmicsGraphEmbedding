@@ -34,7 +34,7 @@ class DGLNodeSampler(HeteroNetDataset):
                  edge_dir=True,
                  reshuffle_train: float = None,
                  add_reverse_metapaths=True,
-                 inductive=True):
+                 inductive=False):
         self.neighbor_sizes = neighbor_sizes
         self.embedding_dim = embedding_dim
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
