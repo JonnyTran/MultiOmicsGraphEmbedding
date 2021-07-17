@@ -393,7 +393,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                     tokens.append(token)
 
             reverse_metapath = tuple(tokens)
-            print(metapath, reverse_metapath)
+            print("Reversing", metapath, "to", reverse_metapath)
 
         elif isinstance(metapath, str):
             reverse_metapath = "".join(reversed(metapath))
