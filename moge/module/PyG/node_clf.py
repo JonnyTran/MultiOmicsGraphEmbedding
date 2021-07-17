@@ -81,8 +81,7 @@ class LATTENodeClf(NodeClfTrainer):
                 hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
                 logging.info("embedding_dim {}".format(hparams.embedding_dim))
             elif hparams.layer_pooling == "rel_concat":
-                hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].num_head_relations(
-                    self.head_node_type)
+                hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
 
             self.classifier = DenseClassification(hparams)
         else:

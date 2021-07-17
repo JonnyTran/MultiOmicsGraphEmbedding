@@ -66,12 +66,11 @@ class LATTE(nn.Module):
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           dropout=False if not hasattr(hparams,
                                                        "dropout") or is_output_layer else hparams.dropout,
+                          input_dropout=hparams.input_dropout if "input_dropout" in hparams else False,
                           attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
                           edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
                           use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
-                          layer_pooling=layer_pooling,
-                          input_dropout=hparams.input_dropout if "input_dropout" in hparams else False
-                          ))
+                          layer_pooling=layer_pooling if is_last_layer else None))
 
             if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
                 higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
@@ -120,10 +119,10 @@ class LATTE(nn.Module):
             # if self.use_proximity and t_loss is not None:
             #     proximity_loss += t_loss
 
-            if self.layer_pooling != "last":
+            if self.layer_pooling in ["max", "mean", "concat"]:
                 h_out_layers[self.head_node_type].append(h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
 
-        if self.layer_pooling == "last" or self.n_layers == 1:
+        if self.layer_pooling in ["last", "rel_concat"] or self.n_layers == 1:
             out = h_out
 
         elif self.layer_pooling == "max":
@@ -213,9 +212,9 @@ class LATTE(nn.Module):
 
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
-                 activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, attn_heads=4,
-                 attn_activation="sharpening", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
-                 neg_sampling_ratio=1.0, layer_pooling=None, input_dropout=True) -> None:
+                 activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, input_dropout=True,
+                 attn_heads=4, attn_activation="sharpening", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
+                 neg_sampling_ratio=1.0, layer_pooling=None) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.t_order = t_order
@@ -385,6 +384,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 edge_pred_dict.update(edge_attn_dict)
 
             h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
+
+            if self.layer_pooling == "rel_concat":
+
+                if hasattr(self, "activation"):
+                    h_out[ntype] = self.activation(h_out[ntype])
+
+                if hasattr(self, "dropout"):
+                    h_out[ntype] = self.dropout(h_out[ntype])
+                continue
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)

@@ -11,7 +11,7 @@ from skmultilearn.model_selection import IterativeStratification
 def stratify_train_test(y_label, n_splits=10, seed=42):
     y_label_bin = MultiLabelBinarizer().fit_transform(y_label)
 
-    k_fold = IterativeStratification(n_splits=n_splits, order=1, random_state=seed)
+    k_fold = IterativeStratification(n_splits=n_splits, order=1, random_state=seed, shuffle=True)
     for train, test in k_fold.split(y_label.index.to_list(), sps.lil_matrix(y_label_bin)):
         print("train", len(train), "test", len(test))
         train_nodes = list(y_label.index[train])
