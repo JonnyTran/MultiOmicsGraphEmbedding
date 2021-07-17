@@ -61,7 +61,6 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
         dataset = DGLNodeSampler(ogbn,
                                  sampler="MultiLayerNeighborSampler",
                                  neighbor_sizes=[10, 10],
-                                 head_node_type="paper",
                                  edge_dir="in",
                                  add_reverse_metapaths=True,
                                  inductive=hparams.inductive, reshuffle_train=train_ratio if train_ratio else False)

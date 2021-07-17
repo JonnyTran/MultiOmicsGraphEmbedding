@@ -9,8 +9,10 @@ import os
 import random
 import time
 import dgl
+import networkx as nx
 
-def sample_relation_subsets(g, args):
+
+def sample_relation_subsets(g: nx.MultiDiGraph, args):
     # each relation has prob 0.5 to be kept
     prob = 0.5
     edges = []
@@ -31,6 +33,7 @@ def sample_relation_subsets(g, args):
 
         sorted(selected)
         subsets.add(tuple(selected))
+        print("subsets", subsets)
 
     return subsets
 

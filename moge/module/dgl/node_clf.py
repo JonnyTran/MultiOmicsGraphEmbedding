@@ -228,18 +228,18 @@ class HGConv(NodeClfTrainer):
         super().__init__(Namespace(**args), dataset, metrics)
         self.dataset = dataset
 
-        self.hgconv = Hgconv(graph=dataset.G,
-                             input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
-                                             for ntype in dataset.G.ntypes},
-                             hidden_dim=args['hidden_units'],
-                             num_layers=len(dataset.neighbor_sizes),
-                             n_heads=args['num_heads'],
-                             dropout=args['dropout'],
-                             residual=args['residual'])
+        hgconv = Hgconv(graph=dataset.G,
+                        input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
+                                        for ntype in dataset.G.ntypes},
+                        hidden_dim=args['hidden_units'],
+                        num_layers=len(dataset.neighbor_sizes),
+                        n_heads=args['num_heads'],
+                        dropout=args['dropout'],
+                        residual=args['residual'])
 
-        self.classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
+        classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
 
-        self.model = nn.Sequential(self.hgconv, self.classifier)
+        self.model = nn.Sequential(hgconv, classifier)
         self.criterion = nn.CrossEntropyLoss()
 
         args["n_params"] = self.get_n_params()
@@ -593,7 +593,6 @@ class HAN(NodeClfTrainer):
 
         # if dataset.name() == "ACM":
         #     metapath_list = [['pa', 'ap'], ['pf', 'fp']]
-        # else:
         edge_paths = sample_metapaths(metagraph=dataset.G.metagraph(),
                                       source=self.dataset.head_node_type,
                                       targets=self.dataset.head_node_type,
@@ -614,7 +613,7 @@ class HAN(NodeClfTrainer):
                          num_heads=args['num_heads'],
                          dropout=args['dropout'])
 
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=args["loss_type"], )
 
         args["n_params"] = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
@@ -744,7 +743,6 @@ class HGT(NodeClfTrainer):
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel)
 
-        self._name = f"HGT-{self.n_layers}"
         self.hparams.n_params = self.get_n_params()
 
     def forward(self, blocks, batch_inputs: dict, **kwargs):

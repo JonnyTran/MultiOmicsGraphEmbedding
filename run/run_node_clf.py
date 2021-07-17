@@ -109,7 +109,7 @@ def train(hparams):
         args = {
             'R': 2,
             'ff_layer': 2,
-            'num_subsets': 8,
+            'num_subsets': min(8, len(dataset.G.etypes) ** len(dataset.G.etypes)),
             'num_hidden': 256,
             #     'use_relation_subsets': "../MultiOmicsGraphEmbedding/moge/module/dgl/NARS/sample_relation_subsets/examples/mag",
             'input_dropout': True,
@@ -126,7 +126,7 @@ def train(hparams):
     elif hparams.method == "HGConv":
         args = {
             'seed': hparams.run,
-            'cuda': 0,
+            'head_node_type': dataset.head_node_type,
             'num_heads': 8,  # Number of attention heads
             'hidden_units': 32,
             'dropout': 0.5,
@@ -145,7 +145,6 @@ def train(hparams):
 
     elif hparams.method == "R_HGNN":
         args = {
-            'model_name': 'R_HGNN_lr0.001_dropout0.5_seed_0',
             "head_node_type": dataset.head_node_type,
             'seed': hparams.run,
             'learning_rate': 0.001,
