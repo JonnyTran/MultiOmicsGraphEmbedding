@@ -247,11 +247,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self.dropout = nn.Dropout(p=dropout)
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict({
-                node_type: nn.BatchNorm1d(output_dim) \
+                node_type: nn.BatchNorm1d(
+                    output_dim * self.t_order if self.layer_pooling == "rel_concat" else output_dim) \
                 for node_type in self.node_types})
         if layernorm:
             self.layernorm = torch.nn.ModuleDict({
-                node_type: nn.LayerNorm(output_dim) \
+                node_type: nn.LayerNorm(output_dim * self.t_order if self.layer_pooling == "rel_concat" else output_dim) \
                 for node_type in self.node_types})
 
         # self.conv = torch.nn.ModuleDict(
@@ -386,6 +387,29 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
 
             if self.layer_pooling == "rel_concat":
+                beta[ntype] = []
+                rel_idxs = []
+                order_embs = []
+                for order in range(1, self.t_order + 1):
+                    rel_idx = [self.get_head_relations(ntype).index(m) \
+                               for m in self.get_head_relations(ntype, order=order)]
+                    if order == 1:
+                        rel_idx.append(self.num_head_relations(ntype) - 1)
+
+                    sub_beta = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype][:, rel_idx], ntype=ntype)
+
+                    order_emb = h_out[ntype][:, rel_idx] * sub_beta.unsqueeze(-1)
+                    order_emb = order_emb.sum(1).view(h_out[ntype].size(0), self.embedding_dim)
+
+                    order_embs.append(order_emb)
+                    beta[ntype].append(sub_beta)
+                    rel_idxs.extend(rel_idx)
+
+                h_out[ntype] = torch.cat(order_embs, dim=1)
+                beta[ntype] = torch.cat(beta[ntype], dim=1)[:, rel_idxs]
+
+                if hasattr(self, "layernorm"):
+                    h_out[ntype] = self.layernorm[ntype](h_out[ntype])
 
                 if hasattr(self, "activation"):
                     h_out[ntype] = self.activation(h_out[ntype])

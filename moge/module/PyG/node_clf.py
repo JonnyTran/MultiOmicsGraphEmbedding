@@ -85,7 +85,7 @@ class LATTENodeClf(NodeClfTrainer):
 
             self.classifier = DenseClassification(hparams)
         else:
-            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
+            assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
         self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
                                             loss_type=hparams.loss_type,

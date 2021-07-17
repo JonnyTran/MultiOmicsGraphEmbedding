@@ -1,7 +1,7 @@
 import copy
 import logging
 from abc import abstractmethod
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Dict
 
 import dgl
 import networkx as nx
@@ -16,7 +16,9 @@ from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 from scipy.io import loadmat
 from sklearn.cluster import KMeans
+
 from torch.utils import data
+from torch import Tensor
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_geometric.utils import is_undirected
 from torch_sparse import transpose
@@ -104,7 +106,7 @@ class Network:
             nid = global_node_index[node_type].cpu().numpy().astype(str)
             n_type_id = np.core.defchararray.add(node_type[0], nid)
 
-            if isinstance(h_dict[node_type], torch.Tensor):
+            if isinstance(h_dict[node_type], Tensor):
                 df = pd.DataFrame(h_dict[node_type].detach().cpu().numpy(), index=n_type_id)
             else:
                 df = pd.DataFrame(h_dict[node_type], index=n_type_id)
@@ -248,7 +250,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             self.n_classes = None
 
         if hasattr(self, "class_counts"):
-            self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
+            self.class_weight = torch.sqrt(torch.true_divide(1, Tensor(self.class_counts, dtype=torch.float)))
             assert self.class_weight.numel() == self.n_classes, f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
 
         assert hasattr(self, "num_nodes_dict")
@@ -361,12 +363,18 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         return node_ids_dict
 
-    def add_reverse_edge_index(self, edge_index_dict) -> None:
+    def add_reverse_edge_index(self, edge_index_dict: Dict[Tuple[str], Tensor]) -> None:
         reverse_edge_index_dict = {}
-        for metapath in edge_index_dict:
+        for metapath, edge_index in edge_index_dict.items():
             if is_negative(metapath) or edge_index_dict[metapath] == None: continue
+
             reverse_metapath = self.reverse_metapath_name(metapath)
 
+            if metapath == reverse_metapath and isinstance(edge_index, Tensor) and is_undirected(edge_index):
+                print(f"skipping reverse {metapath} because edges are symmetrical")
+                continue
+
+            print("Reversing", metapath, "to", reverse_metapath)
             reverse_edge_index_dict[reverse_metapath] = transpose(index=edge_index_dict[metapath], value=None,
                                                                   m=self.num_nodes_dict[metapath[0]],
                                                                   n=self.num_nodes_dict[metapath[-1]])[0]
@@ -393,7 +401,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                     tokens.append(token)
 
             reverse_metapath = tuple(tokens)
-            print("Reversing", metapath, "to", reverse_metapath)
 
         elif isinstance(metapath, str):
             reverse_metapath = "".join(reversed(metapath))
@@ -410,7 +417,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
     @staticmethod
     def sps_adj_to_edgeindex(adj):
         adj = adj.tocoo(copy=False)
-        return torch.tensor(np.vstack((adj.row, adj.col)).astype("long"))
+        return Tensor(np.vstack((adj.row, adj.col)).astype("long"))
 
     def process_BlogCatalog6k(self, dataset, train_ratio):
         data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
@@ -419,7 +426,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                              "tag": torch.arange(data["tagnetwork"].shape[0])}
         self.node_types = ["user", "tag"]
         self.head_node_type = "user"
-        self.y_dict = {self.head_node_type: torch.tensor(data["usercategory"].toarray().astype(int))}
+        self.y_dict = {self.head_node_type: Tensor(data["usercategory"].toarray().astype(int))}
         print("self.y_dict", {k: v.shape for k, v in self.y_dict.items()})
 
         self.metapaths = [("user", "usertag", "tag"),
@@ -473,7 +480,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                   ~np.isin(other_nodes, self.testing_idx)
             other_nodes = other_nodes[idx]
             self.training_subgraph_idx = torch.cat(
-                [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
+                [self.training_idx, Tensor(other_nodes, dtype=self.training_idx.dtype)],
                 dim=0).unique()
 
         self.data = data
@@ -482,13 +489,13 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         graph = dataset.load()
         self.node_types = graph.node_types if node_types is None else node_types
         self.metapaths = graph.metapaths
-        self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
+        self.y_index_dict = {k: Tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
 
         edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
         edge_index_dict = {path: [] for path in metapath}
         for u, v, t in edgelist:
             edge_index_dict[metapath[t]].append([u, v])
-        self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
+        self.edge_index_dict = {metapath: Tensor(edges, dtype=torch.long).T for metapath, edges in
                                 edge_index_dict.items()}
         self.training_node, self.validation_node, self.testing_node = self.split_train_val_test(train_ratio)
 
@@ -587,8 +594,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         return (edge_index, values)
 
     def collate_HAN(self, iloc, mode=None):
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
+        if not isinstance(iloc, Tensor):
+            iloc = Tensor(iloc)
 
         if "train" in mode:
             filter = True if self.inductive else False
@@ -631,8 +638,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         return X, y, None
 
     def collate_HAN_batch(self, iloc, mode=None):
-        if not isinstance(iloc, torch.Tensor):
-            iloc = torch.tensor(iloc)
+        if not isinstance(iloc, Tensor):
+            iloc = Tensor(iloc)
 
         X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
         print("X_batch", tensor_sizes(X_batch))

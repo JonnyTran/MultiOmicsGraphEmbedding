@@ -15,6 +15,7 @@ from dgl.init import zero_initializer
 from dgl.sampling import RandomWalkNeighborSampler
 from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
+from torch_geometric.utils import is_undirected
 
 from moge.data.network import HeteroNetDataset
 from moge.module.utils import tensor_sizes
@@ -176,11 +177,14 @@ class DGLNodeSampler(HeteroNetDataset):
 
             # Reverse edges
             if add_reverse:
-                # if metapath == tuple(reversed(metapath)):
-                #     print("skipped reversing", metapath)
-                #     continue
                 reverse_metapath = self.reverse_metapath_name(metapath)
+
+                if metapath == reverse_metapath and is_undirected(torch.stack([src, dst], dim=0)):
+                    print(f"skipping reverse {metapath} because edges are symmetrical")
+                    continue
+
                 assert reverse_metapath not in relations
+                print("Reversing", metapath, "to", reverse_metapath)
                 src, dst = reversed_g.all_edges(etype=metapath[1])
                 relations[reverse_metapath] = (src, dst)
 

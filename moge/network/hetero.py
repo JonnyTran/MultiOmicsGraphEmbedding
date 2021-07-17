@@ -3,16 +3,18 @@ from argparse import Namespace
 import networkx as nx
 import numpy as np
 import pandas as pd
+from typing import Dict, Tuple
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
 from openomics.utils.df import concat_uniques
 from openomics import MultiOmics
+from moge.data.dgl.node_generator import DGLNodeSampler
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics: MultiOmics, node_types: list, layers: {(str, str, str): nx.Graph},
+    def __init__(self, multiomics: MultiOmics, node_types: list, layers: Dict[Tuple[str]: nx.Graph],
                  annotations=True, ) -> None:
         """
         :param multiomics: MultiOmics object containing annotations
@@ -22,7 +24,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         """
         self.multiomics = multiomics
         self.node_types = node_types
-        self.layers_adj = {}
+        self.networks: Dict[nx.Graph] = {}
 
         networks = {}
         for src_etype_dst, GraphClass in layers.items():
@@ -149,6 +151,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             y_omic = self.all_annotations.loc[y_label.index,
                                               MODALITY_COL].str.split("\||:")
             y_label = y_label + y_omic
+
+        print("y_label", y_label.shape)
 
         self.train_test_splits = list(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
 
