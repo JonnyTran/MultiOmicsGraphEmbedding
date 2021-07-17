@@ -68,7 +68,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         ogbn = DglNodePropPredDataset(name=name, root=dataset_path)
         dataset = DGLNodeSampler(ogbn,
                                  sampler="MultiLayerNeighborSampler",
-                                 neighbor_sizes=[10, 10],
+                                 neighbor_sizes=args.neighbor_sizes,
                                  edge_dir="in",
                                  add_reverse_metapaths=True,
                                  inductive=args.inductive, reshuffle_train=train_ratio if train_ratio else False)
