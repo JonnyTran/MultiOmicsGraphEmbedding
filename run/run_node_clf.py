@@ -28,7 +28,7 @@ def train(hparams):
     CALLBACKS = None
     NUM_GPUS = hparams.num_gpus
 
-    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio,
+    dataset = load_node_dataset(hparams.dataset, hparams.method, args=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
 
     METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]

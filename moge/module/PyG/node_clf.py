@@ -286,13 +286,13 @@ class LATTENodeClf(NodeClfTrainer):
                         and "embeddings" not in name],
              'weight_decay': self.hparams.weight_decay},
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0},
-            {'params': [p for name, p in param_optimizer if "embeddings" in name], 'lr': self.lr / 10,
+            {'params': [p for name, p in param_optimizer if "embeddings" in name], 'lr': self.lr / 5,
              'weight_decay': 0.0},
         ]
 
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
         # print("no weight_decay", sorted({name for name, p in param_optimizer if any(key in name for key in no_decay)}))
-        print("embeddings", [name for name, p in param_optimizer if "embeddings" in name])
+        # print("embeddings", [name for name, p in param_optimizer if "embeddings" in name])
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,

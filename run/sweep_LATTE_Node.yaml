@@ -9,17 +9,17 @@ early_terminate:
   s: 2
 parameters:
   embedding_dim:
-    values: [ 64, 128, 256 ]
-  trainable_embedding:
+    values: [ 128, 256 ]
+  freeze_embeddings:
     values: [ True, False ]
   n_layers:
     values: [ 2, 3 ]
   t_order:
     values: [ 1, 2, 3 ]
   n_neighbors:
-    values: [ 20, 30, 40 ]
+    values: [ 10, 15, 20 ]
   layer_pooling:
-    values: [ "last", "concat" ]
+    values: [ "last", "concat", "rel_concat" ]
 
   batchnorm:
     values: [ True, False ]
@@ -44,11 +44,11 @@ parameters:
     max: 0.5
     min: 0.0
     distribution: uniform
+  input_dropout:
+    values: [ True, False ]
 
   edge_threshold:
-    max: 0.5
-    min: 0.0
-    distribution: uniform
+    values: [ 0, 0.2, 0.5 ]
 
   gradient_clip_val:
     values: [ 0, 1.0, 0.5, 0.1 ]
@@ -59,4 +59,4 @@ parameters:
     values: [ 0.001, 0.0001, 0.00001, 0.0 ]
 
   lr:
-    values: [ 0.001, 0.005, 0.01, 0.05 ]
+    values: [ 0.01 ]

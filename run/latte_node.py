@@ -2,8 +2,8 @@ import logging
 import sys, random
 from argparse import ArgumentParser, Namespace
 
-logger = logging.getLogger("wandb")
-logger.setLevel(logging.ERROR)
+# logger = logging.getLogger("wandb")
+# logger.setLevel(logging.INFO)
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
 from pytorch_lightning.trainer import Trainer
@@ -12,22 +12,22 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
 from moge.module.PyG.node_clf import LATTENodeClf
-from run.utils import load_node_dataset
+from run.load_data import load_node_dataset
 
 
 def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = True  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 100
+    MAX_EPOCHS = 15
 
     neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.n_layers):
         neighbor_sizes.extend([neighbor_sizes[-1] // 2])
-    print("neighbor_sizes", neighbor_sizes)
-    hparams.neighbor_sizes = neighbor_sizes
+    hparams.neighbor_sizes = list(reversed(neighbor_sizes))
+    print("neighbor_sizes", hparams.neighbor_sizes)
 
-    dataset = load_node_dataset(hparams.dataset, method="LATTE", hparams=hparams, train_ratio=None,
-                                dataset_dir=hparams.dir_path)
+    dataset = load_node_dataset(hparams.dataset, method="LATTE", args=hparams, train_ratio=None,
+                                dataset_path=hparams.root_path)
 
     METRICS = [dataset.name() if "ogb" in dataset.name() else "accuracy"]
 
@@ -64,15 +64,17 @@ if __name__ == "__main__":
 
     # Dataset
     parser.add_argument('--dataset', type=str, default="ogbn-mag")
-    parser.add_argument('--dir_path', type=str, default="/home/jonny/Bioinformatics_ExternalData/OGB/")
+    parser.add_argument('--root_path', type=str, default="/home/jonny/Bioinformatics_ExternalData/OGB/")
+    parser.add_argument('--use_emb', type=str,
+                        default="/home/jonny/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
     parser.add_argument('--inductive', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
-    parser.add_argument('--trainable_embedding', type=bool, default=False)
+    parser.add_argument('--freeze_embeddings', type=bool, default=False)
 
     # parametrize the network
     parser.add_argument('-g', '--num_gpus', type=int, default=1)
     parser.add_argument("-d", '--embedding_dim', type=int, default=128)
-    parser.add_argument('-n', '--batch_size', type=int, default=2048)
+    parser.add_argument('-n', '--batch_size', type=int, default=1024)
     parser.add_argument('--n_neighbors', type=int, default=20)
     parser.add_argument("-l", '--n_layers', type=int, default=2)
     parser.add_argument("-t", '--t_order', type=int, default=2)
@@ -82,6 +84,7 @@ if __name__ == "__main__":
     parser.add_argument('--layernorm', type=bool, default=True)
     parser.add_argument('--layer_pooling', type=str, default="last")
     parser.add_argument('--dropout', type=float, default=0.4)
+    parser.add_argument('--input_dropout', type=bool, default=True)
 
     parser.add_argument('--attn_heads', type=int, default=4)
     parser.add_argument('--attn_activation', type=str, default="LeakyReLU")

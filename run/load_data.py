@@ -21,8 +21,8 @@ from moge.module.dgl.NARS.data import load_acm
 from moge.module.utils import preprocess_input
 
 
-def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
-                        path: str, skip_ntype: str = None):
+def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler], path: str, skip_ntype: str = None,
+                        args: Namespace = None):
     node_emb = {}
     if os.path.exists(path) and os.path.isdir(path):
         for file in os.listdir(path):
@@ -37,25 +37,33 @@ def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
         for ntype, ndata in preprocess_input(features, device="cpu", dtype=torch.float).items():
             node_emb[ntype] = ndata
     else:
-        logging.warning(f"Failed to import embeddings from {path}")
+        print(f"Failed to import embeddings from {path}")
 
     for ntype, ndata in node_emb.items():
         if skip_ntype == ntype:
             logging.info(f"Use original features (not embeddings) for node type: {ntype}")
             continue
 
-        if isinstance(dataset.G, dgl.DGLHeteroGraph):
+        if "freeze_embeddings" in args and args.freeze_embeddings == False:
+            print("got here")
+            if "node_emb_init" not in args:
+                args.node_emb_init = {}
+
+            args.node_emb_init[ntype] = ndata
+
+        elif isinstance(dataset.G, dgl.DGLHeteroGraph):
             dataset.G.nodes[ntype].data["feat"] = ndata
+
         elif isinstance(dataset.G, HeteroNeighborGenerator):
             dataset.G.x_dict[ntype] = ndata
         else:
             raise Exception(f"Cannot recognize type of {dataset.G}")
 
-        logging.info(f"Loaded embeddings for {ntype}: {ndata.shape}")
+        print(f"Loaded embeddings for {ntype}: {ndata.shape}")
 
 
-def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
-                      dataset_path="~/Bioinformatics_ExternalData/OGB/"):
+def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
+                      dataset_path="dataset"):
     if "ogbn" in name:
         ogbn = DglNodePropPredDataset(name=name, root=dataset_path)
         dataset = DGLNodeSampler(ogbn,
@@ -63,24 +71,24 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                  neighbor_sizes=[10, 10],
                                  edge_dir="in",
                                  add_reverse_metapaths=True,
-                                 inductive=hparams.inductive, reshuffle_train=train_ratio if train_ratio else False)
+                                 inductive=args.inductive, reshuffle_train=train_ratio if train_ratio else False)
 
         if name == "ogbn-mag":
-            add_node_embeddings(dataset, path=os.path.join(hparams.use_emb, "TransE_mag/"))
+            add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_mag/"), args=args)
         elif name == "ogbn-proteins":
-            add_node_embeddings(dataset, path=os.path.join(hparams.use_emb, "TransE_l2_ogbn-proteins/"))
+            add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_l2_ogbn-proteins/"), args=args)
         else:
-            logging.warning(f"Cannot load embeddings for {dataset} at {hparams.use_emb}")
+            print(f"Cannot load embeddings for {dataset} at {args.use_emb}")
 
     elif name == "ACM":
         dataset = DGLNodeSampler.from_dgl_heterograph(
-            *load_acm(use_emb=os.path.join(hparams.use_emb, "TransE_acm/")),
+            *load_acm(use_emb=os.path.join(args.use_emb, "TransE_acm/")),
             sampler="MultiLayerNeighborSampler",
             neighbor_sizes=[10],
             head_node_type="paper",
             edge_dir="in",
             add_reverse_metapaths=True,
-            inductive=hparams.inductive, reshuffle_train=train_ratio if train_ratio else False)
+            inductive=args.inductive, reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "ACM"
 
     elif name == "DBLP":
@@ -91,7 +99,7 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                                   head_node_type="A",
                                                   metapaths=[("P", "PA", "A"), ("A", "AP", "P"), ("P", "PC", "C"),
                                                              ("C", "CP", "P")],
-                                                  add_reverse_metapaths=False, inductive=hparams.inductive,
+                                                  add_reverse_metapaths=False, inductive=args.inductive,
                                                   reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "DBLP"
 
@@ -106,7 +114,7 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
                                                              ("D", "DA", "A"),
                                                              ("A", "AD", "D")
                                                              ],
-                                                  add_reverse_metapaths=False, inductive=hparams.inductive,
+                                                  add_reverse_metapaths=False, inductive=args.inductive,
                                                   reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "IMDB"
 
@@ -114,11 +122,11 @@ def load_node_dataset(name: str, method, hparams: Namespace, train_ratio=None,
         dataset = HeteroNeighborGenerator(AMiner("datasets/aminer"), [25, 20], node_types=None,
                                           metapaths=[('paper', 'written by', 'author'),
                                                      ('venue', 'published', 'paper')], head_node_type="author",
-                                          resample_train=train_ratio, inductive=hparams.inductive)
+                                          resample_train=train_ratio, inductive=args.inductive)
     elif name == "BlogCatalog":
         dataset = HeteroNeighborGenerator("datasets/blogcatalog6k.mat", [25, 20], node_types=["user", "tag"],
                                           head_node_type="user", resample_train=train_ratio,
-                                          inductive=hparams.inductive)
+                                          inductive=args.inductive)
     else:
         raise Exception(f"dataset {name} not found")
 
