@@ -14,7 +14,7 @@ from moge.data.dgl.node_generator import DGLNodeSampler
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics: MultiOmics, node_types: list, layers: Dict[Tuple[str]: nx.Graph],
+    def __init__(self, multiomics: MultiOmics, node_types: list, layers: Dict[Tuple[str], nx.Graph],
                  annotations=True, ) -> None:
         """
         :param multiomics: MultiOmics object containing annotations
@@ -81,11 +81,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                                  filter_label,
                                                                  min_count, verbose=verbose)
 
-    def add_edges(self, edgelist, layer: (str, str, str), database, **kwargs):
-        source = layer[0]
-        target = layer[-1]
-        self.networks[layer].add_edges_from(edgelist, source=source, target=target, database=database, **kwargs)
-        print(len(edgelist), "edges added to self.networks[{}]".format(layer))
+    def add_edges(self, edgelist, etype: (str, str, str), database, **kwargs):
+        source = etype[0]
+        target = etype[-1]
+        self.networks[etype].add_edges_from(edgelist, source=source, target=target, database=database, etype=etype,
+                                            **kwargs)
+        print(len(edgelist), "edges added to self.networks[{}]".format(etype))
 
     def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, method="GAT", output="dense"):
         """
@@ -148,19 +149,32 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                       min_count=n_splits,
                                       dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
-            y_omic = self.all_annotations.loc[y_label.index,
-                                              MODALITY_COL].str.split("\||:")
-            y_label = y_label + y_omic
+            omic_type_col = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
+            y_label = y_label + omic_type_col
 
         print("y_label", y_label.shape)
 
-        self.train_test_splits = list(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
+        train_val, test = next(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
 
-        self.training = Namespace()
-        self.testing = Namespace()
-        self.training.node_list = self.train_test_splits[0][0]
-        self.testing.node_list = self.train_test_splits[0][1]
+        if not hasattr(self, "training"):
+            self.training = Namespace()
+        if not hasattr(self, "validation"):
+            self.validation = Namespace()
+        if not hasattr(self, "testing"):
+            self.testing = Namespace()
+
+        train, valid = next(stratify_train_test(y_label=y_label[train_val], n_splits=int(1 // 0.1), seed=seed))
+
+        self.training.node_list = train
+        self.validation.node_list = valid
+        self.testing.node_list = test
 
     def get_aggregated_network(self):
         G = nx.compose_all(list(self.networks.values()))
         return G
+
+    def to_dgl_heterograph(self):
+        training_idx = {ntype: [nid for nid in nids if nid in self.training.node_list] for ntype, nids in
+                        self.nodes.to_dict().items()}
+        testing_idx = {ntype: [nid for nid in nids if nid in self.testing.node_list] for ntype, nids in
+                       self.nodes.to_dict().items()}

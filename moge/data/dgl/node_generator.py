@@ -179,7 +179,7 @@ class DGLNodeSampler(HeteroNetDataset):
             if add_reverse:
                 reverse_metapath = self.reverse_metapath_name(metapath)
 
-                if metapath == reverse_metapath and is_undirected(torch.stack([src, dst], dim=0)):
+                if metapath[0] == metapath[-1] and is_undirected(torch.stack([src, dst], dim=0)):
                     print(f"skipping reverse {metapath} because edges are symmetrical")
                     continue
 

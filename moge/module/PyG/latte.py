@@ -313,17 +313,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             for node_type in self.conv:
                 nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
 
-    def get_beta_weights(self, query, key, ntype: str):
-        alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
-        alpha_r = (key * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
-
-        # print("alpha_l", alpha_l.shape, "alpha_r", alpha_r.shape)
-        beta = alpha_l[:, None, :] + alpha_r
-        beta = F.leaky_relu(beta, negative_slope=0.2)
-        beta = F.softmax(beta, dim=1)
-        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
-        return beta
-
     # def get_beta_weights(self, h_dict):
     #     beta = {}
     #
@@ -337,6 +326,30 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     #         beta[ntype] = torch.softmax(beta[ntype], dim=1)
     #
     #     return beta
+
+    def get_beta_weights(self, query, key, ntype: str):
+        alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
+        alpha_r = (key * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
+
+        # print("alpha_l", alpha_l.shape, "alpha_r", alpha_r.shape)
+        beta = alpha_l[:, None, :] + alpha_r
+        beta = F.leaky_relu(beta, negative_slope=0.2)
+        beta = F.softmax(beta, dim=1)
+        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        return beta
+
+    def get_h_dict(self, input, source_target="source"):
+        h_dict = {}
+        for ntype in input:
+            if source_target == "source":
+                h_dict[ntype] = self.linear_l[ntype].forward(input[ntype])
+            elif source_target == "target":
+                h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
+
+            h_dict[ntype] = h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels)
+            h_dict[ntype] = F.tanh(h_dict[ntype])
+
+        return h_dict
 
     def forward(self, x: Dict[str, torch.Tensor],
                 prev_h_in: Dict[str, List[torch.Tensor]],
@@ -408,8 +421,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 h_out[ntype] = torch.cat(order_embs, dim=1)
                 beta[ntype] = torch.cat(beta[ntype], dim=1)[:, rel_idxs]
 
-                if hasattr(self, "layernorm"):
-                    h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+                if hasattr(self, "batchnorm"):
+                    h_out[ntype] = self.batchnorm[ntype](h_out[ntype])
 
                 if hasattr(self, "activation"):
                     h_out[ntype] = self.activation(h_out[ntype])
@@ -563,18 +576,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
 
         return x_j * alpha.unsqueeze(-1)
-
-    def get_h_dict(self, input, source_target="source"):
-        h_dict = {}
-        for ntype in input:
-            if source_target == "source":
-                h_dict[ntype] = self.linear_l[ntype].forward(input[ntype])
-            elif source_target == "target":
-                h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
-
-            h_dict[ntype] = F.tanh(h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels))
-
-        return h_dict
 
     def get_head_relations(self, head_node_type, order=None, str_form=False) -> list:
         relations = filter_metapaths(self.metapaths, order=order, tail_type=head_node_type)
