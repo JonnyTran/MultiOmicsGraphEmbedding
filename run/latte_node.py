@@ -69,7 +69,7 @@ if __name__ == "__main__":
                         default="/home/jonny/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
     parser.add_argument('--inductive', type=bool, default=False)
     parser.add_argument('--use_reverse', type=bool, default=True)
-    parser.add_argument('--freeze_embeddings', type=bool, default=False)
+    parser.add_argument('--freeze_embeddings', type=bool, default=True)
 
     # parametrize the network
     parser.add_argument('-g', '--num_gpus', type=int, default=1)

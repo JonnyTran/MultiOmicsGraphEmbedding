@@ -19,7 +19,7 @@ parameters:
   n_neighbors:
     values: [ 10, 15, 20 ]
   layer_pooling:
-    values: [ "last", "concat", "rel_concat" ]
+    values: [ "last", "concat" ]
 
   batchnorm:
     values: [ True, False ]
