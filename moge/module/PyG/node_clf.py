@@ -129,9 +129,11 @@ class LATTENodeClf(NodeClfTrainer):
                                                       sparse=False)
                 else:
                     print(f"Pretrained embeddings freeze={freeze}", ntype)
+                    max_norm = pretrain_embeddings[ntype].norm(dim=1).mean()
                     module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
                                                                       freeze=freeze,
-                                                                      scale_grad_by_freq=True)
+                                                                      scale_grad_by_freq=True,
+                                                                      max_norm=max_norm)
 
             embeddings = nn.ModuleDict(module_dict)
         else:
@@ -287,14 +289,14 @@ class LATTENodeClf(NodeClfTrainer):
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-        #                                                        T_max=self.num_training_steps,
-        #                                                        eta_min=self.lr / 100
-        #                                                        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                               T_max=self.num_training_steps,
+                                                               eta_min=self.lr / 100
+                                                               )
 
         return {"optimizer": optimizer,
-                # "lr_scheduler": scheduler,
-                # "monitor": "val_loss"
+                "lr_scheduler": scheduler,
+                "monitor": "val_loss"
                 }
 
 
