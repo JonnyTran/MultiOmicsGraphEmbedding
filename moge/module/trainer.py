@@ -186,8 +186,10 @@ class NodeClfTrainer(ClusteringEvaluator):
         #         nn = nn * s
         #     size += nn
         # return size
-        model_parameters = filter(lambda p: p.requires_grad, self.parameters())
-        params = sum([np.prod(p.size()) for p in model_parameters])
+        model_parameters = filter(lambda tup: tup[1].requires_grad and "embedding" not in tup[0],
+                                  self.named_parameters())
+
+        params = sum([np.prod(p.size()) for name, p in model_parameters])
         return params
 
     @property
