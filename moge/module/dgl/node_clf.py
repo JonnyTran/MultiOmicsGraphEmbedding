@@ -20,7 +20,7 @@ from moge.module.losses import ClassificationLoss
 
 from .HGConv.model.HGConv import HGConv as Hgconv
 
-from .hgt import Hgt
+from .HGT import Hgt
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes, process_tensor_dicts, filter_samples_weights

@@ -12,7 +12,6 @@ from torch_geometric.nn.inits import glorot, zeros
 class DenseClassification(nn.Module):
     def __init__(self, hparams) -> None:
         super(DenseClassification, self).__init__()
-
         # Classifier
         if hparams.nb_cls_dense_size > 0:
             self.fc_classifier = nn.Sequential(OrderedDict([
@@ -37,9 +36,11 @@ class DenseClassification(nn.Module):
             print("INFO: Output of `_classifier` is logits")
         elif "NEGATIVE_LOG_LIKELIHOOD" == hparams.loss_type:
             print("INFO: Output of `_classifier` is LogSoftmax")
+
             self.fc_classifier.add_module("pred_activation", nn.LogSoftmax(dim=1))
         elif "SOFTMAX_CROSS_ENTROPY" == hparams.loss_type:
             print("INFO: Output of `_classifier` is logits")
+
         elif "BCE" == hparams.loss_type:
             print("INFO: Output of `_classifier` is sigmoid probabilities")
             self.fc_classifier.add_module("pred_activation", nn.Sigmoid())
@@ -52,8 +53,7 @@ class DenseClassification(nn.Module):
 
     def reset_parameters(self):
         for linear in self.fc_classifier:
-            if isinstance(linear, torch.nn.Linear):
-                glorot(linear.weight)
+            glorot(linear.weight)
 
 
 class MulticlassClassification(nn.Module):

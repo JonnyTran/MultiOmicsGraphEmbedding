@@ -1,5 +1,6 @@
 import logging
 import os
+import pickle
 from argparse import Namespace
 
 import dgl
@@ -79,6 +80,20 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
             add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_l2_ogbn-proteins/"), args=args)
         else:
             print(f"Cannot load embeddings for {dataset} at {args.use_emb}")
+
+    elif name == "GTeX":
+        with open(os.path.join(dataset_path, 'gtex_rna_ppi_multiplex_network.pickle'), "rb") as file:
+            network = pickle.load(file)
+
+        dataset = DGLNodeSampler.from_dgl_heterograph(*network.to_dgl_heterograph(min_count=500),
+                                                      sampler="MultiLayerNeighborSampler",
+                                                      neighbor_sizes=args.neighbor_sizes,
+                                                      head_node_type=network.node_types,
+                                                      edge_dir="in",
+                                                      add_reverse_metapaths=True,
+                                                      inductive=False)
+        dataset._name = "GTeX"
+        add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_l2_GTeX/"), args=args)
 
     elif name == "ACM":
         dataset = DGLNodeSampler.from_dgl_heterograph(

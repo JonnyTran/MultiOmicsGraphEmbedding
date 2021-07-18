@@ -300,24 +300,23 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.reset_parameters()
 
     def reset_parameters(self):
-        gain = nn.init.calculate_gain('leaky_relu', 0.2)
+        # gain = nn.init.calculate_gain('leaky_relu', 0.2)
         for metapath in self.attn:
-            nn.init.xavier_normal_(self.attn[metapath], gain=gain)
+            nn.init.kaiming_uniform_(self.attn[metapath], mode='fan_in', nonlinearity='leaky_relu')
 
-        gain = nn.init.calculate_gain('relu')
+        # gain = nn.init.calculate_gain('relu')
         for ntype in self.linear_l:
-            nn.init.xavier_normal_(self.linear_l[ntype].weight, gain=gain)
-            nn.init.xavier_normal_(self.linear_r[ntype].weight, gain=gain)
+            nn.init.kaiming_uniform_(self.linear_l[ntype].weight, mode='fan_in', nonlinearity='relu')
+            nn.init.kaiming_uniform_(self.linear_r[ntype].weight, mode='fan_in', nonlinearity='relu')
 
         if hasattr(self, "rel_attn_l"):
-            gain = nn.init.calculate_gain('leaky_relu', 0.2)
             for ntype in self.rel_attn_l:
-                nn.init.xavier_normal_(self.rel_attn_l[ntype], gain=gain)
-                nn.init.xavier_normal_(self.rel_attn_r[ntype], gain=gain)
+                nn.init.kaiming_uniform_(self.rel_attn_l[ntype], mode='fan_in', nonlinearity='leaky_relu')
+                nn.init.kaiming_uniform_(self.rel_attn_r[ntype], mode='fan_in', nonlinearity='leaky_relu')
 
         if hasattr(self, "conv"):
             for node_type in self.conv:
-                nn.init.xavier_normal_(self.conv[node_type].weight, gain=1)
+                nn.init.kaiming_uniform_(self.conv[node_type].weight, mode='fan_in', nonlinearity='leaky_relu')
 
     # def get_beta_weights(self, h_dict):
     #     beta = {}
