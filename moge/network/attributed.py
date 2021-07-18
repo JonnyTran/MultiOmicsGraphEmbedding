@@ -3,6 +3,7 @@ import openomics
 import pandas as pd
 from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
+from typing import List
 
 from moge.data.sequences import SEQUENCE_COL
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
@@ -57,19 +58,20 @@ class AttributedNetwork(Network):
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
         self.delimiter = delimiter
-        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter,
-                                                                 filter_label, min_count,
-                                                                 verbose=verbose)
+        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, filter_label,
+                                                                 min_count, delimiter, verbose=verbose)
 
     @classmethod
-    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", filter_label=None, min_count=0,
+    def get_feature_transformers(cls, annotation: pd.DataFrame, node_list, filter_label: List[str] = None,
+                                 min_count: int = 0,
+                                 delimiter="\||;",
                                  verbose=False):
         """
         :param annotation: a pandas DataFrame
         :param node_list: list of nodes. Indexes the annotation DataFrame
-        :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
         :param filter_label: str or list of str for the labels to filter by min_count
         :param min_count: minimum frequency of label to keep
+        :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
         :return: dict of feature transformers
         """
         feature_transformers = {}
@@ -223,8 +225,11 @@ def filter_y_multilabel(df: pd.DataFrame, column="go_id", min_count=2, dropna=Fa
     else:
         annotations_list = df.loc[nodes_index, column]
 
-    labels_filter = get_label_min_count_filter(annotations_list, min_count)
-    print("label {} filtered: {} with min_count={}".format(column, len(labels_filter), min_count))
+    if min_count:
+        labels_filter = get_label_min_count_filter(annotations_list, min_count)
+        print(f"Column {column} filtered: {len(labels_filter)} with min_count={min_count}")
+    else:
+        labels_filter = annotations_list
 
     y_labels = annotations_list.map(
         lambda go_terms: [item for item in go_terms \

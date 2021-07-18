@@ -80,9 +80,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 {k: concat_uniques for k in self.all_annotations.columns})
 
         print("Annotation columns:", self.all_annotations.columns.tolist()) if verbose else None
-        self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
-                                                                 filter_label,
-                                                                 min_count, verbose=verbose)
+        self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, filter_label,
+                                                                 min_count, delimiter, verbose=verbose)
 
     def add_edges(self, edgelist: List[Tuple], etype: Tuple[str], database: str, **kwargs):
         source = etype[0]
@@ -196,12 +195,13 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             for col in self.all_annotations.columns.drop([label_col, "omic", "sequence"]):
                 if col in self.feature_transformer:
                     feat_filtered = filter_y_multilabel(df=self.multiomics[ntype].annotations, column=col,
-                                                        min_count=min_count, dropna=False, delimiter=self.delimiter)
+                                                        min_count=None, dropna=False, delimiter=self.delimiter)
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
                     g.nodes[ntype].data[col] = torch.from_numpy(feat)
 
         # Labels
+        self.process_feature_tranformer(filter_label=label_col, min_count=min_count)
         labels = {}
         for ntype in g.ntypes:
             if label_col not in self.multiomics[ntype].annotations.columns: continue
