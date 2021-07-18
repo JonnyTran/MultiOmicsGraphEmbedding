@@ -42,12 +42,12 @@ class ClassificationLoss(nn.Module):
         else:
             raise TypeError(f"Unsupported loss type:{loss_type}")
 
-    def forward(self, logits, target, weights=None, dense_weight: torch.Tensor = None):
+    def forward(self, logits, targets, weights=None, dense_weight: torch.Tensor = None):
         """
 
         Args:
             logits (torch.Tensor): y_pred
-            target (torch.Tensor): y_true
+            targets (torch.Tensor): y_true
             weights (): Sample weights.
             dense_weight (torch.Tensor): A tensor of the Dense layer's weights, only used when using recursive regularization.
 
@@ -57,13 +57,13 @@ class ClassificationLoss(nn.Module):
         if self.multilabel:
             assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
                                       "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
-            target = target.type_as(logits)
+            targets = targets.type_as(logits)
         else:
             if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
                                       "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
-                target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
+                targets = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[targets]
 
-        loss = self.criterion.forward(logits, target)
+        loss = self.criterion.forward(logits, targets)
 
         if (self.reduction == None or self.reduction == "none") and weights is not None:
             loss = (weights * loss).sum() / weights.sum()

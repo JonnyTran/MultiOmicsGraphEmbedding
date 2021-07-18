@@ -28,7 +28,7 @@ class LATTE(nn.Module):
         self.node_types = list(num_nodes_dict.keys())
         self.head_node_type = hparams.head_node_type
 
-        self.embedding_dim = embedding_dim * n_layers
+        self.embedding_dim = embedding_dim
 
         self.t_order = t_order
         self.n_layers = n_layers
@@ -120,7 +120,13 @@ class LATTE(nn.Module):
             #     proximity_loss += t_loss
 
             if self.layer_pooling in ["max", "mean", "concat"]:
-                h_out_layers[self.head_node_type].append(h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
+                if isinstance(self.head_node_type, str):
+                    h_out_layers[self.head_node_type].append(
+                        h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
+                else:
+                    for ntype in [ntype for ntype in sizes[-1] if sizes[-1][ntype][1]]:
+                        h_out_ntype = h_out[ntype][:sizes[-1][ntype][1]]
+                        h_out_layers[ntype].append(h_out_ntype)
 
         if self.layer_pooling in ["last", "rel_concat"] or self.n_layers == 1:
             out = h_out

@@ -1,6 +1,6 @@
 import copy
 from collections import defaultdict
-from typing import List, Dict
+from typing import List, Dict, Union
 
 import dgl
 import numpy as np
@@ -14,6 +14,7 @@ from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
 from dgl.init import zero_initializer
 from dgl.sampling import RandomWalkNeighborSampler
 from ogb.nodeproppred import DglNodePropPredDataset
+from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.utils import is_undirected
 
@@ -71,7 +72,8 @@ class DGLNodeSampler(HeteroNetDataset):
             self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
 
     @classmethod
-    def from_dgl_heterograph(cls, g: dgl.DGLHeteroGraph, labels, num_classes, train_idx, val_idx, test_idx,
+    def from_dgl_heterograph(cls, g: dgl.DGLHeteroGraph, labels: Union[Tensor, Dict[str, Tensor]],
+                             num_classes: str, train_idx: Dict[str, Tensor], val_idx, test_idx,
                              **kwargs):
 
         self = cls(dataset=g, metapaths=g.canonical_etypes, **kwargs)
@@ -82,16 +84,23 @@ class DGLNodeSampler(HeteroNetDataset):
         if not isinstance(labels, dict):
             self.y_dict[self.head_node_type] = labels
             self.G.nodes[self.head_node_type].data["label"] = labels  # [:self.G.num_nodes(self.head_node_type)]
-        else:
-            self.y_dict = labels
-            self.G.nodes[self.head_node_type].data["label"] = labels[self.head_node_type]
+        elif isinstance(labels, dict):
+            if self.head_node_type is not None and isinstance(self.head_node_type, str):
+                self.y_dict = labels
+                self.G.nodes[self.head_node_type].data["label"] = labels[self.head_node_type]
 
         self.n_classes = num_classes
-        self.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
+        if isinstance(labels, dict):
+            label = list(labels.values()).pop()
+            if not isinstance(label, Tensor):
+                label = torch.tensor(label)
+            self.multilabel = True if label.dim() > 1 and label.size(1) > 1 else False
+        else:
+            self.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
 
-        self.training_idx = train_idx if isinstance(train_idx, torch.Tensor) else torch.tensor(train_idx)
-        self.validation_idx = val_idx if isinstance(val_idx, torch.Tensor) else torch.tensor(val_idx)
-        self.testing_idx = test_idx if isinstance(test_idx, torch.Tensor) else torch.tensor(test_idx)
+        self.training_idx = torch.tensor(train_idx) if isinstance(train_idx, np.ndarray) else train_idx
+        self.validation_idx = torch.tensor(val_idx) if isinstance(val_idx, np.ndarray) else val_idx
+        self.testing_idx = torch.tensor(test_idx) if isinstance(test_idx, np.ndarray) else test_idx
         return self
 
     @classmethod
@@ -151,7 +160,7 @@ class DGLNodeSampler(HeteroNetDataset):
         return self
 
     def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,
-                           decompose_etypes=False, nodes_subset: Dict[str, torch.Tensor] = None) -> dgl.DGLHeteroGraph:
+                           decompose_etypes=False, nodes_subset: Dict[str, Tensor] = None) -> dgl.DGLHeteroGraph:
         if add_reverse:
             reversed_g = g.reverse(copy_edata=False, share_edata=False)
 
@@ -383,11 +392,16 @@ class DGLNodeSampler(HeteroNetDataset):
         else:
             graph = self.G
 
+        if isinstance(self.head_node_type, str) and isinstance(self.training_idx, (Tensor, np.ndarray)):
+            seed_nodes = {self.head_node_type: self.training_idx}
+        else:
+            seed_nodes = self.training_idx
+
         if collate_fn == "neighbor_sampler":
-            collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.training_idx},
+            collator = LATTEPyGCollator(graph, nids=seed_nodes,
                                         block_sampler=self.neighbor_sampler)
         else:
-            collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.training_idx},
+            collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     block_sampler=self.neighbor_sampler)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
@@ -407,11 +421,16 @@ class DGLNodeSampler(HeteroNetDataset):
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
 
+        if isinstance(self.head_node_type, str) and isinstance(self.training_idx, (Tensor, np.ndarray)):
+            seed_nodes = {self.head_node_type: self.validation_idx}
+        else:
+            seed_nodes = self.validation_idx
+
         if collate_fn == "neighbor_sampler":
-            collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.validation_idx},
+            collator = LATTEPyGCollator(graph, nids=seed_nodes,
                                         block_sampler=self.neighbor_sampler)
         else:
-            collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.validation_idx},
+            collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     block_sampler=self.neighbor_sampler)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
@@ -422,11 +441,16 @@ class DGLNodeSampler(HeteroNetDataset):
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
 
+        if isinstance(self.head_node_type, str) and isinstance(self.training_idx, (Tensor, np.ndarray)):
+            seed_nodes = {self.head_node_type: self.testing_idx}
+        else:
+            seed_nodes = self.testing_idx
+
         if collate_fn == "neighbor_sampler":
-            collator = LATTEPyGCollator(graph, nids={self.head_node_type: self.testing_idx},
+            collator = LATTEPyGCollator(graph, nids=seed_nodes,
                                         block_sampler=self.neighbor_sampler)
         else:
-            collator = dgl.dataloading.NodeCollator(graph, nids={self.head_node_type: self.testing_idx},
+            collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     block_sampler=self.neighbor_sampler)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
@@ -471,21 +495,33 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
                        for ntype, feat in blocks[0].srcdata["feat"].items() \
                        if feat.size(0) != 0}
 
-        y = blocks[-1].dstdata["label"]
-        if len(y) == 1:
-            y = y[list(y.keys())[0]]
-
+        y_dict = blocks[-1].dstdata["label"]
         weights = None
-        if y.dim() == 2 and y.size(1) == 1:
-            y = y.squeeze(-1)
-        elif y.dim() == 1:
-            weights = (y >= 0).to(torch.float)
 
-        return X, y, weights
+        if len(y_dict) == 1:
+            y_dict = y_dict[list(y_dict.keys()).pop()]
+
+            if y_dict.dim() == 2 and y_dict.size(1) == 1:
+                y_dict = y_dict.squeeze(-1)
+            elif y_dict.dim() == 1:
+                weights = (y_dict >= 0).to(torch.float)
+
+        elif len(y_dict) > 1:
+            weights = {}
+            for ntype, label in y_dict.items():
+                if label.dim() == 2 and label.size(1) == 1:
+                    y_dict[ntype] = label.squeeze(-1)
+
+                if label.dim() == 1:
+                    weights[ntype] = (y_dict >= 0).to(torch.float)
+                elif label.dim() == 2:
+                    weights[ntype] = (label.sum(1) > 0).to(torch.float)
+
+        return X, y_dict, weights
 
 
 class NARSDataLoader(DataLoader):
-    def __init__(self, dataset, batch_size, feats: torch.Tensor, labels: torch.Tensor, **kwargs):
+    def __init__(self, dataset, batch_size, feats: Tensor, labels: Tensor, **kwargs):
         self.feats = feats
         self.labels = labels
 

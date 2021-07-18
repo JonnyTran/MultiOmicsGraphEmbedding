@@ -46,8 +46,8 @@ def join_metapaths(metapath_A, metapath_B):
 
 def filter_metapaths(metapaths: List[Tuple[str]],
                      order: Union[int, Iterable] = None,
-                     head_type: str = None,
-                     tail_type: str = None,
+                     head_type: Union[str, Iterable] = None,
+                     tail_type: Union[str, Iterable] = None,
                      remove_duplicates=True):
     def filter_func(metapath: Tuple[str]):
         condition = True
@@ -58,9 +58,9 @@ def filter_metapaths(metapaths: List[Tuple[str]],
             condition = condition & (len(metapath[1::2]) in order)
 
         if head_type:
-            condition = condition & (metapath[0] == head_type)
+            condition = condition & (metapath[0] in head_type)
         if tail_type:
-            condition = condition & (metapath[-1] == tail_type)
+            condition = condition & (metapath[-1] in tail_type)
 
         return condition
 
@@ -172,35 +172,10 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str], Union[Tensor, Tuple[Te
                 print(f"{e} \n {metapath_a}: {edge_index_a.max(1).values, values_a.shape}, "
                       f"{metapath_b}: {edge_index_b.max(1).values, values_b.shape}")
                 print("sizes: ", {"m": m, "k": k, "n": n, })
-                raise e
+                # raise e
                 continue
 
     return output_edge_index
-
-
-def spspmm_outer_norm(indexA, valueA, indexB, valueB, m, k, n, coalesced=True, sampling=False):
-    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-                     sparse_sizes=(m, k), is_sorted=not coalesced)
-    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-                     sparse_sizes=(k, n), is_sorted=not coalesced)
-
-    deg_A = torch.pow(A.sum(1), -1)
-    deg_B = torch.pow(B.sum(1), -1)
-
-    diag_A = SparseTensor(row=torch.arange(deg_A.size(0), device=deg_A.device),
-                          col=torch.arange(deg_A.size(0), device=deg_A.device),
-                          value=deg_A,
-                          sparse_sizes=(deg_A.size(0), deg_A.size(0)), is_sorted=True)
-
-    diag_B = SparseTensor(row=torch.arange(deg_B.size(0), device=deg_B.device),
-                          col=torch.arange(deg_B.size(0), device=deg_B.device),
-                          value=deg_B,
-                          sparse_sizes=(deg_B.size(0), deg_B.size(0)), is_sorted=True)
-
-    out = A @ B
-    row, col, values = out.coo()
-
-    return torch.stack([row, col], dim=0), values
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=True, sampling=False):
@@ -251,3 +226,28 @@ def edge_index2matrix(edge_index_dict, metapath, describe=True):
 
     mtx = st.detach().to_dense().numpy()
     return mtx
+
+
+def spspmm_outer_norm(indexA, valueA, indexB, valueB, m, k, n, coalesced=True, sampling=False):
+    A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
+                     sparse_sizes=(m, k), is_sorted=not coalesced)
+    B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
+                     sparse_sizes=(k, n), is_sorted=not coalesced)
+
+    deg_A = torch.pow(A.sum(1), -1)
+    deg_B = torch.pow(B.sum(1), -1)
+
+    diag_A = SparseTensor(row=torch.arange(deg_A.size(0), device=deg_A.device),
+                          col=torch.arange(deg_A.size(0), device=deg_A.device),
+                          value=deg_A,
+                          sparse_sizes=(deg_A.size(0), deg_A.size(0)), is_sorted=True)
+
+    diag_B = SparseTensor(row=torch.arange(deg_B.size(0), device=deg_B.device),
+                          col=torch.arange(deg_B.size(0), device=deg_B.device),
+                          value=deg_B,
+                          sparse_sizes=(deg_B.size(0), deg_B.size(0)), is_sorted=True)
+
+    out = A @ B
+    row, col, values = out.coo()
+
+    return torch.stack([row, col], dim=0), values
