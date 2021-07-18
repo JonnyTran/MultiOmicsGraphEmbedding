@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Tuple, Union, List
 
+import torch
 from sklearn.preprocessing import MultiLabelBinarizer
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
@@ -24,7 +25,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         :param layers: A dict of edge types tuple and networkx.Graph/Digraph containing heterogeneous edges
         :param annotations: Whether to process annotation data, default True
         """
-        self.multiomics = multiomics
+        self.multiomics: MultiOmics = multiomics
         self.node_types = node_types
         self.networks: Dict[Tuple, nx.Graph] = {}
 
@@ -152,7 +153,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
     def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
                          dropna=False, seed=42, verbose=False):
-        y_label = filter_y_multilabel(annotations=self.all_annotations, y_label=stratify_label,
+        y_label = filter_y_multilabel(df=self.all_annotations, column=stratify_label,
                                       min_count=n_splits,
                                       dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
@@ -192,13 +193,23 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Node attributes
         for ntype in g.ntypes:
-            pass
+            for col in self.all_annotations.columns.drop([label_col, "omic", "sequence"]):
+                if col in self.feature_transformer:
+                    feat_filtered = filter_y_multilabel(df=self.multiomics[ntype].annotations, column=col,
+                                                        min_count=min_count, dropna=False, delimiter=self.delimiter)
+
+                    feat = self.feature_transformer[col].transform(feat_filtered)
+                    g.nodes[ntype].data[col] = torch.from_numpy(feat)
 
         # Labels
-        y_label = filter_y_multilabel(annotations=self.all_annotations, y_label=label_col,
-                                      min_count=min_count, dropna=False, delimiter=self.delimiter)
-        labels = MultiLabelBinarizer().fit_transform(y_label)
-        num_classes = labels.shape[1]
+        labels = {}
+        for ntype in g.ntypes:
+            if label_col not in self.multiomics[ntype].annotations.columns: continue
+            y_label = filter_y_multilabel(df=self.multiomics[ntype].annotations, column=label_col,
+                                          min_count=min_count, dropna=False, delimiter=self.delimiter)
+            labels[ntype] = self.feature_transformer[label_col].transform(y_label)
+            g.nodes[ntype].data["label"] = torch.tensor(labels[ntype])
+            num_classes = labels[ntype].shape[1]
 
         # Train test split
         training_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \

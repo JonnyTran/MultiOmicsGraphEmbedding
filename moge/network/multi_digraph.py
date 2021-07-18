@@ -374,7 +374,7 @@ class MultiDigraphNetwork(AttributedNetwork, TrainTestSplit):
         else:
             print("full_network", self.G_u.number_of_nodes(), self.G_u.number_of_edges()) if verbose else None
 
-        y_label = filter_y_multilabel(annotations=self.annotations, y_label=stratify_label, min_count=n_splits,
+        y_label = filter_y_multilabel(df=self.annotations, column=stratify_label, min_count=n_splits,
                                       dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
             y_omic = self.annotations.loc[y_label.index, MODALITY_COL].str.split("|")

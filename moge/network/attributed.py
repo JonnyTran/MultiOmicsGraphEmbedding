@@ -211,83 +211,25 @@ network if the similarity measures passes the threshold
         return label_color
 
 
-def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
+def filter_y_multilabel(df: pd.DataFrame, column="go_id", min_count=2, dropna=False, delimiter="|"):
     if dropna:
-        nodes_index = annotations[[SEQUENCE_COL] + [y_label]].dropna().index
+        nodes_index = df[[column]].dropna().index
     else:
-        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
+        nodes_index = df.index
 
-    if annotations.loc[nodes_index, y_label].dtypes == np.object and annotations.loc[nodes_index, y_label].str.contains(
-            delimiter, regex=True).any():
-        annotations_list = annotations.loc[nodes_index, y_label].str.split(delimiter)
+    if df.loc[nodes_index, column].dtypes == np.object and \
+            df.loc[nodes_index, column].str.contains(delimiter, regex=True).any():
+        annotations_list = df.loc[nodes_index, column].str.split(delimiter)
     else:
-        annotations_list = annotations.loc[nodes_index, y_label]
+        annotations_list = df.loc[nodes_index, column]
 
     labels_filter = get_label_min_count_filter(annotations_list, min_count)
-    print("label {} filtered: {} with min_count={}".format(y_label, len(labels_filter), min_count))
+    print("label {} filtered: {} with min_count={}".format(column, len(labels_filter), min_count))
 
     y_labels = annotations_list.map(
-        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
-
-    return y_labels
-
-
-def get_label_min_count_filter(annotation, min_count):
-    label_counts = {}
-
-    for items in annotation:
-        if not isinstance(items, list): continue
-        for item in items:
-            label_counts[item] = label_counts.setdefault(item, 0) + 1
-    label_counts = pd.Series(label_counts)
-    labels_filter = label_counts[label_counts < min_count].index
-    return labels_filter
-
-def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
-    """
-    Filter the gene GO annotations and assign a color for each term given :param go_id_colors:.
-    """
-    if hasattr(self, "all_annotations"):
-        labels = self.all_annotations[label].copy(deep=True)
-    else:
-        labels = self.annotations[label].copy(deep=True)
-
-    if labels.str.contains("\||;", regex=True).any():
-        labels = labels.str.split("\||;")
-
-    if label_filter is not None:
-        # Filter only annotations in label_filter
-        if not isinstance(label_filter, set): label_filter = set(label_filter)
-        labels = labels.map(lambda x: [term for term in x if term in label_filter] if x and len(x) > 0 else None)
-
-    # Filter only annotations with an associated color
-    labels = labels.map(lambda x: [term for term in x if term in go_id_colors.index] if x and len(x) > 0 else None)
-
-    # For each node select one term
-    labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
-    label_color = labels.map(go_id_colors)
-    if fillna:
-        label_color.fillna("#e5ecf6", inplace=True)
-    return label_color
-
-
-def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
-    if dropna:
-        nodes_index = annotations[[SEQUENCE_COL] + [y_label]].dropna().index
-    else:
-        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
-
-    if annotations.loc[nodes_index, y_label].dtypes == np.object and annotations.loc[nodes_index, y_label].str.contains(
-            delimiter, regex=True).any():
-        annotations_list = annotations.loc[nodes_index, y_label].str.split(delimiter)
-    else:
-        annotations_list = annotations.loc[nodes_index, y_label]
-
-    labels_filter = get_label_min_count_filter(annotations_list, min_count)
-    print("label {} filtered: {} with min_count={}".format(y_label, len(labels_filter), min_count))
-
-    y_labels = annotations_list.map(
-        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
+        lambda go_terms: [item for item in go_terms \
+                          if item not in labels_filter] \
+            if type(go_terms) == list else [])
 
     return y_labels
 
