@@ -2,6 +2,7 @@ from collections import OrderedDict
 from typing import Union, Tuple, Iterable, List, Dict
 import pandas as pd
 import torch
+from torch import Tensor
 from torch_sparse import SparseTensor, spspmm, matmul
 
 
@@ -66,7 +67,7 @@ def filter_metapaths(metapaths: List[Tuple[str]],
     return [m for m in sorted(OrderedDict.fromkeys(metapaths)) if filter_func(m)]
 
 
-def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor], torch.Tensor],
+def get_edge_index_values(edge_index_tup: Union[Tuple[Tensor, Tensor], Tensor],
                           filter_edge=False, threshold=0.5):
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
@@ -79,7 +80,7 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
             edge_index = edge_index[:, mask]
             edge_values = edge_values[mask]
 
-    elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
+    elif isinstance(edge_index_tup, Tensor) and edge_index_tup.size(1) > 0:
         edge_index = edge_index_tup
         edge_values = None
         # edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float, device=edge_index_tup.device)
@@ -91,8 +92,9 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[torch.Tensor, torch.Tensor
 
     return edge_index, edge_values
 
-def join_edge_indexes(edge_index_dict_A: Dict[Tuple, Tuple[torch.Tensor]],
-                      edge_index_dict_B: Dict[Tuple, Tuple[torch.Tensor]],
+
+def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str], Union[Tensor, Tuple[Tensor]]],
+                      edge_index_dict_B: Dict[Tuple[str], Union[Tensor, Tuple[Tensor]]],
                       sizes: List[Dict[str, Tuple[int]]],
                       layer: int,
                       metapaths: List[Tuple[str]] = None,

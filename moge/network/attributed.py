@@ -243,32 +243,32 @@ def get_label_min_count_filter(annotation, min_count):
     labels_filter = label_counts[label_counts < min_count].index
     return labels_filter
 
-    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
-        """
-        Filter the gene GO annotations and assign a color for each term given :param go_id_colors:.
-        """
-        if hasattr(self, "all_annotations"):
-            labels = self.all_annotations[label].copy(deep=True)
-        else:
-            labels = self.annotations[label].copy(deep=True)
+def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
+    """
+    Filter the gene GO annotations and assign a color for each term given :param go_id_colors:.
+    """
+    if hasattr(self, "all_annotations"):
+        labels = self.all_annotations[label].copy(deep=True)
+    else:
+        labels = self.annotations[label].copy(deep=True)
 
-        if labels.str.contains("\||;", regex=True).any():
-            labels = labels.str.split("\||;")
+    if labels.str.contains("\||;", regex=True).any():
+        labels = labels.str.split("\||;")
 
-        if label_filter is not None:
-            # Filter only annotations in label_filter
-            if not isinstance(label_filter, set): label_filter = set(label_filter)
-            labels = labels.map(lambda x: [term for term in x if term in label_filter] if x and len(x) > 0 else None)
+    if label_filter is not None:
+        # Filter only annotations in label_filter
+        if not isinstance(label_filter, set): label_filter = set(label_filter)
+        labels = labels.map(lambda x: [term for term in x if term in label_filter] if x and len(x) > 0 else None)
 
-        # Filter only annotations with an associated color
-        labels = labels.map(lambda x: [term for term in x if term in go_id_colors.index] if x and len(x) > 0 else None)
+    # Filter only annotations with an associated color
+    labels = labels.map(lambda x: [term for term in x if term in go_id_colors.index] if x and len(x) > 0 else None)
 
-        # For each node select one term
-        labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
-        label_color = labels.map(go_id_colors)
-        if fillna:
-            label_color.fillna("#e5ecf6", inplace=True)
-        return label_color
+    # For each node select one term
+    labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
+    label_color = labels.map(go_id_colors)
+    if fillna:
+        label_color.fillna("#e5ecf6", inplace=True)
+    return label_color
 
 
 def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):

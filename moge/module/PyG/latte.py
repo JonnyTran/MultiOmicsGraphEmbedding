@@ -5,7 +5,7 @@ import numpy as np, pandas as pd
 import pytorch_lightning as pl
 import torch
 from colorhash import ColorHash
-from torch import nn as nn
+from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
@@ -81,7 +81,7 @@ class LATTE(nn.Module):
         else:
             self.layer_pooling = layer_pooling
 
-    def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, torch.Tensor]], sizes: List[Dict[str, Tuple[int]]],
+    def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, Tensor]], sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: List[Dict], save_betas=False):
         """
         This
@@ -275,14 +275,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
              for metapath in filter_metapaths(self.metapaths, order=None)})
 
         self.rel_attn_l = nn.ParameterDict({
-            ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
+            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
         self.rel_attn_r = nn.ParameterDict({
-            ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
+            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
 
         if attn_activation == "sharpening":
-            self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
+            self.alpha_activation = nn.Parameter(Tensor(len(self.metapaths)).fill_(1.0))
         elif attn_activation == "PReLU":
             self.alpha_activation = nn.PReLU(num_parameters=attn_heads, init=0.2)
         elif attn_activation == "LeakyReLU":
@@ -351,12 +351,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return h_dict
 
-    def forward(self, x: Dict[str, torch.Tensor],
-                prev_h_in: Dict[str, List[torch.Tensor]],
-                edge_index_dict: Dict[Tuple, torch.Tensor],
-                prev_edge_index_dict: Dict[Tuple, torch.Tensor],
+    def forward(self, x: Dict[str, Tensor],
+                prev_h_in: Dict[str, List[Tensor]],
+                edge_index_dict: Dict[Tuple, Tensor],
+                prev_edge_index_dict: Dict[Tuple, Tensor],
                 sizes: List[Dict[str, Tuple[int]]],
-                global_node_idx: Dict[str, torch.Tensor],
+                global_node_idx: Dict[str, Tensor],
                 save_betas=False):
         """
 
@@ -463,11 +463,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return (l_dict, h_out), proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, node_type: str,
-                               l_dict: Dict[str, torch.Tensor],
-                               r_dict: Dict[str, torch.Tensor],
-                               edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
-                               prev_l_dict: Dict[str, List[torch.Tensor]],
-                               prev_edge_index_dict: Dict[Tuple, Tuple[torch.Tensor]],
+                               l_dict: Dict[str, Tensor],
+                               r_dict: Dict[str, Tensor],
+                               edge_index_dict: Dict[Tuple, Tuple[Tensor]],
+                               prev_l_dict: Dict[str, List[Tensor]],
+                               prev_edge_index_dict: Dict[Tuple, Tuple[Tensor]],
                                sizes: List[Dict[str, Tuple[int]]]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         # print(node_type, tensor_sizes(r_dict))
@@ -559,7 +559,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
         if values is None:
             x = torch.cat([x_i, x_j], dim=2)
-            if isinstance(self.alpha_activation, torch.Tensor):
+            if isinstance(self.alpha_activation, Tensor):
                 x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
             elif isinstance(self.alpha_activation, nn.Module):
                 x = self.alpha_activation(x)
@@ -595,8 +595,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         relations = self.get_head_relations(node_type)
         return len(relations) + 1
 
-    def save_relation_weights(self, betas: Dict[str, torch.Tensor],
-                              global_node_idx: Dict[str, torch.Tensor]):
+    def save_relation_weights(self, betas: Dict[str, Tensor],
+                              global_node_idx: Dict[str, Tensor]):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
         if not hasattr(self, "_betas"): return
 
@@ -661,8 +661,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return top_rels
 
     def save_attn_weights(self, node_type: str,
-                          attn_weights: torch.Tensor,
-                          node_idx: torch.Tensor):
+                          attn_weights: Tensor,
+                          node_idx: Tensor):
         self._betas = {}
         self._beta_avg = {}
         self._beta_std = {}

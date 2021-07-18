@@ -1,16 +1,18 @@
 from argparse import Namespace
 
+import dgl
 import networkx as nx
 import numpy as np
 import pandas as pd
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union, List
+
+from sklearn.preprocessing import MultiLabelBinarizer
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
 from openomics.utils.df import concat_uniques
 from openomics import MultiOmics
-from moge.data.dgl.node_generator import DGLNodeSampler
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -24,7 +26,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         """
         self.multiomics = multiomics
         self.node_types = node_types
-        self.networks: Dict[nx.Graph] = {}
+        self.networks: Dict[Tuple, nx.Graph] = {}
 
         networks = {}
         for src_etype_dst, GraphClass in layers.items():
@@ -81,14 +83,19 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                                  filter_label,
                                                                  min_count, verbose=verbose)
 
-    def add_edges(self, edgelist, etype: (str, str, str), database, **kwargs):
+    def add_edges(self, edgelist: List[Tuple], etype: Tuple[str], database: str, **kwargs):
         source = etype[0]
         target = etype[-1]
         self.networks[etype].add_edges_from(edgelist, source=source, target=target, database=database, etype=etype,
                                             **kwargs)
         print(len(edgelist), "edges added to self.networks[{}]".format(etype))
 
-    def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, method="GAT", output="dense"):
+    @property
+    def num_nodes_dict(self):
+        return {node: nid.shape[0] for node, nid in self.nodes.items()}
+
+    def get_adjacency_matrix(self, edge_types: Union[Tuple[str], List[Tuple[str]]],
+                             node_list=None, method="GAT", output="dense"):
         """
 
         :param edge_types: either a tuple(str, ...) or [tuple(str, ...), tuple(str, ...)]
@@ -152,8 +159,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             omic_type_col = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
             y_label = y_label + omic_type_col
 
-        print("y_label", y_label.shape)
-
         train_val, test = next(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
 
         if not hasattr(self, "training"):
@@ -173,8 +178,34 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         G = nx.compose_all(list(self.networks.values()))
         return G
 
-    def to_dgl_heterograph(self):
-        training_idx = {ntype: [nid for nid in nids if nid in self.training.node_list] for ntype, nids in
-                        self.nodes.to_dict().items()}
-        testing_idx = {ntype: [nid for nid in nids if nid in self.testing.node_list] for ntype, nids in
-                       self.nodes.to_dict().items()}
+    def to_dgl_heterograph(self, label_col="go_id", min_count=10):
+        # Edge index
+        edge_index_dict = {}
+        for relation, nxgraph in self.networks.items():
+            biadj = nx.bipartite.biadjacency_matrix(nxgraph,
+                                                    row_order=self.nodes[relation[0]],
+                                                    column_order=self.nodes[relation[-1]],
+                                                    format="coo")
+            edge_index_dict[relation] = (biadj.row, biadj.col)
+
+        g: dgl.DGLHeteroGraph = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
+
+        # Node attributes
+        for ntype in g.ntypes:
+            pass
+
+        # Labels
+        y_label = filter_y_multilabel(annotations=self.all_annotations, y_label=label_col,
+                                      min_count=min_count, dropna=False, delimiter=self.delimiter)
+        labels = MultiLabelBinarizer().fit_transform(y_label)
+        num_classes = labels.shape[1]
+
+        # Train test split
+        training_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \
+                        for ntype, ntype_nids in self.nodes.to_dict().items()}
+        validation_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.validation.node_list)) \
+                          for ntype, ntype_nids in self.nodes.to_dict().items()}
+        testing_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.testing.node_list)) \
+                       for ntype, ntype_nids in self.nodes.to_dict().items()}
+
+        return g, labels, num_classes, training_idx, validation_idx, testing_idx
