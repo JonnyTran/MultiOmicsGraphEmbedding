@@ -157,3 +157,15 @@ def get_multiplex_collate_fn(node_types, layers):
         return X_all, torch.cat(y_all), torch.cat(idx_all)
 
     return multiplex_collate_fn
+
+
+def process_multi_ntypes(y_pred, y_true, weights):
+    if isinstance(y_true, dict):
+        ntypes = list(y_pred.keys())
+
+        y_pred = torch.cat([y_pred[ntype] for ntype in ntypes], dim=0)
+        y_true = torch.cat([y_true[ntype] for ntype in ntypes], dim=0)
+        if isinstance(weights, dict):
+            weights = torch.cat([weights[ntype] for ntype in ntypes], dim=0)
+
+    return y_pred, y_true, weights

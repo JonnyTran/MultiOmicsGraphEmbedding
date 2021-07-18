@@ -169,9 +169,9 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str], Union[Tensor, Tuple[Te
                 output_edge_index[new_metapath] = (new_edge_index, new_values)
 
             except Exception as e:
-                print(f"{e} \n {metapath_a}: {edge_index_a.max(1).values, values_a.shape}, "
-                      f"{metapath_b}: {edge_index_b.max(1).values, values_b.shape}")
-                print("sizes: ", {"m": m, "k": k, "n": n, })
+                # print(f"{e} \n {metapath_a}: {edge_index_a.max(1).values, values_a.shape}, "
+                #       f"{metapath_b}: {edge_index_b.max(1).values, values_b.shape}")
+                # print("sizes: ", {"m": m, "k": k, "n": n, })
                 # raise e
                 continue
 

@@ -17,7 +17,7 @@ from moge.module.PyG.latte import LATTE
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import tensor_sizes
+from moge.module.utils import filter_samples_weights, process_multi_ntypes
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -215,8 +215,8 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss, _ = self.forward(X)
 
-        # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        y_pred, y_true, weights = self.process_multi_ntypes(y_pred, y_true, weights)
+        y_pred, y_true, weights = process_multi_ntypes(y_pred, y_true, weights)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
 
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
@@ -235,24 +235,14 @@ class LATTENodeClf(NodeClfTrainer):
 
         return loss
 
-    def process_multi_ntypes(self, y_pred, y_true, weights):
-        if isinstance(y_true, dict):
-            ntypes = list(y_pred.keys())
-            y_pred = torch.cat([y_pred[ntype] for ntype in ntypes], dim=0)
-            y_true = torch.cat([y_true[ntype] for ntype in ntypes], dim=0)
-            if isinstance(weights, dict):
-                weights = torch.cat([weights[ntype] for ntype in ntypes], dim=0)
-
-        return y_pred, y_true, weights
-
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
 
         y_pred, proximity_loss, _ = self.forward(X, save_betas=False)
 
         y_pred, y_true, weights = self.process_multi_ntypes(y_pred, y_true, weights)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
 
-        # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
 
@@ -266,8 +256,10 @@ class LATTENodeClf(NodeClfTrainer):
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
         y_pred, proximity_loss, _ = self.forward(X, save_betas=True)
+
         y_pred, y_true, weights = self.process_multi_ntypes(y_pred, y_true, weights)
-        # y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 
         if batch_nb == 0:
