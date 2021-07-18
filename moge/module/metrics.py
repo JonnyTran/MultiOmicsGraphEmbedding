@@ -55,7 +55,6 @@ class Metrics(torch.nn.Module):
             elif "avg_precision" in metric:
                 self.metrics[metric] = AveragePrecision(num_classes=n_classes, )
 
-
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None)
 
