@@ -2,7 +2,7 @@ import copy
 import logging
 import os
 from argparse import Namespace
-from typing import Dict, List
+from typing import Dict, List, Iterable
 
 import dgl
 import torch
@@ -23,7 +23,7 @@ from .HGConv.model.HGConv import HGConv as Hgconv
 from .hgt import Hgt
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
-from ..utils import tensor_sizes
+from ..utils import tensor_sizes, process_tensor_dicts, filter_samples_weights
 from ...data.dgl.node_generator import NARSDataLoader
 
 from .conv import HAN as Han
@@ -730,7 +730,8 @@ class HGT(NodeClfTrainer):
 
         self.model = Hgt(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                          edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                         n_inp=self.dataset.node_attr_shape[self.head_node_type],
+                         n_inp=self.dataset.node_attr_shape[self.head_node_type if isinstance(self.head_node_type, str) \
+                             else self.head_node_type[0]],
                          n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
                          n_layers=self.n_layers,
                          n_heads=hparams.attn_heads,
@@ -748,18 +749,29 @@ class HGT(NodeClfTrainer):
     def forward(self, blocks, batch_inputs: dict, **kwargs):
         embeddings = self.model(blocks, batch_inputs)
 
-        y_pred = self.classifier(embeddings[self.head_node_type])
-        return y_pred
+        if isinstance(self.head_node_type, str):
+            y_hat = self.classifier(embeddings[self.head_node_type]) \
+                if hasattr(self, "classifier") else embeddings[self.head_node_type]
+
+        elif isinstance(self.head_node_type, Iterable):
+            if hasattr(self, "classifier"):
+                y_hat = {ntype: self.classifier(emb) for ntype, emb in embeddings.items()}
+            else:
+                y_hat = embeddings
+
+        return y_hat
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['label']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
         y_pred = self.forward(blocks, batch_inputs)
+
+        y_true = blocks[-1].dstdata['label']
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=None)
@@ -776,11 +788,12 @@ class HGT(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['label']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
         y_pred = self.forward(blocks, batch_inputs)
-        assert (y_true < 0).sum() == 0, f"y_true negatives: {(y_true < 0).sum()}"
+
+        y_true = blocks[-1].dstdata['label']
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred, y_true)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
@@ -792,10 +805,12 @@ class HGT(NodeClfTrainer):
         batch_inputs = blocks[0].srcdata['feat']
         if not isinstance(batch_inputs, dict):
             batch_inputs = {self.head_node_type: batch_inputs}
-        y_true = blocks[-1].dstdata['label']
-        y_true = y_true[self.head_node_type] if isinstance(y_true, dict) else y_true
 
         y_pred = self.forward(blocks, batch_inputs)
+
+        y_true = blocks[-1].dstdata['label']
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         test_loss = self.criterion.forward(y_pred, y_true)
 
         if batch_nb == 0:

@@ -17,7 +17,7 @@ from moge.module.PyG.latte import LATTE
 from moge.module.classifier import DenseClassification
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples_weights, process_multi_ntypes
+from moge.module.utils import filter_samples_weights, process_tensor_dicts
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -215,7 +215,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss, _ = self.forward(X)
 
-        y_pred, y_true, weights = process_multi_ntypes(y_pred, y_true, weights)
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
 
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
@@ -240,7 +240,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         y_pred, proximity_loss, _ = self.forward(X, save_betas=False)
 
-        y_pred, y_true, weights = process_multi_ntypes(y_pred, y_true, weights)
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
@@ -257,7 +257,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss, _ = self.forward(X, save_betas=True)
 
-        y_pred, y_true, weights = process_multi_ntypes(y_pred, y_true, weights)
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
 
         test_loss = self.criterion(y_pred, y_true, weights=weights)
@@ -299,13 +299,14 @@ class LATTENodeClf(NodeClfTrainer):
                         and "embeddings" not in name],
              'weight_decay': self.hparams.weight_decay},
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0},
-            {'params': [p for name, p in param_optimizer if "embeddings" in name], 'lr': self.lr / 5,
+            {'params': [p for name, p in param_optimizer if "embeddings" in name],
+             # 'lr': self.lr / 5,
              'weight_decay': 0.0},
         ]
 
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
         # print("no weight_decay", sorted({name for name, p in param_optimizer if any(key in name for key in no_decay)}))
-        # print("embeddings", [name for name, p in param_optimizer if "embeddings" in name])
+        print("embeddings", [name for name, p in param_optimizer if "embeddings" in name])
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
