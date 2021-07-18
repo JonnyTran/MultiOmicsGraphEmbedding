@@ -300,7 +300,7 @@ class LATTENodeClf(NodeClfTrainer):
              'weight_decay': self.hparams.weight_decay},
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0},
             {'params': [p for name, p in param_optimizer if "embeddings" in name],
-             # 'lr': self.lr / 5,
+             'lr': self.lr / 2,
              'weight_decay': 0.0},
         ]
 
