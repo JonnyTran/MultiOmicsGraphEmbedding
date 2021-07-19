@@ -73,13 +73,17 @@ def train(hparams: Namespace):
 
     trainer.fit(model)
 
-    if trainer.checkpoint_callback is not None:
-        model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
-                                                  hparams=hparams,
-                                                  dataset=dataset,
-                                                  metrics=METRICS)
-        print(trainer.checkpoint_callback.best_model_path)
-    trainer.test(model)
+    try:
+        if trainer.checkpoint_callback is not None:
+            model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
+                                                      hparams=hparams,
+                                                      dataset=dataset,
+                                                      metrics=METRICS)
+            print(trainer.checkpoint_callback.best_model_path)
+    except:
+        pass
+    finally:
+        trainer.test(model)
 
 if __name__ == "__main__":
     parser = ArgumentParser()
