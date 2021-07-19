@@ -12,7 +12,7 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from moge.module.PyG.node_clf import LATTENodeClf
 from run.load_data import load_node_dataset
@@ -43,7 +43,7 @@ def train(hparams: Namespace):
     hparams.loss_type = "BCE" if dataset.multilabel else hparams.loss_type
     hparams.n_classes = dataset.n_classes
     hparams.head_node_type = dataset.head_node_type
-    model = LATTENodeClf(hparams, dataset, collate_fn="neighbor_sampler", metrics=METRICS)
+    model = LATTENodeClf(hparams, dataset, metrics=METRICS)
 
     logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
 
@@ -51,6 +51,8 @@ def train(hparams: Namespace):
     if hparams.early_stopping:
         callbacks.append(EarlyStopping(monitor='val_moving_loss', patience=hparams.early_stopping,
                                        min_delta=0.001, strict=False))
+    callbacks.append(ModelCheckpoint(monitor='val_loss',
+                                     filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'))
 
     trainer = Trainer(
         gpus=random.sample([0, 1, 2], NUM_GPUS),
@@ -71,6 +73,13 @@ def train(hparams: Namespace):
     trainer.tune(model)
 
     trainer.fit(model)
+
+    if trainer.checkpoint_callback is not None:
+        model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
+                                                  hparams=hparams,
+                                                  dataset=dataset,
+                                                  metrics=METRICS)
+        print(trainer.checkpoint_callback.best_model_path)
     trainer.test(model)
 
 if __name__ == "__main__":
