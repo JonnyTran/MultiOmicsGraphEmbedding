@@ -223,7 +223,7 @@ def train(hparams):
             "use_class_weights": False,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "stochastic_weight_avg": False,
-            "lr": 0.01,
+            "lr": 0.001 if "ogbn" in hparams.dataset else 0.01,
             "epochs": 75,
             "patience": 5,
             "weight_decay": 1e-4,
