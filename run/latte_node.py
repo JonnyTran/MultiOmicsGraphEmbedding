@@ -38,7 +38,7 @@ def train(hparams: Namespace):
     dataset = load_node_dataset(hparams.dataset, method="LATTE", args=hparams, train_ratio=None,
                                 dataset_path=hparams.root_path)
 
-    METRICS = [dataset.name() if "ogb" in dataset.name() else "accuracy"]
+    METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
 
     hparams.loss_type = "BCE" if dataset.multilabel else hparams.loss_type
     hparams.n_classes = dataset.n_classes
