@@ -258,7 +258,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 for node_type in self.node_types})
         if layernorm:
             self.layernorm = torch.nn.ModuleDict({
-                node_type: nn.LayerNorm(output_dim * self.t_order if self.layer_pooling == "rel_concat" else output_dim) \
+                node_type: nn.LayerNorm(
+                    output_dim * self.t_order if self.layer_pooling == "rel_concat" else output_dim) \
                 for node_type in self.node_types})
 
         # self.conv = torch.nn.ModuleDict(
@@ -390,6 +391,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta = {}
         h_out = {}
         edge_pred_dict = {}
+
         # For each metapath in a node_type, use GAT message passing to aggregate l_dict neighbors
         for ntype in x_r:
             h_out[ntype], edge_attn_dict = self.agg_relation_neighbors(node_type=ntype,
@@ -402,8 +404,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if edge_attn_dict:
                 edge_pred_dict.update(edge_attn_dict)
 
-            h_out[ntype][:, -1] = r_dict[
-                ntype]  # x_r[ntype].view(-1, self.attn_heads, self.out_channels) # [:sizes[self.layer][ntype][1]]
+            h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
 
             if self.layer_pooling == "rel_concat":
                 beta[ntype] = []
