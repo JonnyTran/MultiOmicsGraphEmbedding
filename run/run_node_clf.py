@@ -231,8 +231,8 @@ def train(hparams):
 
         args.update(hparams.__dict__)
         model = LATTENodeClf(Namespace(**args), dataset, collate_fn="neighbor_sampler", metrics=METRICS)
-        CALLBACKS = [
-            EarlyStopping(monitor='val_moving_loss', patience=args["patience"], min_delta=0.0001, strict=False), ]
+    else:
+        raise Exception(f"Wrong model {hparams.model}")
 
     if CALLBACKS is None and "patience" in args:
         CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False)]
