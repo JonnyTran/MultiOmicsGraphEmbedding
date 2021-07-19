@@ -92,7 +92,7 @@ class LATTE(nn.Module):
         :return embedding_output, proximity_loss, edge_pred_dict:
         """
         # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
-        edge_pred_dicts = [None for l in range(self.n_layers)]
+        edge_pred_dicts = [None, ] * self.n_layers
         edge_pred_dict = None
 
         prev_h_in = {ntype: [] for ntype in node_feats}
@@ -468,6 +468,27 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return (l_dict, h_out), proximity_loss, edge_pred_dict
 
+    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
+        if values is None:
+            x = torch.cat([x_i, x_j], dim=2)
+            if isinstance(self.alpha_activation, Tensor):
+                x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
+            elif isinstance(self.alpha_activation, nn.Module):
+                x = self.alpha_activation(x)
+
+            alpha = (x * self.attn[metapath]).sum(dim=-1)
+            alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+        else:
+            if values.dim() == 1:
+                values = values.unsqueeze(-1)
+            alpha = values
+            # alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+
+        self._alpha = alpha
+        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
+
+        return x_j * alpha.unsqueeze(-1)
+
     def agg_relation_neighbors(self, node_type: str,
                                l_dict: Dict[str, Tensor],
                                r_dict: Dict[str, Tensor],
@@ -547,12 +568,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     size=(head_size_in, tail_size_out),
                     metapath_idx=self.metapaths.index(metapath),
                     metapath=str(metapath),
-                    values=None)
+                    values=values)
                 emb_relations[:, relations.index(metapath)] = out
+
             except Exception as e:
                 print(metapath, edge_index.max(1).values,
-                      {"values": values.shape if values is not None else None,
-                       "self._alpha": self._alpha.shape if self._alpha is not None else None},
+                      {"values": values.shape if isinstance(values, Tensor) else values,
+                       "self._alpha": self._alpha.shape if isinstance(self._alpha, Tensor) else self._alpha},
                       {"head_size_in": head_size_in, "tail_size_out": tail_size_out},
                       {"l_dict[head]": l_dict[head].shape, "\nr_dict[tail]": r_dict[tail].shape})
                 raise e
@@ -561,27 +583,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self._alpha = None
 
         return emb_relations, edge_pred_dict
-
-    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
-        if values is None:
-            x = torch.cat([x_i, x_j], dim=2)
-            if isinstance(self.alpha_activation, Tensor):
-                x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
-            elif isinstance(self.alpha_activation, nn.Module):
-                x = self.alpha_activation(x)
-
-            alpha = (x * self.attn[metapath]).sum(dim=-1)
-            alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        else:
-            if values.dim() == 1:
-                values = values.unsqueeze(-1)
-            alpha = values
-            # alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-
-        self._alpha = alpha
-        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
-
-        return x_j * alpha.unsqueeze(-1)
 
     def get_head_relations(self, head_node_type, order=None, str_form=False) -> list:
         relations = filter_metapaths(self.metapaths, order=order, tail_type=head_node_type)

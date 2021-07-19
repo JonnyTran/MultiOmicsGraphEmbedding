@@ -40,7 +40,8 @@ class LATTENodeClf(NodeClfTrainer):
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout,
-                              use_proximity=hparams.use_proximity if hasattr(hparams, "use_proximity") else False,
+                              use_proximity=hparams.use_proximity \
+                                  if hasattr(hparams, "use_proximity") else False,
                               neg_sampling_ratio=hparams.neg_sampling_ratio \
                                   if hasattr(hparams, "neg_sampling_ratio") else None,
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,

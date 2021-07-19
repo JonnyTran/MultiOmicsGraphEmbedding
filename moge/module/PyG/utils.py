@@ -135,22 +135,21 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str], Union[Tensor, Tuple[Te
 
             try:
                 if values_a.dim() > 1 and values_a.size(1) > 1:
-                    # new_values = []
-                    # for d in range(values_a.size(1)):
-                    #     new_edge_index, values = spspmm(indexA=edge_index_a, valueA=values_a[:, d],
-                    #                                     indexB=edge_index_b, valueB=values_b[:, d],
-                    #                                     m=m, k=k, n=n,
-                    #                                     # sampling=edge_sampling,
-                    #                                     coalesced=True)
-                    #     new_values.append(values)
-                    #
-                    # new_values = torch.stack(new_values, dim=1)
-                    new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=None,
-                                                        indexB=edge_index_b, valueB=None,
+                    new_values = []
+                    for d in range(values_a.size(1)):
+                        new_edge_index, values = spspmm(indexA=edge_index_a, valueA=values_a[:, d],
+                                                        indexB=edge_index_b, valueB=values_b[:, d],
                                                         m=m, k=k, n=n,
                                                         # sampling=edge_sampling,
                                                         coalesced=True)
+                        new_values.append(values)
+                    new_values = torch.stack(new_values, dim=1)
 
+                    # new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=None,
+                    #                                     indexB=edge_index_b, valueB=None,
+                    #                                     m=m, k=k, n=n,
+                    #                                     # sampling=edge_sampling,
+                    #                                     coalesced=True)
 
                 else:
                     if values_a.dim() > 1 and values_a.size(1) == 1:
