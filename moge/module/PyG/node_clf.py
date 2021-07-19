@@ -34,6 +34,7 @@ class LATTENodeClf(NodeClfTrainer):
         if "fanouts" in hparams and isinstance(hparams.fanouts,
                                                Iterable) and self.dataset.neighbor_sizes != hparams.fanouts:
             self.set_fanouts(self.dataset, hparams.fanouts)
+            hparams.n_layers = len(dataset.neighbor_sizes)
 
         assert hparams.n_layers == len(dataset.neighbor_sizes)
 

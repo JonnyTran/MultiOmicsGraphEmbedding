@@ -228,7 +228,7 @@ class HGConv(NodeClfTrainer):
         self.dataset = dataset
 
         if "node_neighbors_min_num" in args:
-            fanouts = [args.node_neighbors_min_num, ] * len(dataset.neighbor_sizes)
+            fanouts = [args["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
             self.set_fanouts(self.dataset, fanouts)
 
         hgconv = Hgconv(graph=dataset.G,
@@ -345,7 +345,7 @@ class R_HGNN(NodeClfTrainer):
         self.dataset = dataset
 
         if "node_neighbors_min_num" in args:
-            fanouts = [args.node_neighbors_min_num, ] * len(dataset.neighbor_sizes)
+            fanouts = [args["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
             self.set_fanouts(self.dataset, fanouts)
 
         self.r_hgnn = RHGNN(graph=dataset.G,
