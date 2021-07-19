@@ -517,22 +517,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
 
             # Propapate flows from target nodes to source nodes
-            try:
-                out = self.propagate(
-                    edge_index=edge_index,
-                    x=(l_dict[head], r_dict[tail]),
-                    size=(head_size_in, tail_size_out),
-                    metapath_idx=self.metapaths.index(metapath),
-                    metapath=str(metapath),
-                    values=None)
-                emb_relations[:, relations.index(metapath)] = out
-            except Exception as e:
-                print({metapath: (edge_index.max(1).values, \
-                                  [head, sizes[self.layer][head][0],
-                                   tail, sizes[self.layer][tail][1]])})
-                print({"head_size_in": head_size_in, "tail_size_out": tail_size_out})
-                print({"l_dict": tensor_sizes(l_dict), "r_dict": tensor_sizes(r_dict)})
-                raise e
+            out = self.propagate(
+                edge_index=edge_index,
+                x=(l_dict[head], r_dict[tail]),
+                size=(head_size_in, tail_size_out),
+                metapath_idx=self.metapaths.index(metapath),
+                metapath=str(metapath),
+                values=None)
+            emb_relations[:, relations.index(metapath)] = out
 
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
@@ -562,23 +554,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
 
             # Propapate flows from higher order source nodes to target nodes
-            try:
-                out = self.propagate(
-                    edge_index=edge_index,
-                    x=(h_source, r_dict[tail]),
-                    size=(head_size_in, tail_size_out),
-                    metapath_idx=self.metapaths.index(metapath),
-                    metapath=str(metapath),
-                    values=values)
-                emb_relations[:, relations.index(metapath)] = out
-
-            except Exception as e:
-                print(metapath, edge_index.max(1).values,
-                      {"values": values.shape if isinstance(values, Tensor) else values,
-                       "self._alpha": self._alpha.shape if isinstance(self._alpha, Tensor) else self._alpha},
-                      {"head_size_in": head_size_in, "tail_size_out": tail_size_out},
-                      {"l_dict[head]": l_dict[head].shape, "\nr_dict[tail]": r_dict[tail].shape})
-                raise e
+            out = self.propagate(
+                edge_index=edge_index,
+                x=(h_source, r_dict[tail]),
+                size=(head_size_in, tail_size_out),
+                metapath_idx=self.metapaths.index(metapath),
+                metapath=str(metapath),
+                values=None)
+            emb_relations[:, relations.index(metapath)] = out
 
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None

@@ -312,14 +312,14 @@ class LATTENodeClf(NodeClfTrainer):
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-        #                                                        T_max=self.num_training_steps,
-        #                                                        eta_min=self.lr / 100
-        #                                                        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                               T_max=self.num_training_steps,
+                                                               eta_min=self.lr / 10
+                                                               )
 
         return {"optimizer": optimizer,
-                # "lr_scheduler": scheduler,
-                # "monitor": "val_loss"
+                "lr_scheduler": scheduler,
+                "monitor": "val_loss"
                 }
 
 
