@@ -402,7 +402,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if edge_attn_dict:
                 edge_pred_dict.update(edge_attn_dict)
 
-            h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
+            h_out[ntype][:, -1] = r_dict[
+                ntype]  # x_r[ntype].view(-1, self.attn_heads, self.out_channels) # [:sizes[self.layer][ntype][1]]
 
             if self.layer_pooling == "rel_concat":
                 beta[ntype] = []

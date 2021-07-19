@@ -1,7 +1,7 @@
 program: run/latte_node.py
-method: bayes
+method: random
 metric:
-  name: test_acc
+  name: test_micro_f1
   goal: maximize
 early_terminate:
   type: hyperband
@@ -17,29 +17,31 @@ parameters:
   t_order:
     values: [ 1, 2, 3 ]
   n_neighbors:
-    values: [ 10, 15, 20 ]
+    values: [ 10, 15, 20, -1 ]
   layer_pooling:
-    values: [ "last", "concat" ]
+    values: [ "last", "concat", "rel_concat" ]
 
   batchnorm:
     values: [ True, False ]
   layernorm:
     values: [ True, False ]
   dropout:
-    max: 0.5
+    max: 0.7
     min: 0.0
     distribution: uniform
 
   attn_heads:
     values: [ 1, 2, 4, 8 ]
   attn_dropout:
-    values: [ 0.0, 0.1, 0.2, 0.3, 0.4, 0.5 ]
+    max: 0.7
+    min: 0.0
+    distribution: uniform
 
   attn_activation:
     values: [ "sharpening", "LeakyReLU" ]
 
   nb_cls_dropout:
-    max: 0.5
+    max: 0.7
     min: 0.0
     distribution: uniform
   input_dropout:
@@ -49,6 +51,8 @@ parameters:
     values: [ 0, 1.0, 0.5, 0.1 ]
   stochastic_weight_avg:
     values: [ True, False ]
+  early_stopping:
+    values: [ 0, 2, 5, 10 ]
 
   weight_decay:
     values: [ 0.001, 0.0001, 0.00001, 0.0 ]

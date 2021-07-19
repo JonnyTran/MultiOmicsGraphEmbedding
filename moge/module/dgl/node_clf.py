@@ -24,7 +24,6 @@ from .HGT import Hgt
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes, process_tensor_dicts, filter_samples_weights
-from ...data.dgl.node_generator import NARSDataLoader
 
 from .conv import HAN as Han
 from moge.data.dgl.node_generator import HANSampler
@@ -556,26 +555,29 @@ class NARS(NodeClfTrainer):
         self.log("test_loss", test_loss, logger=True)
         return test_loss
 
-    def train_dataloader(self):
-        dataloader = NARSDataLoader(self.dataset.training_idx, batch_size=self.hparams.batch_size,
-                                    feats=self.dataset.feats,
-                                    labels=self.dataset.labels, shuffle=True)
+    def collate(self, batch, history=None):
+        batch_feats = [x[batch] for x in self.dataset.feats]
+        if history is not None:
+            # Train aggregator partially using history
+            batch_feats = (batch_feats, [x[batch] for x in history])
 
-        return dataloader
+        y_true = self.dataset.labels[batch]
+        return batch_feats, y_true
+
+    def train_dataloader(self):
+        return DataLoader(
+            dataset=self.dataset.training_idx,
+            batch_size=self.hparams.batch_size, collate_fn=self.collate, shuffle=True, )
 
     def val_dataloader(self, batch_size=None):
-        dataloader = NARSDataLoader(self.dataset.validation_idx, batch_size=self.hparams.batch_size,
-                                    feats=self.dataset.feats,
-                                    labels=self.dataset.labels, shuffle=False)
-
-        return dataloader
+        return DataLoader(
+            dataset=self.dataset.validation_idx,
+            batch_size=self.hparams.batch_size, collate_fn=self.collate, shuffle=False, )
 
     def test_dataloader(self, batch_size=None):
-        dataloader = NARSDataLoader(self.dataset.testing_idx, batch_size=self.hparams.batch_size,
-                                    feats=self.dataset.feats,
-                                    labels=self.dataset.labels, shuffle=False)
-
-        return dataloader
+        return DataLoader(
+            dataset=self.dataset.testing_idx,
+            batch_size=self.hparams.batch_size, collate_fn=self.collate, shuffle=False, )
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(),

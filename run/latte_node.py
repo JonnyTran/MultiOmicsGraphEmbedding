@@ -18,11 +18,15 @@ from run.load_data import load_node_dataset
 def train(hparams: Namespace):
     NUM_GPUS = hparams.num_gpus
     USE_AMP = True  # True if NUM_GPUS > 1 else False
-    MAX_EPOCHS = 15
+    MAX_EPOCHS = 100
 
     neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.n_layers):
-        neighbor_sizes.extend([neighbor_sizes[-1] // 2])
+        if neighbor_sizes[-1] != -1:
+            neighbor_sizes.extend([neighbor_sizes[-1] // 2])
+        else:
+            neighbor_sizes.extend([10])
+
     hparams.neighbor_sizes = list(reversed(neighbor_sizes))
     print("neighbor_sizes", hparams.neighbor_sizes)
 
@@ -38,6 +42,12 @@ def train(hparams: Namespace):
 
     logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
 
+    if hparams.early_stopping:
+        callbacks = [EarlyStopping(monitor='val_moving_loss', patience=hparams.early_stopping,
+                                   min_delta=0.001, strict=False)]
+    else:
+        callbacks = None
+
     trainer = Trainer(
         gpus=random.sample([0, 1, 2], NUM_GPUS),
         accelerator='ddp' if NUM_GPUS > 1 else None,
@@ -46,7 +56,7 @@ def train(hparams: Namespace):
         auto_lr_find=False,
         auto_scale_batch_size=True if hparams.n_layers > 2 else False,
         max_epochs=MAX_EPOCHS,
-        callbacks=[EarlyStopping(monitor='val_moving_loss', patience=2, min_delta=0.001, strict=False)],
+        callbacks=callbacks,
         logger=logger,
         # plugins='deepspeed' if NUM_GPUS > 1 else None,
         #     accelerator='ddp_spawn',
@@ -63,7 +73,7 @@ if __name__ == "__main__":
     parser = ArgumentParser()
 
     # Dataset
-    parser.add_argument('--dataset', type=str, default="ogbn-mag")
+    parser.add_argument('--dataset', type=str, default="ACM")
     parser.add_argument('--root_path', type=str, default="/home/jonny/Bioinformatics_ExternalData/OGB/")
     parser.add_argument('--use_emb', type=str,
                         default="/home/jonny/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
@@ -110,6 +120,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--gradient_clip_val', type=float, default=0.0)
     parser.add_argument('--stochastic_weight_avg', type=bool, default=False)
+    parser.add_argument('--early_stopping', type=int, default=2)
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
 

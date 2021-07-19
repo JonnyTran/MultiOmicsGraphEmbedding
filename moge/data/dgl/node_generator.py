@@ -520,23 +520,6 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
         return X, y_dict, weights
 
 
-class NARSDataLoader(DataLoader):
-    def __init__(self, dataset, batch_size, feats: Tensor, labels: Tensor, **kwargs):
-        self.feats = feats
-        self.labels = labels
-
-        super().__init__(dataset, batch_size, collate_fn=self.collate, **kwargs)
-
-    def collate(self, batch, history=None):
-        batch_feats = [x[batch] for x in self.feats]
-        if history is not None:
-            # Train aggregator partially using history
-            batch_feats = (batch_feats, [x[batch] for x in history])
-
-        y_true = self.labels[batch]
-        return batch_feats, y_true
-
-
 class HANSampler(object):
     def __init__(self, g, metapath_list, num_neighbors):
         self.sampler_list: List[RandomWalkNeighborSampler] = []

@@ -299,24 +299,26 @@ class LATTENodeClf(NodeClfTrainer):
                         and "embeddings" not in name],
              'weight_decay': self.hparams.weight_decay},
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0},
-            {'params': [p for name, p in param_optimizer if "embeddings" in name],
-             'lr': self.lr / 2,
-             'weight_decay': 0.0},
         ]
 
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
         # print("no weight_decay", sorted({name for name, p in param_optimizer if any(key in name for key in no_decay)}))
-        print("embeddings", [name for name, p in param_optimizer if "embeddings" in name])
+
+        # optimizer_grouped_parameters.append({'params': [p for name, p in param_optimizer if "embeddings" in name],
+        #                                      # 'lr': self.lr / 2,
+        #                                      'weight_decay': 0.0},)
+        # print("embeddings", [name for name, p in param_optimizer if "embeddings" in name])
+
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                               T_max=self.num_training_steps,
-                                                               eta_min=self.lr / 100
-                                                               )
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+        #                                                        T_max=self.num_training_steps,
+        #                                                        eta_min=self.lr / 100
+        #                                                        )
 
         return {"optimizer": optimizer,
-                "lr_scheduler": scheduler,
-                "monitor": "val_loss"
+                # "lr_scheduler": scheduler,
+                # "monitor": "val_loss"
                 }
 
 
