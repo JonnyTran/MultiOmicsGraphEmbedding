@@ -384,6 +384,7 @@ class DGLNodeSampler(HeteroNetDataset):
 
     def sample(self, iloc, **kwargs):
         loader = self.train_dataloader(**kwargs)
+        # return loader.collate_fn(iloc)
         return next(iter(loader))
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):

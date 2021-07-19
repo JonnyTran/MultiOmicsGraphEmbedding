@@ -3,14 +3,15 @@ import sys
 from argparse import ArgumentParser, Namespace
 import random
 
+from moge.data import HeteroNeighborGenerator
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
+import pytorch_lightning
 from pytorch_lightning.trainer import Trainer
-
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from moge.module.PyG.node_clf import MetaPath2Vec, LATTENodeClf
@@ -27,6 +28,13 @@ def train(hparams):
     USE_AMP = False
     CALLBACKS = None
     NUM_GPUS = hparams.num_gpus
+
+    pytorch_lightning.seed_everything(hparams.run)
+
+    if hparams.dataset in ["ACM", "IMDB", "DBLP", "GTeX"]:
+        hparams.neighbor_sizes = [-1, -1]
+    elif "obgn" in hparams.dataset:
+        hparams.neighbor_sizes = [10, 10]
 
     dataset = load_node_dataset(hparams.dataset, hparams.method, args=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
@@ -132,7 +140,7 @@ def train(hparams):
             'dropout': 0.5,
             'n_layers': 2,
             'batch_size': 3000,  # the number of graphs to train in each batch
-            'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
+            # 'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
             'optimizer': 'adam',
             'weight_decay': 0.0,
             'residual': True,
@@ -155,7 +163,7 @@ def train(hparams):
             'n_layers': 2,
             'residual': True,
             'batch_size': 1280,  # the number of nodes to train in each batch
-            'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
+            # 'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
             'optimizer': 'adam',
             'weight_decay': 0.0,
             'epochs': 200,
@@ -166,6 +174,7 @@ def train(hparams):
 
     elif "LATTE" in hparams.method:
         USE_AMP = True
+        extra_args = {}
 
         if "-1" in hparams.method:
             t_order = 1
@@ -173,14 +182,12 @@ def train(hparams):
         elif "-2" in hparams.method:
             t_order = 2
             batch_order = 11
+
         elif "-3" in hparams.method:
             t_order = 3
             batch_order = 10
 
-            dataset.neighbor_sizes = [10, 10, 10]
-            if isinstance(dataset, DGLNodeSampler):
-                dataset.neighbor_sampler.fanouts = [10, 10, 10]
-                dataset.neighbor_sampler.num_layers = len(dataset.neighbor_sizes)
+            extra_args["fanouts"] = [10, 10, 10]
         else:
             t_order = 2
 
@@ -191,10 +198,11 @@ def train(hparams):
             "n_layers": len(dataset.neighbor_sizes),
             "t_order": t_order,
             "batch_size": int(2 ** batch_order),
+            **extra_args,
 
             "attn_heads": 4,
             "attn_activation": "LeakyReLU",
-            "attn_dropout": 0.3,
+            "attn_dropout": 0.5,
 
             "batchnorm": False,
             "layernorm": False,
@@ -216,18 +224,19 @@ def train(hparams):
             "stochastic_weight_avg": True,
             "lr": 0.01,
             "epochs": 50,
-            "patience": 10,
-            "weight_decay": 0.0,
+            "patience": 5,
+            "weight_decay": 1e-3,
         }
 
         args.update(hparams.__dict__)
         model = LATTENodeClf(Namespace(**args), dataset, collate_fn="neighbor_sampler", metrics=METRICS)
-        CALLBACKS = [EarlyStopping(monitor='val_moving_loss', patience=10, min_delta=0.0001, strict=False),
-                     ModelCheckpoint(monitor='val_micro_f1', mode="max",
-                                     filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_micro_f1:.3f}')]
+        CALLBACKS = [
+            EarlyStopping(monitor='val_moving_loss', patience=args["patience"], min_delta=0.0001, strict=False),
+            ModelCheckpoint(monitor='val_loss',
+                            filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}')]
 
     if CALLBACKS is None and "patience" in args:
-        CALLBACKS = [EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001, strict=False)]
+        CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False)]
 
     wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
     wandb_logger.log_hyperparams(args)

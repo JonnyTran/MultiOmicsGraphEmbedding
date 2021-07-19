@@ -1,5 +1,6 @@
 import itertools
 import logging
+from typing import Union, Iterable
 
 import numpy as np
 import pandas as pd
@@ -9,6 +10,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from .metrics import Metrics
 from .utils import tensor_sizes, preprocess_input
+from ..data import DGLNodeSampler, HeteroNeighborGenerator
 from ..evaluation.clustering import clustering_metrics
 
 
@@ -208,6 +210,15 @@ class NodeClfTrainer(ClusteringEvaluator):
 
         effective_accum = self.trainer.accumulate_grad_batches * num_devices
         return (batches // effective_accum) * self.trainer.max_epochs
+
+    def set_fanouts(self, dataset: Union[DGLNodeSampler, HeteroNeighborGenerator], fanouts: Iterable):
+        dataset.neighbor_sizes = fanouts
+
+        if isinstance(dataset, DGLNodeSampler):
+            dataset.neighbor_sampler.fanouts = fanouts
+            dataset.neighbor_sampler.num_layers = len(fanouts)
+        elif isinstance(dataset, HeteroNeighborGenerator):
+            dataset.graph_sampler.neighbor_sampler.sizes = fanouts
 
 
 class LinkPredTrainer(NodeClfTrainer):

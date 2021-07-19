@@ -723,10 +723,9 @@ class HGT(NodeClfTrainer):
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
 
-        if "fanouts" in hparams:
-            self.dataset.neighbor_sizes = hparams.fanouts
-            self.dataset.neighbor_sampler.fanouts = hparams.fanouts
-            self.dataset.neighbor_sampler.num_layers = len(hparams.fanouts)
+        if "fanouts" in hparams and isinstance(hparams.fanouts, Iterable) \
+                and len(self.dataset.neighbor_sizes) != len(hparams.fanouts):
+            self.set_fanouts(self.dataset, hparams.fanouts)
 
         self.n_layers = len(self.dataset.neighbor_sizes)
 

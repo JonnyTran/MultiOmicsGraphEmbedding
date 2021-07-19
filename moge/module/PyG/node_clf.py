@@ -31,6 +31,15 @@ class LATTENodeClf(NodeClfTrainer):
         self._name = f"LATTE-{hparams.t_order}"
         self.collate_fn = collate_fn
 
+        if "seed" in hparams:
+            pl.seed_everything(hparams.seed)
+
+        if "fanouts" in hparams and isinstance(hparams.fanouts,
+                                               Iterable) and self.dataset.neighbor_sizes != hparams.fanouts:
+            self.set_fanouts(self.dataset, hparams.fanouts)
+
+        assert hparams.n_layers == len(dataset.neighbor_sizes)
+
         self.embedder = LATTE(n_layers=hparams.n_layers,
                               t_order=min(hparams.t_order, hparams.n_layers),
                               embedding_dim=hparams.embedding_dim,
@@ -299,7 +308,8 @@ class LATTENodeClf(NodeClfTrainer):
             {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay) \
                         and "embeddings" not in name],
              'weight_decay': self.hparams.weight_decay},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0},
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
+             'weight_decay': 0.0},
         ]
 
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
@@ -314,7 +324,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                T_max=self.num_training_steps,
-                                                               eta_min=self.lr / 10
+                                                               eta_min=self.lr / 100
                                                                )
 
         return {"optimizer": optimizer,
