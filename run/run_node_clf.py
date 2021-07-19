@@ -225,7 +225,7 @@ def train(hparams):
             "stochastic_weight_avg": False,
             "lr": 0.01,
             "epochs": 75,
-            "patience": 2,
+            "patience": 5,
             "weight_decay": 1e-4,
         }
 
