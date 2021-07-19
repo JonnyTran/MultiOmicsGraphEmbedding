@@ -48,9 +48,8 @@ def train(hparams: Namespace):
     logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
 
     callbacks = []
-    if hparams.early_stopping:
-        callbacks.append(EarlyStopping(monitor='val_moving_loss', patience=hparams.early_stopping,
-                                       min_delta=0.001, strict=False))
+    callbacks.append(EarlyStopping(monitor='val_moving_loss', patience=2,
+                                   min_delta=0.001, strict=False))
     callbacks.append(ModelCheckpoint(monitor='val_loss',
                                      filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'))
 
