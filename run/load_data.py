@@ -65,17 +65,26 @@ def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
                       dataset_path="dataset"):
+    if name == "NARS":
+        use_reverse = False
+    else:
+        use_reverse = True
+
     if "ogbn" in name and method == "NARS":
-        dataset = DGLNodeSampler.from_dgl_heterograph(*load_mag(args=args), inductive=args.inductive,
+        dataset = DGLNodeSampler.from_dgl_heterograph(*load_mag(args=args),
+                                                      inductive=args.inductive,
+                                                      neighbor_sizes=args.neighbor_sizes, head_node_type="paper",
+                                                      add_reverse_metapaths=False,
                                                       reshuffle_train=train_ratio if train_ratio else False)
 
     elif "ogbn" in name:
+
         ogbn = DglNodePropPredDataset(name=name, root=dataset_path)
         dataset = DGLNodeSampler(ogbn,
                                  sampler="MultiLayerNeighborSampler",
                                  neighbor_sizes=args.neighbor_sizes,
                                  edge_dir="in",
-                                 add_reverse_metapaths=True,
+                                 add_reverse_metapaths=use_reverse,
                                  inductive=args.inductive, reshuffle_train=train_ratio if train_ratio else False)
 
         if name == "ogbn-mag":
@@ -94,7 +103,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
                                                       neighbor_sizes=args.neighbor_sizes,
                                                       head_node_type=network.node_types,
                                                       edge_dir="in",
-                                                      add_reverse_metapaths=True,
+                                                      add_reverse_metapaths=use_reverse,
                                                       inductive=False)
         dataset._name = "GTeX"
         add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_l2_GTeX/"), args=args)
@@ -106,7 +115,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
             neighbor_sizes=args.neighbor_sizes,
             head_node_type="paper",
             edge_dir="in",
-            add_reverse_metapaths=True,
+            add_reverse_metapaths=use_reverse,
             inductive=args.inductive, reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "ACM"
 

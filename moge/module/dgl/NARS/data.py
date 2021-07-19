@@ -145,16 +145,19 @@ def load_mag(args: Namespace):
     path = args.use_emb
     home_dir = os.getenv("HOME")
     dataset = DglNodePropPredDataset(
-        name="ogbn-mag", root=args.root_path if "root_path" in args else os.path.join(home_dir, ".ogb", "dataset"))
+        name="ogbn-mag",
+        root=args.root_path if "root_path" in args else os.path.join(home_dir, ".ogb", "dataset"))
+
     g, labels = dataset[0]
     splitted_idx = dataset.get_idx_split()
     train_nid = splitted_idx["train"]['paper']
     val_nid = splitted_idx["valid"]['paper']
     test_nid = splitted_idx["test"]['paper']
     features = g.nodes['paper'].data['feat']
-    author_emb = torch.load(os.path.join(path, "author.pt")).float()
-    topic_emb = torch.load(os.path.join(path, "field_of_study.pt")).float()
-    institution_emb = torch.load(os.path.join(path, "institution.pt")).float()
+
+    author_emb = torch.load(os.path.join(path, "TransE_mag", "author.pt")).float()
+    topic_emb = torch.load(os.path.join(path, "TransE_mag", "field_of_study.pt")).float()
+    institution_emb = torch.load(os.path.join(path, "TransE_mag", "institution.pt")).float()
 
     g.nodes["author"].data["feat"] = author_emb
     g.nodes["institution"].data["feat"] = institution_emb

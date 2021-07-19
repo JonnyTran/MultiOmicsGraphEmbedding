@@ -33,7 +33,7 @@ def train(hparams):
 
     if hparams.dataset in ["ACM", "IMDB", "DBLP", "GTeX"]:
         hparams.neighbor_sizes = [-1, -1]
-    elif "obgn" in hparams.dataset:
+    elif "ogbn" in hparams.dataset:
         hparams.neighbor_sizes = [10, 10]
 
     dataset = load_node_dataset(hparams.dataset, hparams.method, args=hparams, train_ratio=hparams.train_ratio,
@@ -125,7 +125,7 @@ def train(hparams):
             'dropout': 0.5,
             'head_node_type': dataset.head_node_type,
             'batch_size': 50000,
-            'epochs': 1000,
+            'epochs': 200,
             'patience': 10,
             'lr': 0.001,
             'weight_decay': 0.0,
