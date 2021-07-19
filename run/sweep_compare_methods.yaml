@@ -4,13 +4,13 @@ metric:
   name: val_micro_f1
   goal: maximize
 parameters:
+  run:
+    values: [ 1,2,3,4,5,6,7,8,9,10 ]
   dataset:
-    values: [ "ACM", "DBLP", "IMDB", "ogbn-mag", "ogbn-proteins", "GTeX" ]
+    values: [ "ACM", "DBLP", "IMDB", "ogbn-mag", "ogbn-proteins" ]
   method:
     values: [ "LATTE-1", "LATTE-2", "HAN", "HGT", "NARS", "HGConv", "R_HGNN", "LATTE-3", ]
   train_ratio:
     values: [ 0.0 ]
-  run:
-    values: [ 1,2,3,4,5,6,7,8,9,10 ]
   inductive:
     values: [ False ]

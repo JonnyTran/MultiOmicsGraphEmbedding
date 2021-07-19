@@ -258,7 +258,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if not hasattr(self, "x_dict") or self.x_dict is None or len(self.x_dict) == 0:
             self.x_dict = {}
 
-        if reshuffle_train is not None and reshuffle_train > 0:
+        if reshuffle_train is not None and reshuffle_train:
             self.resample_training_idx(reshuffle_train)
         else:
             if hasattr(self, "training_idx"):
@@ -314,10 +314,15 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         testing_idx = indices[int(num_indices * train_ratio):]
         return training_idx, validation_idx, testing_idx
 
-    def resample_training_idx(self, train_ratio):
-        all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-        self.training_idx, self.validation_idx, self.testing_idx = \
-            self.split_train_val_test(train_ratio=train_ratio, sample_indices=all_idx)
+    def resample_training_idx(self, train_ratio: float):
+        if train_ratio == 1.0:
+            ratio = self.get_train_ratio()
+        else:
+            ratio = train_ratio
+
+            all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
+            self.training_idx, self.validation_idx, self.testing_idx = \
+                self.split_train_val_test(train_ratio=ratio, sample_indices=all_idx)
         print(f"Resampled training set at {self.get_train_ratio()}%")
 
     def get_metapaths(self, khop=False):

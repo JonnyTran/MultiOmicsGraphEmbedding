@@ -39,7 +39,8 @@ def train(hparams):
     dataset = load_node_dataset(hparams.dataset, hparams.method, args=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
 
-    METRICS = ["micro_f1", "macro_f1", dataset.name() if "ogb" in dataset.name() else "accuracy"]
+    METRICS = ["micro_f1", "macro_f1",
+               dataset.name() if "ogb" in dataset.name() else "accuracy"]
 
     if hparams.method == "HAN":
         args = {
@@ -140,7 +141,7 @@ def train(hparams):
             'dropout': 0.5,
             'n_layers': 2,
             'batch_size': 3000,  # the number of graphs to train in each batch
-            # 'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
+            'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
             'optimizer': 'adam',
             'weight_decay': 0.0,
             'residual': True,
@@ -163,7 +164,7 @@ def train(hparams):
             'n_layers': 2,
             'residual': True,
             'batch_size': 1280,  # the number of nodes to train in each batch
-            # 'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
+            'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
             'optimizer': 'adam',
             'weight_decay': 0.0,
             'epochs': 200,

@@ -227,6 +227,10 @@ class HGConv(NodeClfTrainer):
         super().__init__(Namespace(**args), dataset, metrics)
         self.dataset = dataset
 
+        if "node_neighbors_min_num" in args:
+            fanouts = [args.node_neighbors_min_num, ] * len(dataset.neighbor_sizes)
+            self.set_fanouts(self.dataset, fanouts)
+
         hgconv = Hgconv(graph=dataset.G,
                         input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
                                         for ntype in dataset.G.ntypes},
@@ -339,6 +343,10 @@ class R_HGNN(NodeClfTrainer):
     def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
         super(R_HGNN, self).__init__(Namespace(**args), dataset, metrics)
         self.dataset = dataset
+
+        if "node_neighbors_min_num" in args:
+            fanouts = [args.node_neighbors_min_num, ] * len(dataset.neighbor_sizes)
+            self.set_fanouts(self.dataset, fanouts)
 
         self.r_hgnn = RHGNN(graph=dataset.G,
                             input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
@@ -593,8 +601,7 @@ class HAN(NodeClfTrainer):
         super(HAN, self).__init__(Namespace(**args), dataset, metrics)
         self.dataset = dataset
 
-        # if dataset.name() == "ACM":
-        #     metapath_list = [['pa', 'ap'], ['pf', 'fp']]
+        # metapath_list = [['pa', 'ap'], ['pf', 'fp']]
         edge_paths = sample_metapaths(metagraph=dataset.G.metagraph(),
                                       source=self.dataset.head_node_type,
                                       targets=self.dataset.head_node_type,
@@ -615,7 +622,8 @@ class HAN(NodeClfTrainer):
                          num_heads=args['num_heads'],
                          dropout=args['dropout'])
 
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=args["loss_type"], )
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=args["loss_type"],
+                                            multilabel=dataset.multilabel)
 
         args["n_params"] = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')

@@ -220,6 +220,8 @@ class NodeClfTrainer(ClusteringEvaluator):
         elif isinstance(dataset, HeteroNeighborGenerator):
             dataset.graph_sampler.neighbor_sampler.sizes = fanouts
 
+        print(f"Changed graph neighbor sampling sizes to {fanouts}, because method have {len(fanouts)} layers.")
+
 
 class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):

@@ -56,7 +56,7 @@ class ClassificationLoss(nn.Module):
         """
         if self.multilabel:
             assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
-                                      "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
+                                      "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"], self.loss_type
             targets = targets.type_as(logits)
         else:
             if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
