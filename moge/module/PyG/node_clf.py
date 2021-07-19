@@ -31,9 +31,6 @@ class LATTENodeClf(NodeClfTrainer):
         self._name = f"LATTE-{hparams.t_order}"
         self.collate_fn = collate_fn
 
-        if "seed" in hparams:
-            pl.seed_everything(hparams.seed)
-
         if "fanouts" in hparams and isinstance(hparams.fanouts,
                                                Iterable) and self.dataset.neighbor_sizes != hparams.fanouts:
             self.set_fanouts(self.dataset, hparams.fanouts)

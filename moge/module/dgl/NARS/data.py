@@ -140,7 +140,7 @@ def load_acm(**kwargs):
     return g, labels, n_classes, train_nid, val_nid, test_nid
 
 
-def load_mag(device, args: Namespace):
+def load_mag(args: Namespace):
     from ogb.nodeproppred import DglNodePropPredDataset
     path = args.use_emb
     home_dir = os.getenv("HOME")

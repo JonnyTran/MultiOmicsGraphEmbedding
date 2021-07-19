@@ -175,8 +175,8 @@ def train(hparams):
 
     elif "LATTE" in hparams.method:
         USE_AMP = True
-        extra_args = {}
 
+        extra_args = {}
         if "-1" in hparams.method:
             t_order = 1
             batch_order = 12
@@ -194,7 +194,7 @@ def train(hparams):
 
         args = {
             "embedding_dim": 128,
-            "layer_pooling": "concat",
+            "layer_pooling": "rel_concat",
 
             "n_layers": len(dataset.neighbor_sizes),
             "t_order": t_order,
@@ -203,12 +203,12 @@ def train(hparams):
 
             "attn_heads": 4,
             "attn_activation": "LeakyReLU",
-            "attn_dropout": 0.5,
+            "attn_dropout": 0.3,
 
             "batchnorm": False,
             "layernorm": False,
             "activation": "relu",
-            "dropout": 0.5,
+            "dropout": 0.3,
             "input_dropout": True,
 
             "nb_cls_dense_size": 0,
@@ -222,24 +222,22 @@ def train(hparams):
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
-            "stochastic_weight_avg": True,
+            "stochastic_weight_avg": False,
             "lr": 0.01,
-            "epochs": 50,
-            "patience": 5,
-            "weight_decay": 1e-3,
+            "epochs": 75,
+            "patience": 2,
+            "weight_decay": 1e-4,
         }
 
         args.update(hparams.__dict__)
         model = LATTENodeClf(Namespace(**args), dataset, collate_fn="neighbor_sampler", metrics=METRICS)
         CALLBACKS = [
-            EarlyStopping(monitor='val_moving_loss', patience=args["patience"], min_delta=0.0001, strict=False),
-            ModelCheckpoint(monitor='val_loss',
-                            filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}')]
+            EarlyStopping(monitor='val_moving_loss', patience=args["patience"], min_delta=0.0001, strict=False), ]
 
     if CALLBACKS is None and "patience" in args:
         CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False)]
 
-    wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
+    wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred", log_model=False)
     wandb_logger.log_hyperparams(args)
 
     trainer = Trainer(

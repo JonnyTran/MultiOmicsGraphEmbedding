@@ -27,7 +27,7 @@ from ..utils import one_hot_encoder
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
-                 sampler: str,
+                 sampler: str = "MultiLayerNeighborSampler",
                  embedding_dim=None,
                  neighbor_sizes=None,
                  node_types=None,

@@ -18,7 +18,7 @@ import moge
 import moge.data.PyG.triplet_generator
 from moge.data.dgl.graph_generator import DGLGraphSampler
 from moge.data import HeteroNeighborGenerator, DGLNodeSampler
-from moge.module.dgl.NARS.data import load_acm
+from moge.module.dgl.NARS.data import load_acm, load_mag
 from moge.module.utils import preprocess_input
 
 
@@ -65,7 +65,11 @@ def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
                       dataset_path="dataset"):
-    if "ogbn" in name:
+    if "ogbn" in name and method == "NARS":
+        dataset = DGLNodeSampler.from_dgl_heterograph(*load_mag(args=args), inductive=args.inductive,
+                                                      reshuffle_train=train_ratio if train_ratio else False)
+
+    elif "ogbn" in name:
         ogbn = DglNodePropPredDataset(name=name, root=dataset_path)
         dataset = DGLNodeSampler(ogbn,
                                  sampler="MultiLayerNeighborSampler",
