@@ -145,7 +145,7 @@ def load_mag(args: Namespace):
     path = args.use_emb
     home_dir = os.getenv("HOME")
     dataset = DglNodePropPredDataset(
-        name="ogbn-mag", root=args.root_dir if "root_dir" in args else os.path.join(home_dir, ".ogb", "dataset"))
+        name="ogbn-mag", root=args.root_path if "root_path" in args else os.path.join(home_dir, ".ogb", "dataset"))
     g, labels = dataset[0]
     splitted_idx = dataset.get_idx_split()
     train_nid = splitted_idx["train"]['paper']
