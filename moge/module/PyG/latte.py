@@ -353,7 +353,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
             h_dict[ntype] = h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels)
-            h_dict[ntype] = F.tanh(h_dict[ntype])
+            h_dict[ntype] = torch.tanh(h_dict[ntype])
 
         return h_dict
 
