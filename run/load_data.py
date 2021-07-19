@@ -99,7 +99,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         dataset = DGLNodeSampler.from_dgl_heterograph(
             *load_acm(use_emb=os.path.join(args.use_emb, "TransE_acm/")),
             sampler="MultiLayerNeighborSampler",
-            neighbor_sizes=[10],
+            neighbor_sizes=args.neighbor_sizes,
             head_node_type="paper",
             edge_dir="in",
             add_reverse_metapaths=True,
@@ -108,7 +108,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
 
     elif name == "DBLP":
         dataset = DGLNodeSampler.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-dblp"),
-                                                  neighbor_sizes=[25, 25],
+                                                  neighbor_sizes=args.neighbor_sizes,
                                                   sampler="MultiLayerNeighborSampler",
                                                   node_types=["P", "A", "C"],
                                                   head_node_type="A",
@@ -120,7 +120,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
 
     elif name == "IMDB":
         dataset = DGLNodeSampler.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-imdb"),
-                                                  neighbor_sizes=[25, 25],
+                                                  neighbor_sizes=args.neighbor_sizes,
                                                   sampler="MultiLayerNeighborSampler",
                                                   node_types=["M", "D", "A"],
                                                   head_node_type="M",
@@ -134,12 +134,12 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         dataset._name = "IMDB"
 
     elif name == "AMiner":
-        dataset = HeteroNeighborGenerator(AMiner("datasets/aminer"), [25, 20], node_types=None,
+        dataset = HeteroNeighborGenerator(AMiner("datasets/aminer"), args.neighbor_sizes, node_types=None,
                                           metapaths=[('paper', 'written by', 'author'),
                                                      ('venue', 'published', 'paper')], head_node_type="author",
                                           resample_train=train_ratio, inductive=args.inductive)
     elif name == "BlogCatalog":
-        dataset = HeteroNeighborGenerator("datasets/blogcatalog6k.mat", [25, 20], node_types=["user", "tag"],
+        dataset = HeteroNeighborGenerator("datasets/blogcatalog6k.mat", args.neighbor_sizes, node_types=["user", "tag"],
                                           head_node_type="user", resample_train=train_ratio,
                                           inductive=args.inductive)
     else:

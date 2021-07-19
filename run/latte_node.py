@@ -1,13 +1,16 @@
 import logging
+import pprint
 import sys, random
 from argparse import ArgumentParser, Namespace
 
 # logger = logging.getLogger("wandb")
 # logger.setLevel(logging.INFO)
+from moge.module.utils import tensor_sizes
+
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
+from pytorch_lightning.utilities.seed import seed_everything
 from pytorch_lightning.trainer import Trainer
-
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping
 
@@ -20,6 +23,8 @@ def train(hparams: Namespace):
     USE_AMP = True  # True if NUM_GPUS > 1 else False
     MAX_EPOCHS = 100
 
+    seed_everything(seed=42)
+
     neighbor_sizes = [hparams.n_neighbors, ]
     for t in range(1, hparams.n_layers):
         if neighbor_sizes[-1] != -1:
@@ -28,7 +33,7 @@ def train(hparams: Namespace):
             neighbor_sizes.extend([10])
 
     hparams.neighbor_sizes = list(reversed(neighbor_sizes))
-    print("neighbor_sizes", hparams.neighbor_sizes)
+    print("neighbor_sizes", hparams.neighbor_sizes, hparams.n_layers)
 
     dataset = load_node_dataset(hparams.dataset, method="LATTE", args=hparams, train_ratio=None,
                                 dataset_path=hparams.root_path)
@@ -42,11 +47,10 @@ def train(hparams: Namespace):
 
     logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
 
+    callbacks = []
     if hparams.early_stopping:
-        callbacks = [EarlyStopping(monitor='val_moving_loss', patience=hparams.early_stopping,
-                                   min_delta=0.001, strict=False)]
-    else:
-        callbacks = None
+        callbacks.append(EarlyStopping(monitor='val_moving_loss', patience=hparams.early_stopping,
+                                       min_delta=0.001, strict=False))
 
     trainer = Trainer(
         gpus=random.sample([0, 1, 2], NUM_GPUS),
@@ -54,7 +58,7 @@ def train(hparams: Namespace):
         gradient_clip_val=hparams.gradient_clip_val,
         stochastic_weight_avg=hparams.stochastic_weight_avg,
         auto_lr_find=False,
-        auto_scale_batch_size=True if hparams.n_layers > 2 else False,
+        # auto_scale_batch_size=True if hparams.n_layers > 2 else False,
         max_epochs=MAX_EPOCHS,
         callbacks=callbacks,
         logger=logger,
