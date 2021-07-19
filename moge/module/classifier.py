@@ -53,7 +53,8 @@ class DenseClassification(nn.Module):
 
     def reset_parameters(self):
         for linear in self.fc_classifier:
-            glorot(linear.weight)
+            if hasattr(linear, "weight"):
+                glorot(linear.weight)
 
 
 class MulticlassClassification(nn.Module):
