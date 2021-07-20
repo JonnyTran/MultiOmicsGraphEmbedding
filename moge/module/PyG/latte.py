@@ -76,10 +76,8 @@ class LATTE(nn.Module):
                 higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
-        if layer_pooling == "rel_concat":
-            self.layer_pooling = "last"
-        else:
-            self.layer_pooling = layer_pooling
+
+        self.layer_pooling = layer_pooling
 
     def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, Tensor]], sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: List[Dict], save_betas=False):
@@ -128,7 +126,7 @@ class LATTE(nn.Module):
                         h_out_ntype = h_out[ntype][:sizes[-1][ntype][1]]
                         h_out_layers[ntype].append(h_out_ntype)
 
-        if self.layer_pooling in ["last", "rel_concat"] or self.n_layers == 1:
+        if self.layer_pooling in ["last", "order_concat"] or self.n_layers == 1:
             out = h_out
 
         elif self.layer_pooling == "max":
@@ -254,12 +252,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(
-                    output_dim * self.t_order if self.layer_pooling == "rel_concat" else output_dim) \
+                    output_dim * self.t_order if self.layer_pooling == "order_concat" else output_dim) \
                 for node_type in self.node_types})
         if layernorm:
             self.layernorm = torch.nn.ModuleDict({
                 node_type: nn.LayerNorm(
-                    output_dim * self.t_order if self.layer_pooling == "rel_concat" else output_dim) \
+                    output_dim * self.t_order if self.layer_pooling == "order_concat" else output_dim) \
                 for node_type in self.node_types})
 
         # self.conv = torch.nn.ModuleDict(
@@ -353,7 +351,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
             h_dict[ntype] = h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels)
-            h_dict[ntype] = torch.tanh(h_dict[ntype])
+            # h_dict[ntype] = torch.tanh(h_dict[ntype])
 
         return h_dict
 
@@ -406,53 +404,25 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
 
-            if self.layer_pooling == "rel_concat":
-                beta[ntype] = []
-                rel_idxs = []
-                order_embs = []
-                for order in range(1, self.t_order + 1):
-                    rel_idx = [self.get_head_relations(ntype).index(m) \
-                               for m in self.get_head_relations(ntype, order=order)]
-                    if order == 1:
-                        rel_idx.append(self.num_head_relations(ntype) - 1)
+            if self.layer_pooling == "order_concat":
+                h_out[ntype] = self.order_concat(h_out[ntype], beta, ntype, query=r_dict[ntype])
 
-                    sub_beta = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype][:, rel_idx], ntype=ntype)
+            else:
+                # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
+                beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
+                h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
 
-                    order_emb = h_out[ntype][:, rel_idx] * sub_beta.unsqueeze(-1)
-                    order_emb = order_emb.sum(1).view(h_out[ntype].size(0), self.embedding_dim)
+                # print("h_out[ntype]", h_out[ntype].shape)
+                h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
-                    order_embs.append(order_emb)
-                    beta[ntype].append(sub_beta)
-                    rel_idxs.extend(rel_idx)
-
-                h_out[ntype] = torch.cat(order_embs, dim=1)
-                beta[ntype] = torch.cat(beta[ntype], dim=1)[:, rel_idxs]
-
-                if hasattr(self, "batchnorm"):
-                    h_out[ntype] = self.batchnorm[ntype](h_out[ntype])
+                if hasattr(self, "layernorm"):
+                    h_out[ntype] = self.layernorm[ntype](h_out[ntype])
 
                 if hasattr(self, "activation"):
                     h_out[ntype] = self.activation(h_out[ntype])
 
                 if hasattr(self, "dropout"):
                     h_out[ntype] = self.dropout(h_out[ntype])
-                continue
-
-            # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
-            h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
-
-            # print("h_out[ntype]", h_out[ntype].shape)
-            h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
-
-            if hasattr(self, "layernorm"):
-                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
-
-            if hasattr(self, "activation"):
-                h_out[ntype] = self.activation(h_out[ntype])
-
-            if hasattr(self, "dropout"):
-                h_out[ntype] = self.dropout(h_out[ntype])
 
 
         # Save beta weights from testing samples
@@ -468,6 +438,37 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                     global_node_idx=global_node_idx)
 
         return (l_dict, h_out), proximity_loss, edge_pred_dict
+
+    def order_concat(self, rel_embs: Tensor, beta: dict, ntype: str, query: Tensor):
+        beta[ntype] = []
+        rel_idxs = []
+        order_embs = []
+        for order in range(1, self.t_order + 1):
+            rel_idx = [self.get_head_relations(ntype).index(m) \
+                       for m in self.get_head_relations(ntype, order=order)]
+            if order == 1:
+                rel_idx.append(self.num_head_relations(ntype) - 1)
+
+            sub_beta = self.get_beta_weights(query=query, key=rel_embs[:, rel_idx], ntype=ntype)
+
+            order_emb = rel_embs[:, rel_idx] * sub_beta.unsqueeze(-1)
+            order_emb = order_emb.sum(1).view(rel_embs.size(0), self.embedding_dim)
+
+            order_embs.append(order_emb)
+            beta[ntype].append(sub_beta)
+            rel_idxs.extend(rel_idx)
+
+        rel_embs = torch.cat(order_embs, dim=1)
+        beta[ntype] = torch.cat(beta[ntype], dim=1)[:, rel_idxs]
+
+        if hasattr(self, "batchnorm"):
+            rel_embs = self.batchnorm[ntype](rel_embs)
+        if hasattr(self, "activation"):
+            rel_embs = self.activation(rel_embs)
+        if hasattr(self, "dropout"):
+            rel_embs = self.dropout(rel_embs)
+
+        return rel_embs
 
     def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
         if values is None:

@@ -194,7 +194,7 @@ def train(hparams):
 
         args = {
             "embedding_dim": 128,
-            "layer_pooling": "rel_concat",
+            "layer_pooling": "order_concat",
 
             "n_layers": len(dataset.neighbor_sizes),
             "t_order": t_order,
