@@ -351,7 +351,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
 
             h_dict[ntype] = h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels)
-            # h_dict[ntype] = torch.tanh(h_dict[ntype])
 
         return h_dict
 
@@ -374,7 +373,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
                for ntype in x if sizes[self.layer][ntype][1]}
 
-        if hasattr(self, "dropout") and self.input_dropout:
+        if self.input_dropout and hasattr(self, "dropout"):
             x = {ntype: self.dropout(x[ntype]) for ntype in x}
             x_r = {ntype: self.dropout(x_r[ntype]) for ntype in x_r}
             # if prev_h_in:
@@ -404,8 +403,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
 
-            if self.layer_pooling == "order_concat":
-                h_out[ntype] = self.order_concat(h_out[ntype], beta, ntype, query=r_dict[ntype])
+            if self.layer_pooling == "order_concat":  # Only at last layer
+                h_out[ntype], beta[ntype] = self.order_concat(h_out[ntype], query=r_dict[ntype], ntype=ntype)
 
             else:
                 # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
@@ -415,14 +414,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 # print("h_out[ntype]", h_out[ntype].shape)
                 h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
-                if hasattr(self, "layernorm"):
-                    h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+            if hasattr(self, "layernorm"):
+                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
 
-                if hasattr(self, "activation"):
-                    h_out[ntype] = self.activation(h_out[ntype])
+            if hasattr(self, "activation"):
+                h_out[ntype] = self.activation(h_out[ntype])
 
-                if hasattr(self, "dropout"):
-                    h_out[ntype] = self.dropout(h_out[ntype])
+            if hasattr(self, "dropout"):
+                h_out[ntype] = self.dropout(h_out[ntype])
 
 
         # Save beta weights from testing samples
@@ -439,8 +438,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return (l_dict, h_out), proximity_loss, edge_pred_dict
 
-    def order_concat(self, rel_embs: Tensor, beta: dict, ntype: str, query: Tensor):
-        beta[ntype] = []
+    def order_concat(self, rel_embs: Tensor, query: Tensor, ntype: str):
+        beta = []
         rel_idxs = []
         order_embs = []
         for order in range(1, self.t_order + 1):
@@ -455,20 +454,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             order_emb = order_emb.sum(1).view(rel_embs.size(0), self.embedding_dim)
 
             order_embs.append(order_emb)
-            beta[ntype].append(sub_beta)
+            beta.append(sub_beta)
             rel_idxs.extend(rel_idx)
 
         rel_embs = torch.cat(order_embs, dim=1)
-        beta[ntype] = torch.cat(beta[ntype], dim=1)[:, rel_idxs]
-
-        if hasattr(self, "batchnorm"):
-            rel_embs = self.batchnorm[ntype](rel_embs)
-        if hasattr(self, "activation"):
-            rel_embs = self.activation(rel_embs)
-        if hasattr(self, "dropout"):
-            rel_embs = self.dropout(rel_embs)
-
-        return rel_embs
+        beta = torch.cat(beta, dim=1)[:, rel_idxs]
+        return rel_embs, beta
 
     def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
         if values is None:

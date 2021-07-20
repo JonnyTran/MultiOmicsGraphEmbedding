@@ -82,7 +82,7 @@ class LATTENodeClf(NodeClfTrainer):
                 for ntype in self.proj_ntypes
             })
 
-        # self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         if hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":
@@ -320,14 +320,17 @@ class LATTENodeClf(NodeClfTrainer):
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-        #                                                        T_max=self.num_training_steps,
-        #                                                        eta_min=self.lr / 100
-        #                                                        )
+        extra = {}
+        if "lr_annealing" in self.hparams and self.hparams.lr_annealing:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", verbose=True,
+                                                                   # T_max=self.num_training_steps,
+                                                                   # eta_min=self.lr / 100
+                                                                   )
+            extra = {"lr_scheduler": scheduler,
+                     "monitor": "val_loss"}
 
         return {"optimizer": optimizer,
-                # "lr_scheduler": scheduler,
-                # "monitor": "val_loss"
+                **extra
                 }
 
 
