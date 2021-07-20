@@ -89,13 +89,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
                                  reshuffle_train=train_ratio if train_ratio else False)
 
         if name == "ogbn-mag":
-            if method == "LATTE":
-                skip_ntype = dataset.head_node_type
-            else:
-                skip_ntype = None
-
-            add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_mag/"), args=args,
-                                skip_ntype=skip_ntype)
+            add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_mag/"), args=args)
         elif name == "ogbn-proteins":
             add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_l2_ogbn-proteins/"), args=args)
         else:
