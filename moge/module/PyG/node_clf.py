@@ -91,7 +91,7 @@ class LATTENodeClf(NodeClfTrainer):
             elif hparams.layer_pooling == "order_concat":
                 hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
 
-            self.classifier = LinkPredictionClassifier(hparams)
+            self.classifier = DenseClassification(hparams)
         else:
             assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
@@ -312,7 +312,7 @@ class LATTENodeClf(NodeClfTrainer):
         ]
 
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
-        print("no weight_decay", sorted({name for name, p in param_optimizer if any(key in name for key in no_decay)}))
+        # print("no weight_decay", sorted({name for name, p in param_optimizer if any(key in name for key in no_decay)}))
 
         # optimizer_grouped_parameters.append({'params': [p for name, p in param_optimizer if "embeddings" in name],
         #                                      # 'lr': self.lr / 2,

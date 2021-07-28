@@ -57,7 +57,8 @@ class LATTE(nn.Module):
                                                  tail_type=self.head_node_type if is_last_layer else None)
 
             layers.append(
-                LATTEConv(input_dim=embedding_dim, output_dim=hparams.n_classes if is_output_layer else embedding_dim,
+                LATTEConv(input_dim=embedding_dim,
+                          output_dim=hparams.n_classes if is_output_layer else embedding_dim,
                           node_types=list(num_nodes_dict.keys()), metapaths=l_layer_metapaths, layer=l,
                           t_order=self.t_order, activation=None if is_output_layer else activation,
                           batchnorm=False if not hasattr(hparams,
