@@ -14,6 +14,7 @@ from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
 from dgl.init import zero_initializer
 from dgl.sampling import RandomWalkNeighborSampler
 from ogb.nodeproppred import DglNodePropPredDataset
+from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.utils import is_undirected
@@ -295,8 +296,12 @@ class DGLNodeSampler(HeteroNetDataset):
         if "year" in graph.ndata:
             for ntype in graph.ntypes:
                 if "year" in graph.nodes[ntype].data:
+                    lb = LabelBinarizer()
+                    year_onehot = lb.fit_transform(graph.nodes[ntype].data["year"].numpy())
+                    year_onehot = torch.from_numpy(year_onehot)
+
                     graph.nodes[ntype].data["feat"] = torch.cat([graph.nodes[ntype].data["feat"],
-                                                                 graph.nodes[ntype].data["year"]], dim=1)
+                                                                 year_onehot], dim=1)
 
         self.metapaths = graph.canonical_etypes
 

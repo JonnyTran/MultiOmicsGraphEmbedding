@@ -1,4 +1,4 @@
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 from collections import OrderedDict
 from copy import deepcopy
 
@@ -7,6 +7,20 @@ import numpy as np
 import torch
 from torch import nn
 from torch_geometric.nn.inits import glorot, zeros
+
+from moge.module.utils import tensor_sizes
+
+
+class LinkPredictionClassifier(nn.Module):
+    def __init__(self, hparams: Namespace):
+        super(LinkPredictionClassifier, self).__init__()
+
+        self.cls_embeddings = nn.Embedding(num_embeddings=hparams.n_classes, embedding_dim=hparams.embedding_dim)
+        self.bias = nn.Parameter(torch.zeros(hparams.embedding_dim), requires_grad=True)
+
+    def forward(self, embeddings):
+        score = embeddings @ (self.cls_embeddings.weight * self.bias).t()
+        return score
 
 
 class DenseClassification(nn.Module):

@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 
 from moge.data.network import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
-from moge.module.classifier import DenseClassification
+from moge.module.classifier import DenseClassification, LinkPredictionClassifier
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.module.utils import filter_samples_weights, process_tensor_dicts
@@ -91,7 +91,7 @@ class LATTENodeClf(NodeClfTrainer):
             elif hparams.layer_pooling == "order_concat":
                 hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
 
-            self.classifier = DenseClassification(hparams)
+            self.classifier = LinkPredictionClassifier(hparams)
         else:
             assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
@@ -321,17 +321,20 @@ class LATTENodeClf(NodeClfTrainer):
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
         extra = {}
-        if "lr_annealing" in self.hparams and self.hparams.lr_annealing:
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", verbose=True,
-                                                                   # T_max=self.num_training_steps,
-                                                                   # eta_min=self.lr / 100
+        if "lr_annealing" in self.hparams and self.hparams.lr_annealing == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                                   T_max=self.num_training_steps,
+                                                                   eta_min=self.lr / 100
                                                                    )
-            extra = {"lr_scheduler": scheduler,
-                     "monitor": "val_loss"}
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
 
-        return {"optimizer": optimizer,
-                **extra
-                }
+        elif "lr_annealing" in self.hparams and self.hparams.lr_annealing == "restart":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
+                                                                             T_0=2 * len(self.train_dataloader()),
+                                                                             eta_min=self.lr / 100)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+
+        return {"optimizer": optimizer, **extra}
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):
