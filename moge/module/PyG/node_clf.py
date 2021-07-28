@@ -91,7 +91,7 @@ class LATTENodeClf(NodeClfTrainer):
             elif hparams.layer_pooling == "order_concat":
                 hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
 
-            self.classifier = LinkPredictionClassifier(hparams)
+            self.classifier = DenseClassification(hparams)
         else:
             assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
@@ -303,7 +303,8 @@ class LATTENodeClf(NodeClfTrainer):
                     'BatchNorm.bias', 'BatchNorm.weight']
 
         optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay) \
+            {'params': [p for name, p in param_optimizer \
+                        if not any(key in name for key in no_decay) \
                         and "embeddings" not in name],
              'weight_decay': self.hparams.weight_decay},
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
@@ -324,15 +325,18 @@ class LATTENodeClf(NodeClfTrainer):
         if "lr_annealing" in self.hparams and self.hparams.lr_annealing == "cosine":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                    T_max=self.num_training_steps,
+                                                                   T_mult=1,
                                                                    eta_min=self.lr / 100
                                                                    )
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using CosineAnnealingLR", scheduler.state_dict())
 
         elif "lr_annealing" in self.hparams and self.hparams.lr_annealing == "restart":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                             T_0=2 * len(self.train_dataloader()),
+                                                                             T_0=50,
                                                                              eta_min=self.lr / 100)
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
 
         return {"optimizer": optimizer, **extra}
 
