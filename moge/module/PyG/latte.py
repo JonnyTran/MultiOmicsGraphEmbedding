@@ -403,6 +403,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             h_out[ntype][:, -1] = l_dict[ntype][:sizes[self.layer][ntype][1]]
 
+            # Aggregate multiple relations for each node type
             if self.layer_pooling == "order_concat":  # Only at last layer
                 h_out[ntype], beta[ntype] = self.order_concat(h_out[ntype], query=r_dict[ntype], ntype=ntype)
 

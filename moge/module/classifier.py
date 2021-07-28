@@ -7,7 +7,7 @@ import networkx as nx
 import numpy as np
 import torch
 from torch import nn, Tensor
-from torch_geometric.nn.inits import glorot, zeros
+from torch_geometric.nn.inits import glorot, zeros, glorot_orthogonal
 
 from moge.module.utils import tensor_sizes
 
@@ -24,20 +24,26 @@ class LinkPredictionClassifier(nn.Module):
 
         self.out_channels = hparams.embedding_dim // self.n_heads
 
-        self.cls_embeddings = nn.Embedding(num_embeddings=hparams.n_classes, embedding_dim=hparams.embedding_dim)
+        self.dropout = nn.Dropout(p=hparams.nb_cls_dropout)
+
+        self.cls_embeddings = nn.Embedding(num_embeddings=hparams.n_classes,
+                                           embedding_dim=hparams.embedding_dim)
         self.attn_kernels = nn.Parameter(torch.Tensor(self.n_heads, self.out_channels, self.out_channels))
         # self.attn_bias = nn.Parameter(torch.ones(self.n_heads))
 
         torch.nn.init.xavier_normal_(self.attn_kernels)
+        torch.nn.init.orthogonal_(self.cls_embeddings.weight)
 
     def forward(self, embeddings: Tensor):
-        queries = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
-        keys = self.cls_embeddings.weight.view(-1, self.n_heads, self.out_channels)
+        nodes = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
 
-        keys = torch.bmm(keys.transpose(1, 0), self.attn_kernels).transpose(2, 1)
+        classes = self.cls_embeddings.weight.view(-1, self.n_heads, self.out_channels)
+
+        classes = torch.bmm(classes.transpose(1, 0), self.attn_kernels).transpose(2, 1)
+        classes = self.dropout(classes)
 
         # scale = self.attn_bias / np.sqrt(self.out_channels)
-        score = torch.bmm(queries, keys).transpose(1, 0)  # * scale[None, :, None]
+        score = torch.bmm(nodes, classes).transpose(1, 0)  # * scale[None, :, None]
         score = score.sum(1)
         return score
 
