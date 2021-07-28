@@ -14,12 +14,24 @@ from moge.module.utils import tensor_sizes
 class LinkPredictionClassifier(nn.Module):
     def __init__(self, hparams: Namespace):
         super(LinkPredictionClassifier, self).__init__()
+        self.n_heads = hparams.attn_heads
+        self.out_channels = hparams.embedding_dim // hparams.attn_heads
 
         self.cls_embeddings = nn.Embedding(num_embeddings=hparams.n_classes, embedding_dim=hparams.embedding_dim)
-        self.bias = nn.Parameter(torch.zeros(hparams.embedding_dim), requires_grad=True)
+        self.kernels = nn.Parameter(torch.Tensor(hparams.attn_heads, self.out_channels, self.out_channels))
 
     def forward(self, embeddings):
-        score = embeddings @ (self.cls_embeddings.weight * self.bias).t()
+        q_mat = embeddings.view(-1, self.n_heads, self.out_channels)
+        k_mat = self.cls_embeddings.weight.view(-1, self.n_heads, self.out_channels)
+
+        print("k_mat", k_mat.transpose(1, 0).shape, self.kernels.shape)
+        k_mat = torch.bmm(k_mat.transpose(1, 0), self.kernels).transpose(1, 0)
+
+        print("q_mat", q_mat.shape, "k_mat", k_mat.shape)
+
+        score = (q_mat * k_mat).sum(dim=-1)
+        print("score", score.shape)
+        # score = embeddings @ (self.cls_embeddings.weight * self.bias).t()
         return score
 
 
