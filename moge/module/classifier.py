@@ -9,7 +9,7 @@ import torch
 from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros, glorot_orthogonal
 
-from torch_geometric.nn import GATConv, MessagePassing
+from torch_geometric.nn import GATConv, MessagePassing, RGCNConv, H
 from moge.module.utils import tensor_sizes
 
 
