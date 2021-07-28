@@ -91,7 +91,7 @@ class LATTENodeClf(NodeClfTrainer):
             elif hparams.layer_pooling == "order_concat":
                 hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
 
-            self.classifier = DenseClassification(hparams)
+            self.classifier = LinkPredictionClassifier(hparams)
         else:
             assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
