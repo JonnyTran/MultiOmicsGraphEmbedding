@@ -9,10 +9,11 @@ import torch
 from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros, glorot_orthogonal
 
+from torch_geometric.nn import GATConv, MessagePassing
 from moge.module.utils import tensor_sizes
 
 
-class LinkPredictionClassifier(nn.Module):
+class LinkPredictionClassifier(MessagePassing):
     def __init__(self, hparams: Namespace):
         super(LinkPredictionClassifier, self).__init__()
         self.n_heads = hparams.attn_heads
@@ -36,11 +37,10 @@ class LinkPredictionClassifier(nn.Module):
 
     def forward(self, embeddings: Tensor):
         nodes = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
-
         classes = self.cls_embeddings.weight.view(-1, self.n_heads, self.out_channels)
 
         classes = torch.bmm(classes.transpose(1, 0), self.attn_kernels).transpose(2, 1)
-        classes = self.dropout(classes)
+        # classes = self.dropout(classes)
 
         # scale = self.attn_bias / np.sqrt(self.out_channels)
         score = torch.bmm(nodes, classes).transpose(1, 0)  # * scale[None, :, None]
