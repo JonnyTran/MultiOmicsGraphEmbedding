@@ -1,3 +1,4 @@
+import math
 from argparse import ArgumentParser, Namespace
 from collections import OrderedDict
 from copy import deepcopy
@@ -5,7 +6,7 @@ from copy import deepcopy
 import networkx as nx
 import numpy as np
 import torch
-from torch import nn
+from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 
 from moge.module.utils import tensor_sizes
@@ -15,23 +16,29 @@ class LinkPredictionClassifier(nn.Module):
     def __init__(self, hparams: Namespace):
         super(LinkPredictionClassifier, self).__init__()
         self.n_heads = hparams.attn_heads
-        self.out_channels = hparams.embedding_dim // hparams.attn_heads
+
+        if hparams.layer_pooling == "concat":
+            self.n_heads = self.n_heads * hparams.n_layers
+        elif hparams.layer_pooling == "order_concat":
+            self.n_heads = self.n_heads * hparams.t_order
+
+        self.out_channels = hparams.embedding_dim // self.n_heads
 
         self.cls_embeddings = nn.Embedding(num_embeddings=hparams.n_classes, embedding_dim=hparams.embedding_dim)
-        self.kernels = nn.Parameter(torch.Tensor(hparams.attn_heads, self.out_channels, self.out_channels))
+        self.attn_kernels = nn.Parameter(torch.Tensor(self.n_heads, self.out_channels, self.out_channels))
+        # self.attn_bias = nn.Parameter(torch.ones(self.n_heads))
 
-    def forward(self, embeddings):
-        q_mat = embeddings.view(-1, self.n_heads, self.out_channels)
-        k_mat = self.cls_embeddings.weight.view(-1, self.n_heads, self.out_channels)
+        torch.nn.init.xavier_normal_(self.attn_kernels)
 
-        print("k_mat", k_mat.transpose(1, 0).shape, self.kernels.shape)
-        k_mat = torch.bmm(k_mat.transpose(1, 0), self.kernels).transpose(1, 0)
+    def forward(self, embeddings: Tensor):
+        queries = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
+        keys = self.cls_embeddings.weight.view(-1, self.n_heads, self.out_channels)
 
-        print("q_mat", q_mat.shape, "k_mat", k_mat.shape)
+        keys = torch.bmm(keys.transpose(1, 0), self.attn_kernels).transpose(2, 1)
 
-        score = (q_mat * k_mat).sum(dim=-1)
-        print("score", score.shape)
-        # score = embeddings @ (self.cls_embeddings.weight * self.bias).t()
+        # scale = self.attn_bias / np.sqrt(self.out_channels)
+        score = torch.bmm(queries, keys).transpose(1, 0)  # * scale[None, :, None]
+        score = score.sum(1)
         return score
 
 

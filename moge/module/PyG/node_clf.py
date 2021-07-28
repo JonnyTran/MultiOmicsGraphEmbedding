@@ -298,7 +298,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation",
+        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embedding",
                     'LayerNorm.bias', 'LayerNorm.weight',
                     'BatchNorm.bias', 'BatchNorm.weight']
 
@@ -311,7 +311,7 @@ class LATTENodeClf(NodeClfTrainer):
         ]
 
         # print("weight_decay", sorted({name for name, p in param_optimizer if not any(key in name for key in no_decay)}))
-        # print("no weight_decay", sorted({name for name, p in param_optimizer if any(key in name for key in no_decay)}))
+        print("no weight_decay", sorted({name for name, p in param_optimizer if any(key in name for key in no_decay)}))
 
         # optimizer_grouped_parameters.append({'params': [p for name, p in param_optimizer if "embeddings" in name],
         #                                      # 'lr': self.lr / 2,

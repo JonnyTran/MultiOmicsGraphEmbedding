@@ -401,7 +401,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if edge_attn_dict:
                 edge_pred_dict.update(edge_attn_dict)
 
-            h_out[ntype][:, -1] = r_dict[ntype]  # [:sizes[self.layer][ntype][1]]
+            h_out[ntype][:, -1] = l_dict[ntype][:sizes[self.layer][ntype][1]]
 
             if self.layer_pooling == "order_concat":  # Only at last layer
                 h_out[ntype], beta[ntype] = self.order_concat(h_out[ntype], query=r_dict[ntype], ntype=ntype)
@@ -446,6 +446,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             rel_idx = [self.get_head_relations(ntype).index(m) \
                        for m in self.get_head_relations(ntype, order=order)]
             if order == 1:
+                # Add the self LHS embeddings to first order relations
                 rel_idx.append(self.num_head_relations(ntype) - 1)
 
             sub_beta = self.get_beta_weights(query=query, key=rel_embs[:, rel_idx], ntype=ntype)
