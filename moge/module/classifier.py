@@ -63,8 +63,8 @@ class HeteroRGCN(nn.Module):
         h_dict = self.layer1(G, self.embeddings)
         h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
         h_dict = self.layer2(G, h_dict)
-        # get paper logits
-        return h_dict['_N']
+
+        return h_dict
 
 
 class LinkPredictionClassifier(nn.Module):
@@ -81,29 +81,30 @@ class LinkPredictionClassifier(nn.Module):
         self.out_channels = hparams.embedding_dim // self.n_heads
 
         self.dropout = nn.Dropout(p=hparams.nb_cls_dropout)
-        self.cls_embeddings = nn.Embedding(num_embeddings=hparams.n_classes,
-                                           embedding_dim=hparams.embedding_dim)
         self.attn_kernels = nn.Parameter(torch.Tensor(self.n_heads, self.out_channels, self.out_channels))
         # self.attn_bias = nn.Parameter(torch.ones(self.n_heads))
 
         if isinstance(hparams.cls_graph, dgl.DGLGraph):
             self.g: dgl.DGLHeteroGraph = hparams.cls_graph
             self.rgcn = HeteroRGCN(self.g, hparams.embedding_dim, 128, hparams.embedding_dim)
-            # self.rgcn_1 = HeteroRGCNLayer(hparams.embedding_dim, hparams.embedding_dim, etypes=self.g.etypes)
-            # self.rgcn_2 = HeteroRGCNLayer(hparams.embedding_dim, hparams.embedding_dim, etypes=self.g.etypes)
+        else:
+            self.embeddings = nn.Embedding(num_embeddings=hparams.n_classes,
+                                           embedding_dim=hparams.embedding_dim)
+            nn.init.xavier_uniform_(self.embeddings.weight)
 
         torch.nn.init.xavier_normal_(self.attn_kernels)
-        nn.init.xavier_uniform_(self.cls_embeddings.weight)
 
     def forward(self, embeddings: Tensor):
         nodes = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
 
-        classes = self.cls_embeddings.weight
         if hasattr(self, "g"):
-            if self.g.device != classes.device:
-                self.g = self.g.to(classes.device)
-            classes = self.rgcn(self.g, {"_N": classes})["_N"]
-            classes = classes[:self.n_classes]
+            if self.g.device != self.attn_kernels.device:
+                self.g = self.g.to(self.attn_kernels.device)
+
+            classes = self.rgcn(self.g)["_N"]
+            classes = self.dropout(classes[:self.n_classes])
+        else:
+            classes = self.embeddings.weight
 
         classes = classes.view(-1, self.n_heads, self.out_channels)
 

@@ -5,6 +5,7 @@ from argparse import Namespace
 
 import dgl
 import dill
+import numpy as np
 import torch
 from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset, GTNDataset
 from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
@@ -99,15 +100,34 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         with open(os.path.join(dataset_path, 'gtex_rna_ppi_multiplex_network.pickle'), "rb") as file:
             network = pickle.load(file)
 
-        dataset = DGLNodeSampler.from_dgl_heterograph(*network.to_dgl_heterograph(min_count=500),
-                                                      sampler="MultiLayerNeighborSampler",
-                                                      neighbor_sizes=args.neighbor_sizes,
-                                                      head_node_type=network.node_types,
-                                                      edge_dir="in",
-                                                      add_reverse_metapaths=use_reverse,
-                                                      inductive=False)
-        dataset._name = "GTeX"
+        min_count = 10
+        label_col = 'go_id'
+        dataset = DGLNodeSampler.from_dgl_heterograph(
+            *network.to_dgl_heterograph(label_col=label_col, min_count=min_count),
+            sampler="MultiLayerNeighborSampler",
+            neighbor_sizes=args.neighbor_sizes,
+            head_node_type=network.node_types,
+            edge_dir="in",
+            add_reverse_metapaths=use_reverse,
+            inductive=False,
+            classes=network.feature_transformer[label_col].classes_)
+        dataset._name = f"GTeX-{label_col}@{dataset.n_classes}"
+
         add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_l2_GTeX/"), args=args)
+
+        # # Set up graph of the clasification labels
+        from openomics.database.ontology import GeneOntology
+        geneontology = GeneOntology()
+
+        all_go = set(geneontology.network.nodes)
+        next_go = set(all_go) - set(dataset.classes)
+        nodes = np.concatenate([dataset.classes, np.array(list(next_go))])
+
+        edge_types = {e for u, v, e in geneontology.network.edges}
+        edge_index_dict = geneontology.to_scipy_adjacency(nodes=nodes, edge_types=edge_types)
+
+        go_net = dgl.heterograph(edge_index_dict)
+        args["cls_graph"] = go_net
 
     elif name == "ACM":
         dataset = DGLNodeSampler.from_dgl_heterograph(

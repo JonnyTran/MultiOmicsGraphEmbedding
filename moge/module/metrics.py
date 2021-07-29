@@ -10,13 +10,13 @@ from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
 
 import torchmetrics
-from torchmetrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
+from torchmetrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy, Precision as PrecisionMetric, \
+    Recall as RecallMetric
 
 from .utils import filter_samples
 
-
 class Metrics(torch.nn.Module):
-    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[5, 10, 50, 100], n_classes: int = None,
+    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[5, 10, 50], n_classes: int = None,
                  multilabel: bool = None, metrics=["precision", "recall", "top_k", "accuracy"]):
         super().__init__()
 
@@ -44,9 +44,11 @@ class Metrics(torch.nn.Module):
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
             elif "macro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="macro")
+                self.metrics[metric] = F1(num_classes=n_classes, average="macro",
+                                          top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "micro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="micro")
+                self.metrics[metric] = F1(num_classes=n_classes, average="micro",
+                                          top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:

@@ -331,7 +331,6 @@ class LATTENodeClf(NodeClfTrainer):
         if "lr_annealing" in self.hparams and self.hparams.lr_annealing == "cosine":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                    T_max=self.num_training_steps,
-                                                                   T_mult=1,
                                                                    eta_min=self.lr / 100
                                                                    )
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
@@ -339,7 +338,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         elif "lr_annealing" in self.hparams and self.hparams.lr_annealing == "restart":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                             T_0=50,
+                                                                             T_0=50, T_mult=1,
                                                                              eta_min=self.lr / 100)
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
             print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
