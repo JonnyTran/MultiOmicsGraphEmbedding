@@ -398,6 +398,15 @@ class DGLNodeSampler(HeteroNetDataset):
         # return loader.collate_fn(iloc)
         return next(iter(loader))
 
+    def get_training_subgraph(self):
+        nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
+        nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
+        graph = self.create_heterograph(self.G, nodes_subset=nodes)
+
+        print("Removed edges incident to test nodes from the training subgraph for inductive node classification: \n",
+              graph)
+        return graph
+
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         if self.inductive:
             graph = self.get_training_subgraph()
@@ -423,15 +432,6 @@ class DGLNodeSampler(HeteroNetDataset):
                                 batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         return dataloader
-
-    def get_training_subgraph(self):
-        nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
-        nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
-        graph = self.create_heterograph(self.G, nodes_subset=nodes)
-
-        print("Removed edges incident to test nodes from the training subgraph for inductive node classification: \n",
-              graph)
-        return graph
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
