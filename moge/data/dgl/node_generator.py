@@ -406,7 +406,10 @@ class DGLNodeSampler(HeteroNetDataset):
 
         if isinstance(self.head_node_type, str) and isinstance(self.training_idx, (Tensor, np.ndarray)):
             seed_nodes = {self.head_node_type: self.training_idx}
+        elif isinstance(self.head_node_type, str) and isinstance(self.training_idx, dict):
+            seed_nodes = {self.head_node_type: self.training_idx[self.head_node_type]}
         else:
+            assert isinstance(self.training_idx, dict) and len(self.head_node_type) == len(self.training_idx)
             seed_nodes = self.training_idx
 
         if collate_fn == "neighbor_sampler":
@@ -433,9 +436,12 @@ class DGLNodeSampler(HeteroNetDataset):
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
 
-        if isinstance(self.head_node_type, str) and isinstance(self.training_idx, (Tensor, np.ndarray)):
+        if isinstance(self.head_node_type, str) and isinstance(self.validation_idx, (Tensor, np.ndarray)):
             seed_nodes = {self.head_node_type: self.validation_idx}
+        elif isinstance(self.head_node_type, str) and isinstance(self.validation_idx, dict):
+            seed_nodes = {self.head_node_type: self.validation_idx[self.head_node_type]}
         else:
+            assert isinstance(self.validation_idx, dict) and len(self.head_node_type) == len(self.validation_idx)
             seed_nodes = self.validation_idx
 
         if collate_fn == "neighbor_sampler":
@@ -453,9 +459,12 @@ class DGLNodeSampler(HeteroNetDataset):
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         graph = self.G
 
-        if isinstance(self.head_node_type, str) and isinstance(self.training_idx, (Tensor, np.ndarray)):
+        if isinstance(self.head_node_type, str) and isinstance(self.testing_idx, (Tensor, np.ndarray)):
             seed_nodes = {self.head_node_type: self.testing_idx}
+        elif isinstance(self.head_node_type, str) and isinstance(self.testing_idx, dict):
+            seed_nodes = {self.head_node_type: self.testing_idx[self.head_node_type]}
         else:
+            assert isinstance(self.testing_idx, dict) and len(self.head_node_type) == len(self.testing_idx)
             seed_nodes = self.testing_idx
 
         if collate_fn == "neighbor_sampler":

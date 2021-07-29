@@ -5,11 +5,11 @@ import torch
 from torch import Tensor
 
 
-def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights: torch.Tensor, max_mode=False):
+def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor, max_mode=False):
     if weights is None or weights.shape == None or weights.numel() == 0:
         return Y_hat, Y
 
-    if not isinstance(weights, torch.Tensor):
+    if not isinstance(weights, Tensor):
         weights = torch.tensor(weights)
 
     if max_mode:
@@ -30,11 +30,12 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights: torch.Tensor, 
     return Y_hat, Y
 
 
-def filter_samples_weights(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
-    if weights is None or weights.shape == None:
+def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights):
+    if weights is None or \
+            (isinstance(weights, (Tensor, np.ndarray)) and weights.shape == None):
         return Y_hat, Y, None
 
-    if isinstance(weights, torch.Tensor):
+    if isinstance(weights, Tensor):
         idx = torch.nonzero(weights).view(-1)
     else:
         idx = torch.tensor(np.nonzero(weights)[0])
@@ -66,10 +67,14 @@ def process_tensor_dicts(y_pred, y_true, weights=None):
     elif isinstance(y_true, dict) and isinstance(y_pred, Tensor):
         head_node_type = list(y_true.keys()).pop()
         y_true = y_true[head_node_type]
+        if isinstance(weights, dict):
+            weights = weights[head_node_type]
 
     elif isinstance(y_true, Tensor) and isinstance(y_pred, dict):
         head_node_type = list(y_pred.keys()).pop()
         y_pred = y_pred[head_node_type]
+        if isinstance(weights, dict):
+            weights = weights[head_node_type]
 
     return y_pred, y_true, weights
 
@@ -86,7 +91,7 @@ def tensor_sizes(input):
         return [tensor_sizes(v) for v in input]
     else:
         if input is not None and hasattr(input, "shape"):
-            if isinstance(input, torch.Tensor) and input.dim() == 0:
+            if isinstance(input, Tensor) and input.dim() == 0:
                 return input.item()
 
             return list(input.shape)
@@ -110,7 +115,7 @@ def process_tensor(input, device=None, dtype=None, half=False):
     if input is None:
         return input
 
-    if not isinstance(input, torch.Tensor):
+    if not isinstance(input, Tensor):
         input = torch.tensor(input)
 
     if dtype:

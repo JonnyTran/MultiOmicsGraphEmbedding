@@ -184,11 +184,10 @@ class LATTENodeClf(NodeClfTrainer):
 
         h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"][0])
 
-        embeddings, proximity_loss, edge_index_dict = self.embedder(h_out,
-                                                                    X["edge_index"],
-                                                                    X["sizes"],
-                                                                    X["global_node_index"], **kwargs)
-
+        embeddings, _, edge_index_dict = self.embedder(h_out,
+                                                       X["edge_index"],
+                                                       X["sizes"],
+                                                       X["global_node_index"], **kwargs)
         if isinstance(self.head_node_type, str):
             y_hat = self.classifier(embeddings[self.head_node_type]) \
                 if hasattr(self, "classifier") else embeddings[self.head_node_type]
@@ -199,7 +198,7 @@ class LATTENodeClf(NodeClfTrainer):
             else:
                 y_hat = embeddings
 
-        return y_hat, proximity_loss, edge_index_dict
+        return y_hat, _, edge_index_dict
 
     def on_test_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
