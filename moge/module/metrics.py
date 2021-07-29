@@ -16,7 +16,7 @@ from .utils import filter_samples
 
 
 class Metrics(torch.nn.Module):
-    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
+    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[5, 10, 50, 100], n_classes: int = None,
                  multilabel: bool = None, metrics=["precision", "recall", "top_k", "accuracy"]):
         super().__init__()
 
@@ -26,7 +26,6 @@ class Metrics(torch.nn.Module):
         self.multilabel = multilabel
         self.top_ks = top_k
         self.prefix = prefix
-
 
         self.metrics = {}
         for metric in metrics:
@@ -56,7 +55,8 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = AveragePrecision(num_classes=n_classes, )
 
             elif "accuracy" in metric:
-                self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None)
+                self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
+                                                subset_accuracy=multilabel)
 
             elif "ogbn" in metric:
                 self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric))
@@ -66,6 +66,7 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = OGBLinkPredMetrics(LinkEvaluator(metric))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
+                continue
 
             # Needed to add the PytorchGeometric methods as Modules, so they'll be on the correct CUDA device during training
             if isinstance(self.metrics[metric], torchmetrics.metric.Metric):

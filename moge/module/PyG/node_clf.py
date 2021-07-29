@@ -17,7 +17,7 @@ from moge.module.PyG.latte import LATTE
 from moge.module.classifier import DenseClassification, LinkPredictionClassifier
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples_weights, process_tensor_dicts
+from moge.module.utils import filter_samples_weights, process_tensor_dicts, tensor_sizes
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -91,7 +91,10 @@ class LATTENodeClf(NodeClfTrainer):
             elif hparams.layer_pooling == "order_concat":
                 hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
 
-            self.classifier = DenseClassification(hparams)
+            if "cls_graph" in hparams and hparams.cls_graph:
+                self.classifier = LinkPredictionClassifier(hparams)
+            else:
+                self.classifier = DenseClassification(hparams)
         else:
             assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
@@ -225,6 +228,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
@@ -250,6 +254,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
@@ -267,6 +272,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 

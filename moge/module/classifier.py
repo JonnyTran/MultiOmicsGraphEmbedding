@@ -64,12 +64,13 @@ class HeteroRGCN(nn.Module):
         h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
         h_dict = self.layer2(G, h_dict)
         # get paper logits
-        return h_dict['paper']
+        return h_dict['_N']
 
 
 class LinkPredictionClassifier(nn.Module):
     def __init__(self, hparams: Namespace):
         super(LinkPredictionClassifier, self).__init__()
+        self.n_classes = hparams.n_classes
         self.n_heads = hparams.attn_heads
 
         if hparams.layer_pooling == "concat":
@@ -85,10 +86,11 @@ class LinkPredictionClassifier(nn.Module):
         self.attn_kernels = nn.Parameter(torch.Tensor(self.n_heads, self.out_channels, self.out_channels))
         # self.attn_bias = nn.Parameter(torch.ones(self.n_heads))
 
-        if "cls_graph" in hparams:
+        if isinstance(hparams.cls_graph, dgl.DGLGraph):
             self.g: dgl.DGLHeteroGraph = hparams.cls_graph
-            self.rgcn_1 = HeteroRGCNLayer(hparams.embedding_dim, hparams.embedding_dim, etypes=self.g.etypes)
-            self.rgcn_2 = HeteroRGCNLayer(hparams.embedding_dim, hparams.embedding_dim, etypes=self.g.etypes)
+            self.rgcn = HeteroRGCN(self.g, hparams.embedding_dim, 128, hparams.embedding_dim)
+            # self.rgcn_1 = HeteroRGCNLayer(hparams.embedding_dim, hparams.embedding_dim, etypes=self.g.etypes)
+            # self.rgcn_2 = HeteroRGCNLayer(hparams.embedding_dim, hparams.embedding_dim, etypes=self.g.etypes)
 
         torch.nn.init.xavier_normal_(self.attn_kernels)
         nn.init.xavier_uniform_(self.cls_embeddings.weight)
@@ -100,8 +102,8 @@ class LinkPredictionClassifier(nn.Module):
         if hasattr(self, "g"):
             if self.g.device != classes.device:
                 self.g = self.g.to(classes.device)
-            classes = self.rgcn_1(self.g, {"_N": classes})["_N"]
-            classes = self.rgcn_2(self.g, {"_N": F.leaky_relu(classes)})["_N"]
+            classes = self.rgcn(self.g, {"_N": classes})["_N"]
+            classes = classes[:self.n_classes]
 
         classes = classes.view(-1, self.n_heads, self.out_channels)
 

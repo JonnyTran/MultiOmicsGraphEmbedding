@@ -74,8 +74,12 @@ class DGLNodeSampler(HeteroNetDataset):
 
     @classmethod
     def from_dgl_heterograph(cls, g: dgl.DGLHeteroGraph, labels: Union[Tensor, Dict[str, Tensor]],
-                             num_classes: str, train_idx: Dict[str, Tensor], val_idx, test_idx,
+                             num_classes: int, train_idx: Dict[str, Tensor], val_idx, test_idx,
                              **kwargs):
+        if "classes" in kwargs:
+            classes = kwargs.pop("classes")
+        else:
+            classes = None
 
         self = cls(dataset=g, metapaths=g.canonical_etypes, **kwargs)
 
@@ -98,6 +102,8 @@ class DGLNodeSampler(HeteroNetDataset):
             self.multilabel = True if label.dim() > 1 and label.size(1) > 1 else False
         else:
             self.multilabel = True if labels.dim() > 1 and labels.size(1) > 1 else False
+
+        self.classes = classes
 
         self.training_idx = torch.tensor(train_idx) if isinstance(train_idx, np.ndarray) else train_idx
         self.validation_idx = torch.tensor(val_idx) if isinstance(val_idx, np.ndarray) else val_idx

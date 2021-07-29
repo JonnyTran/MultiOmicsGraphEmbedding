@@ -55,6 +55,8 @@ def filter_samples_weights(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
 def process_tensor_dicts(y_pred, y_true, weights=None):
     if isinstance(y_true, dict) and isinstance(y_pred, dict):
         ntypes = list(y_pred.keys())
+        # Filter node types which have no data
+        ntypes = [ntype for ntype in ntypes if y_true[ntype].sum() > 0]
 
         y_true = torch.cat([y_true[ntype] for ntype in ntypes], dim=0)
         y_pred = torch.cat([y_pred[ntype] for ntype in ntypes], dim=0)
