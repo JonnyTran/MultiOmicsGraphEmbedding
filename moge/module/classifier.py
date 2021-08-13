@@ -40,21 +40,23 @@ class HeteroRGCNLayer(nn.Module):
         # The first argument is the message passing functions for each relation.
         # The second one is the type wise reducer, could be "sum", "max",
         # "min", "mean", "stack"
-        G.multi_update_all(funcs, 'sum')
+        G.multi_update_all(funcs, 'max')
         # return the updated node feature dictionary
         return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
 
 
 class HeteroRGCN(nn.Module):
-    def __init__(self, G, in_size, hidden_size, out_size):
+    def __init__(self, G: dgl.DGLHeteroGraph, in_size, hidden_size, out_size):
         super(HeteroRGCN, self).__init__()
+
         # Use trainable node embeddings as featureless inputs.
-        embed_dict = {ntype: nn.Parameter(torch.Tensor(G.number_of_nodes(ntype), in_size))
+        embed_dict = {ntype: nn.Parameter(torch.Tensor(G.num_nodes(ntype), in_size))
                       for ntype in G.ntypes}
         for key, embed in embed_dict.items():
             nn.init.xavier_uniform_(embed)
 
         self.embeddings = nn.ParameterDict(embed_dict)
+
         # create layers
         self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes)
         self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes)
@@ -86,7 +88,8 @@ class LinkPredictionClassifier(nn.Module):
 
         if isinstance(hparams.cls_graph, dgl.DGLGraph):
             self.g: dgl.DGLHeteroGraph = hparams.cls_graph
-            self.rgcn = HeteroRGCN(self.g, hparams.embedding_dim, 128, hparams.embedding_dim)
+            self.rgcn = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
+                                   out_size=hparams.embedding_dim)
         else:
             self.embeddings = nn.Embedding(num_embeddings=hparams.n_classes,
                                            embedding_dim=hparams.embedding_dim)

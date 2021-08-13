@@ -1,6 +1,6 @@
 import copy
 from collections import defaultdict
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Iterable
 
 import dgl
 import numpy as np
@@ -105,9 +105,19 @@ class DGLNodeSampler(HeteroNetDataset):
 
         self.classes = classes
 
-        self.training_idx = torch.tensor(train_idx) if isinstance(train_idx, np.ndarray) else train_idx
-        self.validation_idx = torch.tensor(val_idx) if isinstance(val_idx, np.ndarray) else val_idx
-        self.testing_idx = torch.tensor(test_idx) if isinstance(test_idx, np.ndarray) else test_idx
+        if isinstance(train_idx, dict) and isinstance(self.head_node_type, str):
+            self.training_idx = train_idx[self.head_node_type]
+            self.validation_idx = val_idx[self.head_node_type]
+            self.testing_idx = test_idx[self.head_node_type]
+        elif isinstance(train_idx, dict) and isinstance(self.head_node_type, Iterable):
+            self.training_idx = {ntype: train_idx[ntype] for ntype in self.head_node_type}
+            self.validation_idx = {ntype: val_idx[ntype] for ntype in self.head_node_type}
+            self.testing_idx = {ntype: test_idx[ntype] for ntype in self.head_node_type}
+        else:
+            self.training_idx = torch.tensor(train_idx)
+            self.validation_idx = torch.tensor(val_idx)
+            self.testing_idx = torch.tensor(test_idx)
+
         return self
 
     @classmethod

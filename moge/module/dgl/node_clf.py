@@ -6,7 +6,7 @@ from typing import Dict, List, Iterable
 
 import dgl
 import torch
-from torch import nn
+from torch import nn, Tensor
 from torch.utils.data import DataLoader
 
 import moge
@@ -468,7 +468,7 @@ class R_HGNN(NodeClfTrainer):
 
 class NARS(NodeClfTrainer):
     def __init__(self, args: Namespace, dataset: DGLNodeSampler, metrics: List[str]):
-        args.loss_type = "KL_DIVERGENCE" if dataset.multilabel else "NEGATIVE_LOG_LIKELIHOOD"
+        args.loss_type = "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
         super(NARS, self).__init__(args, dataset, metrics)
 
         self.dataset = dataset
@@ -514,7 +514,7 @@ class NARS(NodeClfTrainer):
                  args.ff_layer, args.dropout, args.input_dropout)
         )
 
-        self.criterion = nn.KLDivLoss(reduction='batchmean') if dataset.multilabel else nn.NLLLoss()
+        self.criterion = nn.BCEWithLogitsLoss(reduction="none") if dataset.multilabel else nn.CrossEntropyLoss()
 
         args.n_params = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
@@ -529,7 +529,8 @@ class NARS(NodeClfTrainer):
         input_features, y_true = batch
 
         y_pred = self.forward(input_features)
-        loss = self.criterion.forward(y_pred, y_true)
+        loss = self.criterion.forward(y_pred,
+                                      y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
@@ -544,7 +545,8 @@ class NARS(NodeClfTrainer):
         input_features, y_true = batch
 
         y_pred = self.forward(input_features)
-        val_loss = self.criterion.forward(y_pred, y_true)
+        val_loss = self.criterion.forward(y_pred,
+                                          y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
@@ -554,7 +556,8 @@ class NARS(NodeClfTrainer):
         input_features, y_true = batch
 
         y_pred = self.forward(input_features)
-        test_loss = self.criterion.forward(y_pred, y_true)
+        test_loss = self.criterion.forward(y_pred,
+                                           y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         if batch_nb == 0:
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)

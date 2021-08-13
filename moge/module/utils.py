@@ -65,7 +65,7 @@ def process_tensor_dicts(y_pred, y_true, weights=None):
             weights = torch.cat([weights[ntype] for ntype in ntypes], dim=0)
 
     elif isinstance(y_true, dict) and isinstance(y_pred, Tensor):
-        head_node_type = list(y_true.keys()).pop()
+        head_node_type = list({ntype for ntype, label in y_true.items() if label.numel() > 0}).pop()
         y_true = y_true[head_node_type]
         if isinstance(weights, dict):
             weights = weights[head_node_type]
