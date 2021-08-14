@@ -106,9 +106,10 @@ class DGLNodeSampler(HeteroNetDataset):
         self.classes = classes
 
         if isinstance(train_idx, dict) and isinstance(self.head_node_type, str):
-            self.training_idx = train_idx[self.head_node_type]
-            self.validation_idx = val_idx[self.head_node_type]
-            self.testing_idx = test_idx[self.head_node_type]
+            self.training_idx = torch.tensor(train_idx[self.head_node_type])
+            self.validation_idx = torch.tensor(val_idx[self.head_node_type])
+            self.testing_idx = torch.tensor(test_idx[self.head_node_type])
+
         elif isinstance(train_idx, dict) and isinstance(self.head_node_type, Iterable):
             self.training_idx = {ntype: train_idx[ntype] for ntype in self.head_node_type}
             self.validation_idx = {ntype: val_idx[ntype] for ntype in self.head_node_type}
