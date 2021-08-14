@@ -15,6 +15,8 @@ from ogb.graphproppred import PygGraphPropPredDataset, DglGraphPropPredDataset
 from torch_geometric.datasets import AMiner
 from typing import Union
 
+from openomics.database.ontology import GeneOntology
+
 import moge
 import moge.data.PyG.triplet_generator
 from moge.data.dgl.graph_generator import DGLGraphSampler
@@ -106,7 +108,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
             *network.to_dgl_heterograph(label_col=label_col, min_count=min_count),
             sampler="MultiLayerNeighborSampler",
             neighbor_sizes=args.neighbor_sizes,
-            head_node_type=network.node_types,
+            head_node_type="MessengerRNA",
             edge_dir="in",
             add_reverse_metapaths=use_reverse,
             inductive=False,
@@ -115,19 +117,20 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
 
         add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_l2_GTeX/"), args=args)
 
-        # # Set up graph of the clasification labels
-        from openomics.database.ontology import GeneOntology
-        geneontology = GeneOntology()
+        # Set up graph of the clasification labels
+        if "LATTE" in method and "cls_graph" in method:
+            print("adding cls_graph")
+            geneontology = GeneOntology()
 
-        all_go = set(geneontology.network.nodes)
-        next_go = set(all_go) - set(dataset.classes)
-        nodes = np.concatenate([dataset.classes, np.array(list(next_go))])
+            all_go = set(geneontology.network.nodes)
+            next_go = set(all_go) - set(dataset.classes)
+            nodes = np.concatenate([dataset.classes, np.array(list(next_go))])
 
-        edge_types = {e for u, v, e in geneontology.network.edges}
-        edge_index_dict = geneontology.to_scipy_adjacency(nodes=nodes, edge_types=edge_types)
+            edge_types = {e for u, v, e in geneontology.network.edges}
+            edge_index_dict = geneontology.to_scipy_adjacency(nodes=nodes, edge_types=edge_types)
 
-        go_net = dgl.heterograph(edge_index_dict)
-        args["cls_graph"] = go_net
+            args.classes = dataset.classes
+            args.cls_graph = dgl.heterograph(edge_index_dict)
 
     elif name == "ACM":
         dataset = DGLNodeSampler.from_dgl_heterograph(

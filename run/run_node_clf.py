@@ -31,16 +31,20 @@ def train(hparams):
 
     pytorch_lightning.seed_everything(hparams.run)
 
-    if hparams.dataset in ["ACM", "IMDB", "DBLP", "GTeX"]:
+    if hparams.dataset in ["ACM", "IMDB", "DBLP"]:
         hparams.neighbor_sizes = [-1, -1]
     elif "ogbn" in hparams.dataset:
+        hparams.neighbor_sizes = [10, 10]
+    else:
         hparams.neighbor_sizes = [10, 10]
 
     dataset = load_node_dataset(hparams.dataset, hparams.method, args=hparams, train_ratio=hparams.train_ratio,
                                 dataset_path=hparams.root_path)
 
     METRICS = ["micro_f1", "macro_f1",
-               dataset.name() if "ogb" in dataset.name() else "accuracy"]
+               "precision", "recall", "top_k",
+               # dataset.name() if "ogb" in dataset.name() else "accuracy"
+               ]
 
     if hparams.method == "HAN":
         args = {
@@ -124,7 +128,7 @@ def train(hparams):
             'input_dropout': True,
             'dropout': 0.5,
             'head_node_type': dataset.head_node_type,
-            'batch_size': 50000,
+            'batch_size': 10000,
             'epochs': 200,
             'patience': 10,
             'lr': 0.001,
@@ -174,7 +178,7 @@ def train(hparams):
         model = R_HGNN(args, dataset, metrics=METRICS)
 
     elif "LATTE" in hparams.method:
-        USE_AMP = True
+        USE_AMP = False
 
         extra_args = {}
         if "-1" in hparams.method:
@@ -182,7 +186,7 @@ def train(hparams):
             batch_order = 12
         elif "-2" in hparams.method:
             t_order = 2
-            batch_order = 11
+            batch_order = 10
 
         elif "-3" in hparams.method:
             t_order = 3
@@ -223,10 +227,11 @@ def train(hparams):
             "use_class_weights": False,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "stochastic_weight_avg": False,
-            "lr": 0.001,
+            "lr": 0.01,
             "epochs": 75,
             "patience": 5,
             "weight_decay": 1e-4,
+            "lr_annealing": "restart",
         }
 
         args.update(hparams.__dict__)

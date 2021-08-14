@@ -696,11 +696,9 @@ class HAN(NodeClfTrainer):
         for i, block in enumerate(blocks):
             blocks[i] = block.to(self.device)
         y_true = self.labels[seeds].to(self.device)
-        print("y_true", y_true)
 
         h_list = self.load_subtensors(blocks, self.features.to(self.device))
 
-        print("h_list", tensor_sizes(h_list))
         y_pred = self.forward(blocks, h_list)
         val_loss = self.criterion.forward(y_pred, y_true)
 
