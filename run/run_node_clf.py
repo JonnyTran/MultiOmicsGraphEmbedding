@@ -231,7 +231,7 @@ def train(hparams):
             "epochs": 300,
             "patience": 20,
             "weight_decay": 0.0,
-            "lr_annealing": "cosine",
+            "lr_annealing": "restart",
         }
 
         args.update(hparams.__dict__)
