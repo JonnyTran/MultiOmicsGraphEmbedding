@@ -186,7 +186,7 @@ def train(hparams):
             batch_order = 12
         elif "-2" in hparams.method:
             t_order = 2
-            batch_order = 10
+            batch_order = 11
 
         elif "-3" in hparams.method:
             t_order = 3
@@ -269,7 +269,7 @@ def train(hparams):
     # model.register_hooks()
     if trainer.checkpoint_callback is not None:
         model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
-                                                  hparams=Namespace(**hparams),
+                                                  hparams=Namespace(**args),
                                                   dataset=dataset,
                                                   metrics=METRICS)
         print(trainer.checkpoint_callback.best_model_path)
@@ -298,7 +298,6 @@ if __name__ == "__main__":
     parser.add_argument('--disable_alpha', type=bool, default=False)
     parser.add_argument('--disable_beta', type=bool, default=False)
     parser.add_argument('--disable_concat', type=bool, default=False)
-    parser.add_argument('--attn_activation', type=str, default=None)
 
     parser.add_argument('--num_gpus', type=int, default=1)
 

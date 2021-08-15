@@ -218,7 +218,7 @@ class LATTE(nn.Module):
 class LATTEConv(MessagePassing, pl.LightningModule):
     def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, input_dropout=True,
-                 attn_heads=4, attn_activation="sharpening", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
+                 attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
                  neg_sampling_ratio=1.0, layer_pooling=None) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
@@ -294,7 +294,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         elif attn_activation == "LeakyReLU":
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
         else:
-            print(f"WARNING: alpha_activation `{attn_activation}` did not match, so used linear activation")
+            print(f"WARNING: attn_activation `{attn_activation}` did not match, so used linear activation")
             self.alpha_activation = nn.LeakyReLU(negative_slope=0.2)
 
         self.reset_parameters()
