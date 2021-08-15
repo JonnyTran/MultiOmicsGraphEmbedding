@@ -227,11 +227,11 @@ def train(hparams):
             "use_class_weights": False,
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "stochastic_weight_avg": False,
-            "lr": 0.001,
+            "lr": 0.01,
             "epochs": 300,
-            "patience": 20,
+            "patience": 10,
             "weight_decay": 0.0,
-            "lr_annealing": "restart",
+            "lr_annealing": None,
         }
 
         args.update(hparams.__dict__)
