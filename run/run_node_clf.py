@@ -216,7 +216,7 @@ def train(hparams):
             "input_dropout": True,
 
             "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0.0,
+            "nb_cls_dropout": 0.5,
 
             "edge_threshold": 0.0,
             "edge_sampling": False,
@@ -228,16 +228,22 @@ def train(hparams):
             "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "stochastic_weight_avg": False,
             "lr": 0.001,
-            "epochs": 75,
-            "patience": 5,
-            "weight_decay": 1e-4,
+            "epochs": 300,
+            "patience": 20,
+            "weight_decay": 0.0,
             "lr_annealing": "cosine",
         }
 
         args.update(hparams.__dict__)
         model = LATTENodeClf(Namespace(**args), dataset, collate_fn="neighbor_sampler", metrics=METRICS)
+
+        CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False),
+                     ModelCheckpoint(monitor='val_loss',
+                                     filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'),
+                     ]
+
     else:
-        raise Exception(f"Wrong model {hparams.model}")
+        raise Exception(f"Unknown model {hparams.model}")
 
     if CALLBACKS is None and "patience" in args:
         CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False)]
@@ -261,6 +267,12 @@ def train(hparams):
     trainer.fit(model)
 
     # model.register_hooks()
+    if trainer.checkpoint_callback is not None:
+        model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
+                                                  hparams=Namespace(**hparams),
+                                                  dataset=dataset,
+                                                  metrics=METRICS)
+        print(trainer.checkpoint_callback.best_model_path)
     trainer.test(model)
     # wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
 

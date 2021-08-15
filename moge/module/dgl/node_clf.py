@@ -243,7 +243,7 @@ class HGConv(NodeClfTrainer):
         classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
 
         self.model = nn.Sequential(hgconv, classifier)
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.BCEWithLogitsLoss() if dataset.multilabel else nn.CrossEntropyLoss()
 
         args["n_params"] = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
@@ -266,7 +266,14 @@ class HGConv(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         y_pred = self.forward(blocks, input_features)
-        loss = self.criterion.forward(y_pred, y_true)
+        if y_pred.dim() == 1:
+            weights = (y_true >= 0).to(torch.float)
+        elif y_pred.dim() == 2:
+            weights = (y_true.sum(1) > 0).to(torch.float)
+
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        loss = self.criterion.forward(y_pred,
+                                      y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
@@ -286,7 +293,14 @@ class HGConv(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         y_pred = self.forward(blocks, input_features)
-        val_loss = self.criterion.forward(y_pred, y_true)
+        if y_pred.dim() == 1:
+            weights = (y_true >= 0).to(torch.float)
+        elif y_pred.dim() == 2:
+            weights = (y_true.sum(1) > 0).to(torch.float)
+
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        val_loss = self.criterion.forward(y_pred,
+                                          y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
@@ -301,7 +315,14 @@ class HGConv(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         y_pred = self.forward(blocks, input_features)
-        test_loss = self.criterion.forward(y_pred, y_true)
+        if y_pred.dim() == 1:
+            weights = (y_true >= 0).to(torch.float)
+        elif y_pred.dim() == 2:
+            weights = (y_true.sum(1) > 0).to(torch.float)
+
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        test_loss = self.criterion.forward(y_pred,
+                                           y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         if batch_nb == 0:
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
@@ -362,7 +383,7 @@ class R_HGNN(NodeClfTrainer):
         self.classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
 
         self.model = nn.Sequential(self.r_hgnn, self.classifier)
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.BCEWithLogitsLoss() if dataset.multilabel else nn.CrossEntropyLoss()
 
         args["n_params"] = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
@@ -386,7 +407,14 @@ class R_HGNN(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         y_pred = self.forward(blocks, input_features)
-        loss = self.criterion.forward(y_pred, y_true)
+        if y_pred.dim() == 1:
+            weights = (y_true >= 0).to(torch.float)
+        elif y_pred.dim() == 2:
+            weights = (y_true.sum(1) > 0).to(torch.float)
+
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        loss = self.criterion.forward(y_pred,
+                                      y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=None)
 
@@ -407,7 +435,14 @@ class R_HGNN(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         y_pred = self.forward(blocks, input_features)
-        val_loss = self.criterion.forward(y_pred, y_true)
+        if y_pred.dim() == 1:
+            weights = (y_true >= 0).to(torch.float)
+        elif y_pred.dim() == 2:
+            weights = (y_true.sum(1) > 0).to(torch.float)
+
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        val_loss = self.criterion.forward(y_pred,
+                                          y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
         self.log("val_loss", val_loss, prog_bar=True, logger=True)
@@ -423,7 +458,14 @@ class R_HGNN(NodeClfTrainer):
             blocks[i] = block.to(self.device)
 
         y_pred = self.forward(blocks, input_features)
-        test_loss = self.criterion.forward(y_pred, y_true)
+        if y_pred.dim() == 1:
+            weights = (y_true >= 0).to(torch.float)
+        elif y_pred.dim() == 2:
+            weights = (y_true.sum(1) > 0).to(torch.float)
+
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        test_loss = self.criterion.forward(y_pred,
+                                           y_true.type_as(y_pred) if self.dataset.multilabel else y_true)
 
         if batch_nb == 0:
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
