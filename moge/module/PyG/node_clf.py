@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Iterable
 
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch_sparse.sample
@@ -17,7 +18,7 @@ from moge.module.PyG.latte import LATTE
 from moge.module.classifier import DenseClassification, LinkPredictionClassifier
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples_weights, process_tensor_dicts, tensor_sizes
+from moge.module.utils import filter_samples_weights, process_tensor_dicts, tensor_sizes, activation
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -300,6 +301,40 @@ class LATTENodeClf(NodeClfTrainer):
         self.log("predict_loss", predict_loss)
 
         return predict_loss
+
+    def predict(self, dataloader, node_names=None, filter_nan_labels=True):
+        y_true = []
+        y_pred = []
+
+        for X_test, y_test, w_test in dataloader:
+            y_test_pred, _, edge_index = self.forward(X_test, save_betas=True)
+
+            y_test_pred, y_test, w_test = process_tensor_dicts(y_test_pred, y_test, w_test)
+            mask_idx = filter_samples_weights(Y_hat=y_test_pred, Y=y_test, weights=w_test, return_index=True)
+
+            y_test = y_test[mask_idx]
+            y_test_pred = activation(y_test_pred, loss_type=self.hparams["loss_type"])[mask_idx]
+            w_test = w_test[mask_idx]
+
+            node_ids = X_test["global_node_index"][-1][self.head_node_type].numpy()[mask_idx]
+            if node_names is not None:
+                node_ids = node_names[node_ids]
+
+            y_test = pd.DataFrame(y_test.numpy(), index=node_ids, columns=self.dataset.classes)
+            y_test_pred = pd.DataFrame(y_test_pred.detach().cpu().numpy(), index=node_ids, columns=self.dataset.classes)
+
+            y_true.append(y_test)
+            y_pred.append(y_test_pred)
+
+        y_true = pd.concat(y_true, axis=0)
+        y_pred = pd.concat(y_pred, axis=0)
+
+        if filter_nan_labels:
+            mask_labels = y_true.columns[y_true.sum(0) > 0]
+            y_true = y_true.filter(mask_labels, axis=1)
+            y_pred = y_pred.filter(mask_labels, axis=1)
+
+        return y_true, y_pred
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())

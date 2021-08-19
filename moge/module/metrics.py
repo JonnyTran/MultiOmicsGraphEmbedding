@@ -14,7 +14,8 @@ import torchmetrics
 from torchmetrics import F1, AUROC, MeanSquaredError, Accuracy, Precision as PrecisionMetric, \
     Recall as RecallMetric, PrecisionRecallCurve
 
-from .utils import filter_samples, tensor_sizes
+from .utils import filter_samples, tensor_sizes, activation
+
 
 class Metrics(torch.nn.Module):
     def __init__(self, prefix: str, loss_type: str, threshold=0.5, top_k=[5, 10, 50], n_classes: int = None,
@@ -54,8 +55,8 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
                 self.metrics[metric] = AUROC(num_classes=n_classes, average="micro")
-            elif "avg_precision" == metric:
-                self.metrics[metric] = AveragePrecision()
+            elif "aupr" == metric:
+                self.metrics[metric] = AveragePrecision(average="micro")
 
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
@@ -85,21 +86,23 @@ class Metrics(torch.nn.Module):
         """
         y_pred = y_hat.detach()
         y_true = y.detach()
+
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
 
-        # Apply softmax/sigmoid activation if needed
-        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
-            if "SOFTMAX" in self.loss_type:
-                y_pred = torch.softmax(y_pred, dim=1)
-            else:
-                y_pred = torch.sigmoid(y_pred)
-        elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type or "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
-            y_pred = torch.softmax(y_pred, dim=1)
+        y_pred = activation(y_pred, loss_type=self.loss_type)
 
         for metric in self.metrics:
             # torchmetrics metrics
             if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
                 self.metrics[metric].update(y_pred, y_true)
+
+            # Torch ignite metrics
+            elif "precision" in metric or "recall" in metric or "accuracy" in metric:
+                if not self.multilabel and y_true.dim() == 1:
+                    self.metrics[metric].update((self.hot_encode(y_pred.argmax(1, keepdim=False), type_as=y_true),
+                                                 self.hot_encode(y_true, type_as=y_pred)))
+                else:
+                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
 
             # Torch ignite metrics
             elif metric == "top_k":
@@ -117,13 +120,6 @@ class Metrics(torch.nn.Module):
 
                 self.metrics[metric].update((y_pred, y_true))
 
-            # Torch ignite metrics
-            elif "precision" in metric or "recall" in metric or "accuracy" in metric:
-                if not self.multilabel and y_true.dim() == 1:
-                    self.metrics[metric].update((self.hot_encode(y_pred.argmax(1, keepdim=False), type_as=y_true),
-                                                 self.hot_encode(y_true, type_as=y_pred)))
-                else:
-                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
 
@@ -293,23 +289,48 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
 
 
 class AveragePrecision(torchmetrics.Metric):
-    def __init__(self, compute_on_step: bool = False, dist_sync_on_step: bool = False,
+    def __init__(self, average="macro", compute_on_step: bool = False, dist_sync_on_step: bool = False,
                  process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
+        """
+
+        Args:
+            average : {'micro', 'samples', 'weighted', 'macro'} or None,             default='macro'
+                If ``None``, the scores for each class are returned. Otherwise,
+                this determines the type of averaging performed on the data:
+
+                ``'micro'``:
+                    Calculate metrics globally by considering each element of the label
+                    indicator matrix as a label.
+                ``'macro'``:
+                    Calculate metrics for each label, and find their unweighted
+                    mean.  This does not take label imbalance into account.
+                ``'weighted'``:
+                    Calculate metrics for each label, and find their average, weighted
+                    by support (the number of true instances for each label).
+                ``'samples'``:
+                    Calculate metrics for each instance, and find their average.
+        """
         super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
+        self.average = average
 
     def reset(self):
-        self._ap_scores = []
+        self._scores = []
+        self._n_samples = []
 
     def update(self, y_pred, y_true):
-        ap_score = average_precision_score(y_true.cpu().numpy(), y_pred.cpu().numpy(), average="micro")
+        Y = y_true.detach().cpu().numpy()
+        Y_hat = y_pred.detach().cpu().numpy()
 
-        self._ap_scores.append(ap_score)
+        mask_labels = Y.sum(0) > 0
+        score = average_precision_score(Y[:, mask_labels], Y_hat[:, mask_labels], average=self.average)
+
+        self._scores.append(score)
+        self._n_samples.append(Y.shape[0])
 
     def compute(self, prefix=None) -> dict:
-        if len(self._ap_scores) == 0:
+        if len(self._scores) == 0:
             raise NotComputableError("AveragePrecision must have at"
                                      "least one example before it can be computed.")
-        if prefix is None:
-            return np.mean(self._ap_scores)
-        else:
-            return {f"{prefix}avg_precision": np.mean(self._ap_scores)}
+
+        weighted_avg_score = np.average(self._scores, weights=self._n_samples)
+        return weighted_avg_score if prefix is None else {f"{prefix}avg_precision": weighted_avg_score}

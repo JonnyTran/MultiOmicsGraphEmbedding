@@ -5,6 +5,18 @@ import torch
 from torch import Tensor
 
 
+def activation(y_pred, loss_type):
+    # Apply softmax/sigmoid activation if needed
+    if "LOGITS" in loss_type or "FOCAL" in loss_type:
+        if "SOFTMAX" in loss_type:
+            y_pred = torch.softmax(y_pred, dim=1)
+        else:
+            y_pred = torch.sigmoid(y_pred)
+    elif "NEGATIVE_LOG_LIKELIHOOD" == loss_type or "SOFTMAX_CROSS_ENTROPY" in loss_type:
+        y_pred = torch.softmax(y_pred, dim=1)
+    return y_pred
+
+
 def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor, max_mode=False):
     if weights is None or weights.shape == None or weights.numel() == 0:
         return Y_hat, Y
@@ -30,7 +42,7 @@ def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor, max_mode=False):
     return Y_hat, Y
 
 
-def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights):
+def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights, return_index=False):
     if weights is None or \
             (isinstance(weights, (Tensor, np.ndarray)) and weights.shape == None):
         return Y_hat, Y, None
@@ -39,6 +51,9 @@ def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights):
         idx = torch.nonzero(weights).view(-1)
     else:
         idx = torch.tensor(np.nonzero(weights)[0])
+
+    if return_index:
+        return idx
 
     if Y.dim() > 1:
         Y = Y[idx, :]

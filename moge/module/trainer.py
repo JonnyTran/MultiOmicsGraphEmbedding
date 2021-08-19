@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
 
 from .metrics import Metrics
-from .utils import tensor_sizes, preprocess_input
+from .utils import tensor_sizes, preprocess_input, process_tensor_dicts, filter_samples_weights, activation
 from ..data import DGLNodeSampler, HeteroNeighborGenerator
 from ..evaluation.clustering import clustering_metrics
 
@@ -187,6 +187,9 @@ class NodeClfTrainer(ClusteringEvaluator):
         self.log_dict(metrics, prog_bar=True)
         self.test_metrics.reset_metrics()
         return None
+
+    def predict(self, dataloader, node_names=None, filter_nan_labels=True):
+        raise NotImplementedError()
 
     def train_dataloader(self):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
