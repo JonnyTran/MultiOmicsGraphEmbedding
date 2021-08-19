@@ -8,12 +8,14 @@ from ogb.nodeproppred import Evaluator as NodeEvaluator
 
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
+from ignite.contrib.metrics import AveragePrecision
 
 import torchmetrics
-from torchmetrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy, Precision as PrecisionMetric, \
-    Recall as RecallMetric
+from torchmetrics import F1, AUROC, MeanSquaredError, Accuracy, Precision as PrecisionMetric, \
+    Recall as RecallMetric, PrecisionRecallCurve
 
-from .utils import filter_samples
+from .utils import filter_samples, tensor_sizes
+
 
 class Metrics(torch.nn.Module):
     def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[5, 10, 50], n_classes: int = None,
@@ -52,9 +54,9 @@ class Metrics(torch.nn.Module):
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
-                self.metrics[metric] = AUROC(num_classes=n_classes)
+                self.metrics[metric] = AUROC(num_classes=n_classes, average="micro")
             elif "avg_precision" in metric:
-                self.metrics[metric] = AveragePrecision(num_classes=n_classes, )
+                self.metrics[metric] = AveragePrecision(check_compute_fn=True)
 
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
@@ -101,15 +103,9 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric].update(y_pred, y_true)
 
             # Torch ignite metrics
-            elif "precision" in metric or "recall" in metric or "accuracy" in metric:
-                if not self.multilabel and y_true.dim() == 1:
-                    self.metrics[metric].update((self.hot_encode(y_pred.argmax(1, keepdim=False), type_as=y_true),
-                                                 self.hot_encode(y_true, type_as=y_pred)))
-                else:
-                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
-
-            # Torch ignite metrics
             elif metric == "top_k":
+                self.metrics[metric].update((y_pred, y_true))
+            elif metric == "avg_precision":
                 self.metrics[metric].update((y_pred, y_true))
 
             # OGB metrics
@@ -121,6 +117,14 @@ class Metrics(torch.nn.Module):
                     pass
 
                 self.metrics[metric].update((y_pred, y_true))
+
+            # Torch ignite metrics
+            elif "precision" in metric or "recall" in metric or "accuracy" in metric:
+                if not self.multilabel and y_true.dim() == 1:
+                    self.metrics[metric].update((self.hot_encode(y_pred.argmax(1, keepdim=False), type_as=y_true),
+                                                 self.hot_encode(y_true, type_as=y_pred)))
+                else:
+                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
 
