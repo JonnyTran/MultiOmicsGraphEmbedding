@@ -8,7 +8,7 @@ from ogb.nodeproppred import Evaluator as NodeEvaluator
 
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
-from ignite.contrib.metrics import AveragePrecision
+from sklearn.metrics import average_precision_score
 
 import torchmetrics
 from torchmetrics import F1, AUROC, MeanSquaredError, Accuracy, Precision as PrecisionMetric, \
@@ -16,9 +16,8 @@ from torchmetrics import F1, AUROC, MeanSquaredError, Accuracy, Precision as Pre
 
 from .utils import filter_samples, tensor_sizes
 
-
 class Metrics(torch.nn.Module):
-    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[5, 10, 50], n_classes: int = None,
+    def __init__(self, prefix: str, loss_type: str, threshold=0.5, top_k=[5, 10, 50], n_classes: int = None,
                  multilabel: bool = None, metrics=["precision", "recall", "top_k", "accuracy"]):
         super().__init__()
 
@@ -55,8 +54,8 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
                 self.metrics[metric] = AUROC(num_classes=n_classes, average="micro")
-            elif "avg_precision" in metric:
-                self.metrics[metric] = AveragePrecision(check_compute_fn=True)
+            elif "avg_precision" == metric:
+                self.metrics[metric] = AveragePrecision()
 
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
@@ -291,3 +290,26 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
             return {f"top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
         else:
             return {f"{prefix}top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
+
+
+class AveragePrecision(torchmetrics.Metric):
+    def __init__(self, compute_on_step: bool = False, dist_sync_on_step: bool = False,
+                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
+        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
+
+    def reset(self):
+        self._ap_scores = []
+
+    def update(self, y_pred, y_true):
+        ap_score = average_precision_score(y_true.cpu().numpy(), y_pred.cpu().numpy(), average="micro")
+
+        self._ap_scores.append(ap_score)
+
+    def compute(self, prefix=None) -> dict:
+        if len(self._ap_scores) == 0:
+            raise NotComputableError("AveragePrecision must have at"
+                                     "least one example before it can be computed.")
+        if prefix is None:
+            return np.mean(self._ap_scores)
+        else:
+            return {f"{prefix}avg_precision": np.mean(self._ap_scores)}
