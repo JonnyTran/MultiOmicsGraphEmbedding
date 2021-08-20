@@ -7,6 +7,11 @@ import pandas as pd
 from typing import Dict, Tuple, Union, List
 
 import torch
+from torchtext.vocab import build_vocab_from_iterator
+from torchtext.data.utils import get_tokenizer
+from torchtext import data
+from torch.nn.utils.rnn import pack_padded_sequence, pad_sequence, PackedSequence
+
 from sklearn.preprocessing import MultiLabelBinarizer
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
@@ -177,7 +182,37 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         G = nx.compose_all(list(self.networks.values()))
         return G
 
+    def one_hot_encode(self, node_type, sequences):
+        tokenizer = get_tokenizer(lambda word: [char for char in word])
+
+        def yield_tokens(data_iter):
+            for text in data_iter:
+                yield tokenizer(text)
+
+        if hasattr(self, "vocab") and isinstance(self.vocab, dict) and node_type in self.vocab:
+            vocab = self.vocab[node_type]
+        else:
+            vocab = build_vocab_from_iterator(yield_tokens(sequences[sequences.notnull()]))
+            vocab.set_default_index(-1)
+            self.vocab[node_type] = vocab
+
+        text_pipeline = lambda x: torch.tensor(vocab(tokenizer(x)))
+
+        seqs = [text_pipeline(seq) for seq in sequences]
+        seq_lens = torch.tensor([seq.shape[0] for seq in seqs])
+
+        padded_encoding = pad_sequence(seqs, batch_first=True)
+        # packed_seqs = PackedSequence(seqs, batch_sizes=seq_lens)
+
+        return padded_encoding
+
     def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None):
+        # Filter node if no sequence
+        for ntype in self.node_types:
+            nodes_w_seq = self.multiomics[ntype].annotations.index[
+                self.multiomics[ntype].annotations["sequence"].notnull()]
+            self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
+
         # Edge index
         edge_index_dict = {}
         for relation, nxgraph in self.networks.items():
@@ -198,6 +233,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
                     G.nodes[ntype].data[col] = torch.from_numpy(feat)
+
+            padded_encoding = self.one_hot_encode(ntype,
+                                                  sequences=self.multiomics[ntype].annotations["sequence"].loc[
+                                                      self.nodes[ntype]])
+            G.nodes[ntype].data["sequence"] = padded_encoding
 
         # Labels
         self.process_feature_tranformer(filter_label=label_col, min_count=min_count)

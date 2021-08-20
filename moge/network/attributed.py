@@ -23,6 +23,7 @@ class AttributedNetwork(Network):
         :param kwargs: args to pass to Network() constructor.
         """
         self.multiomics = multiomics
+        self.vocab = {}
 
         # Process network & node_list
         super(AttributedNetwork, self).__init__(**kwargs)
