@@ -31,11 +31,8 @@ class SequenceEncoder(nn.Module):
         output, _ = pad_packed_sequence(packed_output, batch_first=True)
 
         out_forward = output[range(len(output)), lengths - 1, :self.embedding_dim]
-        print(tensor_sizes({"out_forward": out_forward}))
         out_reverse = output[:, 0, self.embedding_dim:]
-        print(tensor_sizes({"out_reverse": out_reverse}))
         out_reduced = torch.cat((out_forward, out_reverse), 1)
-        print(tensor_sizes({"out_reduced": out_reduced}))
 
         text_fea = self.dropout(out_reduced)
         text_fea = self.fc(text_fea)
