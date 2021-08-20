@@ -4,10 +4,11 @@ import dgl
 import networkx as nx
 import numpy as np
 import pandas as pd
-from typing import Dict, Tuple, Union, List
+from typing import Dict, Tuple, Union, List, Iterable
 
 import torch
-from torchtext.vocab import build_vocab_from_iterator
+from torchtext.data import get_tokenizer
+from torchtext.vocab import build_vocab_from_iterator, Vocab
 from torchtext.data.utils import get_tokenizer
 from torchtext import data
 from torch.nn.utils.rnn import pack_padded_sequence, pad_sequence, PackedSequence
@@ -21,7 +22,57 @@ from openomics.utils.df import concat_uniques
 from openomics import MultiOmics
 
 
-class HeteroNetwork(AttributedNetwork, TrainTestSplit):
+class Sequence:
+    def __init__(self):
+        self.vocab: Dict[str, Vocab] = {}
+
+    def build_vocab(self, sequences: pd.Series, node_type: str):
+        tokenizer = get_tokenizer(lambda word: [char for char in word])
+
+        def yield_tokens(data_iter):
+            for text in data_iter:
+                yield tokenizer(text)
+
+        if node_type in self.vocab:
+            vocab = self.vocab[node_type]
+        else:
+            vocab = build_vocab_from_iterator(yield_tokens(sequences[sequences.notnull()]))
+
+            # Ensures RNA types with the same vocab have the same word indexing
+            for other_ntype, other_vocab in self.vocab.items():
+                if set(other_vocab.vocab.itos_) == set(vocab.vocab.itos_):
+                    vocab = other_vocab
+
+            vocab.set_default_index(-1)
+            self.vocab[node_type] = vocab
+
+        return vocab, tokenizer
+
+    def one_hot_encode(self, node_type, sequences: pd.Series, max_length=0.90):
+        if not hasattr(self, "vocab"):
+            self.vocab = {}
+
+        vocab, tokenizer = self.build_vocab(sequences, node_type)
+        if isinstance(max_length, float):
+            max_len = int(sequences.map(len).quantile(max_length))
+        else:
+            max_len = None
+
+        def encoder(x):
+            if max_len is not None and len(x) > max_len:
+                x = x[: max_len]
+            return torch.tensor(vocab(tokenizer(x)))
+
+        seqs = sequences.apply(encoder).to_list()
+        seq_lens = torch.tensor([seq.shape[0] for seq in seqs])
+
+        padded_encoding = pad_sequence(seqs, batch_first=True)
+        # packed_seqs = PackedSequence(seqs, batch_sizes=seq_lens)
+
+        return padded_encoding, seq_lens
+
+
+class HeteroNetwork(AttributedNetwork, TrainTestSplit, Sequence):
     def __init__(self, multiomics: MultiOmics, node_types: list, layers: Dict[Tuple[str], nx.Graph],
                  annotations=True, ) -> None:
         """
@@ -182,30 +233,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         G = nx.compose_all(list(self.networks.values()))
         return G
 
-    def one_hot_encode(self, node_type, sequences):
-        tokenizer = get_tokenizer(lambda word: [char for char in word])
-
-        def yield_tokens(data_iter):
-            for text in data_iter:
-                yield tokenizer(text)
-
-        if hasattr(self, "vocab") and isinstance(self.vocab, dict) and node_type in self.vocab:
-            vocab = self.vocab[node_type]
-        else:
-            vocab = build_vocab_from_iterator(yield_tokens(sequences[sequences.notnull()]))
-            vocab.set_default_index(-1)
-            self.vocab[node_type] = vocab
-
-        text_pipeline = lambda x: torch.tensor(vocab(tokenizer(x)))
-
-        seqs = [text_pipeline(seq) for seq in sequences]
-        seq_lens = torch.tensor([seq.shape[0] for seq in seqs])
-
-        padded_encoding = pad_sequence(seqs, batch_first=True)
-        # packed_seqs = PackedSequence(seqs, batch_sizes=seq_lens)
-
-        return padded_encoding
-
     def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None):
         # Filter node if no sequence
         for ntype in self.node_types:
@@ -228,16 +255,22 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         for ntype in G.ntypes:
             for col in self.all_annotations.columns.drop([label_col, "omic", "sequence"]):
                 if col in self.feature_transformer:
-                    feat_filtered = filter_multilabel(df=self.multiomics[ntype].annotations, column=col, min_count=None,
+                    feat_filtered = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype]],
+                                                      column=col, min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
                     G.nodes[ntype].data[col] = torch.from_numpy(feat)
 
-            padded_encoding = self.one_hot_encode(ntype,
-                                                  sequences=self.multiomics[ntype].annotations["sequence"].loc[
-                                                      self.nodes[ntype]])
-            G.nodes[ntype].data["sequence"] = padded_encoding
+            # DNA/RNA sequence
+            if "sequence" in self.multiomics[ntype].annotations:
+                padded_encoding, seq_lens = self.one_hot_encode(ntype,
+                                                                sequences=
+                                                                self.multiomics[ntype].annotations["sequence"].loc[
+                                                                    self.nodes[ntype]])
+                print(f"Added sequences ({padded_encoding.shape}) to {ntype}")
+                G.nodes[ntype].data["sequence"] = padded_encoding
+                G.nodes[ntype].data["seq_len"] = seq_lens
 
         # Labels
         self.process_feature_tranformer(filter_label=label_col, min_count=min_count)
@@ -248,7 +281,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         labels = {}
         for ntype in G.ntypes:
             if label_col not in self.multiomics[ntype].annotations.columns: continue
-            y_label = filter_multilabel(df=self.multiomics[ntype].annotations, column=label_col, min_count=min_count,
+            y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype]],
+                                        column=label_col, min_count=min_count,
                                         label_subset=label_subset, dropna=False, delimiter=self.delimiter)
             labels[ntype] = self.feature_transformer[label_col].transform(y_label)
             labels[ntype] = torch.tensor(labels[ntype])

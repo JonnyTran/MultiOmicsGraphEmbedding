@@ -37,6 +37,7 @@ class DGLNodeSampler(HeteroNetDataset):
                  edge_dir=True,
                  reshuffle_train: float = None,
                  add_reverse_metapaths=True,
+                 init_embeddings=False,
                  inductive=False):
         self.neighbor_sizes = neighbor_sizes
         self.embedding_dim = embedding_dim
@@ -50,7 +51,8 @@ class DGLNodeSampler(HeteroNetDataset):
         elif "feat" in self.G.edata and self.G.edata["feat"]:
             self.G = self.create_heterograph(self.G, decompose_etypes=True, add_reverse=add_reverse_metapaths)
 
-        self.init_node_embeddings(self.G)
+        if init_embeddings:
+            self.init_node_embeddings(self.G)
 
         self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
 
@@ -526,6 +528,14 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
         X["x_dict"] = {ntype: feat \
                        for ntype, feat in blocks[0].srcdata["feat"].items() \
                        if feat.size(0) != 0}
+
+        if "sequence" in blocks[0].srcdata:
+            X["sequence"] = {ntype: feat \
+                             for ntype, feat in blocks[0].srcdata["sequence"].items() \
+                             if feat.size(0) != 0}
+            X["seq_len"] = {ntype: feat \
+                            for ntype, feat in blocks[0].srcdata["seq_len"].items() \
+                            if feat.size(0) != 0}
 
         y_dict = blocks[-1].dstdata["label"]
         weights = None

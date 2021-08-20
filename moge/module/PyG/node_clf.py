@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 
 from moge.data.network import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
+from moge.module.PyG.text import SequenceEncoder
 from moge.module.classifier import DenseClassification, LinkPredictionClassifier
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
@@ -56,34 +57,40 @@ class LATTENodeClf(NodeClfTrainer):
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
 
-        self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
-                                                     dataset.num_nodes_dict,
-                                                     dataset.node_attr_shape,
-                                                     pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
-                                                     freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True)
+        if "vocab" not in hparams:
+            self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
+                                                         dataset.num_nodes_dict,
+                                                         dataset.node_attr_shape,
+                                                         pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
+                                                         freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True)
 
-        # node types that needs a projection to align to the embedding_dim
-        self.proj_ntypes = [ntype for ntype in self.node_types \
-                            if (ntype in dataset.node_attr_shape and
-                                dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
-                            or (self.embeddings and ntype in self.embeddings and
-                                self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
+            # node types that needs a projection to align to the embedding_dim
+            self.proj_ntypes = [ntype for ntype in self.node_types \
+                                if (ntype in dataset.node_attr_shape and
+                                    dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
+                                or (self.embeddings and ntype in self.embeddings and
+                                    self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
 
-        self.feature_projection = nn.ModuleDict({
-            ntype: nn.Linear(
-                in_features=dataset.node_attr_shape[ntype] \
-                    if not self.embeddings or ntype not in self.embeddings \
-                    else self.embeddings[ntype].weight.size(1),
-                out_features=hparams.embedding_dim) \
-            for ntype in self.proj_ntypes})
+            self.feature_projection = nn.ModuleDict({
+                ntype: nn.Linear(
+                    in_features=dataset.node_attr_shape[ntype] \
+                        if not self.embeddings or ntype not in self.embeddings \
+                        else self.embeddings[ntype].weight.size(1),
+                    out_features=hparams.embedding_dim) \
+                for ntype in self.proj_ntypes})
 
-        if hparams.batchnorm:
-            self.batchnorm = nn.ModuleDict({
-                ntype: nn.BatchNorm1d(hparams.embedding_dim) \
-                for ntype in self.proj_ntypes
-            })
+            if hparams.batchnorm:
+                self.batchnorm = nn.ModuleDict({
+                    ntype: nn.BatchNorm1d(hparams.embedding_dim) \
+                    for ntype in self.proj_ntypes
+                })
 
-        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+            self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+
+        else:
+            self.sequence_encoders = nn.ModuleDict({
+                ntype: SequenceEncoder(vocab_size=len(vocab.vocab), embed_dim=hparams.embedding_dim) \
+                for ntype, vocab in hparams.vocab})
 
         if hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":
@@ -183,7 +190,12 @@ class LATTENodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = X["global_node_index"]
 
-        h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"][0])
+        if "x_dict" in X:
+            h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"][0])
+
+        elif "sequence" in X:
+            h_out = {ntype: self.sequence_encoders[ntype].forward(X["sequence"][ntype], X["seq_len"][ntype]) \
+                     for ntype in X["sequence"]}
 
         embeddings, _, edge_index_dict = self.embedder(h_out,
                                                        X["edge_index"],
@@ -378,6 +390,91 @@ class LATTENodeClf(NodeClfTrainer):
             print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
 
         return {"optimizer": optimizer, **extra}
+
+
+class LATTETextNodeClf(LATTENodeClf):
+    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
+        super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        self.head_node_type = dataset.head_node_type
+        self.node_types = list(dataset.num_nodes_dict.keys())
+        self.dataset = dataset
+        self.multilabel = dataset.multilabel
+        self.y_types = list(dataset.y_dict.keys())
+        self._name = f"LATTE-{hparams.t_order}"
+        self.collate_fn = collate_fn
+
+        if "fanouts" in hparams and isinstance(hparams.fanouts,
+                                               Iterable) and self.dataset.neighbor_sizes != hparams.fanouts:
+            self.set_fanouts(self.dataset, hparams.fanouts)
+            hparams.n_layers = len(dataset.neighbor_sizes)
+
+        assert hparams.n_layers == len(dataset.neighbor_sizes)
+
+        self.embedder = LATTE(n_layers=hparams.n_layers,
+                              t_order=min(hparams.t_order, hparams.n_layers),
+                              embedding_dim=hparams.embedding_dim,
+                              num_nodes_dict=dataset.num_nodes_dict,
+                              metapaths=dataset.get_metapaths(khop=True if "khop" in collate_fn else None),
+                              activation=hparams.activation,
+                              attn_heads=hparams.attn_heads,
+                              attn_activation=hparams.attn_activation,
+                              attn_dropout=hparams.attn_dropout,
+                              use_proximity=hparams.use_proximity \
+                                  if hasattr(hparams, "use_proximity") else False,
+                              neg_sampling_ratio=hparams.neg_sampling_ratio \
+                                  if hasattr(hparams, "neg_sampling_ratio") else None,
+                              edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
+                              layer_pooling=hparams.layer_pooling,
+                              hparams=hparams)
+
+        # self.embedding = nn.EmbeddingBag(vocab_size, embed_dim, sparse=True)
+        #
+        # hparams.vocab
+
+        # node types that needs a projection to align to the embedding_dim
+        self.proj_ntypes = [ntype for ntype in self.node_types \
+                            if (ntype in dataset.node_attr_shape and
+                                dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
+                            or (self.embeddings and ntype in self.embeddings and
+                                self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
+
+        self.feature_projection = nn.ModuleDict({None: None for ntype in self.proj_ntypes})
+
+        if hparams.batchnorm:
+            self.batchnorm = nn.ModuleDict({
+                ntype: nn.BatchNorm1d(hparams.embedding_dim) \
+                for ntype in self.proj_ntypes
+            })
+
+        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+
+        if hparams.nb_cls_dense_size >= 0:
+            if hparams.layer_pooling == "concat":
+                hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
+                logging.info("embedding_dim {}".format(hparams.embedding_dim))
+            elif hparams.layer_pooling == "order_concat":
+                hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
+
+            if "cls_graph" in hparams and hparams.cls_graph:
+                self.classifier = LinkPredictionClassifier(hparams)
+            else:
+                self.classifier = DenseClassification(hparams)
+        else:
+            assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
+
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
+                                            loss_type=hparams.loss_type,
+                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
+                                                                                 hparams.use_class_weights else None,
+                                            multilabel=dataset.multilabel,
+                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
+
+        self.hparams.n_params = self.get_n_params()
+        self.lr = self.hparams.lr
+
+        self.val_moving_loss = torch.tensor([2.5, ] * 5, dtype=torch.float)
+
+        self.reset_parameters()
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):

@@ -23,7 +23,6 @@ class AttributedNetwork(Network):
         :param kwargs: args to pass to Network() constructor.
         """
         self.multiomics = multiomics
-        self.vocab = {}
 
         # Process network & node_list
         super(AttributedNetwork, self).__init__(**kwargs)
@@ -244,7 +243,7 @@ def filter_multilabel(df: pd.DataFrame, column="go_id", min_count=2, label_subse
     return y_labels
 
 
-def filter_labels_by_count(annotation: pd.DataFrame, min_count: Union[int, float]):
+def filter_labels_by_count(annotation: pd.Series, min_count: Union[int, float]):
     """
 
     Args:
