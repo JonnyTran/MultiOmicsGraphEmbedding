@@ -78,6 +78,13 @@ class Metrics(torch.nn.Module):
 
         self.reset_metrics()
 
+    def hot_encode(self, labels, type_as):
+        if labels.dim() == 2:
+            return labels
+        elif labels.dim() == 1:
+            labels = torch.eye(self.n_classes)[labels].type_as(type_as)
+            return labels
+
     def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights=None):
         """
         :param y_pred:
@@ -88,8 +95,11 @@ class Metrics(torch.nn.Module):
         y_true = y.detach()
 
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
-
         y_pred = activation(y_pred, loss_type=self.loss_type)
+
+        if self.multilabel and "auroc" in self.metrics or "aupr" in self.metrics:
+            mask_labels = y_pred.sum(0) > 0
+            y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
 
         for metric in self.metrics:
             # torchmetrics metrics
@@ -122,13 +132,6 @@ class Metrics(torch.nn.Module):
 
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
-
-    def hot_encode(self, labels, type_as):
-        if labels.dim() == 2:
-            return labels
-        elif labels.dim() == 1:
-            labels = torch.eye(self.n_classes)[labels].type_as(type_as)
-            return labels
 
     def compute_metrics(self):
         logs = {}
@@ -318,14 +321,11 @@ class AveragePrecision(torchmetrics.Metric):
         self._n_samples = []
 
     def update(self, y_pred, y_true):
-        Y = y_true.detach().cpu().numpy()
-        Y_hat = y_pred.detach().cpu().numpy()
-
-        mask_labels = Y.sum(0) > 0
-        score = average_precision_score(Y[:, mask_labels], Y_hat[:, mask_labels], average=self.average)
+        score = average_precision_score(y_true.detach().cpu().numpy(),
+                                        y_pred.detach().cpu().numpy(), average=self.average)
 
         self._scores.append(score)
-        self._n_samples.append(Y.shape[0])
+        self._n_samples.append(y_true.size(0))
 
     def compute(self, prefix=None) -> dict:
         if len(self._scores) == 0:

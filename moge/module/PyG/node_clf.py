@@ -5,6 +5,7 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch_sparse.sample
+import tqdm
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
@@ -15,11 +16,11 @@ from torch.utils.data import DataLoader
 
 from moge.data.network import HeteroNetDataset
 from moge.module.PyG.latte import LATTE
-from moge.module.PyG.text import SequenceEncoder
+from moge.module.transformers.encoder import SequenceEncoder
 from moge.module.classifier import DenseClassification, LinkPredictionClassifier
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples_weights, process_tensor_dicts, tensor_sizes, activation
+from moge.module.utils import filter_samples_weights, process_tensor_dicts, activation
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -320,7 +321,7 @@ class LATTENodeClf(NodeClfTrainer):
         y_true = []
         y_pred = []
 
-        for X_test, y_test, w_test in dataloader:
+        for X_test, y_test, w_test in tqdm.tqdm(dataloader):
             y_test_pred, _, edge_index = self.forward(X_test, save_betas=True)
 
             y_test_pred, y_test, w_test = process_tensor_dicts(y_test_pred, y_test, w_test)
