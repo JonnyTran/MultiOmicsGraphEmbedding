@@ -42,7 +42,7 @@ def train(hparams):
                                 dataset_path=hparams.root_path)
 
     METRICS = ["micro_f1", "macro_f1",
-               "precision", "recall", "top_k",
+               "precision", "recall", "top_k", "auroc", "aupr"
                # dataset.name() if "ogb" in dataset.name() else "accuracy"
                ]
 
