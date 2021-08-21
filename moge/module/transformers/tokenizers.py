@@ -20,9 +20,14 @@ import os
 import math
 import unicodedata
 
-from .tokenization_utils import PreTrainedTokenizer, PreTrainedTokenizerFast
+from .utils import PreTrainedTokenizer, PreTrainedTokenizerFast
 
-logger = logging.getLogger(__name__)
+from transformers import BertForSequenceClassification, BertTokenizer, WordpieceTokenizer
+
+from tokenizers import Tokenizer
+from tokenizers.pre_tokenizers import Whitespace
+from tokenizers.models import WordPiece, WordLevel, BPE
+from tokenizers.trainers import BpeTrainer
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
@@ -257,7 +262,7 @@ class DNATokenizer(PreTrainedTokenizer):
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
-                    logger.warning(
+                    print(
                         "Saving vocabulary to {}: vocabulary indices are not consecutive."
                         " Please check that the vocabulary is not corrupted!".format(vocab_file)
                     )
