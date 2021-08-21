@@ -58,7 +58,7 @@ class LATTENodeClf(NodeClfTrainer):
                               layer_pooling=hparams.layer_pooling,
                               hparams=hparams)
 
-        if "vocab" not in hparams:
+        if "vocab" not in hparams or hparams.vocab is None:
             self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
                                                          dataset.num_nodes_dict,
                                                          dataset.node_attr_shape,

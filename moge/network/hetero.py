@@ -176,12 +176,13 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         G = nx.compose_all(list(self.networks.values()))
         return G
 
-    def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None):
-        # Filter node if no sequence
-        for ntype in self.node_types:
-            nodes_w_seq = self.multiomics[ntype].annotations.index[
-                self.multiomics[ntype].annotations["sequence"].notnull()]
-            self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
+    def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False):
+        if sequence:
+            # Filter node if no sequence
+            for ntype in self.node_types:
+                nodes_w_seq = self.multiomics[ntype].annotations.index[
+                    self.multiomics[ntype].annotations["sequence"].notnull()]
+                self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
 
         # Edge index
         edge_index_dict = {}
@@ -196,10 +197,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Add node attributes
         for ntype in G.ntypes:
-            annotations = self.multiomics[ntype].annotations
+            annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
+
             for col in self.all_annotations.columns.drop([label_col, "omic", "sequence"]):
                 if col in self.feature_transformer:
-                    feat_filtered = filter_multilabel(df=annotations.loc[self.nodes[ntype]],
+                    feat_filtered = filter_multilabel(df=annotations,
                                                       column=col, min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
 
@@ -207,11 +209,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     G.nodes[ntype].data[col] = torch.from_numpy(feat)
 
             # DNA/RNA sequence
-            if "sequence" in annotations and hasattr(self, "tokenizer"):
+            if sequence and "sequence" in annotations:
+                assert hasattr(self, "tokenizer")
                 padded_encoding, seq_lens = self.tokenizer.one_hot_encode(ntype,
-                                                                          sequences=
-                                                                          annotations["sequence"].loc[
-                                                                              self.nodes[ntype]])
+                                                                          sequences=annotations["sequence"])
                 print(f"Added sequences ({padded_encoding.shape}) to {ntype}")
                 G.nodes[ntype].data["sequence"] = padded_encoding
                 G.nodes[ntype].data["seq_len"] = seq_lens
