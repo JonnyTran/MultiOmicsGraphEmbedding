@@ -102,13 +102,16 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         with open(os.path.join(dataset_path, 'gtex_rna_ppi_multiplex_network.pickle'), "rb") as file:
             network = pickle.load(file)
 
-        min_count = 10
+        min_count = 0.01
         label_col = 'go_id'
         dataset = DGLNodeSampler.from_dgl_heterograph(
-            *network.to_dgl_heterograph(label_col=label_col, min_count=min_count),
+            *network.to_dgl_heterograph(label_col=label_col,
+                                        min_count=min_count,
+                                        sequence=False,
+                                        ),
             sampler="MultiLayerNeighborSampler",
             neighbor_sizes=args.neighbor_sizes,
-            head_node_type="MessengerRNA",  # network.node_types if "LATTE" in method else "MessengerRNA",
+            head_node_type="Protein",  # network.node_types if "LATTE" in method else "MessengerRNA",
             edge_dir="in",
             add_reverse_metapaths=use_reverse,
             inductive=False,

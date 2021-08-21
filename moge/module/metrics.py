@@ -97,7 +97,8 @@ class Metrics(torch.nn.Module):
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
         y_pred = activation(y_pred, loss_type=self.loss_type)
 
-        if self.multilabel and "auroc" in self.metrics or "aupr" in self.metrics:
+        if self.multilabel and any([m in self.metrics \
+                                    for m in ["auroc", "aupr", "precision", "recall", "micro_f1", "macro_f1"]]):
             mask_labels = y_pred.sum(0) > 0
             y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
 
