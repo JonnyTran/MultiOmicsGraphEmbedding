@@ -5,8 +5,7 @@ import pandas as pd
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 
-SEQ_DTYPE = "long"
-SEQUENCE_COL = "sequence"
+from network.base import SEQ_DTYPE, SEQUENCE_COL
 
 
 class SequenceTokenizer():

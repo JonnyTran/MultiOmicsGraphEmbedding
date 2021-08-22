@@ -8,6 +8,7 @@ from typing import Dict, Tuple, Union, List
 
 import torch
 
+from moge.network.sequences import SEQUENCE_COL
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
@@ -177,11 +178,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         return G
 
     def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False):
+        # Filter node that doesn't have a sequence
         if sequence:
-            # Filter node if no sequence
             for ntype in self.node_types:
                 nodes_w_seq = self.multiomics[ntype].annotations.index[
-                    self.multiomics[ntype].annotations["sequence"].notnull()]
+                    self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
                 self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
 
         # Edge index
@@ -199,7 +200,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         for ntype in G.ntypes:
             annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
 
-            for col in self.all_annotations.columns.drop([label_col, "omic", "sequence"]):
+            for col in self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL]):
                 if col in self.feature_transformer:
                     feat_filtered = filter_multilabel(df=annotations,
                                                       column=col, min_count=None,
@@ -212,9 +213,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if sequence and "sequence" in annotations:
                 assert hasattr(self, "tokenizer")
                 padded_encoding, seq_lens = self.tokenizer.one_hot_encode(ntype,
-                                                                          sequences=annotations["sequence"])
+                                                                          sequences=annotations[SEQUENCE_COL])
                 print(f"Added sequences ({padded_encoding.shape}) to {ntype}")
-                G.nodes[ntype].data["sequence"] = padded_encoding
+                G.nodes[ntype].data[SEQUENCE_COL] = padded_encoding
                 G.nodes[ntype].data["seq_len"] = seq_lens
 
         # Labels

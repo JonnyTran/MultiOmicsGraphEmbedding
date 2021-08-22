@@ -87,3 +87,7 @@ class Network(object):
             idx_A = [self.node_list.index(node) for node in nodes_A]
             idx_B = [self.node_list.index(node) for node in nodes_B]
             return adj[idx_A, :][:, idx_B]
+
+
+SEQ_DTYPE = "long"
+SEQUENCE_COL = "sequence"
