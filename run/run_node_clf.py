@@ -273,7 +273,8 @@ def train(hparams):
     trainer.fit(model)
 
     # model.register_hooks()
-    if "LATTE" in hparams.method and trainer.checkpoint_callback is not None:
+    if "LATTE" in hparams.method and trainer.checkpoint_callback is not None and hasattr(
+            trainer.checkpoint_callback, "best_model_path"):
         model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
                                                   hparams=Namespace(**args),
                                                   dataset=dataset,

@@ -5,7 +5,7 @@ from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
 from typing import List, Union
 
-from moge.network.sequences import SEQUENCE_COL
+from moge.network.base import SEQUENCE_COL
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
 from moge.network.base import Network
 
