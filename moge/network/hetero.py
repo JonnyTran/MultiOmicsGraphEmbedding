@@ -8,7 +8,7 @@ from typing import Dict, Tuple, Union, List
 
 import torch
 
-from moge.network.sequences import SEQUENCE_COL
+from moge.network.base import SEQUENCE_COL
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 

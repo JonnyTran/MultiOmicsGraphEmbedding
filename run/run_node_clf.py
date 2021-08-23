@@ -60,7 +60,7 @@ def train(hparams):
             'lr': 0.001,
             'weight_decay': 0.001,
         }
-
+        ModelClass = HAN
         model = HAN(args, dataset, metrics=METRICS)
 
     elif hparams.method == "GTN":
@@ -77,6 +77,7 @@ def train(hparams):
             "lr": 0.005 * NUM_GPUS,
             "epochs": 40,
         }
+        ModelClass = GTN
         model = GTN(Namespace(**args), dataset=dataset, metrics=METRICS)
 
     elif hparams.method == "MetaPath2Vec":
@@ -94,6 +95,7 @@ def train(hparams):
             "lr": 0.01 * NUM_GPUS,
             "epochs": 100
         }
+        ModelClass = MetaPath2Vec
         model = MetaPath2Vec(Namespace(**args), dataset=dataset, metrics=METRICS)
 
     elif hparams.method == "HGT":
@@ -116,6 +118,7 @@ def train(hparams):
             "weight_decay": 1e-2,
             'epochs': 100,
         }
+        ModelClass = HGT
         model = HGT(Namespace(**args), dataset, metrics=METRICS)
 
     elif hparams.method == "NARS":
@@ -134,6 +137,7 @@ def train(hparams):
             'lr': 0.001,
             'weight_decay': 0.0,
         }
+        ModelClass = NARS
         model = NARS(Namespace(**args), dataset, metrics=METRICS)
 
     elif hparams.method == "HGConv":
@@ -154,6 +158,7 @@ def train(hparams):
             'learning_rate': 0.001,
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
+        ModelClass = HGConv
         model = HGConv(args, dataset, metrics=METRICS)
 
     elif hparams.method == "R_HGNN":
@@ -175,6 +180,7 @@ def train(hparams):
             'patience': 50,
             'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
         }
+        ModelClass = R_HGNN
         model = R_HGNN(args, dataset, metrics=METRICS)
 
     elif "LATTE" in hparams.method:
@@ -267,7 +273,7 @@ def train(hparams):
     trainer.fit(model)
 
     # model.register_hooks()
-    if trainer.checkpoint_callback is not None:
+    if "LATTE" in hparams.method and trainer.checkpoint_callback is not None:
         model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
                                                   hparams=Namespace(**args),
                                                   dataset=dataset,
