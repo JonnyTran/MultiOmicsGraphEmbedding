@@ -441,7 +441,20 @@ class DGLNodeSampler(HeteroNetDataset):
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     block_sampler=self.neighbor_sampler)
 
-        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+        if hasattr(self, "network"):
+            def collate_fn(idx):
+                if collate_fn == "neighbor_sampler":
+                    X, y_dict, weights = collator.collate(idx)
+                    # TODO
+                    return X, y_dict, weights
+                else:
+                    input_nodes, seeds, blocks = collator.collate(idx)
+                    # TODO
+                    return input_nodes, seeds, blocks
+        else:
+            collate_fn = collator.collate
+
+        dataloader = DataLoader(collator.dataset, collate_fn=collate_fn,
                                 batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         return dataloader
