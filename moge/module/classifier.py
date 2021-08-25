@@ -12,7 +12,11 @@ from torch_geometric.nn.inits import glorot, zeros, glorot_orthogonal
 
 import dgl.function as fn
 from torch.nn import functional as F
+from typing import Dict
+
 from moge.module.utils import tensor_sizes
+
+from transformers import BertForSequenceClassification
 
 
 class HeteroRGCNLayer(nn.Module):
@@ -46,23 +50,33 @@ class HeteroRGCNLayer(nn.Module):
 
 
 class HeteroRGCN(nn.Module):
-    def __init__(self, G: dgl.DGLHeteroGraph, in_size, hidden_size, out_size):
+    def __init__(self, G: dgl.DGLHeteroGraph, in_size, hidden_size, out_size,
+                 encoder: BertForSequenceClassification = None):
         super(HeteroRGCN, self).__init__()
 
         # Use trainable node embeddings as featureless inputs.
-        embed_dict = {ntype: nn.Parameter(torch.Tensor(G.num_nodes(ntype), in_size))
-                      for ntype in G.ntypes}
-        for key, embed in embed_dict.items():
-            nn.init.xavier_uniform_(embed)
-
-        self.embeddings = nn.ParameterDict(embed_dict)
+        if encoder is not None and "input_ids" in G.node_attr_schemes():
+            self.encoder = encoder
+        else:
+            embed_dict = {ntype: nn.Parameter(torch.Tensor(G.num_nodes(ntype), in_size))
+                          for ntype in G.ntypes}
+            for key, embed in embed_dict.items():
+                nn.init.xavier_uniform_(embed)
+            self.embeddings = nn.ParameterDict(embed_dict)
 
         # create layers
         self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes)
         self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes)
 
     def forward(self, G):
-        h_dict = self.layer1(G, self.embeddings)
+        if hasattr(self, "embeddings"):
+            feats = self.embeddings
+        elif hasattr(self, "encoder"):
+            out = self.encoder.forward(G.ndata["input_ids"], G.ndata["attention_mask"],
+                                       G.ndata["token_type_ids"])
+            feats = out.logits
+
+        h_dict = self.layer1(G, feats)
         h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
         h_dict = self.layer2(G, h_dict)
 
@@ -88,8 +102,14 @@ class LinkPredictionClassifier(nn.Module):
 
         if isinstance(hparams.cls_graph, dgl.DGLGraph):
             self.g: dgl.DGLHeteroGraph = hparams.cls_graph
+            if "input_ids" in self.g.ndata:
+                go_encoder = BertForSequenceClassification.from_pretrained("dmis-lab/biobert-base-cased-v1.2",
+                                                                           num_hidden_layers=3,
+                                                                           num_labels=hparams.embedding_dim)
+            else:
+                go_encoder = None
             self.rgcn = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
-                                   out_size=hparams.embedding_dim)
+                                   out_size=hparams.embedding_dim, encoder=go_encoder)
         else:
             self.embeddings = nn.Embedding(num_embeddings=hparams.n_classes,
                                            embedding_dim=hparams.embedding_dim)

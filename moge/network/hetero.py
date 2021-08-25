@@ -177,13 +177,16 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         G = nx.compose_all(list(self.networks.values()))
         return G
 
+    def filter_sequence_nodes(self):
+        for ntype in self.node_types:
+            nodes_w_seq = self.multiomics[ntype].annotations.index[
+                self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
+            self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
+
     def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False):
         # Filter node that doesn't have a sequence
         if sequence:
-            for ntype in self.node_types:
-                nodes_w_seq = self.multiomics[ntype].annotations.index[
-                    self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
-                self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
+            self.filter_sequence_nodes()
 
         # Edge index
         edge_index_dict = {}

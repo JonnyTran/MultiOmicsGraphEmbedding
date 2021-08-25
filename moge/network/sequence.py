@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Dict, Union, Iterable
+from typing import Dict, Union, Iterable, List
 
 import pandas as pd
 import torch
@@ -7,23 +7,44 @@ from torch.nn.utils.rnn import pad_sequence
 from torchtext.data import get_tokenizer
 from torchtext.vocab import Vocab, build_vocab_from_iterator
 
+from tokenizers import Tokenizer
+from transformers import AutoTokenizer
+
 
 class Sequence(metaclass=ABCMeta):
-    def __init__(self):
-        self.vocab: Dict[str, Vocab] = {}
+    def __init__(self, nodes: Dict[str, pd.Series], node_types: List):
+        self.nodes = nodes
+        self.node_types = node_types
 
     @abstractmethod
     def build_vocab(self, sequences: Union[Iterable, pd.Series], node_type: str):
         pass
 
     @abstractmethod
-    def one_hot_encode(self, node_type: str, sequences: Union[Iterable, pd.Series], max_length: Union[float, int]):
+    def one_hot_encode(self, node_type: str, sequences: Union[Iterable, pd.Series], **kwargs):
         pass
 
 
+class BertSequenceTokenizer(Sequence):
+    def __init__(self, nodes: Dict[str, pd.Series],
+                 sequences: Dict[str, pd.Series],
+                 tokenizers: Dict[str, AutoTokenizer]):
+        super().__init__(nodes, node_types=list(tokenizers.keys()))
+        self.tokenizers: Dict[str, AutoTokenizer] = tokenizers
+        if sequences is not None:
+            self.sequences = sequences
+
+    def one_hot_encode(self, node_type: str, sequences: Union[Iterable, pd.Series], node_ids=None):
+        output = self.tokenizers[node_type].batch_encode_plus(sequences.to_list(), add_special_tokens=True,
+                                                              padding=True, truncation=True,
+                                                              return_tensors="pt")
+        return output
+
+
 class CharTokenizer(Sequence):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, nodes, node_types: List):
+        super().__init__(nodes, node_types)
+        self.vocab: Dict[str, Vocab] = {}
 
     def build_vocab(self, sequences: pd.Series, node_type: str):
         tokenizer = get_tokenizer(lambda word: [char for char in word])

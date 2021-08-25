@@ -18,9 +18,12 @@ from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.utils import is_undirected
+from transformers import AutoTokenizer
 
 from moge.data.network import HeteroNetDataset
 from moge.module.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 from .samplers import ImportanceSampler
 from .. import HeteroNeighborGenerator
 from ..utils import one_hot_encoder
@@ -441,15 +444,40 @@ class DGLNodeSampler(HeteroNetDataset):
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     block_sampler=self.neighbor_sampler)
 
-        if hasattr(self, "network"):
+        if hasattr(self, "network") and hasattr(self, "tokenizer"):
+            self.network: HeteroNetwork
+            self.tokenizer: BertSequenceTokenizer
+
             def collate_fn(idx):
                 if collate_fn == "neighbor_sampler":
                     X, y_dict, weights = collator.collate(idx)
-                    # TODO
+                    node_names = {ntype: self.network.nodes[ntype][nid.numpy()] \
+                                  for ntype, nid in X["global_node_index"][0].items()}
+
+                    for ntype, names in node_names.items():
+                        sequences = self.network.multiomics[ntype].annotations.loc[names, "sequence"]
+
+                        output = self.tokenizer.one_hot_encode(ntype, sequences.to_list())
+                        X["x_dict"][ntype].ndata["input_ids"] = output["input_ids"]
+                        X["x_dict"][ntype].ndata["attention_mask"] = output["attention_mask"]
+                        X["x_dict"][ntype].ndata["token_type_ids"] = output["token_type_ids"]
+
                     return X, y_dict, weights
+
                 else:
                     input_nodes, seeds, blocks = collator.collate(idx)
-                    # TODO
+
+                    node_names = {ntype: self.network.nodes[ntype][nid.numpy()] \
+                                  for ntype, nid in input_nodes.items()}
+
+                    for ntype, names in node_names.items():
+                        sequences = self.network.multiomics[ntype].annotations.loc[names, "sequence"]
+
+                        output = self.tokenizer.one_hot_encode(ntype, sequences.to_list())
+                        blocks[0].nodes[ntype].ndata["input_ids"] = output["input_ids"]
+                        blocks[0].nodes[ntype].ndata["attention_mask"] = output["attention_mask"]
+                        blocks[0].nodes[ntype].ndata["token_type_ids"] = output["token_type_ids"]
+
                     return input_nodes, seeds, blocks
         else:
             collate_fn = collator.collate
