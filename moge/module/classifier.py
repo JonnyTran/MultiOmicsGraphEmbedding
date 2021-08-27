@@ -14,7 +14,7 @@ import dgl.function as fn
 from torch.nn import functional as F
 from typing import Dict
 
-from moge.module.utils import tensor_sizes
+from moge.module.dgl.HGT import Hgt, HGTLayer
 
 from transformers import BertForSequenceClassification
 
@@ -65,16 +65,30 @@ class HeteroRGCN(nn.Module):
             self.embeddings = nn.ParameterDict(embed_dict)
 
         # create layers
-        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes)
-        self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes)
+        self.layer1 = HGTLayer(in_size, hidden_size,
+                               {ntype: i for i, ntype in enumerate(G.ntypes)},
+                               {metapath[1]: i for i, metapath in enumerate(G.canonical_etypes)}, n_heads=4,
+                               use_norm=False)
+        self.layer2 = HGTLayer(hidden_size, out_size,
+                               {ntype: i for i, ntype in enumerate(G.ntypes)},
+                               {metapath[1]: i for i, metapath in enumerate(G.canonical_etypes)}, n_heads=4,
+                               use_norm=False)
 
-    def forward(self, G):
+    def forward(self, G: dgl.DGLHeteroGraph):
         if hasattr(self, "embeddings"):
             feats = self.embeddings
         elif hasattr(self, "encoder"):
-            out = self.encoder.forward(G.ndata["input_ids"], G.ndata["attention_mask"],
-                                       G.ndata["token_type_ids"])
-            feats = out.logits
+            feats = {}
+            for ntype in G.ntypes:
+                feats_concat = []
+                for input_ids, attention_mask, token_type_ids in zip(G.nodes[ntype].data["input_ids"].split(32),
+                                                                     G.nodes[ntype].data["attention_mask"].split(32),
+                                                                     G.nodes[ntype].data["token_type_ids"].split(32)):
+                    out = self.encoder.forward(input_ids, attention_mask, token_type_ids)
+
+                    feats_concat.append(out.logits)
+
+                feats[ntype] = torch.cat(feats_concat, axis=0)
 
         h_dict = self.layer1(G, feats)
         h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
@@ -104,10 +118,11 @@ class LinkPredictionClassifier(nn.Module):
             self.g: dgl.DGLHeteroGraph = hparams.cls_graph
             if "input_ids" in self.g.ndata:
                 go_encoder = BertForSequenceClassification.from_pretrained("dmis-lab/biobert-base-cased-v1.2",
-                                                                           num_hidden_layers=3,
+                                                                           num_hidden_layers=0,
                                                                            num_labels=hparams.embedding_dim)
             else:
                 go_encoder = None
+
             self.rgcn = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
                                    out_size=hparams.embedding_dim, encoder=go_encoder)
         else:

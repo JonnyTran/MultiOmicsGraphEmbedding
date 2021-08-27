@@ -20,7 +20,7 @@ from moge.module.transformers.encoder import SequenceEncoder
 from moge.module.classifier import DenseClassification, LinkPredictionClassifier
 from moge.module.losses import ClassificationLoss
 from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples_weights, process_tensor_dicts, activation
+from moge.module.utils import filter_samples_weights, process_tensor_dicts, activation, tensor_sizes
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -193,7 +193,7 @@ class LATTENodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = X["global_node_index"]
 
-        if "x_dict" in X and len(X["x_dict"]):
+        if "x_dict" in X or hasattr(self, "embeddings"):
             h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"][0])
 
         elif "sequence" in X:
@@ -204,6 +204,7 @@ class LATTENodeClf(NodeClfTrainer):
                                                        X["edge_index"],
                                                        X["sizes"],
                                                        X["global_node_index"], **kwargs)
+
         if isinstance(self.head_node_type, str):
             y_hat = self.classifier(embeddings[self.head_node_type]) \
                 if hasattr(self, "classifier") else embeddings[self.head_node_type]

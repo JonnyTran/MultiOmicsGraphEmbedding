@@ -28,6 +28,8 @@ from .samplers import ImportanceSampler
 from .. import HeteroNeighborGenerator
 from ..utils import one_hot_encoder
 
+SEQUENCE_COL = "sequence"
+
 
 class DGLNodeSampler(HeteroNetDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
@@ -570,10 +572,10 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
                        for ntype, feat in blocks[0].srcdata["feat"].items() \
                        if feat.size(0) != 0}
 
-        if "sequence" in blocks[0].srcdata:
-            X["sequence"] = {ntype: feat \
-                             for ntype, feat in blocks[0].srcdata["sequence"].items() \
-                             if feat.size(0) != 0}
+        if SEQUENCE_COL in blocks[0].srcdata and len(blocks[0].srcdata[SEQUENCE_COL]):
+            X[SEQUENCE_COL] = {ntype: feat \
+                               for ntype, feat in blocks[0].srcdata[SEQUENCE_COL].items() \
+                               if feat.size(0) != 0}
             X["seq_len"] = {ntype: feat \
                             for ntype, feat in blocks[0].srcdata["seq_len"].items() \
                             if feat.size(0) != 0}
