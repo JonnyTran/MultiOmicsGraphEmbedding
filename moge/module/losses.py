@@ -77,7 +77,6 @@ class ClassificationLoss(nn.Module):
 
 class PULoss(nn.Module):
     """wrapper of loss function for PU learning"""
-
     def __init__(self, prior, loss=(lambda x: torch.sigmoid(-x)),
                  gamma=1, beta=0, nnPU=False):
         super(PULoss, self).__init__()

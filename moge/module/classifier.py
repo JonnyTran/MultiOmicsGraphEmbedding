@@ -14,18 +14,19 @@ import dgl.function as fn
 from torch.nn import functional as F
 from typing import Dict
 
-from moge.module.dgl.HGT import Hgt, HGTLayer
-
 from transformers import BertForSequenceClassification
+
+from moge.module.utils import tensor_sizes
 
 
 class HeteroRGCNLayer(nn.Module):
-    def __init__(self, in_size, out_size, etypes):
+    def __init__(self, in_size, out_size, etypes, agg='stack'):
         super(HeteroRGCNLayer, self).__init__()
         # W_r for each relation
         self.weight = nn.ModuleDict({
             name: nn.Linear(in_size, out_size) for name in etypes
         })
+        self.agg = agg
 
     def forward(self, G, feat_dict):
         # The input is a dictionary of node features for each type
@@ -44,7 +45,7 @@ class HeteroRGCNLayer(nn.Module):
         # The first argument is the message passing functions for each relation.
         # The second one is the type wise reducer, could be "sum", "max",
         # "min", "mean", "stack"
-        G.multi_update_all(funcs, 'max')
+        G.multi_update_all(funcs, self.agg)
         # return the updated node feature dictionary
         return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
 
@@ -65,14 +66,8 @@ class HeteroRGCN(nn.Module):
             self.embeddings = nn.ParameterDict(embed_dict)
 
         # create layers
-        self.layer1 = HGTLayer(in_size, hidden_size,
-                               {ntype: i for i, ntype in enumerate(G.ntypes)},
-                               {metapath[1]: i for i, metapath in enumerate(G.canonical_etypes)}, n_heads=4,
-                               use_norm=False)
-        self.layer2 = HGTLayer(hidden_size, out_size,
-                               {ntype: i for i, ntype in enumerate(G.ntypes)},
-                               {metapath[1]: i for i, metapath in enumerate(G.canonical_etypes)}, n_heads=4,
-                               use_norm=False)
+        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes, agg="stack")
+        self.layer2 = HeteroRGCNLayer(hidden_size * len(G.etypes), out_size, G.etypes, agg="mean")
 
     def forward(self, G: dgl.DGLHeteroGraph):
         if hasattr(self, "embeddings"):
@@ -91,7 +86,7 @@ class HeteroRGCN(nn.Module):
                 feats[ntype] = torch.cat(feats_concat, axis=0)
 
         h_dict = self.layer1(G, feats)
-        h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
+        h_dict = {k: F.leaky_relu(h if h.dim() == 2 else h.view(h.size(0), -1)) for k, h in h_dict.items()}
         h_dict = self.layer2(G, h_dict)
 
         return h_dict
@@ -116,10 +111,12 @@ class LinkPredictionClassifier(nn.Module):
 
         if isinstance(hparams.cls_graph, dgl.DGLGraph):
             self.g: dgl.DGLHeteroGraph = hparams.cls_graph
-            if "input_ids" in self.g.ndata:
+            if "input_ids" in self.g.ndata and "cls_config" not in hparams:
                 go_encoder = BertForSequenceClassification.from_pretrained("dmis-lab/biobert-base-cased-v1.2",
-                                                                           num_hidden_layers=0,
+                                                                           num_hidden_layers=1,
                                                                            num_labels=hparams.embedding_dim)
+            elif "input_ids" in self.g.ndata and "cls_config" in hparams:
+                go_encoder = BertForSequenceClassification(hparams.cls_config)
             else:
                 go_encoder = None
 
@@ -135,14 +132,7 @@ class LinkPredictionClassifier(nn.Module):
     def forward(self, embeddings: Tensor):
         nodes = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
 
-        if hasattr(self, "g"):
-            if self.g.device != self.attn_kernels.device:
-                self.g = self.g.to(self.attn_kernels.device)
-
-            classes = self.rgcn(self.g)["_N"]
-            classes = self.dropout(classes[:self.n_classes])
-        else:
-            classes = self.embeddings.weight
+        classes = self.get_class_embeddings()
 
         classes = classes.view(-1, self.n_heads, self.out_channels)
 
@@ -153,6 +143,17 @@ class LinkPredictionClassifier(nn.Module):
         score = torch.bmm(nodes, classes).transpose(1, 0)  # * scale[None, :, None]
         score = score.sum(1)
         return score
+
+    def get_class_embeddings(self):
+        if hasattr(self, "g"):
+            if self.g.device != self.attn_kernels.device:
+                self.g = self.g.to(self.attn_kernels.device)
+
+            classes = self.rgcn(self.g)["_N"]
+            classes = self.dropout(classes[:self.n_classes])
+        else:
+            classes = self.embeddings.weight
+        return classes
 
 
 class DenseClassification(nn.Module):
