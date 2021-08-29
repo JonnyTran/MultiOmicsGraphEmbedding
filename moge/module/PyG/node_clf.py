@@ -318,7 +318,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         return predict_loss
 
-    def predict(self, dataloader, node_names=None, filter_nan_labels=True):
+    def predict(self, dataloader, node_names=None, filter_nan_labels=True, **kwargs):
         y_true = []
         y_pred = []
 

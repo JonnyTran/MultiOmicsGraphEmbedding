@@ -150,8 +150,10 @@ def graph_viz3d(g: nx.Graph,
     if express_mode:
         logging.info("express_mode")
 
-        node_symbol = match_labels(node_symbol, nodelist=nodelist)
-        node_color = match_labels(node_color, nodelist=nodelist)
+        if node_symbol is not None:
+            node_symbol = match_labels(node_symbol, nodelist=nodelist)
+        if node_color is not None:
+            node_color = match_labels(node_color, nodelist=nodelist)
 
         fig = px.scatter_3d(x=node_x, y=node_y, z=node_z, size_max=5,
                             hover_name=nodelist,

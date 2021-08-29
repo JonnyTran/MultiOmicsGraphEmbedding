@@ -14,7 +14,7 @@ import dgl.function as fn
 from torch.nn import functional as F
 from typing import Dict
 
-from transformers import BertForSequenceClassification
+from transformers import BertForSequenceClassification, BertConfig
 
 from moge.module.utils import tensor_sizes
 
@@ -66,8 +66,8 @@ class HeteroRGCN(nn.Module):
             self.embeddings = nn.ParameterDict(embed_dict)
 
         # create layers
-        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes, agg="stack")
-        self.layer2 = HeteroRGCNLayer(hidden_size * len(G.etypes), out_size, G.etypes, agg="mean")
+        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes, agg="max")
+        self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes, agg="max")
 
     def forward(self, G: dgl.DGLHeteroGraph):
         if hasattr(self, "embeddings"):
@@ -75,18 +75,13 @@ class HeteroRGCN(nn.Module):
         elif hasattr(self, "encoder"):
             feats = {}
             for ntype in G.ntypes:
-                feats_concat = []
-                for input_ids, attention_mask, token_type_ids in zip(G.nodes[ntype].data["input_ids"].split(32),
-                                                                     G.nodes[ntype].data["attention_mask"].split(32),
-                                                                     G.nodes[ntype].data["token_type_ids"].split(32)):
-                    out = self.encoder.forward(input_ids, attention_mask, token_type_ids)
-
-                    feats_concat.append(out.logits)
-
-                feats[ntype] = torch.cat(feats_concat, axis=0)
+                out = self.encoder.forward(G.nodes[ntype].data["input_ids"],
+                                           G.nodes[ntype].data["attention_mask"],
+                                           G.nodes[ntype].data["token_type_ids"])
+                feats[ntype] = out.logits
 
         h_dict = self.layer1(G, feats)
-        h_dict = {k: F.leaky_relu(h if h.dim() == 2 else h.view(h.size(0), -1)) for k, h in h_dict.items()}
+        h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
         h_dict = self.layer2(G, h_dict)
 
         return h_dict
@@ -96,6 +91,7 @@ class LinkPredictionClassifier(nn.Module):
     def __init__(self, hparams: Namespace):
         super(LinkPredictionClassifier, self).__init__()
         self.n_classes = hparams.n_classes
+        self.classes = hparams.classes
         self.n_heads = hparams.attn_heads
 
         if hparams.layer_pooling == "concat":
@@ -111,17 +107,14 @@ class LinkPredictionClassifier(nn.Module):
 
         if isinstance(hparams.cls_graph, dgl.DGLGraph):
             self.g: dgl.DGLHeteroGraph = hparams.cls_graph
-            if "input_ids" in self.g.ndata and "cls_config" not in hparams:
-                go_encoder = BertForSequenceClassification.from_pretrained("dmis-lab/biobert-base-cased-v1.2",
-                                                                           num_hidden_layers=1,
-                                                                           num_labels=hparams.embedding_dim)
-            elif "input_ids" in self.g.ndata and "cls_config" in hparams:
-                go_encoder = BertForSequenceClassification(hparams.cls_config)
+            if "input_ids" in self.g.ndata and "cls_encoder" in hparams:
+                go_encoder = self.create_encoder(hparams)
             else:
                 go_encoder = None
 
-            self.rgcn = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
-                                   out_size=hparams.embedding_dim, encoder=go_encoder)
+            self.embedder = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
+                                       out_size=hparams.embedding_dim, encoder=go_encoder)
+            self.embedder.cls_graph_nodes = hparams.cls_graph_nodes
         else:
             self.embeddings = nn.Embedding(num_embeddings=hparams.n_classes,
                                            embedding_dim=hparams.embedding_dim)
@@ -129,18 +122,38 @@ class LinkPredictionClassifier(nn.Module):
 
         torch.nn.init.xavier_normal_(self.attn_kernels)
 
-    def forward(self, embeddings: Tensor):
+    def create_encoder(self, hparams):
+        if isinstance(hparams.cls_encoder, str):
+            go_encoder = BertForSequenceClassification.from_pretrained("dmis-lab/biobert-base-cased-v1.2",
+                                                                       num_hidden_layers=1,
+                                                                       num_labels=hparams.embedding_dim)
+        elif isinstance(hparams.cls_encoder, BertConfig):
+            hparams.cls_encoder.num_labels = hparams.embedding_dim
+            go_encoder = BertForSequenceClassification(hparams.cls_encoder)
+
+        elif isinstance(hparams.cls_encoder, BertForSequenceClassification):
+            go_encoder = hparams.cls_encoder
+
+        return go_encoder
+
+    def forward(self, embeddings: Tensor, classes=None):
         nodes = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
 
-        classes = self.get_class_embeddings()
+        cls_emb = self.get_class_embeddings()
 
-        classes = classes.view(-1, self.n_heads, self.out_channels)
+        if classes is None:
+            cls_emb = cls_emb[:self.n_classes]
+        else:
+            mask = np.isin(self.embedder.cls_graph_nodes, classes, )
+            cls_emb = cls_emb[mask]
 
-        classes = torch.bmm(classes.transpose(1, 0), self.attn_kernels).transpose(2, 1)
+        cls_emb = cls_emb.view(-1, self.n_heads, self.out_channels)
+
+        cls_emb = torch.bmm(cls_emb.transpose(1, 0), self.attn_kernels).transpose(2, 1)
         # classes = self.dropout(classes)
 
         # scale = self.attn_bias / np.sqrt(self.out_channels)
-        score = torch.bmm(nodes, classes).transpose(1, 0)  # * scale[None, :, None]
+        score = torch.bmm(nodes, cls_emb).transpose(1, 0)  # * scale[None, :, None]
         score = score.sum(1)
         return score
 
@@ -149,8 +162,8 @@ class LinkPredictionClassifier(nn.Module):
             if self.g.device != self.attn_kernels.device:
                 self.g = self.g.to(self.attn_kernels.device)
 
-            classes = self.rgcn(self.g)["_N"]
-            classes = self.dropout(classes[:self.n_classes])
+            classes = self.embedder(self.g)["_N"]
+            classes = self.dropout(classes)
         else:
             classes = self.embeddings.weight
         return classes

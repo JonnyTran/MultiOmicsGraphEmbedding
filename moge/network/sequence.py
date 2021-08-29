@@ -68,7 +68,7 @@ class CharTokenizer(Sequence):
 
         return vocab, tokenizer
 
-    def one_hot_encode(self, node_type, sequences: pd.Series, max_length=0.90):
+    def one_hot_encode(self, node_type, sequences: pd.Series, max_length=0.75):
         if not hasattr(self, "vocab"):
             self.vocab = {}
 
