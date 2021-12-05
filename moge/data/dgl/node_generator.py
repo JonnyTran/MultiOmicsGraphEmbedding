@@ -18,7 +18,6 @@ from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.utils import is_undirected
-from transformers import AutoTokenizer
 
 from moge.data.network import HeteroNetDataset
 from moge.module.utils import tensor_sizes
