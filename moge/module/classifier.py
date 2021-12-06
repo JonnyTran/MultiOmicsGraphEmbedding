@@ -114,7 +114,7 @@ class LinkPredictionClassifier(nn.Module):
 
             self.embedder = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
                                        out_size=hparams.embedding_dim, encoder=go_encoder)
-            self.embedder.cls_graph_nodes = hparams.cls_graph_nodes
+            self.embedder.cls_graph_nodes = hparams.classes
         else:
             self.embeddings = nn.Embedding(num_embeddings=hparams.n_classes,
                                            embedding_dim=hparams.embedding_dim)
