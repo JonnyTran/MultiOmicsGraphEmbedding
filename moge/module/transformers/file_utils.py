@@ -19,7 +19,7 @@ from typing import Optional
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
-import boto
+import boto3
 import requests
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -326,7 +326,7 @@ def s3_request(func):
 @s3_request
 def s3_etag(url, proxies=None):
     """Check ETag on S3 object."""
-    s3_resource = boto.resource("s3", config=Config(proxies=proxies))
+    s3_resource = boto3.resource("s3", config=Config(proxies=proxies))
     bucket_name, s3_path = split_s3_path(url)
     s3_object = s3_resource.Object(bucket_name, s3_path)
     return s3_object.e_tag
@@ -335,7 +335,7 @@ def s3_etag(url, proxies=None):
 @s3_request
 def s3_get(url, temp_file, proxies=None):
     """Pull a file directly from S3."""
-    s3_resource = boto.resource("s3", config=Config(proxies=proxies))
+    s3_resource = boto3.resource("s3", config=Config(proxies=proxies))
     bucket_name, s3_path = split_s3_path(url)
     s3_resource.Bucket(bucket_name).download_fileobj(s3_path, temp_file)
 
