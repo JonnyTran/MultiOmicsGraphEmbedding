@@ -9,8 +9,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
-from cogdl.datasets.gtn_data import GTNDataset
-from cogdl.datasets.han_data import HANDataset
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -154,7 +152,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         elif isinstance(dataset, PyGInMemoryDataset):
             print("InMemoryDataset")
             self.process_inmemorydataset(dataset, train_ratio=0.5)
-        elif isinstance(dataset, HANDataset) or isinstance(dataset, GTNDataset):
+        elif dataset.__class__.__name__ in ["HANDataset", "GTNDataset"]:
             print(f"{dataset.__class__.__name__}")
             self.process_COGDLdataset(dataset, metapaths, node_types, reshuffle_train)
         elif isinstance(dataset, str) and "blogcatalog6k" in dataset:
@@ -403,7 +401,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         assert train_ratio is not None
         self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
 
-    def process_COGDLdataset(self, dataset: HANDataset, metapath, node_types, train_ratio):
+    def process_COGDLdataset(self, dataset, metapath, node_types, train_ratio):
         data = dataset.data
         assert self.head_node_type is not None
         assert node_types is not None
