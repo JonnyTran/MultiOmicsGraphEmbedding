@@ -6,7 +6,6 @@ import dgl
 import numpy as np
 import pandas as pd
 import torch
-from cogdl.datasets.gtn_data import GTNDataset
 from dgl import backend as F
 from dgl import utils
 from dgl import utils as dglutils
@@ -128,7 +127,7 @@ class DGLNodeSampler(HeteroNetDataset):
         return self
 
     @classmethod
-    def from_cogdl_graph(cls, gtn_dataset: GTNDataset, **kwargs):
+    def from_cogdl_graph(cls, gtn_dataset, **kwargs):
         dataset = HeteroNeighborGenerator(gtn_dataset, neighbor_sizes=kwargs["neighbor_sizes"],
                                           node_types=kwargs["node_types"],
                                           head_node_type=kwargs["head_node_type"],
