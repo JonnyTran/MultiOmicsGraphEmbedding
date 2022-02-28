@@ -8,15 +8,17 @@ from ogb.nodeproppred import Evaluator as NodeEvaluator
 
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
+from sklearn.metrics import average_precision_score
 
 import torchmetrics
-from torchmetrics import F1, AUROC, AveragePrecision, MeanSquaredError, Accuracy
+from torchmetrics import F1, AUROC, MeanSquaredError, Accuracy, Precision as PrecisionMetric, \
+    Recall as RecallMetric, PrecisionRecallCurve
 
-from .utils import filter_samples
+from .utils import filter_samples, tensor_sizes, activation
 
 
 class Metrics(torch.nn.Module):
-    def __init__(self, prefix, loss_type: str, threshold=0.5, top_k=[1, 5, 10], n_classes: int = None,
+    def __init__(self, prefix: str, loss_type: str, threshold=0.5, top_k=[5, 10, 50], n_classes: int = None,
                  multilabel: bool = None, metrics=["precision", "recall", "top_k", "accuracy"]):
         super().__init__()
 
@@ -26,7 +28,6 @@ class Metrics(torch.nn.Module):
         self.multilabel = multilabel
         self.top_ks = top_k
         self.prefix = prefix
-
 
         self.metrics = {}
         for metric in metrics:
@@ -45,19 +46,21 @@ class Metrics(torch.nn.Module):
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
             elif "macro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="macro")
+                self.metrics[metric] = F1(num_classes=n_classes, average="macro",
+                                          top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "micro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="micro")
+                self.metrics[metric] = F1(num_classes=n_classes, average="micro",
+                                          top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
-                self.metrics[metric] = AUROC(num_classes=n_classes)
-            elif "avg_precision" in metric:
-                self.metrics[metric] = AveragePrecision(num_classes=n_classes, )
-
+                self.metrics[metric] = AUROC(num_classes=n_classes, average="micro")
+            elif "aupr" == metric:
+                self.metrics[metric] = AveragePrecision(average="micro")
 
             elif "accuracy" in metric:
-                self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None)
+                self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
+                                                subset_accuracy=multilabel)
 
             elif "ogbn" in metric:
                 self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric))
@@ -67,12 +70,20 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = OGBLinkPredMetrics(LinkEvaluator(metric))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
+                continue
 
             # Needed to add the PytorchGeometric methods as Modules, so they'll be on the correct CUDA device during training
             if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
                 setattr(self, metric, self.metrics[metric])
 
         self.reset_metrics()
+
+    def hot_encode(self, labels, type_as):
+        if labels.dim() == 2:
+            return labels
+        elif labels.dim() == 1:
+            labels = torch.eye(self.n_classes)[labels].type_as(type_as)
+            return labels
 
     def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights=None):
         """
@@ -82,16 +93,14 @@ class Metrics(torch.nn.Module):
         """
         y_pred = y_hat.detach()
         y_true = y.detach()
-        y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
 
-        # Apply softmax/sigmoid activation if needed
-        if "LOGITS" in self.loss_type or "FOCAL" in self.loss_type:
-            if "SOFTMAX" in self.loss_type:
-                y_pred = torch.softmax(y_pred, dim=1)
-            else:
-                y_pred = torch.sigmoid(y_pred)
-        elif "NEGATIVE_LOG_LIKELIHOOD" == self.loss_type or "SOFTMAX_CROSS_ENTROPY" in self.loss_type:
-            y_pred = torch.softmax(y_pred, dim=1)
+        y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
+        y_pred = activation(y_pred, loss_type=self.loss_type)
+
+        if self.multilabel and any([m in self.metrics \
+                                    for m in ["auroc", "aupr", "precision", "recall", "micro_f1", "macro_f1"]]):
+            mask_labels = y_pred.sum(0) > 0
+            y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
 
         for metric in self.metrics:
             # torchmetrics metrics
@@ -109,6 +118,8 @@ class Metrics(torch.nn.Module):
             # Torch ignite metrics
             elif metric == "top_k":
                 self.metrics[metric].update((y_pred, y_true))
+            elif metric == "avg_precision":
+                self.metrics[metric].update((y_pred, y_true))
 
             # OGB metrics
             elif "ogb" in metric:
@@ -119,15 +130,9 @@ class Metrics(torch.nn.Module):
                     pass
 
                 self.metrics[metric].update((y_pred, y_true))
+
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
-
-    def hot_encode(self, labels, type_as):
-        if labels.dim() == 2:
-            return labels
-        elif labels.dim() == 1:
-            labels = torch.eye(self.n_classes)[labels].type_as(type_as)
-            return labels
 
     def compute_metrics(self):
         logs = {}
@@ -285,3 +290,48 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
             return {f"top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
         else:
             return {f"{prefix}top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
+
+
+class AveragePrecision(torchmetrics.Metric):
+    def __init__(self, average="macro", compute_on_step: bool = False, dist_sync_on_step: bool = False,
+                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
+        """
+
+        Args:
+            average : {'micro', 'samples', 'weighted', 'macro'} or None,             default='macro'
+                If ``None``, the scores for each class are returned. Otherwise,
+                this determines the type of averaging performed on the data:
+
+                ``'micro'``:
+                    Calculate metrics globally by considering each element of the label
+                    indicator matrix as a label.
+                ``'macro'``:
+                    Calculate metrics for each label, and find their unweighted
+                    mean.  This does not take label imbalance into account.
+                ``'weighted'``:
+                    Calculate metrics for each label, and find their average, weighted
+                    by support (the number of true instances for each label).
+                ``'samples'``:
+                    Calculate metrics for each instance, and find their average.
+        """
+        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
+        self.average = average
+
+    def reset(self):
+        self._scores = []
+        self._n_samples = []
+
+    def update(self, y_pred, y_true):
+        score = average_precision_score(y_true.detach().cpu().numpy(),
+                                        y_pred.detach().cpu().numpy(), average=self.average)
+
+        self._scores.append(score)
+        self._n_samples.append(y_true.size(0))
+
+    def compute(self, prefix=None) -> dict:
+        if len(self._scores) == 0:
+            raise NotComputableError("AveragePrecision must have at"
+                                     "least one example before it can be computed.")
+
+        weighted_avg_score = np.average(self._scores, weights=self._n_samples)
+        return weighted_avg_score if prefix is None else {f"{prefix}avg_precision": weighted_avg_score}

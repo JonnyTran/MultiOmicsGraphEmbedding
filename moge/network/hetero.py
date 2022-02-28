@@ -1,10 +1,15 @@
 from argparse import Namespace
 
+import dgl
 import networkx as nx
 import numpy as np
 import pandas as pd
+from typing import Dict, Tuple, Union, List
 
-from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_y_multilabel
+import torch
+
+from moge.network.base import SEQUENCE_COL
+from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
 from openomics.utils.df import concat_uniques
@@ -12,7 +17,7 @@ from openomics import MultiOmics
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
-    def __init__(self, multiomics: MultiOmics, node_types: list, layers: {(str, str, str): nx.Graph},
+    def __init__(self, multiomics: MultiOmics, node_types: list, layers: Dict[Tuple[str], nx.Graph],
                  annotations=True, ) -> None:
         """
         :param multiomics: MultiOmics object containing annotations
@@ -20,9 +25,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         :param layers: A dict of edge types tuple and networkx.Graph/Digraph containing heterogeneous edges
         :param annotations: Whether to process annotation data, default True
         """
-        self.multiomics = multiomics
+        self.multiomics: MultiOmics = multiomics
         self.node_types = node_types
-        self.layers_adj = {}
+        self.networks: Dict[Tuple, nx.Graph] = {}
 
         networks = {}
         for src_etype_dst, GraphClass in layers.items():
@@ -75,17 +80,22 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 {k: concat_uniques for k in self.all_annotations.columns})
 
         print("Annotation columns:", self.all_annotations.columns.tolist()) if verbose else None
-        self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, delimiter,
-                                                                 filter_label,
-                                                                 min_count, verbose=verbose)
+        self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, filter_label,
+                                                                 min_count, delimiter, verbose=verbose)
 
-    def add_edges(self, edgelist, layer: (str, str, str), database, **kwargs):
-        source = layer[0]
-        target = layer[-1]
-        self.networks[layer].add_edges_from(edgelist, source=source, target=target, database=database, **kwargs)
-        print(len(edgelist), "edges added to self.networks[{}]".format(layer))
+    def add_edges(self, edgelist: List[Tuple], etype: Tuple[str], database: str, **kwargs):
+        source = etype[0]
+        target = etype[-1]
+        self.networks[etype].add_edges_from(edgelist, source=source, target=target, database=database, etype=etype,
+                                            **kwargs)
+        print(len(edgelist), "edges added to self.networks[{}]".format(etype))
 
-    def get_adjacency_matrix(self, edge_types: (str, str), node_list=None, method="GAT", output="dense"):
+    @property
+    def num_nodes_dict(self):
+        return {node: nid.shape[0] for node, nid in self.nodes.items()}
+
+    def get_adjacency_matrix(self, edge_types: Union[Tuple[str], List[Tuple[str]]],
+                             node_list=None, method="GAT", output="dense"):
         """
 
         :param edge_types: either a tuple(str, ...) or [tuple(str, ...), tuple(str, ...)]
@@ -142,21 +152,99 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
     def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
                          dropna=False, seed=42, verbose=False):
-        y_label = filter_y_multilabel(annotations=self.all_annotations, y_label=stratify_label,
-                                      min_count=n_splits,
-                                      dropna=dropna, delimiter=self.delimiter)
+        y_label = filter_multilabel(df=self.all_annotations, column=stratify_label, min_count=n_splits, dropna=dropna,
+                                    delimiter=self.delimiter)
         if stratify_omic:
-            y_omic = self.all_annotations.loc[y_label.index,
-                                              MODALITY_COL].str.split("\||:")
-            y_label = y_label + y_omic
+            omic_type_col = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
+            y_label = y_label + omic_type_col
 
-        self.train_test_splits = list(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
+        train_val, test = next(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
 
-        self.training = Namespace()
-        self.testing = Namespace()
-        self.training.node_list = self.train_test_splits[0][0]
-        self.testing.node_list = self.train_test_splits[0][1]
+        if not hasattr(self, "training"):
+            self.training = Namespace()
+        if not hasattr(self, "validation"):
+            self.validation = Namespace()
+        if not hasattr(self, "testing"):
+            self.testing = Namespace()
+
+        train, valid = next(stratify_train_test(y_label=y_label[train_val], n_splits=int(1 // 0.1), seed=seed))
+
+        self.training.node_list = train
+        self.validation.node_list = valid
+        self.testing.node_list = test
 
     def get_aggregated_network(self):
         G = nx.compose_all(list(self.networks.values()))
         return G
+
+    def filter_sequence_nodes(self):
+        for ntype in self.node_types:
+            nodes_w_seq = self.multiomics[ntype].annotations.index[
+                self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
+            self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
+
+    def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False):
+        # Filter node that doesn't have a sequence
+        if sequence:
+            self.filter_sequence_nodes()
+
+        # Edge index
+        edge_index_dict = {}
+        for relation, nxgraph in self.networks.items():
+            biadj = nx.bipartite.biadjacency_matrix(nxgraph,
+                                                    row_order=self.nodes[relation[0]],
+                                                    column_order=self.nodes[relation[-1]],
+                                                    format="coo")
+            edge_index_dict[relation] = (biadj.row, biadj.col)
+
+        G: dgl.DGLHeteroGraph = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
+
+        # Add node attributes
+        for ntype in G.ntypes:
+            annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
+
+            for col in self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL]):
+                if col in self.feature_transformer:
+                    feat_filtered = filter_multilabel(df=annotations,
+                                                      column=col, min_count=None,
+                                                      dropna=False, delimiter=self.delimiter)
+
+                    feat = self.feature_transformer[col].transform(feat_filtered)
+                    G.nodes[ntype].data[col] = torch.from_numpy(feat)
+
+            # DNA/RNA sequence
+            if sequence and "sequence" in annotations:
+                assert hasattr(self, "tokenizer")
+                padded_encoding, seq_lens = self.tokenizer.one_hot_encode(ntype,
+                                                                          sequences=annotations[SEQUENCE_COL])
+                print(f"Added sequences ({padded_encoding.shape}) to {ntype}")
+                G.nodes[ntype].data[SEQUENCE_COL] = padded_encoding
+                G.nodes[ntype].data["seq_len"] = seq_lens
+
+        # Labels
+        self.process_feature_tranformer(filter_label=label_col, min_count=min_count)
+        if label_subset is not None:
+            self.feature_transformer[label_col].classes_ = np.intersect1d(self.feature_transformer[label_col].classes_,
+                                                                          label_subset, assume_unique=True)
+
+        labels = {}
+        for ntype in G.ntypes:
+            if label_col not in self.multiomics[ntype].annotations.columns: continue
+            y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype]],
+                                        column=label_col, min_count=min_count,
+                                        label_subset=label_subset, dropna=False, delimiter=self.delimiter)
+            labels[ntype] = self.feature_transformer[label_col].transform(y_label)
+            labels[ntype] = torch.tensor(labels[ntype])
+
+            G.nodes[ntype].data["label"] = labels[ntype]
+            num_classes = labels[ntype].shape[1]
+
+        # Train test split
+        training_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \
+                        for ntype, ntype_nids in self.nodes.to_dict().items()}
+        validation_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.validation.node_list)) \
+                          for ntype, ntype_nids in self.nodes.to_dict().items()}
+        testing_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.testing.node_list)) \
+                       for ntype, ntype_nids in self.nodes.to_dict().items()}
+
+        return G, labels, num_classes, training_idx, validation_idx, testing_idx

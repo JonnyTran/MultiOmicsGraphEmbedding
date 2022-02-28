@@ -5,26 +5,26 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+from fa2 import ForceAtlas2
+from typing import Dict, List
 
-# from fa2 import ForceAtlas2
-#
-# forceatlas2 = ForceAtlas2(
-#     # Behavior alternatives
-#     outboundAttractionDistribution=True,  # Dissuade hubs
-#     linLogMode=False,  # NOT IMPLEMENTED
-#     adjustSizes=False,  # Prevent overlap (NOT IMPLEMENTED)
-#     edgeWeightInfluence=1.0,
-#     # Performance
-#     jitterTolerance=1.0,  # Tolerance
-#     barnesHutOptimize=True,
-#     barnesHutTheta=1.2,
-#     multiThreaded=False,
-#     # Tuning
-#     scalingRatio=2.0,
-#     strongGravityMode=True,
-#     gravity=1.0,
-#     # Log
-#     verbose=False)
+forceatlas2 = ForceAtlas2(
+    # Behavior alternatives
+    outboundAttractionDistribution=True,  # Dissuade hubs
+    linLogMode=False,  # NOT IMPLEMENTED
+    adjustSizes=False,  # Prevent overlap (NOT IMPLEMENTED)
+    edgeWeightInfluence=1.0,
+    # Performance
+    jitterTolerance=1.0,  # Tolerance
+    barnesHutOptimize=True,
+    barnesHutTheta=1.2,
+    multiThreaded=False,
+    # Tuning
+    scalingRatio=2.0,
+    strongGravityMode=True,
+    gravity=1.0,
+    # Log
+    verbose=False)
 
 def node_degree_viz(node_degrees, x_label, y_label, width=500, height=90):
     fig = go.Figure(data=go.Heatmap(z=node_degrees.applymap(lambda x: np.log10(x + 1)),
@@ -36,15 +36,15 @@ def node_degree_viz(node_degrees, x_label, y_label, width=500, height=90):
                         height=height,
                         margin=dict(l=5, r=5, b=5, t=5, pad=5),
                         font=dict(size=12, ),
-                        # xaxis_nticks=36
                     ))
     return fig
 
+
 def graph_viz(g: nx.Graph,
-              nodelist: list, node_symbol: pd.Series = None, node_color: pd.Series = None,
+              nodelist: List, node_symbol: pd.Series = None, node_color: pd.Series = None,
               edge_label: str = None, max_edges=10000,
               title=None, width=1000, height=800,
-              pos=None, iterations=100, showlegend=True, **kwargs):
+              pos: Dict[str, np.ndarray] = None, iterations=100, showlegend=True, **kwargs):
     if pos is None:
         pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
 
@@ -63,8 +63,10 @@ def graph_viz(g: nx.Graph,
     if express_mode:
         logging.info("express_mode")
 
-        node_symbol = match_labels(node_symbol, nodelist=nodelist)
-        node_color = match_labels(node_color, nodelist=nodelist)
+        if node_symbol is not None:
+            node_symbol = match_labels(node_symbol, nodelist=nodelist)
+        if node_color is not None:
+            node_color = match_labels(node_color, nodelist=nodelist)
 
         fig = px.scatter(x=node_x, y=node_y,
                          hover_name=nodelist,
@@ -148,8 +150,10 @@ def graph_viz3d(g: nx.Graph,
     if express_mode:
         logging.info("express_mode")
 
-        node_symbol = match_labels(node_symbol, nodelist=nodelist)
-        node_color = match_labels(node_color, nodelist=nodelist)
+        if node_symbol is not None:
+            node_symbol = match_labels(node_symbol, nodelist=nodelist)
+        if node_color is not None:
+            node_color = match_labels(node_color, nodelist=nodelist)
 
         fig = px.scatter_3d(x=node_x, y=node_y, z=node_z, size_max=5,
                             hover_name=nodelist,
@@ -293,11 +297,3 @@ def match_labels(labels, nodelist, null_val=-1):
 
     return labels
 
-
-def match_labels(labels, nodelist, null_val=-1):
-    # If nodelist is passed. select labels for nodes in nodelist, fill null_values if necessary
-    if nodelist is not None:
-        labels = nodelist.map(lambda x: labels.get(x, null_val))
-        assert labels.shape == nodelist.shape
-
-    return labels

@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch import Tensor
 from torch_geometric.data import NeighborSampler as PyGNeighborSampler
-from torch_geometric.data.sampler import Adj, EdgeIndex
+from torch_geometric.loader.neighbor_sampler import EdgeIndex, Adj
 from torch_geometric.utils.hetero import group_hetero_graph
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import coalesce, SparseTensor

@@ -63,7 +63,7 @@ class SIGN(nn.Module):
                 feat = self.dropout(feat)
             hidden.append(ff(feat))
         out = self.project(self.dropout(self.prelu(torch.cat(hidden, dim=-1))))
-        return torch.log_softmax(out, dim=-1)
+        return out
 
 
 class WeightedAggregator(nn.Module):

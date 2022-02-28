@@ -29,34 +29,34 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
         evaluate_pr_curve_link_pred(methods, X, y_true, title=title, data_generator=data_generator)
 
 
-def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, fig_save_path=None, data_generator=None):
-    fig = plt.figure(figsize=(4, 4), dpi=dpi)
-    ax = fig.add_subplot(111)
-
-    color_dict = {"LINE": "b", "HOPE": "c", "SDNE": "y", "node2vec": "g", "rna2rna": "r", "siamese": "r"}
-    ls_dict = {"LINE": ":", "HOPE": "-.", "SDNE": "--", "node2vec": "--", "rna2rna": "-", "siamese": ":"}
-
-    for method in methods.keys():
-        if method == "BioVec": continue
-        # if method is "siamese" and method == list(methods.keys())[-1]:
-        #     y_prob_pred = methods[method].predict_generator(data_generator)
-        # else:
-        y_prob_pred = methods[method].predict(X,,
-                      average_precision = average_precision_score(y_true=y_true, y_score=y_prob_pred)
-        precision, recall, _ = precision_recall_curve(y_true=y_true, probas_pred=y_prob_pred, pos_label=1)
-
-        ax.plot(recall, precision, color=color_dict[method], ls=ls_dict[method],
-                label=method + '. AUPR={0:0.2f}'.format(average_precision))
-
-    plt.xlabel('Recall')
-    plt.ylabel('Precision')
-    plt.xlim([0.0, 1.00])
-    plt.ylim([0.0, 1.00])
-    plt.legend(loc="lower right")
-    plt.title(title)
-    plt.show()
-    if fig_save_path is not None:
-        fig.savefig(fig_save_path, bbox_inches='tight')
+# def evaluate_pr_curve_link_pred(methods, X, y_true, title='PR curve', dpi=200, fig_save_path=None, data_generator=None):
+#     fig = plt.figure(figsize=(4, 4), dpi=dpi)
+#     ax = fig.add_subplot(111)
+#
+#     color_dict = {"LINE": "b", "HOPE": "c", "SDNE": "y", "node2vec": "g", "rna2rna": "r", "siamese": "r"}
+#     ls_dict = {"LINE": ":", "HOPE": "-.", "SDNE": "--", "node2vec": "--", "rna2rna": "-", "siamese": ":"}
+#
+#     for method in methods.keys():
+#         if method == "BioVec": continue
+#         # if method is "siamese" and method == list(methods.keys())[-1]:
+#         #     y_prob_pred = methods[method].predict_generator(data_generator)
+#         # else:
+#         y_prob_pred = methods[method].predict(X,,
+#                       average_precision = average_precision_score(y_true=y_true, y_score=y_prob_pred)
+#         precision, recall, _ = precision_recall_curve(y_true=y_true, probas_pred=y_prob_pred, pos_label=1)
+#
+#         ax.plot(recall, precision, color=color_dict[method], ls=ls_dict[method],
+#                 label=method + '. AUPR={0:0.2f}'.format(average_precision))
+#
+#     plt.xlabel('Recall')
+#     plt.ylabel('Precision')
+#     plt.xlim([0.0, 1.00])
+#     plt.ylim([0.0, 1.00])
+#     plt.legend(loc="lower right")
+#     plt.title(title)
+#     plt.show()
+#     if fig_save_path is not None:
+#         fig.savefig(fig_save_path, bbox_inches='tight')
 
 
 def evaluate_top_k_link_pred(embedding, network_train, network_test, node_list, node_list_B=None, edge_type=None,

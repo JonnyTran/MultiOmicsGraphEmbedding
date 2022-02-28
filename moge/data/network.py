@@ -1,7 +1,7 @@
 import copy
 import logging
 from abc import abstractmethod
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Dict
 
 import dgl
 import networkx as nx
@@ -16,7 +16,9 @@ from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 from scipy.io import loadmat
 from sklearn.cluster import KMeans
+
 from torch.utils import data
+from torch import Tensor
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_geometric.utils import is_undirected
 from torch_sparse import transpose
@@ -89,53 +91,11 @@ class Network:
 
         return self.node_degrees
 
-    def get_projection_pos(self, embeddings_all, UMAP: classmethod, n_components=2):
-        pos = UMAP(n_components=n_components).fit_transform(embeddings_all)
-        pos = {embeddings_all.index[i]: pair for i, pair in enumerate(pos)}
+    def get_projection_pos(self, node_embs, UMAP: classmethod, n_components=2):
+        pos = UMAP(n_components=n_components).fit_transform(node_embs)
+        pos = {node_embs.index[i]: pair for i, pair in enumerate(pos)}
         return pos
 
-    def get_embeddings_labels(self, h_dict: dict, global_node_index: dict, cache=True):
-        if hasattr(self, "embeddings") and hasattr(self, "node_types") and hasattr(self, "labels") and cache:
-            return self.embeddings, self.node_types, self.labels
-
-        # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
-        emb_df_list = []
-        for node_type in self.node_types:
-            nid = global_node_index[node_type].cpu().numpy().astype(str)
-            n_type_id = np.core.defchararray.add(node_type[0], nid)
-
-            if isinstance(h_dict[node_type], torch.Tensor):
-                df = pd.DataFrame(h_dict[node_type].detach().cpu().numpy(), index=n_type_id)
-            else:
-                df = pd.DataFrame(h_dict[node_type], index=n_type_id)
-            emb_df_list.append(df)
-
-        embeddings = pd.concat(emb_df_list, axis=0)
-        node_types = embeddings.index.to_series().str.slice(0, 1)
-
-        # Build vector of labels for all node types
-        if hasattr(self, "y_dict") and len(self.y_dict) > 0:
-            labels = pd.Series(
-                self.y_dict[self.head_node_type][global_node_index[self.head_node_type]].squeeze(-1).numpy(),
-                index=emb_df_list[0].index,
-                dtype=str)
-        else:
-            labels = None
-
-        # Save results
-        self.embeddings, self.node_types, self.labels = embeddings, node_types, labels
-
-        return embeddings, node_types, labels
-
-    def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False, seed=None):
-        kmeans = KMeans(n_clusters, n_jobs=n_jobs, random_state=seed)
-        logging.info(f"Kmeans with k={n_clusters}")
-        y_pred = kmeans.fit_predict(self.embeddings)
-        if save_kmeans:
-            self.kmeans = kmeans
-
-        y_pred = pd.Series(y_pred, index=self.embeddings.index, dtype=str)
-        return y_pred
 
 
 class HeteroNetDataset(torch.utils.data.Dataset, Network):
@@ -143,7 +103,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset, DglNodePropPredDataset, DglLinkPropPredDataset],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
-                 inductive: bool = True, **kwargs):
+                 inductive: bool = False, **kwargs):
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
@@ -256,7 +216,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         if not hasattr(self, "x_dict") or self.x_dict is None or len(self.x_dict) == 0:
             self.x_dict = {}
 
-        if reshuffle_train is not None and reshuffle_train > 0:
+        if reshuffle_train is not None and reshuffle_train:
             self.resample_training_idx(reshuffle_train)
         else:
             if hasattr(self, "training_idx"):
@@ -312,10 +272,15 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         testing_idx = indices[int(num_indices * train_ratio):]
         return training_idx, validation_idx, testing_idx
 
-    def resample_training_idx(self, train_ratio):
-        all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-        self.training_idx, self.validation_idx, self.testing_idx = \
-            self.split_train_val_test(train_ratio=train_ratio, sample_indices=all_idx)
+    def resample_training_idx(self, train_ratio: float):
+        if train_ratio == 1.0:
+            ratio = self.get_train_ratio()
+        else:
+            ratio = train_ratio
+
+            all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
+            self.training_idx, self.validation_idx, self.testing_idx = \
+                self.split_train_val_test(train_ratio=ratio, sample_indices=all_idx)
         print(f"Resampled training set at {self.get_train_ratio()}%")
 
     def get_metapaths(self, khop=False):
@@ -361,12 +326,18 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         return node_ids_dict
 
-    def add_reverse_edge_index(self, edge_index_dict) -> None:
+    def add_reverse_edge_index(self, edge_index_dict: Dict[Tuple[str], Tensor]) -> None:
         reverse_edge_index_dict = {}
-        for metapath in edge_index_dict:
+        for metapath, edge_index in edge_index_dict.items():
             if is_negative(metapath) or edge_index_dict[metapath] == None: continue
+
             reverse_metapath = self.reverse_metapath_name(metapath)
 
+            if metapath[0] == metapath[-1] and isinstance(edge_index, Tensor) and is_undirected(edge_index):
+                print(f"skipping reverse {metapath} because edges are symmetrical")
+                continue
+
+            print("Reversing", metapath, "to", reverse_metapath)
             reverse_edge_index_dict[reverse_metapath] = transpose(index=edge_index_dict[metapath], value=None,
                                                                   m=self.num_nodes_dict[metapath[0]],
                                                                   n=self.num_nodes_dict[metapath[-1]])[0]
@@ -393,7 +364,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                     tokens.append(token)
 
             reverse_metapath = tuple(tokens)
-            print(metapath, reverse_metapath)
 
         elif isinstance(metapath, str):
             reverse_metapath = "".join(reversed(metapath))
@@ -587,7 +557,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         return (edge_index, values)
 
     def collate_HAN(self, iloc, mode=None):
-        if not isinstance(iloc, torch.Tensor):
+        if not isinstance(iloc, Tensor):
             iloc = torch.tensor(iloc)
 
         if "train" in mode:
@@ -631,7 +601,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         return X, y, None
 
     def collate_HAN_batch(self, iloc, mode=None):
-        if not isinstance(iloc, torch.Tensor):
+        if not isinstance(iloc, Tensor):
             iloc = torch.tensor(iloc)
 
         X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method

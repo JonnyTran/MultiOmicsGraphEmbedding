@@ -3,8 +3,9 @@ import openomics
 import pandas as pd
 from openomics.utils.df import concat_uniques
 from sklearn import preprocessing
+from typing import List, Union
 
-from moge.data.sequences import SEQUENCE_COL
+from moge.network.base import SEQUENCE_COL
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
 from moge.network.base import Network
 
@@ -57,57 +58,58 @@ class AttributedNetwork(Network):
         :param min_count (int): default 0. Remove labels with frequency less than this. Used for classification or train/test stratification tasks.
         """
         self.delimiter = delimiter
-        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, delimiter,
-                                                                 filter_label, min_count,
-                                                                 verbose=verbose)
+        self.feature_transformer = self.get_feature_transformers(self.annotations, self.node_list, filter_label,
+                                                                 min_count, delimiter, verbose=verbose)
 
     @classmethod
-    def get_feature_transformers(cls, annotation, node_list, delimiter="\||;", filter_label=None, min_count=0,
+    def get_feature_transformers(cls, annotation: pd.DataFrame, node_list, filter_label: List[str] = None,
+                                 min_count: int = 0,
+                                 delimiter="\||;",
                                  verbose=False):
         """
         :param annotation: a pandas DataFrame
         :param node_list: list of nodes. Indexes the annotation DataFrame
-        :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
         :param filter_label: str or list of str for the labels to filter by min_count
         :param min_count: minimum frequency of label to keep
+        :param delimiter: default "\||;", delimiter ('|' or ';') to split strings
         :return: dict of feature transformers
         """
         feature_transformers = {}
-        for label in annotation.columns:
-            if label == SEQUENCE_COL:
+        for col in annotation.columns:
+            if col == SEQUENCE_COL:
                 continue
 
-            if annotation[label].dtypes == np.object:
-                feature_transformers[label] = preprocessing.MultiLabelBinarizer()
+            if annotation[col].dtypes == np.object:
+                feature_transformers[col] = preprocessing.MultiLabelBinarizer()
 
-                if annotation[label].str.contains(delimiter, regex=True).any():
-                    print("INFO: Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(label,
+                if annotation[col].str.contains(delimiter, regex=True).any():
+                    print("INFO: Label {} (of str split by '{}') transformed by MultiLabelBinarizer".format(col,
                                                                                                             delimiter)) if verbose else None
-                    features = annotation.loc[node_list, label].dropna(axis=0).str.split(delimiter)
+                    features = annotation.loc[node_list, col].dropna(axis=0).str.split(delimiter)
                     features = features.map(
                         lambda x: [term.strip() for term in x if len(term) > 0] if isinstance(x, list) else x)
                 else:
                     print("INFO: Label {} (of str) is transformed by MultiLabelBinarizer".format(
-                        label)) if verbose else None
-                    features = annotation.loc[node_list, label].dropna(axis=0)
+                        col)) if verbose else None
+                    features = annotation.loc[node_list, col].dropna(axis=0)
 
-                if filter_label is not None and label in filter_label and min_count:
-                    labels_filter = get_label_min_count_filter(features, min_count=min_count)
+                if filter_label is not None and col in filter_label and min_count:
+                    labels_filter = filter_labels_by_count(features, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
-                feature_transformers[label].fit(features)
+                feature_transformers[col].fit(features)
 
-            elif annotation[label].dtypes == int or annotation[label].dtypes == float:
+            elif annotation[col].dtypes == int or annotation[col].dtypes == float:
                 print(
-                    "INFO: Label {} (of int/float) is transformed by StandardScaler".format(label)) if verbose else None
-                feature_transformers[label] = preprocessing.StandardScaler()
-                features = annotation.loc[node_list, label].dropna(axis=0)
-                feature_transformers[label].fit(features.to_numpy().reshape(-1, 1))
+                    "INFO: Label {} (of int/float) is transformed by StandardScaler".format(col)) if verbose else None
+                feature_transformers[col] = preprocessing.StandardScaler()
+                features = annotation.loc[node_list, col].dropna(axis=0)
+                feature_transformers[col].fit(features.to_numpy().reshape(-1, 1))
 
             else:
-                print("INFO: Label {} is transformed by MultiLabelBinarizer".format(label)) if verbose else None
-                feature_transformers[label] = preprocessing.MultiLabelBinarizer()
-                features = annotation.loc[node_list, label].dropna(axis=0)
-                feature_transformers[label].fit(features.to_numpy().reshape(-1, 1))
+                print("INFO: Label {} is transformed by MultiLabelBinarizer".format(col)) if verbose else None
+                feature_transformers[col] = preprocessing.MultiLabelBinarizer()
+                features = annotation.loc[node_list, col].dropna(axis=0)
+                feature_transformers[col].fit(features.to_numpy().reshape(-1, 1))
 
         return feature_transformers
 
@@ -211,94 +213,58 @@ network if the similarity measures passes the threshold
         return label_color
 
 
-def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
+def filter_multilabel(df: pd.DataFrame, column="go_id", min_count=2, label_subset: pd.Index = None, dropna=False,
+                      delimiter="|"):
     if dropna:
-        nodes_index = annotations[[SEQUENCE_COL] + [y_label]].dropna().index
+        nodes_index = df[[column]].dropna().index
     else:
-        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
+        nodes_index = df.index
 
-    if annotations.loc[nodes_index, y_label].dtypes == np.object and annotations.loc[nodes_index, y_label].str.contains(
-            delimiter, regex=True).any():
-        annotations_list = annotations.loc[nodes_index, y_label].str.split(delimiter)
+    if df.loc[nodes_index, column].dtypes == np.object and \
+            df.loc[nodes_index, column].str.contains(delimiter, regex=True).any():
+        annotations_list = df.loc[nodes_index, column].str.split(delimiter)
     else:
-        annotations_list = annotations.loc[nodes_index, y_label]
+        annotations_list = df.loc[nodes_index, column]
 
-    labels_filter = get_label_min_count_filter(annotations_list, min_count)
-    print("label {} filtered: {} with min_count={}".format(y_label, len(labels_filter), min_count))
+    if min_count:
+        labels_filter = filter_labels_by_count(annotations_list, min_count=min_count)
+        if label_subset is not None:
+            labels_filter = labels_filter.intersection(label_subset)
+
+        print(f"Column {column} filtered: {len(labels_filter)} with min_count={min_count}")
+    else:
+        labels_filter = annotations_list
 
     y_labels = annotations_list.map(
-        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
+        lambda go_terms: [item for item in go_terms \
+                          if item not in labels_filter] \
+            if type(go_terms) == list else [])
 
     return y_labels
 
 
-def get_label_min_count_filter(annotation, min_count):
+def filter_labels_by_count(annotation: pd.Series, min_count: Union[int, float]):
+    """
+
+    Args:
+        annotation (pd.DataFrame): A dataframe with index for gene IDs and values for list of annotations.
+        min_count (float): If integer, then filter labels with at least `min_count` raw frequency. If float, then filter labels annotated with at least `min_count` percentage of genes.
+
+    Returns:
+        labels_filter (pd.Index): filter
+    """
     label_counts = {}
 
+    if isinstance(min_count, float) and min_count < 1.0:
+        num_genes = annotation.shape[0]
+        min_count = int(num_genes * min_count)
+
+    # Filter a label if its label_counts is less than min_count
     for items in annotation:
         if not isinstance(items, list): continue
         for item in items:
             label_counts[item] = label_counts.setdefault(item, 0) + 1
-    label_counts = pd.Series(label_counts)
-    labels_filter = label_counts[label_counts < min_count].index
-    return labels_filter
 
-    def get_labels_color(self, label, go_id_colors, child_terms=True, fillna="#e5ecf6", label_filter=None):
-        """
-        Filter the gene GO annotations and assign a color for each term given :param go_id_colors:.
-        """
-        if hasattr(self, "all_annotations"):
-            labels = self.all_annotations[label].copy(deep=True)
-        else:
-            labels = self.annotations[label].copy(deep=True)
-
-        if labels.str.contains("\||;", regex=True).any():
-            labels = labels.str.split("\||;")
-
-        if label_filter is not None:
-            # Filter only annotations in label_filter
-            if not isinstance(label_filter, set): label_filter = set(label_filter)
-            labels = labels.map(lambda x: [term for term in x if term in label_filter] if x and len(x) > 0 else None)
-
-        # Filter only annotations with an associated color
-        labels = labels.map(lambda x: [term for term in x if term in go_id_colors.index] if x and len(x) > 0 else None)
-
-        # For each node select one term
-        labels = labels.map(lambda x: sorted(x)[-1 if child_terms else 0] if x and len(x) >= 1 else None)
-        label_color = labels.map(go_id_colors)
-        if fillna:
-            label_color.fillna("#e5ecf6", inplace=True)
-        return label_color
-
-
-def filter_y_multilabel(annotations, y_label="go_id", min_count=2, dropna=False, delimiter="|"):
-    if dropna:
-        nodes_index = annotations[[SEQUENCE_COL] + [y_label]].dropna().index
-    else:
-        nodes_index = annotations[[SEQUENCE_COL]].dropna().index
-
-    if annotations.loc[nodes_index, y_label].dtypes == np.object and annotations.loc[nodes_index, y_label].str.contains(
-            delimiter, regex=True).any():
-        annotations_list = annotations.loc[nodes_index, y_label].str.split(delimiter)
-    else:
-        annotations_list = annotations.loc[nodes_index, y_label]
-
-    labels_filter = get_label_min_count_filter(annotations_list, min_count)
-    print("label {} filtered: {} with min_count={}".format(y_label, len(labels_filter), min_count))
-
-    y_labels = annotations_list.map(
-        lambda go_terms: [item for item in go_terms if item not in labels_filter] if type(go_terms) == list else [])
-
-    return y_labels
-
-
-def get_label_min_count_filter(annotation, min_count):
-    label_counts = {}
-
-    for items in annotation:
-        if not isinstance(items, list): continue
-        for item in items:
-            label_counts[item] = label_counts.setdefault(item, 0) + 1
     label_counts = pd.Series(label_counts)
     labels_filter = label_counts[label_counts < min_count].index
     return labels_filter

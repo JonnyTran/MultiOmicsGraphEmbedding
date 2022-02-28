@@ -1,14 +1,18 @@
 import itertools
 import logging
+from typing import Union, Iterable
 
 import numpy as np
 import pandas as pd
 import torch
 from pytorch_lightning import LightningModule
+from sklearn.cluster import KMeans
+from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
 
 from .metrics import Metrics
-from .utils import tensor_sizes, preprocess_input
+from .utils import tensor_sizes, preprocess_input, process_tensor_dicts, filter_samples_weights, activation
+from ..data import DGLNodeSampler, HeteroNeighborGenerator
 from ..evaluation.clustering import clustering_metrics
 
 
@@ -66,12 +70,12 @@ class ClusteringEvaluator(LightningModule):
         if not isinstance(self._embeddings, dict):
             self._embeddings = {list(self._node_ids.keys())[0]: self._embeddings}
 
-        embeddings_all, types_all, y_true = self.dataset.get_embeddings_labels(self._embeddings, self._node_ids)
+        embeddings_all, types_all, y_true = self.get_embeddings_labels(self._embeddings, self._node_ids)
 
         # Record metrics for each run in a list of dict's
         res = [{}, ] * n_runs
         for i in range(n_runs):
-            y_pred = self.dataset.predict_cluster(n_clusters=len(y_true.unique()), seed=i)
+            y_pred = self.predict_cluster(n_clusters=len(y_true.unique()), seed=i)
 
             if compare_node_types and len(self.dataset.node_types) > 1:
                 res[i].update(clustering_metrics(y_true=types_all,
@@ -88,6 +92,51 @@ class ClusteringEvaluator(LightningModule):
         res_df = pd.DataFrame(res)
         metrics = res_df.mean(0).to_dict()
         return metrics
+
+    def get_embeddings_labels(self, h_dict: dict, global_node_index: dict, cache=True):
+        if hasattr(self, "embeddings") and hasattr(self, "node_types") and hasattr(self, "labels") and cache:
+            return self.embeddings, self.node_types, self.labels
+
+        # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
+        emb_df_list = []
+        for node_type in self.dataset.node_types:
+            nid = global_node_index[node_type].cpu().numpy().astype(str)
+            n_type_id = np.core.defchararray.add(node_type[0], nid)
+
+            if isinstance(h_dict[node_type], Tensor):
+                df = pd.DataFrame(h_dict[node_type].detach().cpu().numpy(), index=n_type_id)
+            else:
+                df = pd.DataFrame(h_dict[node_type], index=n_type_id)
+            emb_df_list.append(df)
+
+        embeddings = pd.concat(emb_df_list, axis=0)
+        node_types = embeddings.index.to_series().str.slice(0, 1)
+        target_ntype = self.dataset.head_node_type
+
+        # Build vector of labels for all node types
+        if hasattr(self.dataset, "y_dict") and len(self.dataset.y_dict) > 0:
+            labels = pd.Series(
+                self.dataset.y_dict[target_ntype][global_node_index[target_ntype]].squeeze(-1).numpy(),
+                index=emb_df_list[0].index,
+                dtype=str)
+        else:
+            labels = None
+
+        # Save results
+        self.embeddings, self.node_types, self.labels = embeddings, node_types, labels
+
+        return embeddings, node_types, labels
+
+    def predict_cluster(self, n_clusters=8, n_jobs=-2, save_kmeans=False, seed=None):
+        kmeans = KMeans(n_clusters, n_jobs=n_jobs, random_state=seed)
+        logging.info(f"Kmeans with k={n_clusters}")
+        y_pred = kmeans.fit_predict(self.embeddings)
+        if save_kmeans:
+            self.kmeans = kmeans
+
+        y_pred = pd.Series(y_pred, index=self.embeddings.index, dtype=str)
+        return y_pred
+
 
 class NodeClfTrainer(ClusteringEvaluator):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
@@ -139,6 +188,9 @@ class NodeClfTrainer(ClusteringEvaluator):
         self.test_metrics.reset_metrics()
         return None
 
+    def predict(self, dataloader, node_names=None, filter_nan_labels=True):
+        raise NotImplementedError()
+
     def train_dataloader(self):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.training_idx, num_replicas=self.hparams.num_gpus,
@@ -186,8 +238,10 @@ class NodeClfTrainer(ClusteringEvaluator):
         #         nn = nn * s
         #     size += nn
         # return size
-        model_parameters = filter(lambda p: p.requires_grad, self.parameters())
-        params = sum([np.prod(p.size()) for p in model_parameters])
+        model_parameters = filter(lambda tup: tup[1].requires_grad and "embedding" not in tup[0],
+                                  self.named_parameters())
+
+        params = sum([np.prod(p.size()) for name, p in model_parameters])
         return params
 
     @property
@@ -206,6 +260,17 @@ class NodeClfTrainer(ClusteringEvaluator):
 
         effective_accum = self.trainer.accumulate_grad_batches * num_devices
         return (batches // effective_accum) * self.trainer.max_epochs
+
+    def set_fanouts(self, dataset: Union[DGLNodeSampler, HeteroNeighborGenerator], fanouts: Iterable):
+        dataset.neighbor_sizes = fanouts
+
+        if isinstance(dataset, DGLNodeSampler):
+            dataset.neighbor_sampler.fanouts = fanouts
+            dataset.neighbor_sampler.num_layers = len(fanouts)
+        elif isinstance(dataset, HeteroNeighborGenerator):
+            dataset.graph_sampler.neighbor_sampler.sizes = fanouts
+
+        print(f"Changed graph neighbor sampling sizes to {fanouts}, because method have {len(fanouts)} layers.")
 
 
 class LinkPredTrainer(NodeClfTrainer):

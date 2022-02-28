@@ -14,3 +14,4 @@
 /log/
 /datasets/
 /dataset/
+/.pytest_cache/

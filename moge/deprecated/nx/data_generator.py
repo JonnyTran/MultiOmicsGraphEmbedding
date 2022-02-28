@@ -7,7 +7,7 @@ import tensorflow as tf
 import torch
 from tensorflow import keras
 
-from moge.data.sequences import SequenceTokenizer, SEQUENCE_COL
+from moge.network.sequences import SequenceTokenizer, SEQUENCE_COL
 from moge.network.hetero import HeteroNetwork
 # import moge
 from moge.network.multi_digraph import MultiDigraphNetwork

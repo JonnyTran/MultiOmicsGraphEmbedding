@@ -1,66 +1,89 @@
 import logging
 import sys
 from argparse import ArgumentParser, Namespace
+import random
+
+from moge.data import HeteroNeighborGenerator
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
+import pytorch_lightning
 from pytorch_lightning.trainer import Trainer
-
-from pytorch_lightning.callbacks import EarlyStopping
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from moge.module.PyG.node_clf import MetaPath2Vec, LATTENodeClf
-from moge.module.cogdl.node_clf import HGT, GTN, HAN
+from moge.module.cogdl.node_clf import GTN
+from moge.module.dgl.node_clf import HAN, HGT, NARS, HGConv, R_HGNN
+from moge.data.dgl.node_generator import DGLNodeSampler
+
 from pytorch_lightning.loggers import WandbLogger
 
-from run.utils import load_node_dataset
+from run.load_data import load_node_dataset
 
 
 def train(hparams):
-    EMBEDDING_DIM = 128
-    USE_AMP = None
+    USE_AMP = False
+    CALLBACKS = None
     NUM_GPUS = hparams.num_gpus
-    MAX_EPOCHS = 1000
-    batch_order = 11
 
-    dataset = load_node_dataset(hparams.dataset, hparams.method, hparams=hparams, train_ratio=hparams.train_ratio)
+    pytorch_lightning.seed_everything(hparams.run)
 
-    METRICS = ["precision", "recall", "f1", "accuracy", "top_k" if dataset.multilabel else "ogbn-mag", ]
+    if hparams.dataset in ["ACM", "IMDB", "DBLP"]:
+        hparams.neighbor_sizes = [-1, -1]
+    elif "ogbn" in hparams.dataset:
+        hparams.neighbor_sizes = [10, 10]
+    else:
+        hparams.neighbor_sizes = [10, 10]
+
+    dataset = load_node_dataset(hparams.dataset, hparams.method, args=hparams, train_ratio=hparams.train_ratio,
+                                dataset_path=hparams.root_path)
+
+    METRICS = ["micro_f1", "macro_f1",
+               "precision", "recall", "top_k", "auroc", "aupr"
+               # dataset.name() if "ogb" in dataset.name() else "accuracy"
+               ]
 
     if hparams.method == "HAN":
-        USE_AMP = True
-        model_hparams = {
-            "embedding_dim": EMBEDDING_DIM,
-            "batch_size": 2 ** batch_order * NUM_GPUS,
-            "num_layers": 2,
-            "collate_fn": "HAN_batch",
-            "train_ratio": dataset.train_ratio,
-            "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
-            "n_classes": dataset.n_classes,
-            "lr": 0.0005 * NUM_GPUS,
+        args = {
+            'num_neighbors': 20,
+            'hidden_units': 32,
+            'num_heads': [8],
+            'dropout': 0.6,
+            'head_node_type': dataset.head_node_type,
+            'batch_size': 5000,
+            'epochs': 1000,
+            'patience': 10,
+            'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            'lr': 0.001,
+            'weight_decay': 0.001,
         }
-        model = HAN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
+        ModelClass = HAN
+        model = HAN(args, dataset, metrics=METRICS)
+
     elif hparams.method == "GTN":
         USE_AMP = True
-        model_hparams = {
-            "embedding_dim": EMBEDDING_DIM,
+        args = {
+            "embedding_dim": 128,
             "num_channels": len(dataset.metapaths),
             "num_layers": 2,
-            "batch_size": 2 ** batch_order * NUM_GPUS,
+            "batch_size": 2 ** 11 * NUM_GPUS,
             "collate_fn": "HAN_batch",
             "train_ratio": dataset.train_ratio,
-            "loss_type": "BINARY_CROSS_ENTROPY" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "lr": 0.0005 * NUM_GPUS,
+            "lr": 0.005 * NUM_GPUS,
+            "epochs": 40,
         }
-        model = GTN(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
+        ModelClass = GTN
+        model = GTN(Namespace(**args), dataset=dataset, metrics=METRICS)
 
     elif hparams.method == "MetaPath2Vec":
         USE_AMP = True
-        model_hparams = {
-            "embedding_dim": EMBEDDING_DIM,
+        args = {
+            "embedding_dim": 128,
             "walk_length": 50,
             "context_size": 7,
             "walks_per_node": 5,
@@ -70,81 +93,177 @@ def train(hparams):
             "train_ratio": dataset.train_ratio,
             "n_classes": dataset.n_classes,
             "lr": 0.01 * NUM_GPUS,
+            "epochs": 100
         }
-        model = MetaPath2Vec(Namespace(**model_hparams), dataset=dataset, metrics=METRICS)
+        ModelClass = MetaPath2Vec
+        model = MetaPath2Vec(Namespace(**args), dataset=dataset, metrics=METRICS)
 
     elif hparams.method == "HGT":
-        USE_AMP = False
-        model_hparams = {
-            "embedding_dim": EMBEDDING_DIM,
-            "num_channels": len(dataset.metapaths),
-            "n_layers": 2,
-            "attn_heads": 8,
+        args = {
+            "embedding_dim": 128,
+            "fanouts": [10, 10],
+            "batch_size": 2 ** 11,
+            "activation": "relu",
+            "attn_heads": 4,
+            "attn_activation": "sharpening",
             "attn_dropout": 0.2,
-            "prev_norm": True,
-            "last_norm": True,
-            "nb_cls_dense_size": 0, "nb_cls_dropout": 0.0,
-            "use_class_weights": False,
-            "batch_size": 2 ** batch_order,
-            "n_epoch": MAX_EPOCHS,
-            "train_ratio": dataset.train_ratio,
+            "nb_cls_dense_size": 0,
+            "nb_cls_dropout": 0.2,
             "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
             "n_classes": dataset.n_classes,
-            "collate_fn": "collate_HGT_batch",
-            "lr": 0.001,  # Not used here, defaults to 1e-3
+            "use_norm": True,
+            "use_class_weights": False,
+            "lr": 0.001,
+            "momentum": 0.9,
+            "weight_decay": 1e-2,
+            'epochs': 100,
         }
-        model = HGT(Namespace(**model_hparams), dataset, metrics=METRICS)
+        ModelClass = HGT
+        model = HGT(Namespace(**args), dataset, metrics=METRICS)
+
+    elif hparams.method == "NARS":
+        args = {
+            'R': 2,
+            'ff_layer': 2,
+            'num_subsets': min(8, len(dataset.G.etypes) ** len(dataset.G.etypes) - 1),
+            'num_hidden': 256,
+            #     'use_relation_subsets': "../MultiOmicsGraphEmbedding/moge/module/dgl/NARS/sample_relation_subsets/examples/mag",
+            'input_dropout': True,
+            'dropout': 0.5,
+            'head_node_type': dataset.head_node_type,
+            'batch_size': 10000,
+            'epochs': 200,
+            'patience': 10,
+            'lr': 0.001,
+            'weight_decay': 0.0,
+        }
+        ModelClass = NARS
+        model = NARS(Namespace(**args), dataset, metrics=METRICS)
+
+    elif hparams.method == "HGConv":
+        args = {
+            'seed': hparams.run,
+            'head_node_type': dataset.head_node_type,
+            'num_heads': 8,  # Number of attention heads
+            'hidden_units': 32,
+            'dropout': 0.5,
+            'n_layers': 2,
+            'batch_size': 3000,  # the number of graphs to train in each batch
+            'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
+            'optimizer': 'adam',
+            'weight_decay': 0.0,
+            'residual': True,
+            'epochs': 200,
+            'patience': 50,
+            'learning_rate': 0.001,
+            'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+        }
+        ModelClass = HGConv
+        model = HGConv(args, dataset, metrics=METRICS)
+
+    elif hparams.method == "R_HGNN":
+        args = {
+            "head_node_type": dataset.head_node_type,
+            'seed': hparams.run,
+            'learning_rate': 0.001,
+            'num_heads': 8,
+            'hidden_units': 64,
+            'relation_hidden_units': 8,
+            'dropout': 0.5,
+            'n_layers': 2,
+            'residual': True,
+            'batch_size': 1280,  # the number of nodes to train in each batch
+            'node_neighbors_min_num': 10,  # number of sampled edges for each type for each GNN layer
+            'optimizer': 'adam',
+            'weight_decay': 0.0,
+            'epochs': 200,
+            'patience': 50,
+            'loss_type': "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+        }
+        ModelClass = R_HGNN
+        model = R_HGNN(args, dataset, metrics=METRICS)
 
     elif "LATTE" in hparams.method:
         USE_AMP = False
-        num_gpus = 1
 
+        extra_args = {}
         if "-1" in hparams.method:
             t_order = 1
+            batch_order = 12
         elif "-2" in hparams.method:
             t_order = 2
+            batch_order = 11
+
         elif "-3" in hparams.method:
             t_order = 3
+            batch_order = 10
+
+            extra_args["fanouts"] = [10, 10, 10]
         else:
             t_order = 2
 
-        model_hparams = {
-            "embedding_dim": EMBEDDING_DIM,
-            "n_layers": t_order,
-            "batch_size": 2 ** batch_order * max(num_gpus, 1),
-            "nb_cls_dense_size": 0,
-            "nb_cls_dropout": 0.4,
+        args = {
+            "embedding_dim": 128,
+            "layer_pooling": "order_concat",
+
+            "n_layers": len(dataset.neighbor_sizes),
+            "t_order": t_order,
+            "batch_size": int(2 ** batch_order),
+            **extra_args,
+
+            "attn_heads": 4,
+            "attn_activation": "LeakyReLU",
+            "attn_dropout": 0.3,
+
+            "batchnorm": False,
+            "layernorm": False,
             "activation": "relu",
-            "attn_heads": 2,
-            "attn_activation": "sharpening",
-            "attn_dropout": 0.2,
-            "loss_type": "BCE" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
-            "use_proximity": True if "proximity" in hparams.method else False,
-            "neg_sampling_ratio": 2.0,
+            "dropout": 0.3,
+            "input_dropout": True,
+
+            "nb_cls_dense_size": 0,
+            "nb_cls_dropout": 0.5,
+
+            "edge_threshold": 0.0,
+            "edge_sampling": False,
+
+            "head_node_type": dataset.head_node_type,
+
             "n_classes": dataset.n_classes,
             "use_class_weights": False,
-            "lr": 0.001 * num_gpus,
-            "momentum": 0.9,
-            "weight_decay": 1e-2,
+            "loss_type": "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY",
+            "stochastic_weight_avg": False,
+            "lr": 0.001,
+            "epochs": 300,
+            "patience": 10,
+            "weight_decay": 0.0,
+            "lr_annealing": None,
         }
 
-        model_hparams.update(hparams.__dict__)
+        args.update(hparams.__dict__)
+        model = LATTENodeClf(Namespace(**args), dataset, collate_fn="neighbor_sampler", metrics=METRICS)
 
-        metrics = ["precision", "recall", "micro_f1",
-                   "accuracy" if dataset.multilabel else "ogbn-mag", "top_k"]
+        CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False),
+                     ModelCheckpoint(monitor='val_loss',
+                                     filename=model.name() + '-' + dataset.name() + '-{epoch:02d}-{val_loss:.3f}'),
+                     ]
 
-        model = LATTENodeClf(Namespace(**model_hparams), dataset, collate_fn="neighbor_sampler", metrics=metrics)
+    else:
+        raise Exception(f"Unknown model {hparams.model}")
 
-    wandb_logger = WandbLogger(name=model.name(),
-                               tags=[dataset.name()],
-                               project="multiplex-comparison")
-    wandb_logger.log_hyperparams(model_hparams)
+    if CALLBACKS is None and "patience" in args:
+        CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False)]
+
+    wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred", log_model=False)
+    wandb_logger.log_hyperparams(args)
 
     trainer = Trainer(
-        gpus=NUM_GPUS, auto_select_gpus=True,
-        distributed_backend='dp' if NUM_GPUS > 1 else None,
-        max_epochs=MAX_EPOCHS,
-        callbacks=[EarlyStopping(monitor='val_loss', patience=10, min_delta=0.0001, strict=False)],
+        gpus=random.sample([0, 1, 2], NUM_GPUS),
+        auto_select_gpus=True,
+        distributed_backend='ddp' if NUM_GPUS > 1 else None,
+        max_epochs=args["epochs"],
+        stochastic_weight_avg=args["stochastic_weight_avg"] if "stochastic_weight_avg" in args else False,
+        callbacks=CALLBACKS,
         logger=wandb_logger,
         weights_summary='top',
         amp_level='O1' if USE_AMP else None,
@@ -152,32 +271,43 @@ def train(hparams):
     )
 
     trainer.fit(model)
-    # trainer.fit(model, train_dataloader=model.valtrain_dataloader(), val_dataloaders=model.test_dataloader())
 
-    model.register_hooks()
-
+    # model.register_hooks()
+    if "LATTE" in hparams.method and trainer.checkpoint_callback is not None and hasattr(
+            trainer.checkpoint_callback, "best_model_path"):
+        model = LATTENodeClf.load_from_checkpoint(trainer.checkpoint_callback.best_model_path,
+                                                  hparams=Namespace(**args),
+                                                  dataset=dataset,
+                                                  metrics=METRICS)
+        print(trainer.checkpoint_callback.best_model_path)
     trainer.test(model)
-
-    wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
+    # wandb_logger.log_metrics(model.clustering_metrics(n_runs=10, compare_node_types=True))
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    # parametrize the network
+
+    parser.add_argument('--method', type=str, default="HAN")
+
     parser.add_argument('--embedding_dim', type=int, default=128)
     parser.add_argument('--run', type=int, default=0)
-    parser.add_argument('--inductive', type=bool, default=True)
+    parser.add_argument('--inductive', type=bool, default=False)
 
     parser.add_argument('--dataset', type=str, default="ACM")
-    parser.add_argument('--method', type=str, default="MetaPath2Vec")
+    parser.add_argument('--use_emb', type=str,
+                        default="/home/jonny/PycharmProjects/MultiOmicsGraphEmbedding/moge/module/dgl/NARS/")
+    parser.add_argument('--root_path', type=str,
+                        default="/home/jonny/Bioinformatics_ExternalData/OGB/")
+
     parser.add_argument('--train_ratio', type=float, default=None)
 
+    # Ablation study
     parser.add_argument('--disable_alpha', type=bool, default=False)
     parser.add_argument('--disable_beta', type=bool, default=False)
     parser.add_argument('--disable_concat', type=bool, default=False)
-    parser.add_argument('--attn_activation', type=str, default=None)
 
     parser.add_argument('--num_gpus', type=int, default=1)
+
 
     # add all the available options to the trainer
     args = parser.parse_args()

@@ -39,15 +39,18 @@ class ClassificationLoss(nn.Module):
             self.criterion = torch.nn.MultiLabelMarginLoss(weight=class_weight, reduction=reduction)
         elif loss_type == "KL_DIVERGENCE":
             self.criterion = torch.nn.KLDivLoss(reduction=reduction)
+        elif loss_type == "PU_LOSS_WITH_LOGITS":
+            assert multilabel
+            self.criterion = PULoss(prior=torch.tensor(0.5))
         else:
             raise TypeError(f"Unsupported loss type:{loss_type}")
 
-    def forward(self, logits, target, weights=None, dense_weight: torch.Tensor = None):
+    def forward(self, logits, targets, weights=None, dense_weight: torch.Tensor = None):
         """
 
         Args:
             logits (torch.Tensor): y_pred
-            target (torch.Tensor): y_true
+            targets (torch.Tensor): y_true
             weights (): Sample weights.
             dense_weight (torch.Tensor): A tensor of the Dense layer's weights, only used when using recursive regularization.
 
@@ -55,22 +58,60 @@ class ClassificationLoss(nn.Module):
 
         """
         if self.multilabel:
-            assert self.loss_type in ["BCE_WITH_LOGITS", "BCE",
-                                      "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"]
-            target = target.type_as(logits)
+            assert self.loss_type in ["BCE_WITH_LOGITS", "BCE", "PU_LOSS_WITH_LOGITS",
+                                      "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"], self.loss_type
+            targets = targets.type_as(logits)
         else:
             if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
                                       "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
-                target = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[target]
+                targets = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[targets]
 
-        loss = self.criterion.forward(logits, target)
+        loss = self.criterion.forward(logits, targets)
 
         if (self.reduction == None or self.reduction == "none") and weights is not None:
+            print("got")
             loss = (weights * loss).sum() / weights.sum()
 
         return loss
 
 
+class PULoss(nn.Module):
+    """wrapper of loss function for PU learning"""
+    def __init__(self, prior, loss=(lambda x: torch.sigmoid(-x)),
+                 gamma=1, beta=0, nnPU=False):
+        super(PULoss, self).__init__()
+        if not 0 < prior < 1:
+            raise NotImplementedError("The class prior should be in (0, 1)")
+        self.prior = prior
+        self.gamma = gamma
+        self.beta = beta
+        self.loss_func = loss  # lambda x: (torch.tensor(1., device=x.device) - torch.sign(x))/torch.tensor(2, device=x.device)
+        self.nnPU = nnPU
+        self.positive = 1
+        self.unlabeled = -1
+        self.min_count = torch.tensor(1.)
+
+    def forward(self, y_pred, y_true):
+        assert (y_pred.shape == y_true.shape)
+        positive, unlabeled = y_true == self.positive, y_true == self.unlabeled
+        positive, unlabeled = positive.type(torch.float), unlabeled.type(torch.float)
+        if y_pred.is_cuda:
+            self.min_count = self.min_count.type_as(y_pred)
+            self.prior = self.prior.type_as(y_pred)
+        n_positive, n_unlabeled = torch.max(self.min_count, torch.sum(positive)), torch.max(self.min_count,
+                                                                                            torch.sum(unlabeled))
+
+        y_positive = self.loss_func(positive * y_pred) * positive
+        y_positive_inv = self.loss_func(-positive * y_pred) * positive
+        y_unlabeled = self.loss_func(-unlabeled * y_pred) * unlabeled
+
+        positive_risk = self.prior * torch.sum(y_positive) / n_positive
+        negative_risk = - self.prior * torch.sum(y_positive_inv) / n_positive + torch.sum(y_unlabeled) / n_unlabeled
+
+        if negative_risk < -self.beta and self.nnPU:
+            return -self.gamma * negative_risk
+        else:
+            return positive_risk + negative_risk
 
 class LinkPredLoss(nn.Module):
     def __init__(self):

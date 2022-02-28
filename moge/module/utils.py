@@ -2,13 +2,26 @@ from collections import Iterable
 
 import numpy as np
 import torch
+from torch import Tensor
 
 
-def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights: torch.Tensor, max_mode=False):
+def activation(y_pred, loss_type):
+    # Apply softmax/sigmoid activation if needed
+    if "LOGITS" in loss_type or "FOCAL" in loss_type:
+        if "SOFTMAX" in loss_type:
+            y_pred = torch.softmax(y_pred, dim=1)
+        else:
+            y_pred = torch.sigmoid(y_pred)
+    elif "NEGATIVE_LOG_LIKELIHOOD" == loss_type or "SOFTMAX_CROSS_ENTROPY" in loss_type:
+        y_pred = torch.softmax(y_pred, dim=1)
+    return y_pred
+
+
+def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor, max_mode=False):
     if weights is None or weights.shape == None or weights.numel() == 0:
         return Y_hat, Y
 
-    if not isinstance(weights, torch.Tensor):
+    if not isinstance(weights, Tensor):
         weights = torch.tensor(weights)
 
     if max_mode:
@@ -29,14 +42,18 @@ def filter_samples(Y_hat: torch.Tensor, Y: torch.Tensor, weights: torch.Tensor, 
     return Y_hat, Y
 
 
-def filter_samples_weights(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
-    if weights is None or weights.shape == None:
+def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights, return_index=False):
+    if weights is None or \
+            (isinstance(weights, (Tensor, np.ndarray)) and weights.shape == None):
         return Y_hat, Y, None
 
-    if isinstance(weights, torch.Tensor):
+    if isinstance(weights, Tensor):
         idx = torch.nonzero(weights).view(-1)
     else:
         idx = torch.tensor(np.nonzero(weights)[0])
+
+    if return_index:
+        return idx
 
     if Y.dim() > 1:
         Y = Y[idx, :]
@@ -51,6 +68,32 @@ def filter_samples_weights(Y_hat: torch.Tensor, Y: torch.Tensor, weights):
     return Y_hat, Y, weights[idx]
 
 
+def process_tensor_dicts(y_pred, y_true, weights=None):
+    if isinstance(y_true, dict) and isinstance(y_pred, dict):
+        ntypes = list(y_pred.keys())
+        # Filter node types which have no data
+        ntypes = [ntype for ntype in ntypes if y_true[ntype].sum() > 0]
+
+        y_true = torch.cat([y_true[ntype] for ntype in ntypes], dim=0)
+        y_pred = torch.cat([y_pred[ntype] for ntype in ntypes], dim=0)
+        if isinstance(weights, dict):
+            weights = torch.cat([weights[ntype] for ntype in ntypes], dim=0)
+
+    elif isinstance(y_true, dict) and isinstance(y_pred, Tensor):
+        head_node_type = list({ntype for ntype, label in y_true.items() if label.numel() > 0}).pop()
+        y_true = y_true[head_node_type]
+        if isinstance(weights, dict):
+            weights = weights[head_node_type]
+
+    elif isinstance(y_true, Tensor) and isinstance(y_pred, dict):
+        head_node_type = list(y_pred.keys()).pop()
+        y_pred = y_pred[head_node_type]
+        if isinstance(weights, dict):
+            weights = weights[head_node_type]
+
+    return y_pred, y_true, weights
+
+
 def tensor_sizes(input):
     if isinstance(input, dict):
         return {metapath if not isinstance(metapath, tuple) else \
@@ -63,7 +106,7 @@ def tensor_sizes(input):
         return [tensor_sizes(v) for v in input]
     else:
         if input is not None and hasattr(input, "shape"):
-            if isinstance(input, torch.Tensor) and input.dim() == 0:
+            if isinstance(input, Tensor) and input.dim() == 0:
                 return input.item()
 
             return list(input.shape)
@@ -87,7 +130,7 @@ def process_tensor(input, device=None, dtype=None, half=False):
     if input is None:
         return input
 
-    if not isinstance(input, torch.Tensor):
+    if not isinstance(input, Tensor):
         input = torch.tensor(input)
 
     if dtype:

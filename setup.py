@@ -2,9 +2,9 @@ from setuptools import setup, find_packages
 
 requirements = [
     'numpy', 'pandas', 'cmake', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph',
-    'openomics', "tensorflow",
+    'openomics', "colorhash",
     'chart-studio', "fa2", "scikit-multilearn", "MulticoreTSNE", "gseapy", "focal-loss", "obonet", "wandb",
-    "pytorch-lightning", "pytorch_ignite", "ogb"
+    "pytorch-lightning", "pytorch_ignite", "ogb", "torchmetrics",
 ]
 
 setup(
