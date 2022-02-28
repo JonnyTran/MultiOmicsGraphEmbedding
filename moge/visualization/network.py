@@ -5,26 +5,30 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from fa2 import ForceAtlas2
 from typing import Dict, List
 
-forceatlas2 = ForceAtlas2(
-    # Behavior alternatives
-    outboundAttractionDistribution=True,  # Dissuade hubs
-    linLogMode=False,  # NOT IMPLEMENTED
-    adjustSizes=False,  # Prevent overlap (NOT IMPLEMENTED)
-    edgeWeightInfluence=1.0,
-    # Performance
-    jitterTolerance=1.0,  # Tolerance
-    barnesHutOptimize=True,
-    barnesHutTheta=1.2,
-    multiThreaded=False,
-    # Tuning
-    scalingRatio=2.0,
-    strongGravityMode=True,
-    gravity=1.0,
-    # Log
-    verbose=False)
+try:
+    from fa2 import ForceAtlas2
+
+    forceatlas2 = ForceAtlas2(
+        # Behavior alternatives
+        outboundAttractionDistribution=True,  # Dissuade hubs
+        linLogMode=False,  # NOT IMPLEMENTED
+        adjustSizes=False,  # Prevent overlap (NOT IMPLEMENTED)
+        edgeWeightInfluence=1.0,
+        # Performance
+        jitterTolerance=1.0,  # Tolerance
+        barnesHutOptimize=True,
+        barnesHutTheta=1.2,
+        multiThreaded=False,
+        # Tuning
+        scalingRatio=2.0,
+        strongGravityMode=True,
+        gravity=1.0,
+        # Log
+        verbose=False)
+except:
+    pass
 
 def node_degree_viz(node_degrees, x_label, y_label, width=500, height=90):
     fig = go.Figure(data=go.Heatmap(z=node_degrees.applymap(lambda x: np.log10(x + 1)),
