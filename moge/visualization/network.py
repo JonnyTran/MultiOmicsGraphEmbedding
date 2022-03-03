@@ -110,24 +110,6 @@ def graph_viz3d(g: nx.Graph,
                 edge_label: str = None, max_edges=10000,
                 title=None, width=1000, height=800,
                 pos=None, showlegend=True, **kwargs):
-    """
-
-    :param g: 
-    :param nodelist: 
-    :param node_symbol: The symbol of a node.
-    :param node_color (pd.Series): The color of each node markers. A pd.Series indexed by nodelist with values of either categorical string, hex color, or a tuple of RGB colors.
-    :param nodeline_color (pd.Series, Optional): The outline color of each node.
-    :param node_text: 
-    :param edge_label: 
-    :param max_edges: 
-    :param title: 
-    :param width: 
-    :param height: 
-    :param pos: 
-    :param showlegend: 
-    :param kwargs: 
-    :return: 
-    """
     if pos is None:
         raise Exception("Must provide pos as dict, i.e. {<node>:<3d coordinates>}")
 
