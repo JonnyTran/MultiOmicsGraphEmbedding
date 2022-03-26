@@ -19,8 +19,8 @@ from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
-from moge.graph.multi_digraph import MultiDigraphNetwork
 from moge.model.metrics import precision_d, recall_d, precision, recall
+from moge.network.multi_digraph import MultiDigraphNetwork
 
 
 def contrastive_loss(y_true, y_pred, margin=1.0):

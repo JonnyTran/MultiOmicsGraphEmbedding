@@ -2,9 +2,10 @@ from argparse import Namespace
 
 import networkx as nx
 from moge.evaluation.utils import sample_edges
-from moge.graph.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
-from moge.graph.semantic_similarity import *
-from moge.graph.train_test_split import TrainTestSplit, mask_test_edges, mask_test_edges_by_nodes, \
+
+from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
+from moge.network.semantic_similarity import *
+from moge.network.train_test_split import TrainTestSplit, mask_test_edges, mask_test_edges_by_nodes, \
     stratify_train_test
 
 UNDIRECTED = False

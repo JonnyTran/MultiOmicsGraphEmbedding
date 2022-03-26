@@ -5,9 +5,9 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import tensorflow as tf
-from moge.graph.sequences import MultiSequenceTokenizer
+from moge.network.sequences import MultiSequenceTokenizer
 
-from moge.graph.hetero import HeteroNetwork
+from moge.network.hetero import HeteroNetwork
 from .subgraph_generator import SubgraphGenerator
 
 

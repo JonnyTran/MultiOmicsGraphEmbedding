@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 import torch
-from moge.graph.sequences import SequenceTokenizer, SEQUENCE_COL
+from moge.network.sequences import SequenceTokenizer, SEQUENCE_COL
 from tensorflow import keras
 
-from moge.graph.hetero import HeteroNetwork
+from moge.network.hetero import HeteroNetwork
 # import moge
-from moge.graph.multi_digraph import MultiDigraphNetwork
+from moge.network.multi_digraph import MultiDigraphNetwork
 
 
 class DataGenerator(keras.utils.Sequence, SequenceTokenizer):

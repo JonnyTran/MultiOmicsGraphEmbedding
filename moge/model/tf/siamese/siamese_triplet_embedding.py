@@ -11,7 +11,7 @@ from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
 from moge.dataset import SampledTripletDataGenerator
-from moge.graph.multi_digraph import MultiDigraphNetwork
+from moge.network.multi_digraph import MultiDigraphNetwork
 
 
 class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):

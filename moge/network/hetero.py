@@ -10,9 +10,9 @@ from openomics import MultiOmics
 from openomics.utils.df import concat_uniques
 from torch_geometric.data import HeteroData
 
-from moge.graph.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
-from moge.graph.base import SEQUENCE_COL
-from moge.graph.train_test_split import TrainTestSplit, stratify_train_test
+from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
+from moge.network.base import SEQUENCE_COL
+from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):

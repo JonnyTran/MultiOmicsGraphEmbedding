@@ -5,7 +5,7 @@ from moge.dataset.networkx.sampled_generator import SampledDataGenerator
 from moge.dataset.siamese.pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
     UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
 
-from moge.graph.multi_digraph import MultiDigraphNetwork, EPSILON
+from moge.network.multi_digraph import MultiDigraphNetwork, EPSILON
 
 
 def sparse_matrix_to_sparse_tensor(X):
