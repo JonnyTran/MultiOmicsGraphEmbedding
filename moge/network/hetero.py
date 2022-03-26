@@ -208,7 +208,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         for ntype in self.node_types:
             annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
 
-            node_feats = []
+            # node_feats = []
             for col in self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL]):
                 if col in self.feature_transformer:
                     feat_filtered = filter_multilabel(df=annotations,
@@ -216,10 +216,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                       dropna=False, delimiter=self.delimiter)
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
-                    print(col, feat.shape)
-                    node_feats.append(feat)
+                    G[ntype].x[col] = feat
+                    # node_feats.append(feat)
 
-            G.nodes[ntype].x = torch.from_numpy(np.stack(node_feats, axis=1))
+            # G[ntype].x[col] = torch.from_numpy(np.hstack(node_feats))
 
         return G
 

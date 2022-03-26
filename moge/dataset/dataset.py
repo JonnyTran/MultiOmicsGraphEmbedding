@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
+from cogdl.datasets.han_data import HANDataset
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -18,6 +19,7 @@ from sklearn.cluster import KMeans
 from torch.utils import data
 from torch import Tensor
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
+from torch_geometric.typing import Adj
 from torch_geometric.utils import is_undirected
 from torch_sparse import transpose
 
@@ -95,13 +97,17 @@ class Network:
         return pos
 
 
-
 class HeteroNetDataset(torch.utils.data.Dataset, Network):
-    def __init__(self, dataset: Union[
-        PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset, DglNodePropPredDataset, DglLinkPropPredDataset],
-                 node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
-                 edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
-                 inductive: bool = False, **kwargs):
+    def __init__(self,
+                 dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
+                                DglNodePropPredDataset, DglLinkPropPredDataset],
+                 node_types: List[str] = None,
+                 metapaths: List[Tuple[str, str, str]] = None,
+                 head_node_type: str = None,
+                 edge_dir: str = "in",
+                 reshuffle_train: float = None,
+                 add_reverse_metapaths: bool = True,
+                 inductive: bool = False, ):
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths
@@ -207,7 +213,8 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         if hasattr(self, "class_counts"):
             self.class_weight = torch.sqrt(torch.true_divide(1, torch.tensor(self.class_counts, dtype=torch.float)))
-            assert self.class_weight.numel() == self.n_classes, f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
+            assert self.class_weight.numel() == self.n_classes, \
+                f"self.class_weight {self.class_weight.numel()}, n_classes {self.n_classes}"
 
         assert hasattr(self, "num_nodes_dict")
 
@@ -375,32 +382,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             raise NotImplementedError(f"{metapath} not supported")
         return reverse_metapath
 
-    @staticmethod
-    def sps_adj_to_edgeindex(adj):
-        adj = adj.tocoo(copy=False)
-        return torch.tensor(np.vstack((adj.row, adj.col)).astype("long"))
-
-    def process_BlogCatalog6k(self, dataset, train_ratio):
-        data = loadmat(dataset)  # From http://dmml.asu.edu/users/xufei/Data/blogcatalog6k.mat
-        self._name = "BlogCatalog3"
-        self.y_index_dict = {"user": torch.arange(data["friendship"].shape[0]),
-                             "tag": torch.arange(data["tagnetwork"].shape[0])}
-        self.node_types = ["user", "tag"]
-        self.head_node_type = "user"
-        self.y_dict = {self.head_node_type: torch.tensor(data["usercategory"].toarray().astype(int))}
-        print("self.y_dict", {k: v.shape for k, v in self.y_dict.items()})
-
-        self.metapaths = [("user", "usertag", "tag"),
-                          ("tag", "tagnetwork", "tag"),
-                          ("user", "friendship", "user"), ]
-        self.edge_index_dict = {
-            ("user", "friendship", "user"): self.sps_adj_to_edgeindex(data["friendship"]),
-            ("user", "usertag", "tag"): self.sps_adj_to_edgeindex(data["usertag"]),
-            ("tag", "tagnetwork", "tag"): self.sps_adj_to_edgeindex(data["tagnetwork"])}
-        self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
-        assert train_ratio is not None
-        self.training_idx, self.validation_idx, self.testing_idx = self.split_train_val_test(train_ratio)
-
     def process_COGDLdataset(self, dataset, metapath, node_types, train_ratio):
         data = dataset.data
         assert self.head_node_type is not None
@@ -446,19 +427,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
 
         self.data = data
 
-    def process_stellargraph(self, dataset, metapath, node_types, train_ratio):
-        graph = dataset.load()
-        self.node_types = graph.node_types if node_types is None else node_types
-        self.metapaths = graph.metapaths
-        self.y_index_dict = {k: torch.tensor(graph.nodes(k, use_ilocs=True)) for k in graph.node_types}
-
-        edgelist = graph.edges(include_edge_type=True, use_ilocs=True)
-        edge_index_dict = {path: [] for path in metapath}
-        for u, v, t in edgelist:
-            edge_index_dict[metapath[t]].append([u, v])
-        self.edge_index_dict = {metapath: torch.tensor(edges, dtype=torch.long).T for metapath, edges in
-                                edge_index_dict.items()}
-        self.training_node, self.validation_node, self.testing_node = self.split_train_val_test(train_ratio)
 
     def process_inmemorydataset(self, dataset: PyGInMemoryDataset, train_ratio):
         data = dataset[0]
@@ -484,46 +452,54 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.training_idx, batch_size=batch_size,
                                  shuffle=True, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        mode="train"),
+                                 collate_fn=collate_fn if callable(collate_fn) \
+                                     else self.get_collate_fn(collate_fn, mode="train"),
                                  **kwargs)
         return loader
 
-    def valtrain_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        loader = data.DataLoader(torch.cat([self.training_idx, self.validation_idx]), batch_size=batch_size,
-                                 shuffle=True, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        mode="validation",
-                                                                                                        ), **kwargs)
-        return loader
-
-    def trainvalidtest_dataloader(self, collate_fn=None, batch_size=None, num_workers=0, **kwargs):
-        all_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-        loader = data.DataLoader(all_idx, batch_size=all_idx.shape[0],
-                                 shuffle=True, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        mode="validation",
-                                                                                                        ), **kwargs)
-        return loader
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.validation_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        mode="validation",
-                                                                                                        ), **kwargs)
+                                 collate_fn=collate_fn if callable(collate_fn) \
+                                     else self.get_collate_fn(collate_fn, mode="validation", ),
+                                 **kwargs)
         return loader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         loader = data.DataLoader(self.testing_idx, batch_size=batch_size,
                                  shuffle=False, num_workers=num_workers,
-                                 collate_fn=collate_fn if callable(collate_fn) else self.get_collate_fn(collate_fn,
-                                                                                                        mode="testing",
-                                                                                                        ), **kwargs)
+                                 collate_fn=collate_fn if callable(collate_fn) \
+                                     else self.get_collate_fn(collate_fn, mode="testing", ),
+                                 **kwargs)
         return loader
 
-    def get_collate_fn(self, collate_fn: str, mode=None, **kwargs):
+    def filter_edge_index(self, edge_index: Union[Tensor, Tuple[Tensor, Tensor]], allowed_nodes: np.ndarray) -> Tuple[
+        Tensor, Tensor]:
+        if isinstance(edge_index, tuple):
+            edge_index = edge_index[0]
+            values = edge_index[1]
+        else:
+            edge_index = edge_index
+            values = torch.ones(edge_index.size(1))
 
+        mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
+        edge_index = edge_index[:, mask]
+        values = values[mask]
+
+        return (edge_index, values)
+
+    def get_train_ratio(self):
+        if self.validation_idx.size() != self.testing_idx.size() or not (self.validation_idx == self.testing_idx).all():
+            train_ratio = self.training_idx.numel() / \
+                          sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
+        else:
+            train_ratio = self.training_idx.numel() / sum([self.training_idx.numel(), self.validation_idx.numel()])
+        return train_ratio
+
+
+class HANDataset(HeteroNetDataset):
+    def get_collate_fn(self, collate_fn: str, mode=None, **kwargs):
         def collate_wrapper(iloc):
             if "HAN_batch" in collate_fn:
                 return self.collate_HAN_batch(iloc, mode=mode)
@@ -535,24 +511,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 raise Exception(f"Correct collate function {collate_fn} not found.")
 
         return collate_wrapper
-
-    def filter_edge_index(self, input, allowed_nodes):
-        if isinstance(input, tuple):
-            edge_index = input[0]
-            values = edge_index[1]
-        else:
-            edge_index = input
-            values = None
-
-        mask = np.isin(edge_index[0], allowed_nodes) & np.isin(edge_index[1], allowed_nodes)
-        edge_index = edge_index[:, mask]
-
-        if values == None:
-            values = torch.ones(edge_index.size(1))
-        else:
-            values = values[mask]
-
-        return (edge_index, values)
 
     def collate_HAN(self, iloc, mode=None):
         if not isinstance(iloc, Tensor):
@@ -603,7 +561,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             iloc = torch.tensor(iloc)
 
         X_batch, y, weights = self.sample(iloc, mode=mode)  # uses HeteroNetSampler PyG sampler method
-        print("X_batch", tensor_sizes(X_batch))
 
         X = {}
         X["adj"] = [(X_batch["edge_index_dict"][metapath], torch.ones(X_batch["edge_index_dict"][metapath].size(1))) \
@@ -635,11 +592,3 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         X["edge_time"] = None
 
         return X, y, weights
-
-    def get_train_ratio(self):
-        if self.validation_idx.size() != self.testing_idx.size() or not (self.validation_idx == self.testing_idx).all():
-            train_ratio = self.training_idx.numel() / \
-                          sum([self.training_idx.numel(), self.validation_idx.numel(), self.testing_idx.numel()])
-        else:
-            train_ratio = self.training_idx.numel() / sum([self.training_idx.numel(), self.validation_idx.numel()])
-        return train_ratio
