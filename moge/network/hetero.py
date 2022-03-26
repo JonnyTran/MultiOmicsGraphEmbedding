@@ -19,10 +19,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
     def __init__(self, multiomics: MultiOmics, node_types: list, layers: Dict[Tuple[str], nx.Graph],
                  annotations=True, ) -> None:
         """
-        :param multiomics: MultiOmics object containing annotations
-        :param node_types: Node types
-        :param layers: A dict of edge types tuple and networkx.Graph/Digraph containing heterogeneous edges
-        :param annotations: Whether to process annotation data, default True
+
+        Args:
+            multiomics: MultiOmics object containing annotations
+            node_types: Node types
+            layers: A dict of edge types tuple and networkx.Graph/Digraph containing heterogeneous edges
+            annotations: Whether to process annotation data, default True
         """
         self.multiomics: MultiOmics = multiomics
         self.node_types = node_types
