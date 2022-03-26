@@ -3,9 +3,9 @@ import torch.nn.functional as F
 from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from moge.data import HeteroNetDataset
-from moge.module.PyG.latte import LATTE
-from moge.module.losses import LinkPredLoss
+from moge.dataset import HeteroGraphDataset
+from moge.model.PyG.latte import LATTE
+from moge.model.losses import LinkPredLoss
 from ..trainer import LinkPredTrainer
 
 
@@ -97,7 +97,7 @@ class DistMulti(torch.nn.Module):
 
 
 class LATTELinkPred(LinkPredTrainer):
-    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["obgl-biokg"],
+    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["obgl-biokg"],
                  collate_fn="neighbor_sampler") -> None:
         super(LATTELinkPred, self).__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type

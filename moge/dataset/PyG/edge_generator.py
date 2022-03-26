@@ -1,15 +1,15 @@
 import numpy as np
 import pandas as pd
 import torch
+from moge.datasetset.PyG.node_generator import HeteroNeighborGenerator
+from moge.datasetset.graph import HeteroGraphDataset
+from moge.datasetset.utils import merge_node_index
 from ogb.linkproppred import PygLinkPropPredDataset
 
-from moge.data.PyG.node_generator import HeteroNeighborGenerator
-from moge.data.network import HeteroNetDataset
-from moge.data.utils import merge_node_index
-from moge.module.PyG.utils import is_negative
+from moge.model.PyG.utils import is_negative
 
 
-class EdgeDataset(HeteroNetDataset):
+class EdgeDataset(HeteroGraphDataset):
     DEFAULT_NODE_TYPE = "self"
     DEFAULT_METAPATH = (DEFAULT_NODE_TYPE, "edge", DEFAULT_NODE_TYPE)
 

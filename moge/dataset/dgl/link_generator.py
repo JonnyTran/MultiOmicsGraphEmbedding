@@ -2,10 +2,8 @@ import dgl
 import numpy as np
 import torch
 from ogb.linkproppred import DglLinkPropPredDataset
-from ogb.nodeproppred import DglNodePropPredDataset
 from torch.utils.data import DataLoader
 
-from moge.data.network import HeteroNetDataset
 from .node_generator import DGLNodeSampler
 
 

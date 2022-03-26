@@ -1,15 +1,14 @@
 import dgl
-import tqdm
-import numpy as np
 import torch
+import tqdm
 from ogb.graphproppred import DglGraphPropPredDataset
-from torch.utils.data import DataLoader
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
+from torch.utils.data import DataLoader
 
-from moge.data.network import HeteroNetDataset
+from moge.dataset.graph import HeteroGraphDataset
 
 
-class DGLGraphSampler(HeteroNetDataset):
+class DGLGraphSampler(HeteroGraphDataset):
     def __init__(self, dataset: DglGraphPropPredDataset, embedding_dim=None, add_self_loop=False, node_types=None,
                  metapaths=None, head_node_type=None, edge_dir=True, reshuffle_train: float = None,
                  add_reverse_metapaths=True, inductive=True):

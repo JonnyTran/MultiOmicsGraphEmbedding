@@ -12,14 +12,14 @@ from keras.models import Model
 from keras.models import load_model
 from keras.optimizers import RMSprop
 from keras.utils import multi_gpu_model
-from moge.data.networkx.data_generator import DataGenerator
-from moge.data.networkx.sampled_generator import SampledDataGenerator
-from moge.model.metrics import precision_d, recall_d, precision, recall
+from moge.dataset.networkx.data_generator import DataGenerator
+from moge.dataset.networkx.sampled_generator import SampledDataGenerator
 from moge.model.static_graph_embedding import ImportedGraphEmbedding
 from sklearn.base import BaseEstimator
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
+from moge.model.metrics import precision_d, recall_d, precision, recall
 from moge.network.multi_digraph import MultiDigraphNetwork
 
 

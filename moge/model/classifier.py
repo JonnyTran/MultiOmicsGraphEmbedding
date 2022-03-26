@@ -1,22 +1,16 @@
-import math
-from argparse import ArgumentParser, Namespace
+from argparse import Namespace
 from collections import OrderedDict
 from copy import deepcopy
 
 import dgl
+import dgl.function as fn
 import networkx as nx
 import numpy as np
 import torch
 from torch import nn, Tensor
-from torch_geometric.nn.inits import glorot, zeros, glorot_orthogonal
-
-import dgl.function as fn
 from torch.nn import functional as F
-from typing import Dict
-
+from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
-
-from moge.module.utils import tensor_sizes
 
 
 class HeteroRGCNLayer(nn.Module):

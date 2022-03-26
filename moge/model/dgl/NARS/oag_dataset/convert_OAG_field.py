@@ -9,9 +9,11 @@
 # https://github.com/acbull/pyHGT/blob/master/OAG/train_paper_field.py
 # Copyright (c) 2019 acbull
 
-import numpy as np
 import pickle
-from moge.module.dgl.NARS.oag_dataset.data import renamed_load
+
+import numpy as np
+
+from moge.model.dgl.NARS.oag_dataset.data import renamed_load
 
 graph = renamed_load(open("graph_CS.pk", "rb"))
 edge_list = graph.edge_list

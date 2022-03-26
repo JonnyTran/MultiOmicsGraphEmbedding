@@ -11,10 +11,10 @@ from pytorch_lightning.trainer import Trainer
 
 from pytorch_lightning.callbacks import EarlyStopping
 
-from moge.module.dgl.graph_clf import LATTEGraphClassifier
+from moge.model.dgl.graph_clf import LATTEGraphClassifier
 from pytorch_lightning.loggers import WandbLogger
 
-from run.utils import load_node_dataset, load_graph_dataset
+from run.utils import load_graph_dataset
 
 def train(hparams):
     EMBEDDING_DIM = 128

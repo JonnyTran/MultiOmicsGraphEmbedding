@@ -1,16 +1,12 @@
-from typing import Dict, Tuple
-import logging
 from collections import defaultdict
+from typing import Dict
+
+import dgl
 import numpy as np
 import pandas as pd
 import torch
-
-import dgl
-import dgl.function as fn
-from dgl.dataloading import MultiLayerNeighborSampler, MultiLayerFullNeighborSampler, NodeCollator, BlockSampler
-from dgl.sampling import sample_neighbors, select_topk, random_walk
-
-from moge.module.utils import tensor_sizes
+from dgl.dataloading import BlockSampler
+from dgl.sampling import sample_neighbors
 
 
 class ImportanceSampler(BlockSampler):

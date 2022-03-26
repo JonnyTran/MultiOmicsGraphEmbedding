@@ -1,11 +1,9 @@
-import logging
-import pprint
-import sys, random
+import random
+import sys
 from argparse import ArgumentParser, Namespace
 
 # logger = logging.getLogger("wandb")
 # logger.setLevel(logging.INFO)
-from moge.module.utils import tensor_sizes
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
@@ -14,7 +12,7 @@ from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
-from moge.module.PyG.node_clf import LATTENodeClf
+from moge.model.PyG.node_clf import LATTENodeClf
 from run.load_data import load_node_dataset
 
 

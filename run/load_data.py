@@ -2,27 +2,25 @@ import logging
 import os
 import pickle
 from argparse import Namespace
+from typing import Union
 
 import dgl
 import dill
 import numpy as np
 import torch
-from cogdl.datasets.gtn_data import ACM_GTNDataset, DBLP_GTNDataset, IMDB_GTNDataset, GTNDataset
-from cogdl.datasets.han_data import ACM_HANDataset, DBLP_HANDataset, IMDB_HANDataset
-from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
-from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
-from ogb.graphproppred import PygGraphPropPredDataset, DglGraphPropPredDataset
-from torch_geometric.datasets import AMiner
-from typing import Union
-
+from cogdl.datasets.gtn_data import GTNDataset
+from ogb.graphproppred import DglGraphPropPredDataset
+from ogb.linkproppred import PygLinkPropPredDataset
+from ogb.nodeproppred import DglNodePropPredDataset
 from openomics.database.ontology import GeneOntology
+from torch_geometric.datasets import AMiner
 
 import moge
-import moge.data.PyG.triplet_generator
-from moge.data.dgl.graph_generator import DGLGraphSampler
-from moge.data import HeteroNeighborGenerator, DGLNodeSampler
-from moge.module.dgl.NARS.data import load_acm, load_mag
-from moge.module.utils import preprocess_input
+import moge.dataset.PyG.triplet_generator
+from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler
+from moge.dataset.dgl.graph_generator import DGLGraphSampler
+from moge.model.dgl.NARS.data import load_acm, load_mag
+from moge.model.utils import preprocess_input
 
 
 def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler], path: str, skip_ntype: str = None,
@@ -201,7 +199,6 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
                                                                                   add_reverse_metapaths=hparams.use_reverse)
 
         else:
-            from moge.data import BidirectionalGenerator
 
             dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl, edge_dir=True,
                                                                                   neighbor_sizes=[

@@ -1,25 +1,12 @@
-import copy
-import numpy as np
-import pandas as pd
-from typing import Union, Dict
 from collections.abc import Iterable
+from typing import Union, Dict
 
 import torch
-from torch import nn as nn
-
 import torch.nn.functional as F
-
-import pytorch_lightning as pl
-
-import dgl
-import dgl.nn.pytorch as dglnn
-from dgl.nn.pytorch import edge_softmax, GATConv
-from dgl.utils import expand_as_pair
-from dgl.udf import EdgeBatch, NodeBatch
 from dgl.heterograph import DGLHeteroGraph, DGLBlock
-
-from moge.module.sampling import negative_sample, negative_sample_head_tail
-from moge.module.utils import preprocess_input, tensor_sizes
+from dgl.udf import EdgeBatch, NodeBatch
+from dgl.utils import expand_as_pair
+from torch import nn as nn
 
 
 class LATTE(nn.Module):

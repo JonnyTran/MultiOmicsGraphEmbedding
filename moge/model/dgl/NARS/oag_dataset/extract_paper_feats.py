@@ -5,7 +5,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import numpy as np
-from moge.module.dgl.NARS.oag_dataset.data import renamed_load
+
+from moge.model.dgl.NARS.oag_dataset.data import renamed_load
 
 graph = renamed_load(open("graph_CS.pk", "rb"))
 ntype = "paper"

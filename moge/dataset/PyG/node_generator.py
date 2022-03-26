@@ -1,15 +1,13 @@
-from typing import List, Dict, Tuple
-
 import numpy as np
 import torch
 from ogb.nodeproppred import PygNodePropPredDataset
 
-from moge.data.PyG.neighbor_sampler import NeighborSampler
-from moge.data.network import HeteroNetDataset
-from moge.module.PyG.utils import join_edge_indexes
+from moge.dataset.PyG.neighbor_sampler import NeighborSampler
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.PyG.utils import join_edge_indexes
 
 
-class HeteroNeighborGenerator(HeteroNetDataset):
+class HeteroNeighborGenerator(HeteroGraphDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, edge_dir=True,
                  resample_train=None, add_reverse_metapaths=True, inductive=False):
         self.neighbor_sizes = neighbor_sizes

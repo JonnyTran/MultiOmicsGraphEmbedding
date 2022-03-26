@@ -2,12 +2,9 @@ import math
 
 import torch
 from torch import nn, Tensor
-from torch.autograd import Variable
+from torch.nn import Transformer
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from torch.nn import Transformer, TransformerEncoder
 from transformers import BertModel
-
-from moge.module.utils import tensor_sizes
 
 
 class BertForSequenceClassification(nn.Module):

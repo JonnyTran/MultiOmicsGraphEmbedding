@@ -1,9 +1,7 @@
 import logging
+import random
 import sys
 from argparse import ArgumentParser, Namespace
-import random
-
-from moge.data import HeteroNeighborGenerator
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -14,10 +12,9 @@ import pytorch_lightning
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
-from moge.module.PyG.node_clf import MetaPath2Vec, LATTENodeClf
-from moge.module.cogdl.node_clf import GTN
-from moge.module.dgl.node_clf import HAN, HGT, NARS, HGConv, R_HGNN
-from moge.data.dgl.node_generator import DGLNodeSampler
+from moge.model.PyG.node_clf import MetaPath2Vec, LATTENodeClf
+from moge.model.cogdl.node_clf import GTN
+from moge.model.dgl.node_clf import HAN, HGT, NARS, HGConv, R_HGNN
 
 from pytorch_lightning.loggers import WandbLogger
 

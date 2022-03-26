@@ -1,19 +1,19 @@
 import logging
-import sys, random
-from argparse import ArgumentParser, Namespace
+import random
+import sys
+from argparse import ArgumentParser
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
-import pytorch_lightning as pl
 from pytorch_lightning.trainer import Trainer
 
 from pytorch_lightning.callbacks import EarlyStopping
 
 from pytorch_lightning.loggers import WandbLogger
 
-from moge.module.PyG.link_pred import LATTELinkPred
+from moge.model.PyG.link_pred import LATTELinkPred
 from run.utils import load_link_dataset
 
 

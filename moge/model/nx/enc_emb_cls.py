@@ -1,12 +1,12 @@
 import pandas as pd
 import torch
-from moge.module.networkx.embedder import GAT
-from moge.module.networkx.encoder import ConvLSTM, AlbertEncoder
+from moge.model.networkx.embedder import GAT
+from moge.model.networkx.encoder import ConvLSTM, AlbertEncoder
 from transformers import AlbertConfig
 
-from moge.module.classifier import DenseClassification, HierarchicalAWX
-from moge.module.losses import ClassificationLoss, get_hierar_relations
-from moge.module.utils import filter_samples
+from moge.model.classifier import DenseClassification, HierarchicalAWX
+from moge.model.losses import ClassificationLoss, get_hierar_relations
+from moge.model.utils import filter_samples
 
 
 class EncoderEmbedderClassifier(torch.nn.Module):

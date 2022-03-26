@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 from torch_geometric.utils.hetero import group_hetero_graph
 
-from moge.data import HeteroNetDataset
+from moge.dataset import HeteroGraphDataset
 
 
 class KHopHeteroSampler():
@@ -34,7 +34,7 @@ class KHopHeteroSampler():
         pass
 
 
-class KHopGenerator(HeteroNetDataset):
+class KHopGenerator(HeteroGraphDataset):
     def __init__(self, dataset, neighbor_sizes, node_types=None, metapaths=None, head_node_type=None, edge_dir=True,
                  resample_train: float = None, add_reverse_metapaths=True, inductive=True):
         super().__init__(dataset, node_types, metapaths, head_node_type, edge_dir, resample_train,

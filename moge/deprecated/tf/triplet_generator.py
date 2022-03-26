@@ -1,8 +1,8 @@
 import networkx as nx
 import numpy as np
 import tensorflow as tf
-from moge.data.networkx.sampled_generator import SampledDataGenerator
-from moge.data.siamese.pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
+from moge.dataset.networkx.sampled_generator import SampledDataGenerator
+from moge.dataset.siamese.pairs_generator import DIRECTED_EDGE, UNDIRECTED_EDGE, \
     UNDIRECTED_NEG_EDGE, IS_DIRECTED, IS_UNDIRECTED
 
 from moge.network.multi_digraph import MultiDigraphNetwork, EPSILON

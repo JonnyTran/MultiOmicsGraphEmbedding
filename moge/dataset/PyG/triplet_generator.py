@@ -3,13 +3,13 @@ import pandas as pd
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
 
-from moge.data.PyG.node_generator import HeteroNeighborGenerator
-from moge.data.network import HeteroNetDataset
-from moge.data.utils import merge_node_index
-from moge.module.PyG.utils import is_negative
+from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.utils import merge_node_index
+from moge.model.PyG.utils import is_negative
 
 
-class TripletDataset(HeteroNetDataset):
+class TripletDataset(HeteroGraphDataset):
     def __init__(self, dataset: PygLinkPropPredDataset, node_types=None, metapaths=None, head_node_type=None,
                  edge_dir=True,
                  resample_train=None, add_reverse_metapaths=True, **kwargs):

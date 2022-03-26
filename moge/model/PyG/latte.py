@@ -1,7 +1,8 @@
 import copy
-import copy
+from typing import Dict, List, Tuple
 
-import numpy as np, pandas as pd
+import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
 import torch
 from colorhash import ColorHash
@@ -9,12 +10,10 @@ from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
-from typing import Dict, List, Tuple
 
-from moge.module.sampling import negative_sample
+from moge.model.sampling import negative_sample
 from .utils import is_negative, get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, \
     tag_negative, untag_negative
-from ..utils import tensor_sizes
 
 
 class LATTE(nn.Module):

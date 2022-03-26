@@ -4,17 +4,17 @@ from cogdl.models.emb.hin2vec import Hin2vec, RWgraph, Hin2vec_layer
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from moge.data.network import HeteroNetDataset
-from moge.module.PyG.hgt import HGTModel
-from moge.module.classifier import DenseClassification
-from moge.module.cogdl.conv import GTN as Gtn, HAN as Han
-from moge.module.losses import ClassificationLoss
-from moge.module.trainer import NodeClfTrainer
-from moge.module.utils import filter_samples
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.PyG.hgt import HGTModel
+from moge.model.classifier import DenseClassification
+from moge.model.cogdl.conv import GTN as Gtn, HAN as Han
+from moge.model.losses import ClassificationLoss
+from moge.model.trainer import NodeClfTrainer
+from moge.model.utils import filter_samples
 
 
 class HGT(HGTModel, NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
+    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["precision"]):
         super(HGT, self).__init__(
             in_dim=dataset.in_features,
             n_hid=hparams.embedding_dim,
@@ -110,7 +110,7 @@ class HGT(HGTModel, NodeClfTrainer):
 
 
 class GTN(Gtn, NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
+    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = hparams.num_layers
         num_class = dataset.n_classes
@@ -219,7 +219,7 @@ class GTN(Gtn, NodeClfTrainer):
 
 
 class HAN(Han, NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["precision"]):
+    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["precision"]):
         num_edge = len(dataset.edge_index_dict)
         num_layers = hparams.num_layers
         num_class = dataset.n_classes
@@ -309,7 +309,7 @@ class HAN(Han, NodeClfTrainer):
 
 
 class HIN2Vec(Hin2vec):
-    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
+    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=None):
         self.train_ratio = hparams.train_ratio
         self.batch_size = hparams.batch_size
         self.sparse = hparams.sparse

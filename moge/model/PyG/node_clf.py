@@ -9,22 +9,23 @@ import tqdm
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
-from torch.nn import functional as F
 from torch import nn
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+from torch.nn import functional as F
 from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
-from moge.data.network import HeteroNetDataset
-from moge.module.PyG.latte import LATTE
-from moge.module.transformers.encoder import SequenceEncoder
-from moge.module.classifier import DenseClassification, LinkPredictionClassifier
-from moge.module.losses import ClassificationLoss
-from moge.module.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.module.utils import filter_samples_weights, process_tensor_dicts, activation, tensor_sizes
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.PyG.latte import LATTE
+from moge.model.classifier import DenseClassification, LinkPredictionClassifier
+from moge.model.losses import ClassificationLoss
+from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
+from moge.model.transformers.encoder import SequenceEncoder
+from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation
 
 
 class LATTENodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
+    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["accuracy"],
+                 collate_fn="neighbor_sampler") -> None:
         super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = list(dataset.num_nodes_dict.keys())
@@ -398,7 +399,7 @@ class LATTENodeClf(NodeClfTrainer):
 
 
 class MetaPath2Vec(Metapath2vec, pl.LightningModule):
-    def __init__(self, hparams, dataset: HeteroNetDataset, metrics=None):
+    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=None):
         # Hparams
         self.batch_size = hparams.batch_size
         self.sparse = hparams.sparse

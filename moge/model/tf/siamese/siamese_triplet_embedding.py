@@ -6,11 +6,11 @@ from keras.backend import set_session
 from keras.layers import Lambda
 from keras.optimizers import Adam
 from keras.utils import multi_gpu_model
+from moge.model.siamese.siamese_graph_embedding import SiameseGraphEmbedding, sigmoid, softmax
 from sklearn.metrics import pairwise_distances
 from sklearn.neighbors import radius_neighbors_graph
 
-from moge.data import SampledTripletDataGenerator
-from moge.model.siamese.siamese_graph_embedding import SiameseGraphEmbedding, sigmoid, softmax
+from moge.dataset import SampledTripletDataGenerator
 from moge.network.multi_digraph import MultiDigraphNetwork
 
 

@@ -1,27 +1,17 @@
 import multiprocessing
-import copy
-
-import torch
-from torch import nn
-import torch.nn.functional as F
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 import dgl
-import dgl.function as fn
-from dgl.heterograph import DGLHeteroGraph, DGLBlock
 import dgl.nn.pytorch as dglnn
-from dgl.udf import EdgeBatch, NodeBatch
-from dgl.utils import expand_as_pair
+import torch
+from dgl.heterograph import DGLHeteroGraph
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from moge.data import DGLNodeSampler
-from moge.module.classifier import DenseClassification
-from moge.module.losses import ClassificationLoss
-from moge.module.utils import filter_samples
+from moge.model.classifier import DenseClassification
+from moge.model.dgl.latte import LATTE
+from moge.model.losses import ClassificationLoss
+from .pooling import SAGPool
 from ..trainer import GraphClfTrainer, print_pred_class_counts
 
-from moge.module.dgl.latte import LATTE
-from ...module.utils import tensor_sizes
-from .pooling import SAGPool, DiffPoolBatchedGraphLayer
 
 class LATTEGraphClassifier(GraphClfTrainer):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
