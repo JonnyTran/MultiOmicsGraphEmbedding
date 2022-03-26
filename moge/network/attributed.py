@@ -3,12 +3,11 @@ from typing import List, Union
 import numpy as np
 import openomics
 import pandas as pd
-from openomics.utils.df import concat_uniques
-from sklearn import preprocessing
-
 from moge.graph.base import Network
 from moge.graph.base import SEQUENCE_COL
 from moge.graph.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
+from openomics.utils.df import concat_uniques
+from sklearn import preprocessing
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
