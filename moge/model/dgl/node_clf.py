@@ -6,11 +6,11 @@ from typing import Dict, List, Iterable
 
 import dgl
 import torch
-from moge.datasetset import DGLNodeSampler
-from moge.datasetset.dgl.node_generator import HANSampler
 from torch import nn
 from torch.utils.data import DataLoader
 
+from moge.dataset import DGLNodeSampler
+from moge.dataset.dgl.node_generator import HANSampler
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
     read_relation_subsets

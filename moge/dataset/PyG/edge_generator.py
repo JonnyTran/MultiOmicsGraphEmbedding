@@ -1,11 +1,11 @@
 import numpy as np
 import pandas as pd
 import torch
-from moge.datasetset.PyG.node_generator import HeteroNeighborGenerator
-from moge.datasetset.graph import HeteroGraphDataset
-from moge.datasetset.utils import merge_node_index
 from ogb.linkproppred import PygLinkPropPredDataset
 
+from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.utils import merge_node_index
 from moge.model.PyG.utils import is_negative
 
 

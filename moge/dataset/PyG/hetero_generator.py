@@ -1,9 +1,10 @@
 from typing import Union, List, Tuple
 
-from moge.datasetset.graph import HeteroGraphDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
+
+from moge.dataset.graph import HeteroGraphDataset
 
 
 class HeteroSampler(HeteroGraphDataset):

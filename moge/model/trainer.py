@@ -5,13 +5,13 @@ from typing import Union, Iterable
 import numpy as np
 import pandas as pd
 import torch
-from moge.datasetset import DGLNodeSampler, HeteroNeighborGenerator
 from pytorch_lightning import LightningModule
 from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
 
 from moge.criterion.clustering import clustering_metrics
+from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 
