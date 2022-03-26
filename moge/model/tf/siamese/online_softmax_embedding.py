@@ -4,7 +4,7 @@ from moge.dataset.siamese.triplet_generator import OnlineTripletGenerator
 from moge.model.siamese.siamese_graph_embedding import *
 from moge.model.siamese.siamese_triplet_online_embedding import SiameseOnlineTripletGraphEmbedding
 
-from moge.network.multi_digraph import MultiDigraphNetwork
+from moge.graph.multi_digraph import MultiDigraphNetwork
 
 
 class OnlineSoftmaxGraphEmbedding(SiameseOnlineTripletGraphEmbedding):

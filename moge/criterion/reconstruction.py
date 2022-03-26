@@ -1,8 +1,8 @@
 import numpy as np
-
 from moge.evaluation.utils import getRandomEdgePairs
 from moge.model.static_graph_embedding import BaseGraphEmbedding
-from moge.network.multi_digraph import MultiDigraphNetwork
+
+from moge.graph.multi_digraph import MultiDigraphNetwork
 
 flatten = lambda l: [item for sublist in l for item in sublist]
 

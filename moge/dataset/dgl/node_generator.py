@@ -18,9 +18,9 @@ from torch.utils.data import DataLoader
 from torch_geometric.utils import is_undirected
 
 from moge.dataset.graph import HeteroGraphDataset
+from moge.graph.hetero import HeteroNetwork
+from moge.graph.sequence import BertSequenceTokenizer
 from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
-from moge.network.sequence import BertSequenceTokenizer
 from .samplers import ImportanceSampler
 from .. import HeteroNeighborGenerator
 from ..utils import one_hot_encoder
