@@ -11,7 +11,7 @@ setup(
     version='0.2',
     packages=find_packages("moge",
                            include=['moge'],
-                           exclude=["/data*", ]),
+                           exclude=["/data/*", ]),
     install_requires=requirements,
     url='',
     license='',

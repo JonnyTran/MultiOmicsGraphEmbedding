@@ -23,9 +23,9 @@ from torch_geometric.typing import Adj
 from torch_geometric.utils import is_undirected
 from torch_sparse import transpose
 
-import moge.module.PyG.utils
-from moge.module.PyG.utils import is_negative, get_edge_index_values
-from moge.module.utils import tensor_sizes
+import moge.model.PyG.utils
+from moge.model.PyG.utils import is_negative, get_edge_index_values
+from moge.model.utils import tensor_sizes
 
 
 class Graph:
