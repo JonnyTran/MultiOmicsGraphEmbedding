@@ -28,7 +28,7 @@ from moge.module.PyG.utils import is_negative, get_edge_index_values
 from moge.module.utils import tensor_sizes
 
 
-class Network:
+class Graph:
     def get_networkx(self):
         if not hasattr(self, "G"):
             G = nx.Graph()
@@ -97,7 +97,7 @@ class Network:
         return pos
 
 
-class HeteroNetDataset(torch.utils.data.Dataset, Network):
+class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
     def __init__(self,
                  dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
                                 DglNodePropPredDataset, DglLinkPropPredDataset],
@@ -140,6 +140,9 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
                 self.process_DglGraphDataset_hetero(dataset)
             else:
                 self.process_DglGraphDataset_homo(dataset)
+        elif isinstance(dataset, dgl.DGLGraph):
+            self.G = dataset
+            self.num_nodes_dict = {ntype: self.G.num_nodes(ntype) for ntype in self.G.ntypes}
 
         # PyG datasets
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \
@@ -161,12 +164,7 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         elif dataset.__class__.__name__ in ["HANDataset", "GTNDataset"]:
             print(f"{dataset.__class__.__name__}")
             self.process_COGDLdataset(dataset, metapaths, node_types, reshuffle_train)
-        elif isinstance(dataset, str) and "blogcatalog6k" in dataset:
-            self.process_BlogCatalog6k(dataset, train_ratio=0.5)
 
-        elif isinstance(dataset, dgl.DGLGraph):
-            self.G = dataset
-            self.num_nodes_dict = {ntype: self.G.num_nodes(ntype) for ntype in self.G.ntypes}
         else:
             raise Exception(f"Unsupported dataset {dataset}")
 
@@ -382,51 +380,6 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
             raise NotImplementedError(f"{metapath} not supported")
         return reverse_metapath
 
-    def process_COGDLdataset(self, dataset, metapath, node_types, train_ratio):
-        data = dataset.data
-        assert self.head_node_type is not None
-        assert node_types is not None
-        print(f"Edge_types: {len(data['adj'])}")
-        self.node_types = node_types
-        if metapath is not None:
-            self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
-        else:
-            self.edge_index_dict = {f"{self.head_node_type}{i}{self.head_node_type}": data["adj"][i][0] \
-                                    for i in range(len(data["adj"]))}
-        self.edge_types = list(range(dataset.num_edge))
-        self.metapaths = list(self.edge_index_dict.keys())
-        self.x_dict = {self.head_node_type: data["x"]}
-        self.in_features = data["x"].size(1)
-
-        self.training_idx, self.training_target = data["train_node"], data["train_target"]
-        self.validation_idx, self.validation_target = data["valid_node"], data["valid_target"]
-        self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
-
-        self.y_index_dict = {self.head_node_type: torch.cat([self.training_idx, self.validation_idx, self.testing_idx])}
-        self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
-
-        # Create new labels vector for all nodes, with -1 for nodes without label
-        self.y_dict = {
-            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
-
-        new_y_dict = {nodetype: -torch.ones(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) \
-                      for nodetype in self.y_dict}
-        for node_type in self.y_dict:
-            new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
-        self.y_dict = new_y_dict
-
-        if self.inductive:
-            other_nodes = torch.arange(self.num_nodes_dict[self.head_node_type])
-            idx = ~np.isin(other_nodes, self.training_idx) & \
-                  ~np.isin(other_nodes, self.validation_idx) & \
-                  ~np.isin(other_nodes, self.testing_idx)
-            other_nodes = other_nodes[idx]
-            self.training_subgraph_idx = torch.cat(
-                [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
-                dim=0).unique()
-
-        self.data = data
-
 
     def process_inmemorydataset(self, dataset: PyGInMemoryDataset, train_ratio):
         data = dataset[0]
@@ -498,7 +451,56 @@ class HeteroNetDataset(torch.utils.data.Dataset, Network):
         return train_ratio
 
 
-class HANDataset(HeteroNetDataset):
+@DeprecationWarning
+class CogDLDataset(HeteroGraphDataset):
+    def process_COGDLdataset(self, dataset, metapath, node_types, train_ratio):
+        data = dataset.data
+        assert self.head_node_type is not None
+        assert node_types is not None
+        print(f"Edge_types: {len(data['adj'])}")
+        self.node_types = node_types
+        if metapath is not None:
+            self.edge_index_dict = {metapath: data["adj"][i][0] for i, metapath in enumerate(metapath)}
+        else:
+            self.edge_index_dict = {f"{self.head_node_type}{i}{self.head_node_type}": data["adj"][i][0] \
+                                    for i in range(len(data["adj"]))}
+        self.edge_types = list(range(dataset.num_edge))
+        self.metapaths = list(self.edge_index_dict.keys())
+        self.x_dict = {self.head_node_type: data["x"]}
+        self.in_features = data["x"].size(1)
+
+        self.training_idx, self.training_target = data["train_node"], data["train_target"]
+        self.validation_idx, self.validation_target = data["valid_node"], data["valid_target"]
+        self.testing_idx, self.testing_target = data["test_node"], data["test_target"]
+
+        self.y_index_dict = {self.head_node_type: torch.cat([self.training_idx, self.validation_idx, self.testing_idx])}
+        self.num_nodes_dict = self.get_num_nodes_dict(self.edge_index_dict)
+
+        # Create new labels vector for all nodes, with -1 for nodes without label
+        self.y_dict = {
+            self.head_node_type: torch.cat([self.training_target, self.validation_target, self.testing_target])}
+
+        new_y_dict = {nodetype: -torch.ones(self.num_nodes_dict[nodetype] + 1).type_as(self.y_dict[nodetype]) \
+                      for nodetype in self.y_dict}
+        for node_type in self.y_dict:
+            new_y_dict[node_type][self.y_index_dict[node_type]] = self.y_dict[node_type]
+        self.y_dict = new_y_dict
+
+        if self.inductive:
+            other_nodes = torch.arange(self.num_nodes_dict[self.head_node_type])
+            idx = ~np.isin(other_nodes, self.training_idx) & \
+                  ~np.isin(other_nodes, self.validation_idx) & \
+                  ~np.isin(other_nodes, self.testing_idx)
+            other_nodes = other_nodes[idx]
+            self.training_subgraph_idx = torch.cat(
+                [self.training_idx, torch.tensor(other_nodes, dtype=self.training_idx.dtype)],
+                dim=0).unique()
+
+        self.data = data
+
+
+@DeprecationWarning
+class HANDataset(HeteroGraphDataset):
     def get_collate_fn(self, collate_fn: str, mode=None, **kwargs):
         def collate_wrapper(iloc):
             if "HAN_batch" in collate_fn:
