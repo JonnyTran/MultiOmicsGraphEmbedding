@@ -6,27 +6,23 @@ from typing import Dict, List, Iterable
 
 import dgl
 import torch
-from torch import nn, Tensor
+from torch import nn
 from torch.utils.data import DataLoader
 
-import moge
-from moge.data import DGLNodeSampler
-from moge.module.classifier import DenseClassification
-from moge.module.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
+from moge.dataset import DGLNodeSampler
+from moge.dataset.dgl.node_generator import HANSampler
+from moge.model.classifier import DenseClassification
+from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
     read_relation_subsets
-from moge.module.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
-from moge.module.dgl.latte import LATTE
-from moge.module.losses import ClassificationLoss
-
+from moge.model.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
+from moge.model.dgl.latte import LATTE
+from moge.model.losses import ClassificationLoss
 from .HGConv.model.HGConv import HGConv as Hgconv
-
 from .HGT import Hgt
+from .conv import HAN as Han
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes, process_tensor_dicts, filter_samples_weights
-
-from .conv import HAN as Han
-from moge.data.dgl.node_generator import HANSampler
 
 
 class LATTENodeClassifier(NodeClfTrainer):
