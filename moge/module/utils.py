@@ -97,8 +97,7 @@ def process_tensor_dicts(y_pred, y_true, weights=None):
 def tensor_sizes(input):
     if isinstance(input, dict):
         return {metapath if not isinstance(metapath, tuple) else \
-                    ".".join([type[0].upper() if i % 2 == 0 else type[0].lower() for i, type in
-                              enumerate(metapath)]): tensor_sizes(v) \
+                    ".".join(metapath): tensor_sizes(v) \
                 for metapath, v in input.items()}
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)

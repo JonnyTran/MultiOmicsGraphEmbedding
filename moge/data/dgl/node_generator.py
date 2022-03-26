@@ -9,9 +9,9 @@ import torch
 from dgl import backend as F
 from dgl import utils
 from dgl import utils as dglutils
-from dgl.dataloading.dataloader import _prepare_tensor_dict, _prepare_tensor
 from dgl.init import zero_initializer
 from dgl.sampling import RandomWalkNeighborSampler
+from dgl.utils import prepare_tensor_dict, prepare_tensor
 from ogb.nodeproppred import DglNodePropPredDataset
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
@@ -439,10 +439,10 @@ class DGLNodeSampler(HeteroNetDataset):
 
         if collate_fn == "neighbor_sampler":
             collator = LATTEPyGCollator(graph, nids=seed_nodes,
-                                        block_sampler=self.neighbor_sampler)
+                                        graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
-                                                    block_sampler=self.neighbor_sampler)
+                                                    graph_sampler=self.neighbor_sampler)
 
         if hasattr(self, "network") and hasattr(self, "tokenizer"):
             self.network: HeteroNetwork
@@ -500,10 +500,10 @@ class DGLNodeSampler(HeteroNetDataset):
 
         if collate_fn == "neighbor_sampler":
             collator = LATTEPyGCollator(graph, nids=seed_nodes,
-                                        block_sampler=self.neighbor_sampler)
+                                        graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
-                                                    block_sampler=self.neighbor_sampler)
+                                                    graph_sampler=self.neighbor_sampler)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
@@ -523,10 +523,10 @@ class DGLNodeSampler(HeteroNetDataset):
 
         if collate_fn == "neighbor_sampler":
             collator = LATTEPyGCollator(graph, nids=seed_nodes,
-                                        block_sampler=self.neighbor_sampler)
+                                        graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
-                                                    block_sampler=self.neighbor_sampler)
+                                                    graph_sampler=self.neighbor_sampler)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
                                 batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
@@ -539,11 +539,12 @@ class LATTEPyGCollator(dgl.dataloading.NodeCollator):
         if isinstance(items[0], tuple):
             # returns a list of pairs: group them by node types into a dict
             items = dglutils.group_as_dict(items)
-            items = _prepare_tensor_dict(self.g, items, 'items', self._is_distributed)
+            items = prepare_tensor_dict(self.g, items, 'items')
         else:
-            items = _prepare_tensor(self.g, items, 'items', self._is_distributed)
+            items = prepare_tensor(self.g, items, 'items')
 
-        blocks: List[dgl.DGLHeteroGraph] = self.block_sampler.sample_blocks(self.g, items)
+        blocks: List[dgl.DGLHeteroGraph] = self.graph_sampler.sample_blocks(self.g, items)
+        print(len(blocks))
         output_nodes = blocks[-1].dstdata[dgl.NID]
         input_nodes = blocks[0].srcdata[dgl.NID]
 

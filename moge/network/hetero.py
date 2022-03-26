@@ -7,6 +7,7 @@ import pandas as pd
 from typing import Dict, Tuple, Union, List
 
 import torch
+from torch_geometric.data import HeteroData
 
 from moge.network.base import SEQUENCE_COL
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
@@ -178,10 +179,49 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         return G
 
     def filter_sequence_nodes(self):
+        """
+        Create a `nodes` attr containing dict of <node type: node ids> where node ids are nodes with nonnull sequences
+        """
         for ntype in self.node_types:
             nodes_w_seq = self.multiomics[ntype].annotations.index[
                 self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
             self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
+
+    def to_pyg_heterodata(self, label_col="go_id", min_count=10, label_subset=None, sequence=False):
+        # Filter node that doesn't have a sequence
+        if sequence:
+            self.filter_sequence_nodes()
+
+        G = HeteroData()
+
+        # Edge index
+        edge_index_dict = {}
+        for relation, nxgraph in self.networks.items():
+            biadj = nx.bipartite.biadjacency_matrix(nxgraph,
+                                                    row_order=self.nodes[relation[0]],
+                                                    column_order=self.nodes[relation[-1]],
+                                                    format="coo")
+            G[relation].edge_index = torch.stack([torch.from_numpy(biadj.row),
+                                                  torch.from_numpy(biadj.col)])
+
+        # Add node attributes
+        for ntype in self.node_types:
+            annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
+
+            node_feats = []
+            for col in self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL]):
+                if col in self.feature_transformer:
+                    feat_filtered = filter_multilabel(df=annotations,
+                                                      column=col, min_count=None,
+                                                      dropna=False, delimiter=self.delimiter)
+
+                    feat = self.feature_transformer[col].transform(feat_filtered)
+                    print(col, feat.shape)
+                    node_feats.append(feat)
+
+            G.nodes[ntype].x = torch.from_numpy(np.stack(node_feats, axis=1))
+
+        return G
 
     def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False):
         # Filter node that doesn't have a sequence
