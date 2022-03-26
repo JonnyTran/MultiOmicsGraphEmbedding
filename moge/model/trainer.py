@@ -10,10 +10,10 @@ from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
 
-from .metrics import Metrics
-from .utils import tensor_sizes, preprocess_input, process_tensor_dicts, filter_samples_weights, activation
-from ..data import DGLNodeSampler, HeteroNeighborGenerator
-from ..evaluation.clustering import clustering_metrics
+from moge.module.metrics import Metrics
+from moge.module.utils import tensor_sizes, preprocess_input, process_tensor_dicts, filter_samples_weights, activation
+from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
+from moge.criterion.clustering import clustering_metrics
 
 
 class ClusteringEvaluator(LightningModule):
