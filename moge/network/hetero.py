@@ -188,7 +188,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
             self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
 
-    def to_pyg_heterodata(self, label_col="go_id", min_count=10, label_subset=None, sequence=False) -> HeteroData:
+    def to_pyg_heterodata(self, label_col="go_id", min_count=10, label_subset=None, sequence=False,
+                          attr_cols=[]) -> HeteroData:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
@@ -196,7 +197,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         data = HeteroData()
 
         # Edge index
-        edge_index_dict = {}
         for relation, nxgraph in self.networks.items():
             biadj = nx.bipartite.biadjacency_matrix(nxgraph,
                                                     row_order=self.nodes[relation[0]],
@@ -206,18 +206,22 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                      torch.tensor(biadj.col, dtype=torch.long)])
 
         # Add node attributes
+        node_attr_cols = self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL])
+        if attr_cols:
+            node_attr_cols = node_attr_cols.intersection(attr_cols)
+
         for ntype in self.node_types:
             annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
 
             node_feats = []
-            for col in self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL]):
+            for col in node_attr_cols:
                 if col in self.feature_transformer:
                     feat_filtered = filter_multilabel(df=annotations,
                                                       column=col, min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
-                    data[ntype][col] = feat
+                    # data[ntype][col] = feat
                     node_feats.append(feat)
 
             data[ntype].x = torch.from_numpy(np.hstack(node_feats))
