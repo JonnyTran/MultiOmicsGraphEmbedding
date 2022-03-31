@@ -8,6 +8,7 @@ import pandas as pd
 import torch
 from openomics import MultiOmics
 from openomics.utils.df import concat_uniques
+from torch import Tensor
 from torch_geometric.data import HeteroData
 
 from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
@@ -187,12 +188,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
             self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
 
-    def to_pyg_heterodata(self, label_col="go_id", min_count=10, label_subset=None, sequence=False):
+    def to_pyg_heterodata(self, label_col="go_id", min_count=10, label_subset=None, sequence=False) -> HeteroData:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
 
-        G = HeteroData()
+        data = HeteroData()
 
         # Edge index
         edge_index_dict = {}
@@ -201,14 +202,14 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                     row_order=self.nodes[relation[0]],
                                                     column_order=self.nodes[relation[-1]],
                                                     format="coo")
-            G[relation].edge_index = torch.stack([torch.from_numpy(biadj.row),
-                                                  torch.from_numpy(biadj.col)])
+            data[relation].edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long),
+                                                     torch.tensor(biadj.col, dtype=torch.long)])
 
         # Add node attributes
         for ntype in self.node_types:
             annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
 
-            # node_feats = []
+            node_feats = []
             for col in self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL]):
                 if col in self.feature_transformer:
                     feat_filtered = filter_multilabel(df=annotations,
@@ -216,14 +217,63 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                       dropna=False, delimiter=self.delimiter)
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
-                    G[ntype].x[col] = feat
-                    # node_feats.append(feat)
+                    data[ntype][col] = feat
+                    node_feats.append(feat)
 
-            # G[ntype].x[col] = torch.from_numpy(np.hstack(node_feats))
+            data[ntype].x = torch.from_numpy(np.hstack(node_feats))
+            data[ntype]['nid'] = torch.arange(data[ntype].num_nodes)
 
-        return G
+            # DNA/RNA sequence
+            if sequence and SEQUENCE_COL in annotations:
+                data[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL].to_numpy()
 
-    def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False):
+        # Labels
+        self.process_feature_tranformer(filter_label=label_col, min_count=min_count)
+        if label_subset is not None:
+            self.feature_transformer[label_col].classes_ = np.intersect1d(
+                self.feature_transformer[label_col].classes_,
+                label_subset, assume_unique=True)
+
+        labels = {}
+        for ntype in self.node_types:
+            if label_col not in self.multiomics[ntype].annotations.columns: continue
+            y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype]],
+                                        column=label_col, min_count=min_count,
+                                        label_subset=label_subset, dropna=False, delimiter=self.delimiter)
+            labels[ntype] = self.feature_transformer[label_col].transform(y_label)
+            labels[ntype] = torch.tensor(labels[ntype])
+
+            data[ntype]["y"] = labels[ntype]
+            num_classes = labels[ntype].shape[1]
+
+        # Train test split
+        training_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \
+                        for ntype, ntype_nids in self.nodes.items()}
+        validation_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.validation.node_list)) \
+                          for ntype, ntype_nids in self.nodes.items()}
+        testing_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.testing.node_list)) \
+                       for ntype, ntype_nids in self.nodes.items()}
+
+        for ntype in self.node_types:
+            if ntype in training_idx:
+                mask = torch.zeros(data[ntype].num_nodes)
+                mask[training_idx[ntype]] = 1
+                data[ntype].train_mask = mask
+
+            if ntype in validation_idx:
+                mask = torch.zeros(data[ntype].num_nodes)
+                mask[validation_idx[ntype]] = 1
+                data[ntype].valid_mask = mask
+
+            if ntype in testing_idx:
+                mask = torch.zeros(data[ntype].num_nodes)
+                mask[testing_idx[ntype]] = 1
+                data[ntype].test_mask = mask
+
+        return data
+
+    def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False) -> \
+            Tuple[dgl.DGLHeteroGraph, Dict[str, Tensor], int, Tensor, Tensor, Tensor]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()

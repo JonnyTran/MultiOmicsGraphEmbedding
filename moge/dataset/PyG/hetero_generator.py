@@ -1,16 +1,15 @@
-from typing import Union, List, Tuple
+from typing import List, Tuple
 
-from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
-from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
-from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
+import torch
+from ogb.nodeproppred import PygNodePropPredDataset
+from torch_geometric.data import HeteroData
 
 from moge.dataset.graph import HeteroGraphDataset
 
 
-class HeteroSampler(HeteroGraphDataset):
+class HeteroDataSampler(HeteroGraphDataset):
 
-    def __init__(self, dataset: Union[
-        PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset, DglNodePropPredDataset, DglLinkPropPredDataset],
+    def __init__(self, dataset: HeteroData,
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
                  inductive: bool = False, **kwargs):
