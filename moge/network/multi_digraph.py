@@ -3,10 +3,11 @@ from argparse import Namespace
 import networkx as nx
 from moge.evaluation.utils import sample_edges
 
-from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
+from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.semantic_similarity import *
 from moge.network.train_test_split import TrainTestSplit, mask_test_edges, mask_test_edges_by_nodes, \
     stratify_train_test
+from moge.network.utils import filter_multilabel
 
 UNDIRECTED = False
 DIRECTED = True

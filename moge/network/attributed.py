@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List
 
 import numpy as np
 import openomics
@@ -9,6 +9,7 @@ from sklearn import preprocessing
 from moge.network.base import Network
 from moge.network.base import SEQUENCE_COL
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
+from moge.network.utils import filter_labels_by_count
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
@@ -214,58 +215,3 @@ network if the similarity measures passes the threshold
         return label_color
 
 
-def filter_multilabel(df: pd.DataFrame, column="go_id", min_count=2, label_subset: pd.Index = None, dropna=False,
-                      delimiter="|"):
-    if dropna:
-        nodes_index = df[[column]].dropna().index
-    else:
-        nodes_index = df.index
-
-    if df.loc[nodes_index, column].dtypes == np.object and \
-            df.loc[nodes_index, column].str.contains(delimiter, regex=True).any():
-        annotations_list = df.loc[nodes_index, column].str.split(delimiter)
-    else:
-        annotations_list = df.loc[nodes_index, column]
-
-    if min_count:
-        labels_filter = filter_labels_by_count(annotations_list, min_count=min_count)
-        if label_subset is not None:
-            labels_filter = labels_filter.intersection(label_subset)
-
-        print(f"Column {column} filtered: {len(labels_filter)} with min_count={min_count}")
-    else:
-        labels_filter = annotations_list
-
-    y_labels = annotations_list.map(
-        lambda go_terms: [item for item in go_terms \
-                          if item not in labels_filter] \
-            if type(go_terms) == list else [])
-
-    return y_labels
-
-
-def filter_labels_by_count(annotation: pd.Series, min_count: Union[int, float]):
-    """
-
-    Args:
-        annotation (pd.DataFrame): A dataframe with index for gene IDs and values for list of annotations.
-        min_count (float): If integer, then filter labels with at least `min_count` raw frequency. If float, then filter labels annotated with at least `min_count` percentage of genes.
-
-    Returns:
-        labels_filter (pd.Index): filter
-    """
-    label_counts = {}
-
-    if isinstance(min_count, float) and min_count < 1.0:
-        num_genes = annotation.shape[0]
-        min_count = int(num_genes * min_count)
-
-    # Filter a label if its label_counts is less than min_count
-    for items in annotation:
-        if not isinstance(items, list): continue
-        for item in items:
-            label_counts[item] = label_counts.setdefault(item, 0) + 1
-
-    label_counts = pd.Series(label_counts)
-    labels_filter = label_counts[label_counts < min_count].index
-    return labels_filter

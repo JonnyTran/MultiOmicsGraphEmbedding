@@ -4,16 +4,16 @@ from abc import abstractmethod
 import networkx as nx
 import numpy as np
 import pandas as pd
-import scipy.sparse as sps
+from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 from sklearn.preprocessing import MultiLabelBinarizer
-from skmultilearn.model_selection import IterativeStratification
 
 
-def stratify_train_test(y_label: pd.DataFrame, n_splits: int = 10, seed=42):
+def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):
     y_label_bin = MultiLabelBinarizer().fit_transform(y_label)
 
-    k_fold = IterativeStratification(n_splits=int(n_splits), order=1)
-    for train, test in k_fold.split(y_label.index.to_list(), sps.lil_matrix(y_label_bin)):
+    stratify = MultilabelStratifiedShuffleSplit(test_size=test_size, random_state=0)
+
+    for train, test in stratify.split(y_label.index.to_list(), y_label_bin):
         print("train", len(train), "test", len(test))
         train_nodes = list(y_label.index[train])
         test_nodes = list(y_label.index[test])

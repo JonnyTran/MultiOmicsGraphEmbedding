@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 requirements = [
     'numpy', 'pandas', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph',
-    "colorhash", "scikit-multilearn", "gseapy",
+    "colorhash", "gseapy", 'iterative-stratification',
     "obonet", "wandb",
     "pytorch-lightning", "pytorch-ignite", "ogb", "torchmetrics",
 ]

@@ -11,9 +11,10 @@ from openomics.utils.df import concat_uniques
 from torch import Tensor
 from torch_geometric.data import HeteroData
 
-from moge.network.attributed import AttributedNetwork, MODALITY_COL, filter_multilabel
+from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
+from moge.network.utils import filter_multilabel
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -152,15 +153,16 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         else:
             raise Exception("Output must be one of {csr, coo, dense}")
 
-    def split_stratified(self, stratify_label: str, stratify_omic=True, n_splits=5,
+    def split_stratified(self, stratify_label: str, stratify_omic=True, test_size=0.2, min_count=100, max_count=2000,
                          dropna=False, seed=42, verbose=False):
-        y_label = filter_multilabel(df=self.all_annotations, column=stratify_label, min_count=n_splits, dropna=dropna,
-                                    delimiter=self.delimiter)
+        y_label = filter_multilabel(df=self.all_annotations, column=stratify_label, min_count=min_count,
+                                    max_count=max_count,
+                                    dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
             omic_type_col = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
             y_label = y_label + omic_type_col
 
-        train_val, test = next(stratify_train_test(y_label=y_label, n_splits=n_splits, seed=seed))
+        train_val, test = next(stratify_train_test(y_label=y_label, test_size=test_size, seed=seed))
 
         if not hasattr(self, "training"):
             self.training = Namespace()
@@ -169,7 +171,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         if not hasattr(self, "testing"):
             self.testing = Namespace()
 
-        train, valid = next(stratify_train_test(y_label=y_label[train_val], n_splits=int(1 // 0.1), seed=seed))
+        train, valid = next(stratify_train_test(y_label=y_label[train_val], test_size=0.10, seed=seed))
 
         self.training.node_list = train
         self.validation.node_list = valid
