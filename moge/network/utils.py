@@ -22,7 +22,7 @@ def filter_multilabel(df: pd.DataFrame, column="go_id", min_count=2, max_count=N
         if label_subset is not None:
             labels_filter = labels_filter.intersection(label_subset)
 
-        print(f"{column} num of labels selected: {len(labels_filter)} with min_count={min_count}")
+        print(f"{df.index.name}'s {column} num of labels selected: {len(labels_filter)} with min_count={min_count}")
     else:
         labels_filter = labels
 

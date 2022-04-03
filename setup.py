@@ -1,10 +1,10 @@
 from setuptools import setup, find_packages
 
 requirements = [
-    'numpy', 'pandas', 'networkx>=2.1', 'dask', 'biopython', 'bioservices', 'plotly', 'python-igraph',
-    "colorhash", "gseapy", 'iterative-stratification',
-    "obonet", "wandb",
-    "pytorch-lightning", "pytorch-ignite", "ogb", "torchmetrics",
+    'numpy', 'pandas', 'networkx>=2.1', "boto3",
+    'dask', 'plotly', 'python-igraph', "colorhash",
+    'biopython', 'bioservices', "gseapy", "obonet", 'iterative-stratification',
+    "wandb", "pytorch-lightning", "pytorch-ignite", "ogb", "torchmetrics", "torchtext",
 ]
 
 setup(

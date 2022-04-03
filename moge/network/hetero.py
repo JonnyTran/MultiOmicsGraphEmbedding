@@ -91,7 +91,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         target = etype[-1]
         self.networks[etype].add_edges_from(edgelist, source=source, target=target, database=database, etype=etype,
                                             **kwargs)
-        print(len(edgelist), "edges added to self.networks[{}]".format(etype))
+        unq_sources = {u for u, v, _ in edgelist}
+        unq_targets = {v for u, v, _ in edgelist}
+
+        print(f"{len(edgelist)} edges added between {len(unq_sources)} {source} and {len(unq_targets)} {target}")
 
     @property
     def num_nodes_dict(self):

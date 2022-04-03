@@ -1,15 +1,29 @@
 import logging
+from typing import Dict, List
+
 import networkx as nx
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from typing import Dict, List
 
-try:
+def node_degree_viz(node_degrees, x_label, y_label, width=500, height=90):
+    fig = go.Figure(data=go.Heatmap(z=node_degrees.applymap(lambda x: np.log10(x + 1)),
+                                    x=node_degrees.columns, y=node_degrees.index, colorscale="Greys"),
+                    layout=go.Layout(
+                        xaxis=dict(title=x_label),
+                        yaxis=dict(title=y_label),
+                        width=width,
+                        height=height,
+                        margin=dict(l=5, r=5, b=5, t=5, pad=5),
+                        font=dict(size=12, ),
+                    ))
+    return fig
+
+
+def force_layout(g, nodelist, iterations=100, init_pos=None):
     from fa2 import ForceAtlas2
-
     forceatlas2 = ForceAtlas2(
         # Behavior alternatives
         outboundAttractionDistribution=True,  # Dissuade hubs
@@ -27,30 +41,20 @@ try:
         gravity=1.0,
         # Log
         verbose=False)
-except:
-    pass
 
-def node_degree_viz(node_degrees, x_label, y_label, width=500, height=90):
-    fig = go.Figure(data=go.Heatmap(z=node_degrees.applymap(lambda x: np.log10(x + 1)),
-                                    x=node_degrees.columns, y=node_degrees.index, colorscale="Greys"),
-                    layout=go.Layout(
-                        xaxis=dict(title=x_label),
-                        yaxis=dict(title=y_label),
-                        width=width,
-                        height=height,
-                        margin=dict(l=5, r=5, b=5, t=5, pad=5),
-                        font=dict(size=12, ),
-                    ))
-    return fig
+    pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=init_pos, iterations=iterations)
+
+    return pos
 
 
 def graph_viz(g: nx.Graph,
               nodelist: List, node_symbol: pd.Series = None, node_color: pd.Series = None,
               edge_label: str = None, max_edges=10000,
-              title=None, width=1000, height=800,
-              pos: Dict[str, np.ndarray] = None, iterations=100, showlegend=True, **kwargs):
+              title=None, width=1000, height=800, showlegend=True,
+              pos: Dict[str, np.ndarray] = None, iterations=100,
+              **kwargs):
     if pos is None:
-        pos = forceatlas2.forceatlas2_networkx_layout(g.subgraph(nodelist), pos=None, iterations=iterations)
+        pos = force_layout(g, nodelist, iterations)
 
     # Nodes data
     node_symbol = process_labels(node_symbol)
