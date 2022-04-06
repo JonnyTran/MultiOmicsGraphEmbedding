@@ -1,7 +1,8 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union, Dict
 
 import torch
 from ogb.nodeproppred import PygNodePropPredDataset
+from torch import Tensor
 from torch_geometric.data import HeteroData
 
 from moge.dataset.graph import HeteroGraphDataset
@@ -16,22 +17,28 @@ class HeteroDataSampler(HeteroGraphDataset):
         super().__init__(dataset, node_types, metapaths, head_node_type, edge_dir, reshuffle_train,
                          add_reverse_metapaths, inductive, **kwargs)
 
+    @classmethod
+    def from_pyg_heterodata(cls, hetero: HeteroData, labels: Union[Tensor, Dict[str, Tensor]],
+                            num_classes: int,
+                            train_idx: Dict[str, Tensor],
+                            val_idx: Dict[str, Tensor],
+                            test_idx: Dict[str, Tensor], **kwargs):
+
+        self = cls(dataset=hetero, metapaths=hetero.edge_types, **kwargs)
+        self._name = ""
+
+        self.x_dict = {}
+        self.node_types = hetero.node_types
+        self.num_nodes_dict = {ntype: hetero[ntype].num_nodes for ntype in hetero.node_types}
+        self.y_dict = {}
+
+        self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
+
+        return self
+
     def process_PygNodeDataset_hetero(self, dataset: PygNodePropPredDataset, ):
         data = dataset[0]
         self._name = dataset.name
-        self.edge_index_dict = data.edge_index_dict
-        self.num_nodes_dict = data.num_nodes_dict if hasattr(data, "num_nodes_dict") else self.get_num_nodes_dict(
-            self.edge_index_dict)
-
-        if self.node_types is None:
-            self.node_types = list(self.num_nodes_dict.keys())
-
-        if hasattr(data, "x_dict"):
-            self.x_dict = data.x_dict
-        elif hasattr(data, "x"):
-            self.x_dict = {self.head_node_type: data.x}
-        else:
-            self.x_dict = {}
 
         if hasattr(data, "y_dict"):
             self.y_dict = data.y_dict

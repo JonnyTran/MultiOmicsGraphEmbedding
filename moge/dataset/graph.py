@@ -13,19 +13,15 @@ from cogdl.datasets.han_data import HANDataset
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
-from scipy.io import loadmat
-from sklearn.cluster import KMeans
-
-from torch.utils import data
 from torch import Tensor
+from torch.utils import data
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
-from torch_geometric.typing import Adj
 from torch_geometric.utils import is_undirected
 from torch_sparse import transpose
 
 import moge.model.PyG.utils
 from moge.model.PyG.utils import is_negative, get_edge_index_values
-from moge.model.utils import tensor_sizes
+from moge.network.base import Network
 
 
 class Graph:
@@ -122,6 +118,9 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         elif isinstance(dataset, PygNodePropPredDataset) and hasattr(dataset[0], "edge_index_dict"):
             print("PygNodePropPredDataset Hetero (use HeteroNeighborSampler class)")
             self.process_PygNodeDataset_hetero(dataset)
+
+        elif isinstance(dataset, Network):
+            pass
 
         # DGL Datasets
         elif isinstance(dataset, DglNodePropPredDataset):
