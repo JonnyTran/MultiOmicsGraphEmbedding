@@ -7,15 +7,14 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_geometric.transforms as T
-from openomics import MultiOmics
-from openomics.utils.df import concat_uniques
-from torch import Tensor
-from torch_geometric.data import HeteroData
-
 from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 from moge.network.utils import filter_multilabel
+from openomics import MultiOmics
+from openomics.utils.df import concat_uniques
+from torch import Tensor
+from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -257,7 +256,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             y_dict[ntype] = torch.tensor(y_dict[ntype])
 
             hetero[ntype]["y"] = y_dict[ntype]
-            num_classes = y_dict[ntype].shape[1]
+
+            classes = self.feature_transformer[label_col].classes_
 
         # Train test split
         train_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \
@@ -283,7 +283,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 mask[test_idx[ntype]] = 1
                 hetero[ntype].test_mask = mask
 
-        return hetero, y_dict, num_classes, train_idx, valid_idx, test_idx
+        return hetero, y_dict, classes, train_idx, valid_idx, test_idx
 
     def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False) -> \
             Tuple[dgl.DGLHeteroGraph, Dict[str, Tensor], int, Tensor, Tensor, Tensor]:
