@@ -284,7 +284,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 mask[test_idx[ntype]] = 1
                 hetero[ntype].test_mask = mask
 
-        return hetero, y_dict, classes, train_idx, valid_idx, test_idx
+        return hetero, classes, train_idx, valid_idx, test_idx
 
     def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False) -> \
             Tuple[dgl.DGLHeteroGraph, Dict[str, Tensor], int, Tensor, Tensor, Tensor]:

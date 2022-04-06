@@ -362,13 +362,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 global_node_idx: Dict[str, Tensor],
                 save_betas=False):
         """
+        Args:
+            x: a dict of "source" node representations
+            prev_h_in: Context embedding of the previous order, required for t >= 2.
+                Default: None (if first order). A dict of (node_type: tensor)
+            global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
+            edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
 
-        :param x: a dict of "source" node representations
-        :param prev_h_in: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (node_type: tensor)
-        :param global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
-        :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
-
-        :return: output_emb, loss
+        Returns:
+             output_emb, loss
         """
         x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
                for ntype in x if sizes[self.layer][ntype][1]}

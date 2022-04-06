@@ -31,13 +31,13 @@ class HeteroDataSampler(HeteroGraphDataset):
         self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
 
     @classmethod
-    def from_pyg_heterodata(cls, hetero: HeteroData, labels: Union[Tensor, Dict[str, Tensor]],
+    def from_pyg_heterodata(cls, hetero: HeteroData,
                             classes: List[str],
                             train_idx: Dict[str, Tensor],
                             val_idx: Dict[str, Tensor],
-                            test_idx: Dict[str, Tensor], directed=True, **kwargs):
+                            test_idx: Dict[str, Tensor], **kwargs):
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False,
-                   edge_dir="in" if directed else "out", **kwargs)
+                   edge_dir="in", **kwargs)
         self.classes = classes
         self._name = ""
 
