@@ -22,7 +22,7 @@ class HeteroDataSampler(HeteroGraphDataset):
 
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.G = hetero
-        self.x_dict = {}
+        self.x_dict = hetero.x_dict
         self.node_types = hetero.node_types
         self.num_nodes_dict = {ntype: hetero[ntype].num_nodes for ntype in hetero.node_types}
         self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types}
@@ -40,14 +40,6 @@ class HeteroDataSampler(HeteroGraphDataset):
                    edge_dir="in", **kwargs)
         self.classes = classes
         self._name = ""
-
-        self.x_dict = {}
-        self.node_types = hetero.node_types
-        self.num_nodes_dict = {ntype: hetero[ntype].num_nodes for ntype in hetero.node_types}
-        self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types}
-
-        self.metapaths = hetero.edge_types
-        self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
 
         self.train_idx = train_idx
         self.val_idx = val_idx

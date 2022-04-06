@@ -229,12 +229,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                       column=col, min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
 
-                    feat = self.feature_transformer[col].transform(feat_filtered)
+                    feat: np.ndarray = self.feature_transformer[col].transform(feat_filtered)
                     # data[ntype][col] = feat
-                    node_feats.append(feat)
+                    node_feats.append(feat.astype(float))
 
             hetero[ntype].x = torch.from_numpy(np.hstack(node_feats))
-            hetero[ntype]['nid'] = torch.arange(hetero[ntype].num_nodes)
+            hetero[ntype]['nid'] = torch.arange(hetero[ntype].num_nodes, dtype=torch.long)
 
             # DNA/RNA sequence
             if sequence and SEQUENCE_COL in annotations:

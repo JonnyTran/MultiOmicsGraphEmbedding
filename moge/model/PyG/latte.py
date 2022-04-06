@@ -20,8 +20,9 @@ class LATTE(nn.Module):
     def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict,
                  metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
+                 layer_pooling=False,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
-                 layer_pooling=False, hparams=None):
+                 hparams=None):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -36,6 +37,7 @@ class LATTE(nn.Module):
         self.edge_threshold = hparams.edge_threshold
         self.use_proximity = use_proximity
         self.neg_sampling_ratio = neg_sampling_ratio
+        self.layer_pooling = layer_pooling
 
         layers = []
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
@@ -77,7 +79,6 @@ class LATTE(nn.Module):
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
 
-        self.layer_pooling = layer_pooling
 
     def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, Tensor]], sizes: List[Dict[str, Tuple[int]]],
                 global_node_idx: List[Dict], save_betas=False):
