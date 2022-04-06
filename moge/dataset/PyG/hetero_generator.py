@@ -1,9 +1,11 @@
 from typing import List, Tuple, Union, Dict
 
-from moge.dataset.graph import HeteroGraphDataset
+import torch
 from torch import Tensor
 from torch_geometric.data import HeteroData
 from torch_geometric.loader import NeighborLoader
+
+from moge.dataset.graph import HeteroGraphDataset
 
 
 class HeteroDataSampler(HeteroGraphDataset):
@@ -53,15 +55,63 @@ class HeteroDataSampler(HeteroGraphDataset):
 
         return self
 
-    def sample(self, batch: HeteroData):
-        pass
+    def sample(self, batch: HeteroData, collate_fn=False):
+        X = {}
+        #
+        X["x_dict"] = batch.x_dict
+        X["edge_index_dict"] = batch.edge_index_dict
+        X["global_node_index"] = batch.nid_dict
+        X['sizes'] = batch.num_nodes_dict
+
+        y_dict = batch.y_dict
+
+        if len(y_dict) == 1:
+            y_dict = y_dict[list(y_dict.keys()).pop()]
+
+            if y_dict.dim() == 2 and y_dict.size(1) == 1:
+                y_dict = y_dict.squeeze(-1)
+            elif y_dict.dim() == 1:
+                weights = (y_dict >= 0).to(torch.float)
+
+        elif len(y_dict) > 1:
+            weights = {}
+            for ntype, label in y_dict.items():
+                if label.dim() == 2 and label.size(1) == 1:
+                    y_dict[ntype] = label.squeeze(-1)
+
+                if label.dim() == 1:
+                    weights[ntype] = (y_dict >= 0).to(torch.float)
+                elif label.dim() == 2:
+                    weights[ntype] = (label.sum(1) > 0).to(torch.float)
+
+        return X, y_dict, weights
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         neighbor_sampler = NeighborLoader(self.G, num_neighbors=self.neighbor_sizes,
                                           batch_size=batch_size,
-                                          directed=True if self.edge_dir == "in" else False,
+                                          directed=True,
+                                          transform=self.sample,
                                           input_nodes=(self.head_node_type, self.G[self.head_node_type].train_mask),
-                                          shuffle=True,
-                                          )
+                                          shuffle=True, num_workers=num_workers, **kwargs)
+
+        return neighbor_sampler
+
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        neighbor_sampler = NeighborLoader(self.G, num_neighbors=self.neighbor_sizes,
+                                          batch_size=batch_size,
+                                          directed=False,
+                                          transform=self.sample,
+                                          input_nodes=(self.head_node_type, self.G[self.head_node_type].valid_mask),
+                                          shuffle=True, num_workers=num_workers, **kwargs)
+
+        return neighbor_sampler
+
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        neighbor_sampler = NeighborLoader(self.G, num_neighbors=self.neighbor_sizes,
+                                          batch_size=batch_size,
+                                          directed=False,
+                                          transform=self.sample,
+                                          input_nodes=(self.head_node_type, self.G[self.head_node_type].test_mask),
+                                          shuffle=True, num_workers=num_workers, **kwargs)
 
         return neighbor_sampler

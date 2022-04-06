@@ -7,14 +7,15 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_geometric.transforms as T
-from moge.network.attributed import AttributedNetwork, MODALITY_COL
-from moge.network.base import SEQUENCE_COL
-from moge.network.train_test_split import TrainTestSplit, stratify_train_test
-from moge.network.utils import filter_multilabel
 from openomics import MultiOmics
 from openomics.utils.df import concat_uniques
 from torch import Tensor
 from torch_geometric.data import HeteroData
+
+from moge.network.attributed import AttributedNetwork, MODALITY_COL
+from moge.network.base import SEQUENCE_COL
+from moge.network.train_test_split import TrainTestSplit, stratify_train_test
+from moge.network.utils import filter_multilabel
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -269,17 +270,17 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         for ntype in self.node_types:
             if ntype in train_idx:
-                mask = torch.zeros(hetero[ntype].num_nodes)
+                mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
                 mask[train_idx[ntype]] = 1
                 hetero[ntype].train_mask = mask
 
             if ntype in valid_idx:
-                mask = torch.zeros(hetero[ntype].num_nodes)
+                mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
                 mask[valid_idx[ntype]] = 1
                 hetero[ntype].valid_mask = mask
 
             if ntype in test_idx:
-                mask = torch.zeros(hetero[ntype].num_nodes)
+                mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
                 mask[test_idx[ntype]] = 1
                 hetero[ntype].test_mask = mask
 
