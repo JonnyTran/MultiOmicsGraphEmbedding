@@ -15,3 +15,7 @@
 /datasets/
 /dataset/
 /.pytest_cache/
+/data/
+/ogb_nodepred/
+/moge/module/dgl/NARS/
+/moge/module/transformers/
