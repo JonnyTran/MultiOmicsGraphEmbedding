@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -138,18 +138,51 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         return embeddings
 
-    def forward(self, inputs: dict, **kwargs):
+    def transform_inp_feats(self, node_feats: Dict[str, torch.Tensor], global_node_idx: Dict[str, torch.Tensor]):
+        h_dict = {}
+
+        for ntype in global_node_idx:
+            if global_node_idx[ntype].numel() == 0: continue
+
+            if ntype not in node_feats:
+                node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
+
+            # project to embedding_dim if node features are not same same dimension
+            if ntype in self.proj_ntypes:
+                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
+
+                if hasattr(self, "batchnorm"):
+                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+
+                h_dict[ntype] = F.relu(h_dict[ntype])
+                # if self.dropout:
+                #     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+
+            else:
+                # Skips projection
+                h_dict[ntype] = node_feats[ntype]
+
+        return h_dict
+
+    def forward(self, inputs: Dict[str, Union[Tensor, Dict[str, Tensor]]], **kwargs):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],
-                                                      inputs["edge_index_dict"],
-                                                      inputs["global_node_index"], **kwargs)
+        if "x_dict" in inputs or hasattr(self, "embeddings"):
+            h_out = self.transform_inp_feats(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
+
+        elif "sequence" in inputs:
+            h_out = {ntype: self.sequence_encoders[ntype](inputs["sequence"][ntype], inputs["seq_len"][ntype]) \
+                     for ntype in inputs["sequence"]}
+
+        embeddings, proximity_loss, edge_index_dict = self.embedder(h_out,
+                                                                    inputs["edge_index_dict"],
+                                                                    inputs["global_node_index"], **kwargs)
 
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
 
-        return y_hat, proximity_loss
+        return y_hat, _, edge_index_dict
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
@@ -317,7 +350,6 @@ class LATTE(nn.Module):
 
                 h_dict[ntype] = F.relu(h_dict[ntype])
                 if self.dropout:
-                    print(self.dropout, type(self.dropout), h_dict[ntype].dtype, h_dict[ntype].shape)
                     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
             else:
                 h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)

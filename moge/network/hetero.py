@@ -231,9 +231,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
                     feat: np.ndarray = self.feature_transformer[col].transform(feat_filtered)
                     # data[ntype][col] = feat
-                    node_feats.append(feat.astype(float))
+                    node_feats.append(torch.tensor(feat, dtype=torch.float))
 
-            hetero[ntype].x = torch.from_numpy(np.hstack(node_feats))
+            hetero[ntype].x = torch.cat(node_feats, dim=1)
             hetero[ntype]['nid'] = torch.arange(hetero[ntype].num_nodes, dtype=torch.long)
 
             # DNA/RNA sequence

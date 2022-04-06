@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Union
 
 import pandas as pd
 import pytorch_lightning as pl
@@ -9,7 +9,7 @@ import tqdm
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
@@ -190,21 +190,21 @@ class LATTENodeClf(NodeClfTrainer):
 
         return h_dict
 
-    def forward(self, X: dict, **kwargs):
+    def forward(self, inputs: Dict[str, Union[Tensor, Dict[str, Tensor]]], **kwargs):
         if not self.training:
-            self._node_ids = X["global_node_index"]
+            self._node_ids = inputs["global_node_index"]
 
-        if "x_dict" in X or hasattr(self, "embeddings"):
-            h_out = self.transform_inp_feats(X["x_dict"], global_node_idx=X["global_node_index"][0])
+        if "x_dict" in inputs or hasattr(self, "embeddings"):
+            h_out = self.transform_inp_feats(inputs["x_dict"], global_node_idx=inputs["global_node_index"][0])
 
-        elif "sequence" in X:
-            h_out = {ntype: self.sequence_encoders[ntype](X["sequence"][ntype], X["seq_len"][ntype]) \
-                     for ntype in X["sequence"]}
+        elif "sequence" in inputs:
+            h_out = {ntype: self.sequence_encoders[ntype](inputs["sequence"][ntype], inputs["seq_len"][ntype]) \
+                     for ntype in inputs["sequence"]}
 
         embeddings, _, edge_index_dict = self.embedder(h_out,
-                                                       X["edge_index"],
-                                                       X["sizes"],
-                                                       X["global_node_index"], **kwargs)
+                                                       inputs["edge_index"],
+                                                       inputs["sizes"],
+                                                       inputs["global_node_index"], **kwargs)
 
         if isinstance(self.head_node_type, str):
             y_hat = self.classifier(embeddings[self.head_node_type]) \
