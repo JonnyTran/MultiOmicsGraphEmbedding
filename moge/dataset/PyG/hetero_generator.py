@@ -1,11 +1,12 @@
 from typing import List, Tuple, Union, Dict
 
 import torch
+from torch import Tensor
+from torch_geometric.data import HeteroData
+
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader
 from moge.dataset.graph import HeteroGraphDataset
-from torch import Tensor
-from torch_geometric.data import HeteroData
 
 
 class HeteroDataSampler(HeteroGraphDataset):
@@ -95,7 +96,7 @@ class HeteroDataSampler(HeteroGraphDataset):
                                  directed=False,
                                  transform=self.sample,
                                  input_nodes=(self.head_node_type, self.G[self.head_node_type].valid_mask),
-                                 shuffle=True, num_workers=num_workers, **kwargs)
+                                 shuffle=False, num_workers=num_workers, **kwargs)
 
         return dataset
 
@@ -105,6 +106,6 @@ class HeteroDataSampler(HeteroGraphDataset):
                                  directed=False,
                                  transform=self.sample,
                                  input_nodes=(self.head_node_type, self.G[self.head_node_type].test_mask),
-                                 shuffle=True, num_workers=num_workers, **kwargs)
+                                 shuffle=False, num_workers=num_workers, **kwargs)
 
         return dataset
