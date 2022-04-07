@@ -17,11 +17,9 @@ from .utils import is_negative, get_edge_index_values, filter_metapaths, join_me
 
 
 class LATTE(nn.Module):
-    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict,
-                 metapaths: list,
+    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list,
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
-                 layer_pooling=False,
-                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
+                 layer_pooling=False, use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
                  hparams=None):
         super(LATTE, self).__init__()
         self.metapaths = metapaths
@@ -29,7 +27,6 @@ class LATTE(nn.Module):
         self.head_node_type = hparams.head_node_type
 
         self.embedding_dim = embedding_dim
-
         self.t_order = t_order
         self.n_layers = n_layers
 
@@ -566,7 +563,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         return emb_relations, edge_pred_dict
 
     def get_head_relations(self, head_node_type, order=None, str_form=False) -> list:
-        relations = filter_metapaths(self.metapaths, order=order, tail_type=head_node_type)
+        relations = filter_metapaths(self.metapaths, order=order, head_type=head_node_type)
 
         if str_form:
             relations = [".".join(metapath) if isinstance(metapath, tuple) else metapath \
