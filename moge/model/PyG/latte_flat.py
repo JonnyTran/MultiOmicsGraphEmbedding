@@ -20,7 +20,7 @@ from moge.model.losses import ClassificationLoss
 from moge.model.sampling import negative_sample
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.transformers.encoder import SequenceEncoder
-from moge.model.utils import tensor_sizes, filter_samples_weights
+from moge.model.utils import filter_samples_weights, process_tensor_dicts
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -183,7 +183,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                                                                             inputs["edge_index_dict"],
                                                                             inputs["global_node_index"],
                                                                             inputs["sizes"],
-                                                                            **kwargs)
+                                                                            # **kwargs
+                                                                            )
 
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
@@ -192,9 +193,12 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X)
+        y_pred, proximity_loss, edge_pred_dict = self.forward(X)
 
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
         self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
@@ -205,7 +209,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         else:
             logs = {}
 
-        if self.hparams.use_proximity:
+        if proximity_loss is not None:
             loss = loss + proximity_loss
             logs.update({"proximity_loss": proximity_loss})
 
@@ -215,14 +219,16 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        print(tensor_sizes(X))
-        y_pred, proximity_loss = self.forward(X)
+        y_pred, proximity_loss, edge_pred_dict = self.forward(X)
 
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.valid_metrics.update_metrics(y_pred, y_true)
 
-        if self.hparams.use_proximity:
+        if proximity_loss is not None:
             val_loss = val_loss + proximity_loss
 
         self.log("val_loss", val_loss)
@@ -231,9 +237,12 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X, save_betas=True)
+        y_pred, proximity_loss, edge_pred_dict = self.forward(X, save_betas=False)
 
+        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 
         if batch_nb == 0:
@@ -241,7 +250,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
 
-        if self.hparams.use_proximity:
+        if proximity_loss is not None:
             test_loss = test_loss + proximity_loss
 
         self.log("test_loss", test_loss)
@@ -635,7 +644,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             beta[ntype] = beta[ntype].mean(1)
 
-        if not self.training: self.save_relation_weights(beta, global_node_idx)
+        if not self.training and save_betas: self.save_relation_weights(beta, global_node_idx)
 
         proximity_loss = None
         if self.use_proximity:

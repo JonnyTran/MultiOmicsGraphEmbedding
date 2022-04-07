@@ -367,7 +367,7 @@ class HGTLoader(BaseDataLoader):
     def __init__(
             self,
             data: HeteroData,
-            num_samples: Union[List[int], Dict[NodeType, List[int]]],
+            num_neighbors: Union[List[int], Dict[NodeType, List[int]]],
             input_nodes: Union[NodeType, Tuple[NodeType, Optional[Tensor]]],
             transform: Callable = None,
             **kwargs,
@@ -375,8 +375,8 @@ class HGTLoader(BaseDataLoader):
         if 'collate_fn' in kwargs:
             del kwargs['collate_fn']
 
-        if isinstance(num_samples, (list, tuple)):
-            num_samples = {key: num_samples for key in data.node_types}
+        if isinstance(num_neighbors, (list, tuple)):
+            num_neighbors = {key: num_neighbors for key in data.node_types}
 
         if isinstance(input_nodes, str):
             input_nodes = (input_nodes, None)
@@ -391,9 +391,9 @@ class HGTLoader(BaseDataLoader):
             input_nodes = (input_nodes[0], index)
 
         self.G = data
-        self.num_samples = num_samples
+        self.num_samples = num_neighbors
         self.input_nodes = input_nodes
-        self.num_hops = max([len(v) for v in num_samples.values()])
+        self.num_hops = max([len(v) for v in num_neighbors.values()])
         self.transform = transform
         self.sample_fn = torch.ops.torch_sparse.hgt_sample
 
