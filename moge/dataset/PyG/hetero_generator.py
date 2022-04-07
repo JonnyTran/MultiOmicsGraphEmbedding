@@ -50,12 +50,12 @@ class HeteroDataSampler(HeteroGraphDataset):
     def sample(self, batch: HeteroData, collate_fn=False):
         X = {}
         #
-        X["x_dict"] = batch.x_dict
+        X["x_dict"] = {ntype: x for ntype, x in batch.x_dict.items() if x.size(0)}
         X["edge_index_dict"] = batch.edge_index_dict
-        X["global_node_index"] = batch.nid_dict
-        X['sizes'] = batch.num_nodes_dict
+        X["global_node_index"] = {ntype: nid for ntype, nid in batch.nid_dict.items() if nid.numel()}
+        X['sizes'] = {ntype: size for ntype, size in batch.num_nodes_dict.items() if size}
 
-        y_dict = batch.y_dict
+        y_dict = {ntype: y for ntype, y in batch.y_dict.items() if y.size(0)}
 
         if len(y_dict) == 1:
             y_dict = y_dict[list(y_dict.keys()).pop()]

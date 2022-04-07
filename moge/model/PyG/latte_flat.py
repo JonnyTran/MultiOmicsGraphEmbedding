@@ -6,6 +6,11 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
+from torch import nn as nn, Tensor
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.classifier import DenseClassification
 from moge.model.losses import ClassificationLoss
@@ -13,10 +18,6 @@ from moge.model.sampling import negative_sample
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.transformers.encoder import SequenceEncoder
 from moge.model.utils import tensor_sizes, filter_samples_weights
-from torch import nn as nn, Tensor
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-from torch_sparse.tensor import SparseTensor
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -36,6 +37,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                               embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(khop=True if "khop" in collate_fn else None),
+                              layer_pooling=hparams.layer_pooling,
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
@@ -279,7 +281,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
 class LATTE(nn.Module):
     def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: Dict[str, int],
-                 metapaths: List[Tuple[str, str, str]],
+                 metapaths: List[Tuple[str, str, str]], layer_pooling,
                  activation: str = "relu", attn_heads: int = 1, attn_activation="sharpening", attn_dropout: float = 0.5,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
                  hparams=None):
@@ -294,6 +296,7 @@ class LATTE(nn.Module):
         self.neg_sampling_ratio = neg_sampling_ratio
         self.edge_sampling = edge_sampling
         self.use_proximity = use_proximity
+        self.layer_pooling = layer_pooling
 
         # align the dimension of different types of nodes
         if hparams.batchnorm:
@@ -458,7 +461,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
                  layernorm=False,
                  use_proximity=False, neg_sampling_ratio=1.0) -> None:
-        super().__init__(aggr="add", flow="target_to_source", node_dim=0)
+        super().__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
@@ -540,8 +543,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha_l, alpha_r = {}, {}
 
         for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None or edge_index_dict[
-                metapath].numel() == 0:
+            if metapath not in edge_index_dict or edge_index_dict[metapath] is None or \
+                    edge_index_dict[metapath].numel() == 0:
                 continue
             head, tail = metapath[0], metapath[-1]
 
@@ -579,6 +582,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         out = {}
         beta = {}
         for ntype in global_node_idx:
+            if global_node_idx[ntype].size(0) == 0: continue
             print(">", ntype)
             out[ntype] = self.agg_relation_neighbors(ntype=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
                                                      h_dict=h_dict, edge_index_dict=edge_index_dict,
@@ -614,10 +618,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         emb_relations = torch.zeros(
             size=(global_node_idx[ntype].size(0),
                   self.attn_heads,
-                  self.num_head_relations(ntype),
+                  self.num_tail_relations(ntype),
                   self.out_channels)).type_as(self.attn_l)
 
-        for i, metapath in enumerate(self.get_head_relations(ntype)):
+        for i, metapath in enumerate(self.get_tail_relations(ntype)):
             if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
             head, tail = metapath[0], metapath[-1]
             num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
@@ -635,9 +639,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(h_dict[tail], h_dict[head]),
-                alpha=(alpha_r[metapath], alpha_l[metapath]),
-                size=(num_node_tail, num_node_head),
+                x=(h_dict[head], h_dict[tail]),
+                alpha=(alpha_l[metapath], alpha_r[metapath]),
+                size=(num_node_head, num_node_tail),
                 metapath_idx=self.metapaths.index(metapath))
 
             emb_relations[:, :, i, :] = out
@@ -726,13 +730,20 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                      for metapath in self.metapaths if metapath[0] == head_node_type]
         return relations
 
+    def get_tail_relations(self, head_node_type, to_str=False) -> list:
+        relations = [".".join(metapath) if to_str and isinstance(metapath, tuple) else metapath \
+                     for metapath in self.metapaths if metapath[-1] == head_node_type]
+        return relations
+
     def num_head_relations(self, node_type) -> int:
         """
         Return the number of metapaths with head node type equals to :param ntype: and plus one for none-selection.
-        :param ntype (str):
-        :return:
         """
         relations = self.get_head_relations(node_type)
+        return len(relations) + 1
+
+    def num_tail_relations(self, ntype):
+        relations = self.get_tail_relations(ntype)
         return len(relations) + 1
 
     def save_relation_weights(self, beta, global_node_idx):
