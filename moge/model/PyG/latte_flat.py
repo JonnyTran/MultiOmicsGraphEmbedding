@@ -183,7 +183,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         y_hat = self.classifier(embeddings[self.head_node_type]) \
             if hasattr(self, "classifier") else embeddings[self.head_node_type]
 
-        return y_hat, _, edge_index_dict
+        return y_hat, proximity_loss, edge_index_dict
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
@@ -310,19 +310,16 @@ class LATTE(nn.Module):
             is_last_layer = l + 1 == n_layers
             is_output_layer = hparams.nb_cls_dense_size < 0
             print(l, metapaths)
-            layers.append(
-                LATTEConv(input_dim=embedding_dim,
-                          output_dim=hparams.n_classes if is_last_layer and is_output_layer else embedding_dim,
-                          num_nodes_dict=num_nodes_dict,
-                          metapaths=metapaths,
-                          layer=l,
-                          activation=None if is_last_layer and is_output_layer else activation,
-                          layernorm=False if not hasattr(hparams, "layernorm") or (
-                                  is_last_layer and is_output_layer) else hparams.layernorm,
-                          attn_heads=attn_heads,
-                          attn_activation=attn_activation,
-                          attn_dropout=attn_dropout, use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
-                          ))
+
+            layer = LATTEConv(input_dim=embedding_dim,
+                              output_dim=hparams.n_classes if is_last_layer and is_output_layer else embedding_dim,
+                              num_nodes_dict=num_nodes_dict, metapaths=metapaths, layer=l,
+                              activation=None if is_last_layer and is_output_layer else activation,
+                              layernorm=False if not hasattr(hparams, "layernorm") or (
+                                      is_last_layer and is_output_layer) else hparams.layernorm,
+                              attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
+                              use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio, )
+            layers.append(layer)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
 
