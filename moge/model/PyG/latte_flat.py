@@ -25,7 +25,7 @@ from moge.model.utils import tensor_sizes, filter_samples_weights
 
 class LATTEFlatNodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["accuracy"],
-                 collate_fn="neighbor_sampler") -> None:
+                 collate_fn=None) -> None:
         super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
@@ -603,7 +603,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         Returns:
              output_emb, loss
         """
-        print(self.layer, tensor_sizes(x_l), self.metapaths)
+        # print(self.layer, tensor_sizes(x_l), self.metapaths)
 
         h_dict = self.get_h_dict(x_l, global_node_idx)
         # Compute node-level attention coefficients
@@ -688,14 +688,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # Higher order
         remaining_orders = range(2, min(self.layer + 1, self.t_order) + 1)
         higher_relations = self.get_tail_relations(ntype, order=remaining_orders)
-        print(self.t_order, remaining_orders, higher_relations)
+        # print(self.t_order, remaining_orders, higher_relations)
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
                                                     edge_index_dict_B=edge_index_dict,
                                                     sizes=sizes, layer=self.layer,
                                                     metapaths=higher_relations,
                                                     edge_threshold=self.edge_threshold,
                                                     edge_sampling=False)
-        print("higher_order_edge_index", tensor_sizes(higher_order_edge_index))
+        # print("higher_order_edge_index", tensor_sizes(higher_order_edge_index))
 
         for metapath in higher_relations:
             if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
