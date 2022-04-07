@@ -6,11 +6,6 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from torch import nn as nn, Tensor
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.classifier import DenseClassification
 from moge.model.losses import ClassificationLoss
@@ -18,6 +13,10 @@ from moge.model.sampling import negative_sample
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.transformers.encoder import SequenceEncoder
 from moge.model.utils import tensor_sizes, filter_samples_weights
+from torch import nn as nn, Tensor
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
+from torch_sparse.tensor import SparseTensor
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -304,15 +303,16 @@ class LATTE(nn.Module):
         self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         layers = []
-        for t in range(n_layers):
-            is_last_layer = t + 1 == n_layers
+        for l in range(n_layers):
+            is_last_layer = l + 1 == n_layers
             is_output_layer = hparams.nb_cls_dense_size < 0
-            print(t, metapaths)
+            print(l, metapaths)
             layers.append(
                 LATTEConv(input_dim=embedding_dim,
                           output_dim=hparams.n_classes if is_last_layer and is_output_layer else embedding_dim,
                           num_nodes_dict=num_nodes_dict,
                           metapaths=metapaths,
+                          layer=l,
                           activation=None if is_last_layer and is_output_layer else activation,
                           layernorm=False if not hasattr(hparams, "layernorm") or (
                                   is_last_layer and is_output_layer) else hparams.layernorm,
@@ -342,17 +342,6 @@ class LATTE(nn.Module):
             embedding_output, proximity_loss, edge_pred_dict
         """
         proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
-
-        for ntype in self.node_types:
-            if ntype in h_dict:
-                if hasattr(self, "batchnorm"):
-                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
-
-                h_dict[ntype] = F.relu(h_dict[ntype])
-                if self.dropout:
-                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
-            else:
-                h_dict[ntype] = self.embeddings[ntype].weight[global_node_idx[ntype]].to(self.device)
 
         h_layers = {ntype: [] for ntype in global_node_idx}
         for t in range(self.t_order):
@@ -465,10 +454,12 @@ class LATTE(nn.Module):
 
 
 class LATTEConv(MessagePassing, pl.LightningModule):
-    def __init__(self, input_dim: int, output_dim: int, num_nodes_dict: {str: int}, metapaths: list,
-                 activation: str = "relu", layernorm=False, attn_heads=4, attn_activation="LeakyReLU",
-                 attn_dropout=0.2, use_proximity=False, neg_sampling_ratio=1.0) -> None:
+    def __init__(self, input_dim: int, output_dim: int, num_nodes_dict: Dict[str, int], metapaths: List, layer: int,
+                 activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
+                 layernorm=False,
+                 use_proximity=False, neg_sampling_ratio=1.0) -> None:
         super().__init__(aggr="add", flow="target_to_source", node_dim=0)
+        self.layer = layer
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
         self.num_nodes_dict = num_nodes_dict
@@ -535,12 +526,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for ntype, rel_attn in self.rel_attn_r.items():
             nn.init.xavier_normal_(rel_attn, gain=gain)
 
-    def get_h_dict(self, input, global_node_idx):
+    def get_h_dict(self, x_dict, global_node_idx):
         h_dict = {}
-        for node_type in global_node_idx:
-            h_dict[node_type] = self.linear[node_type].forward(input[node_type])
+        for ntype in global_node_idx:
+            if global_node_idx[ntype].numel() == 0: continue
+            h_dict[ntype] = self.linear[ntype].forward(x_dict[ntype])
 
-            h_dict[node_type] = h_dict[node_type].view(-1, self.attn_heads, self.out_channels)
+            h_dict[ntype] = h_dict[ntype].view(-1, self.attn_heads, self.out_channels)
 
         return h_dict
 
@@ -548,7 +540,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         alpha_l, alpha_r = {}, {}
 
         for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None:
+            if metapath not in edge_index_dict or edge_index_dict[metapath] is None or edge_index_dict[
+                metapath].numel() == 0:
                 continue
             head, tail = metapath[0], metapath[-1]
 
@@ -568,13 +561,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
     def forward(self, x_l, edge_index_dict, global_node_idx, save_betas=False):
         """
-
-        :param x_l: a dict of node attributes indexed ntype
-        :param global_node_idx: A dict of index values indexed by ntype in this mini-batch sampling
-        :param edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
-        :param x_r: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (ntype: tensor)
-        :return: output_emb, loss
+        Args:
+            x_l: a dict of node attributes indexed ntype
+            global_node_idx: A dict of index values indexed by ntype in this mini-batch sampling
+            edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
+            x_r: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (ntype: tensor)
+        Returns:
+             output_emb, loss
         """
+        print(self.layer, tensor_sizes(x_l))
+
         h_dict = self.get_h_dict(x_l, global_node_idx)
         # Compute node-level attention coefficients
         alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict)
@@ -583,10 +579,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         out = {}
         beta = {}
         for ntype in global_node_idx:
+            print(">", ntype)
             out[ntype] = self.agg_relation_neighbors(ntype=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
                                                      h_dict=h_dict, edge_index_dict=edge_index_dict,
                                                      global_node_idx=global_node_idx)
             out[ntype][:, :, -1, :] = h_dict[ntype]
+            print("\n Layer", self.layer, ntype, tensor_sizes(out))
 
             beta[ntype] = self.get_beta_weights(h_dict[ntype], out[ntype], ntype=ntype)
 
@@ -625,7 +623,14 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             num_node_head, num_node_tail = global_node_idx[head].size(0), global_node_idx[tail].size(0)
 
             edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
-            if edge_index is None: continue
+            if edge_index is None or edge_index.size(1) == 0: continue
+
+            print("\n", metapath)
+            print("x_dict", tensor_sizes({tail: h_dict[tail], head: h_dict[head]}))
+            print("global_node_idx", tensor_sizes(global_node_idx))
+            print("edge_index", tensor_sizes(edge_index), edge_index.max(1).values)
+            print("alpha", tensor_sizes({tail: alpha_r[metapath], head: alpha_l[metapath]}))
+            print({"num_node_tail": num_node_tail, "num_node_head": num_node_head})
 
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
@@ -636,7 +641,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 metapath_idx=self.metapaths.index(metapath))
 
             emb_relations[:, :, i, :] = out
-
+            print(ntype, out.shape, emb_relations.shape)
         return emb_relations
 
     def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
