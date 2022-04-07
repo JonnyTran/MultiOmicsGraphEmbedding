@@ -1,13 +1,18 @@
 #!/usr/bin/python3
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, OrderedDict
-from typing import Union, List, Optional
+from typing import Union, List, Optional, Callable, Any, Dict, Tuple
 
 import numpy as np
 import torch
 from torch import Tensor
-from torch_geometric.data import NeighborSampler as PyGNeighborSampler
+from torch_geometric.data import NeighborSampler as PyGNeighborSampler, Data, HeteroData
+from torch_geometric.loader.base import BaseDataLoader
+from torch_geometric.loader.neighbor_loader import NumNeighbors, NeighborSampler, get_input_node_type, \
+    get_input_node_indices
 from torch_geometric.loader.neighbor_sampler import EdgeIndex, Adj
+from torch_geometric.loader.utils import filter_data, filter_hetero_data, to_hetero_csc
+from torch_geometric.typing import InputNodes, NodeType
 from torch_geometric.utils.hetero import group_hetero_graph
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import coalesce, SparseTensor
@@ -302,3 +307,126 @@ class NeighborSampler(Sampler):
         #                                   index=node_ids_dict[ntype].numpy()) \
         #                  for ntype in node_ids_dict}
         return relabel_nodes
+
+
+class NeighborLoader(BaseDataLoader):
+    def __init__(
+            self,
+            data: Union[Data, HeteroData],
+            num_neighbors: NumNeighbors,
+            input_nodes: InputNodes = None,
+            replace: bool = False,
+            directed: bool = True,
+            transform: Callable = None,
+            neighbor_sampler: Optional[NeighborSampler] = None,
+            **kwargs,
+    ):
+        if 'dataset' in kwargs:
+            del kwargs['dataset']
+        if 'collate_fn' in kwargs:
+            del kwargs['collate_fn']
+
+        # Save for PyTorch Lightning:
+        self.G = data
+        self.num_neighbors = num_neighbors
+        self.input_nodes = input_nodes
+        self.replace = replace
+        self.directed = directed
+        self.transform = transform
+        self.neighbor_sampler = neighbor_sampler
+
+        if neighbor_sampler is None:
+            input_node_type = get_input_node_type(input_nodes)
+            self.neighbor_sampler = NeighborSampler(data, num_neighbors,
+                                                    replace, directed,
+                                                    input_node_type)
+
+        return super().__init__(get_input_node_indices(data, input_nodes),
+                                collate_fn=self.neighbor_sampler, **kwargs)
+
+    def transform_fn(self, out: Any) -> Union[Data, HeteroData]:
+        if isinstance(self.G, Data):
+            node, row, col, edge, batch_size = out
+            data = filter_data(self.G, node, row, col, edge,
+                               self.neighbor_sampler.perm)
+            data.batch_size = batch_size
+
+        elif isinstance(self.G, HeteroData):
+            node_dict, row_dict, col_dict, edge_dict, batch_size = out
+            data = filter_hetero_data(self.G, node_dict, row_dict, col_dict,
+                                      edge_dict,
+                                      self.neighbor_sampler.perm_dict)
+            data[self.neighbor_sampler.input_node_type].batch_size = batch_size
+        else:
+            print(len(self.G))
+
+        return data if self.transform is None else self.transform(data)
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}()'
+
+
+class HGTLoader(BaseDataLoader):
+    def __init__(
+            self,
+            data: HeteroData,
+            num_samples: Union[List[int], Dict[NodeType, List[int]]],
+            input_nodes: Union[NodeType, Tuple[NodeType, Optional[Tensor]]],
+            transform: Callable = None,
+            **kwargs,
+    ):
+        if 'collate_fn' in kwargs:
+            del kwargs['collate_fn']
+
+        if isinstance(num_samples, (list, tuple)):
+            num_samples = {key: num_samples for key in data.node_types}
+
+        if isinstance(input_nodes, str):
+            input_nodes = (input_nodes, None)
+        assert isinstance(input_nodes, (list, tuple))
+        assert len(input_nodes) == 2
+        assert isinstance(input_nodes[0], str)
+        if input_nodes[1] is None:
+            index = torch.arange(data[input_nodes[0]].num_nodes)
+            input_nodes = (input_nodes[0], index)
+        elif input_nodes[1].dtype == torch.bool:
+            index = input_nodes[1].nonzero(as_tuple=False).view(-1)
+            input_nodes = (input_nodes[0], index)
+
+        self.G = data
+        self.num_samples = num_samples
+        self.input_nodes = input_nodes
+        self.num_hops = max([len(v) for v in num_samples.values()])
+        self.transform = transform
+        self.sample_fn = torch.ops.torch_sparse.hgt_sample
+
+        # Convert the graph data into a suitable format for sampling.
+        # NOTE: Since C++ cannot take dictionaries with tuples as key as
+        # input, edge type triplets are converted into single strings.
+        self.colptr_dict, self.row_dict, self.perm_dict = to_hetero_csc(
+            data, device='cpu')
+
+        super().__init__(input_nodes[1].tolist(), collate_fn=self.sample,
+                         **kwargs)
+
+    def sample(self, indices: List[int]) -> HeteroData:
+        input_node_dict = {self.input_nodes[0]: torch.tensor(indices)}
+        node_dict, row_dict, col_dict, edge_dict = self.sample_fn(
+            self.colptr_dict,
+            self.row_dict,
+            input_node_dict,
+            self.num_samples,
+            self.num_hops,
+        )
+        return node_dict, row_dict, col_dict, edge_dict, len(indices)
+
+    def transform_fn(self, out: Any) -> HeteroData:
+        node_dict, row_dict, col_dict, edge_dict, batch_size = out
+        data = filter_hetero_data(self.G, node_dict, row_dict, col_dict,
+                                  edge_dict, self.perm_dict)
+        data[self.input_nodes[0]].batch_size = batch_size
+
+        return data if self.transform is None else self.transform(data)
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}()'
