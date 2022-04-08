@@ -77,8 +77,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
             if hparams.batchnorm:
                 self.batchnorm = nn.ModuleDict({
-                    ntype: nn.BatchNorm1d(hparams.embedding_dim) \
-                    for ntype in self.proj_ntypes
+                    ntype: nn.BatchNorm1d(dataset.node_attr_shape[ntype]) \
+                    for ntype in self.node_types
                 })
 
             self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
@@ -147,24 +147,23 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         return embeddings
 
     def transform_inp_feats(self, node_feats: Dict[str, torch.Tensor], global_node_idx: Dict[str, torch.Tensor]):
-        h_dict = {}
+        h_dict = node_feats
 
         for ntype in global_node_idx:
             if global_node_idx[ntype].numel() == 0: continue
 
-            if ntype not in node_feats:
-                node_feats[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
+            if ntype not in h_dict:
+                h_dict[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
 
             # project to embedding_dim if node features are not same same dimension
             if ntype in self.proj_ntypes:
-                h_dict[ntype] = self.feature_projection[ntype](node_feats[ntype])
-
                 if hasattr(self, "batchnorm"):
                     h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
 
+                h_dict[ntype] = self.feature_projection[ntype](h_dict[ntype])
                 h_dict[ntype] = F.relu(h_dict[ntype])
-                # if self.dropout:
-                #     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
+                if self.dropout:
+                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
             else:
                 # Skips projection

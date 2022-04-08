@@ -83,7 +83,7 @@ class HeteroRGCN(nn.Module):
 
 class LinkPredictionClassifier(nn.Module):
     def __init__(self, hparams: Namespace):
-        super(LinkPredictionClassifier, self).__init__()
+        super().__init__()
         self.n_classes = hparams.n_classes
         self.classes = hparams.classes
         self.n_heads = hparams.attn_heads

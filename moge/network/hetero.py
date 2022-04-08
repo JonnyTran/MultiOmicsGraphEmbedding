@@ -262,7 +262,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         return G, labels, num_classes, training_idx, validation_idx, testing_idx
 
     def to_pyg_heterodata(self, label_col="go_id", min_count=10, label_subset=None, sequence=False,
-                          attr_cols=[], add_reverse=True) -> HeteroData:
+                          attr_cols=[], expression=True, add_reverse=True) -> HeteroData:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
@@ -295,11 +295,14 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     feat_filtered = filter_multilabel(df=annotations,
                                                       column=col, min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
-
                     feat: np.ndarray = self.feature_transformer[col].transform(feat_filtered)
                     # data[ntype][col] = feat
                     print(ntype, col)
                     node_feats.append(torch.tensor(feat, dtype=torch.float))
+
+            if expression:
+                node_expression = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]].values
+                node_feats.append(torch.tensor(node_expression, dtype=torch.float))
 
             hetero[ntype].x = torch.cat(node_feats, dim=1)
             hetero[ntype]['nid'] = torch.arange(hetero[ntype].num_nodes, dtype=torch.long)
