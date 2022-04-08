@@ -1,5 +1,5 @@
 from argparse import Namespace
-from typing import Dict, Tuple, Union, List
+from typing import Dict, Tuple, Union, List, Any
 
 import dgl
 import networkx as nx
@@ -159,7 +159,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
     def split_stratified(self, stratify_label: str, stratify_omic=True, test_size=0.2, min_count=100, max_count=2000,
                          dropna=False, seed=42, verbose=False):
-        y_label = filter_multilabel(df=self.all_annotations, column=stratify_label, min_count=min_count,
+        y_label = filter_multilabel(self.all_annotations[stratify_label], min_count=min_count,
                                     max_count=max_count,
                                     dropna=dropna, delimiter=self.delimiter)
         if stratify_omic:
@@ -217,8 +217,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             for col in self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL]):
                 if col in self.feature_transformer:
-                    feat_filtered = filter_multilabel(df=annotations,
-                                                      column=col, min_count=None,
+                    feat_filtered = filter_multilabel(annotations[col], min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
@@ -242,8 +241,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         labels = {}
         for ntype in G.ntypes:
             if label_col not in self.multiomics[ntype].annotations.columns: continue
-            y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype]],
-                                        column=label_col, min_count=min_count,
+            y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype].label_col],
+                                        min_count=min_count,
                                         label_subset=label_subset, dropna=False, delimiter=self.delimiter)
             labels[ntype] = self.feature_transformer[label_col].transform(y_label)
             labels[ntype] = torch.tensor(labels[ntype])
@@ -261,8 +260,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         return G, labels, num_classes, training_idx, validation_idx, testing_idx
 
-    def to_pyg_heterodata(self, label_col="go_id", min_count=10, label_subset=None, sequence=False,
-                          attr_cols=[], expression=True, add_reverse=True) -> HeteroData:
+    def to_pyg_heterodata(self, target="go_id", min_count=10, label_subset=None, sequence=False,
+                          attr_cols=[], expression=True, add_reverse=True) -> Tuple[
+        Union[HeteroData, Any], Any, dict, dict, dict]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
@@ -282,7 +282,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             hetero = transform(hetero)
 
         # Add node attributes
-        node_attr_cols = self.all_annotations.columns.drop([label_col, "omic", SEQUENCE_COL])
+        node_attr_cols = self.all_annotations.columns.drop([target, "omic", SEQUENCE_COL])
         if attr_cols:
             node_attr_cols = node_attr_cols.intersection(attr_cols)
 
@@ -292,8 +292,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             node_feats = []
             for col in node_attr_cols:
                 if col in self.feature_transformer:
-                    feat_filtered = filter_multilabel(df=annotations,
-                                                      column=col, min_count=None,
+                    feat_filtered = filter_multilabel(annotations[col], min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
                     feat: np.ndarray = self.feature_transformer[col].transform(feat_filtered)
                     # data[ntype][col] = feat
@@ -312,24 +311,25 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 hetero[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL].to_numpy()
 
         # Labels
-        self.process_feature_tranformer(filter_label=label_col, min_count=min_count)
+        y_label = filter_multilabel(self.all_annotations[target],
+                                    min_count=min_count,
+                                    label_subset=label_subset, dropna=False, delimiter=self.delimiter)
+        self.feature_transformer[target].fit_transform(y_label)
+        classes = self.feature_transformer[target].classes_
         if label_subset is not None:
-            self.feature_transformer[label_col].classes_ = np.intersect1d(
-                self.feature_transformer[label_col].classes_,
-                label_subset, assume_unique=True)
+            self.feature_transformer[target].classes_ = np.intersect1d(classes, label_subset, assume_unique=True)
+        print(f"Selected {len(self.feature_transformer[target].classes_)} classes:", classes)
 
         y_dict = {}
         for ntype in self.node_types:
-            if label_col not in self.multiomics[ntype].annotations.columns: continue
-            y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype]],
-                                        column=label_col, min_count=min_count,
-                                        label_subset=label_subset, dropna=False, delimiter=self.delimiter)
-            y_dict[ntype] = self.feature_transformer[label_col].transform(y_label)
+            if target not in self.multiomics[ntype].annotations.columns: continue
+            y_label = filter_multilabel(self.multiomics[ntype].annotations.loc[self.nodes[ntype], target],
+                                        min_count=None, label_subset=classes, dropna=False,
+                                        delimiter=self.delimiter)
+            y_dict[ntype] = self.feature_transformer[target].transform(y_label)
             y_dict[ntype] = torch.tensor(y_dict[ntype])
 
             hetero[ntype]["y"] = y_dict[ntype]
-
-            classes = self.feature_transformer[label_col].classes_
 
         # Train test split
         train_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \

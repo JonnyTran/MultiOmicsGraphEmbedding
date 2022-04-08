@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Any
 
 import numpy as np
 import pandas as pd
@@ -53,7 +53,12 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                               hparams=hparams)
 
         # Node feature projection
-        if "vocab" not in hparams or hparams.vocab is None:
+        if "vocab" in hparams or hparams.vocab is not None:
+            self.sequence_encoders = nn.ModuleDict({
+                ntype: SequenceEncoder(vocab_size=len(vocab.vocab), embed_dim=hparams.embedding_dim) \
+                for ntype, vocab in hparams.vocab.items()})
+
+        else:
             self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
                                                          dataset.num_nodes_dict,
                                                          dataset.node_attr_shape,
@@ -83,21 +88,16 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
             self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
-        else:
-            self.sequence_encoders = nn.ModuleDict({
-                ntype: SequenceEncoder(vocab_size=len(vocab.vocab), embed_dim=hparams.embedding_dim) \
-                for ntype, vocab in hparams.vocab.items()})
-
         # Last layer
-        if hparams.nb_cls_dense_size >= 0:
+        if "cls_graph" in hparams and hparams.cls_graph is not None:
+            self.classifier = LinkPredictionClassifier(hparams)
+
+        elif hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":
                 hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
                 logging.info("embedding_dim {}".format(hparams.embedding_dim))
 
-            if "cls_graph" in hparams and hparams.cls_graph:
-                self.classifier = LinkPredictionClassifier(hparams)
-            else:
-                self.classifier = DenseClassification(hparams)
+            self.classifier = DenseClassification(hparams)
         else:
             assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
 
@@ -114,7 +114,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         self.val_moving_loss = torch.tensor([3.0, ] * 5, dtype=torch.float)
 
     def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict,
-                              pretrain_embeddings: Dict[str, torch.Tensor],
+                              pretrain_embeddings: Dict[str, Tensor],
                               freeze=True):
         # If some node type are not attributed, instantiate nn.Embedding for them
         if isinstance(in_channels_dict, dict):
@@ -146,7 +146,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         return embeddings
 
-    def transform_inp_feats(self, node_feats: Dict[str, torch.Tensor], global_node_idx: Dict[str, torch.Tensor]):
+    def transform_inp_feats(self, node_feats: Dict[str, Tensor], global_node_idx: Dict[str, Tensor]) -> Dict[
+        str, Tensor]:
         h_dict = node_feats
 
         for ntype in global_node_idx:
@@ -171,7 +172,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         return h_dict
 
-    def forward(self, inputs: Dict[str, Union[Tensor, Dict[str, Tensor]]], **kwargs):
+    def forward(self, inputs: Dict[str, Any], **kwargs):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
@@ -182,15 +183,16 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             h_out = {ntype: self.sequence_encoders[ntype](inputs["sequence"][ntype], inputs["seq_len"][ntype]) \
                      for ntype in inputs["sequence"]}
 
-        embeddings, proximity_loss, edge_index_dict = self.embedder.forward(h_out,
-                                                                            inputs["edge_index_dict"],
-                                                                            inputs["global_node_index"],
-                                                                            inputs["sizes"],
-                                                                            **kwargs
-                                                                            )
+        embeddings, proximity_loss, edge_index_dict = self.embedder.forward(h_dict=h_out,
+                                                                            edge_index_dict=inputs["edge_index_dict"],
+                                                                            global_node_idx=inputs["global_node_index"],
+                                                                            sizes=inputs["sizes"],
+                                                                            **kwargs)
 
-        y_hat = self.classifier(embeddings[self.head_node_type]) \
-            if hasattr(self, "classifier") else embeddings[self.head_node_type]
+        if hasattr(self, "classifier"):
+            y_hat = self.classifier.forward(embeddings[self.head_node_type])
+        else:
+            y_hat = embeddings[self.head_node_type]
 
         return y_hat, proximity_loss, edge_index_dict
 
@@ -436,12 +438,12 @@ class LATTE(nn.Module):
         return metapaths
 
     @staticmethod
-    def get_edge_index_values(edge_index_tup: [tuple, torch.Tensor]):
+    def get_edge_index_values(edge_index_tup: [tuple, Tensor]):
         if isinstance(edge_index_tup, tuple):
             edge_index = edge_index_tup[0]
             edge_values = edge_index[1]
 
-        elif isinstance(edge_index_tup, torch.Tensor) and edge_index_tup.size(1) > 0:
+        elif isinstance(edge_index_tup, Tensor) and edge_index_tup.size(1) > 0:
             edge_index = edge_index_tup
             edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float64, device=edge_index_tup.device)
         else:
@@ -596,18 +598,18 @@ class LATTEConv(MessagePassing, pl.LightningModule):
              for node_type in self.node_types})  # W.shape (F x F)
 
         self.out_channels = self.embedding_dim // attn_heads
-        self.attn_l = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
-        self.attn_r = nn.Parameter(torch.Tensor(len(self.metapaths), attn_heads, self.out_channels))
+        self.attn_l = nn.Parameter(Tensor(len(self.metapaths), attn_heads, self.out_channels))
+        self.attn_r = nn.Parameter(Tensor(len(self.metapaths), attn_heads, self.out_channels))
 
         self.rel_attn_l = nn.ParameterDict({
-            ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
+            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
         self.rel_attn_r = nn.ParameterDict({
-            ntype: nn.Parameter(torch.Tensor(attn_heads, self.out_channels)) \
+            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
 
         if attn_activation == "sharpening":
-            self.alpha_activation = nn.Parameter(torch.Tensor(len(self.metapaths)).fill_(1.0))
+            self.alpha_activation = nn.Parameter(Tensor(len(self.metapaths)).fill_(1.0))
         elif attn_activation == "PReLU":
             self.alpha_activation = nn.PReLU(init=0.2)
         elif attn_activation == "LeakyReLU":
@@ -822,7 +824,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             return F.sigmoid(e_pred)
 
     def attn_activation(self, alpha, metapath_id):
-        if isinstance(self.alpha_activation, torch.Tensor):
+        if isinstance(self.alpha_activation, Tensor):
             return self.alpha_activation[metapath_id] * alpha
         elif isinstance(self.alpha_activation, nn.Module):
             return self.alpha_activation(alpha)

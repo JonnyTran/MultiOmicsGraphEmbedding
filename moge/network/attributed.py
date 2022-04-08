@@ -9,7 +9,7 @@ from sklearn import preprocessing
 from moge.network.base import Network
 from moge.network.base import SEQUENCE_COL
 from moge.network.semantic_similarity import compute_expression_correlation, compute_annotation_affinities
-from moge.network.utils import filter_labels_by_count
+from moge.network.utils import select_labels
 
 EPSILON = 1e-16
 MODALITY_COL = "omic"
@@ -96,7 +96,7 @@ class AttributedNetwork(Network):
                     features = annotation.loc[node_list, col].dropna(axis=0)
 
                 if filter_label is not None and col in filter_label and min_count:
-                    labels_filter = filter_labels_by_count(features, min_count=min_count)
+                    labels_filter = select_labels(features, min_count=min_count)
                     features = features.map(lambda labels: [item for item in labels if item not in labels_filter])
                 feature_transformers[col].fit(features)
 

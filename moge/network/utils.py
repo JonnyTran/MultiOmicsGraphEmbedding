@@ -1,43 +1,40 @@
 from typing import Union
 
+import numpy as np
 import pandas as pd
 import tqdm
 
 
-def filter_multilabel(df: pd.DataFrame, column="go_id", min_count=2, max_count=None, label_subset: pd.Index = None,
-                      dropna=False,
-                      delimiter="|"):
+def filter_multilabel(y_str: pd.Series, min_count=None, max_count=None, label_subset: pd.Index = None,
+                      dropna=False, delimiter="|") -> pd.Series:
     if dropna:
-        nodes_index = df[[column]].dropna().index
+        index = y_str.dropna().index
     else:
-        nodes_index = df.index
+        index = y_str.index
 
     if delimiter:
-        labels = df.loc[nodes_index, column].str.split(delimiter)
+        y_list = y_str.loc[index].str.split(delimiter)
     else:
-        labels = df.loc[nodes_index, column]
+        y_list = y_str.loc[index]
 
-    if min_count:
-        labels_filter = filter_labels_by_count(labels, min_count=min_count, max_count=max_count)
-        if label_subset is not None:
-            labels_filter = labels_filter.intersection(label_subset)
+    labels_filter = select_labels(y_list, min_count=min_count, max_count=max_count)
+    if label_subset is not None:
+        labels_filter = labels_filter.intersection(label_subset)
 
-        print(f"{df.index.name}'s {column} num of labels selected: {len(labels_filter)} with min_count={min_count}")
-    else:
-        labels_filter = labels
+    print(f"{y_str.name} num of labels selected: {len(labels_filter)} with min_count={min_count}")
 
-    y_labels = labels.map(
-        lambda go_terms: [item for item in go_terms if item in labels_filter] \
-            if type(go_terms) == list else [])
+    y_df = y_list.map(lambda go_terms: \
+                          [item for item in go_terms if item in labels_filter] \
+                              if isinstance(go_terms, (list, np.ndarray)) else [])
 
-    return y_labels
+    return y_df
 
 
-def filter_labels_by_count(y_multilabel: pd.Series, min_count: Union[int, float], max_count: int = None):
+def select_labels(y_list: pd.Series, min_count: Union[int, float], max_count: int = None) -> pd.Index:
     """
 
     Args:
-        y_multilabel (pd.DataFrame): A dataframe with index for gene IDs and values for list of annotations.
+        y_list (pd.Series): A Series with values containing list of strings.
         min_count (float): If integer, then filter labels with at least `min_count` raw frequency. \
             If float, then filter labels annotated with at least `min_count` percentage of genes.
 
@@ -47,11 +44,13 @@ def filter_labels_by_count(y_multilabel: pd.Series, min_count: Union[int, float]
     label_counts = {}
 
     if isinstance(min_count, float) and min_count < 1.0:
-        num_genes = y_multilabel.shape[0]
+        num_genes = y_list.shape[0]
         min_count = int(num_genes * min_count)
+    elif min_count is None:
+        min_count = 1
 
     # Filter a label if its label_counts is less than min_count
-    for labels in tqdm.tqdm(y_multilabel):
+    for labels in tqdm.tqdm(y_list):
         if not isinstance(labels, list): continue
         for label in labels:
             label_counts[label] = label_counts.setdefault(label, 0) + 1
@@ -59,6 +58,6 @@ def filter_labels_by_count(y_multilabel: pd.Series, min_count: Union[int, float]
     label_counts = pd.Series(label_counts)
     label_counts = label_counts[label_counts >= min_count]
     if max_count:
-        label_counts = label_counts[label_counts < max_count]
+        label_counts = label_counts[label_counts <= max_count]
 
     return label_counts.index
