@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import copy
 from abc import ABCMeta, abstractmethod
 from typing import Union, List, Optional, Callable, Any, Dict, Tuple
 
@@ -9,8 +10,9 @@ from torch_geometric.loader.base import BaseDataLoader
 from torch_geometric.loader.neighbor_loader import NumNeighbors, NeighborSampler, get_input_node_type, \
     get_input_node_indices
 from torch_geometric.loader.neighbor_sampler import EdgeIndex, Adj
-from torch_geometric.loader.utils import filter_data, filter_hetero_data, to_hetero_csc
-from torch_geometric.typing import InputNodes, NodeType
+from torch_geometric.loader.utils import filter_data, filter_hetero_data, to_hetero_csc, filter_node_store_, \
+    edge_type_to_str, filter_edge_store_
+from torch_geometric.typing import InputNodes, NodeType, OptTensor
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import SparseTensor
 
@@ -419,11 +421,41 @@ class HGTLoader(BaseDataLoader):
 
     def transform_fn(self, out: Any) -> HeteroData:
         node_dict, row_dict, col_dict, edge_dict, batch_size = out
-        data = filter_hetero_data(self.G, node_dict, row_dict, col_dict,
-                                  edge_dict, self.perm_dict)
+        data = self.filter_hetero_data(self.G, node_dict, row_dict, col_dict,
+                                       edge_dict, self.perm_dict)
         data[self.input_nodes[0]].batch_size = batch_size
 
         return data if self.transform is None else self.transform(data)
+
+    def filter_hetero_data(self,
+                           data: HeteroData,
+                           node_dict: Dict[str, Tensor],
+                           row_dict: Dict[str, Tensor],
+                           col_dict: Dict[str, Tensor],
+                           edge_dict: Dict[str, Tensor],
+                           perm_dict: Dict[str, OptTensor],
+                           ) -> HeteroData:
+        # Filters a heterogeneous data object to only hold nodes in `node` and
+        # edges in `edge` for each node and edge type, respectively:
+        out = copy.copy(data)
+
+        for node_type in data.node_types:
+            filter_node_store_(data[node_type], out[node_type],
+                               node_dict[node_type])
+
+        for edge_type in data.edge_types:
+            edge_type_str = edge_type_to_str(edge_type)
+            if edge_type_str not in row_dict:
+                row_dict[edge_type_str] = torch.tensor([], dtype=torch.long)
+                col_dict[edge_type_str] = torch.tensor([], dtype=torch.long)
+                edge_dict[edge_type_str] = torch.tensor([], dtype=torch.long)
+                perm_dict[edge_type_str] = torch.tensor([], dtype=torch.long)
+
+            filter_edge_store_(data[edge_type], out[edge_type],
+                               row_dict[edge_type_str], col_dict[edge_type_str],
+                               edge_dict[edge_type_str], perm_dict[edge_type_str])
+
+        return out
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}()'

@@ -266,7 +266,6 @@ class LATTENodeClf(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-
         y_pred, proximity_loss, _ = self.forward(X, save_betas=False)
 
         y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)

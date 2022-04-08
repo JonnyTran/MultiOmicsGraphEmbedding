@@ -1,4 +1,4 @@
-from collections import Iterable
+from typing import Dict
 
 import numpy as np
 import torch
@@ -68,7 +68,21 @@ def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights, return_index=False
     return Y_hat, Y, weights[idx]
 
 
-def process_tensor_dicts(y_pred, y_true, weights=None):
+def select_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights=None):
+    # Filter node types which have no data
+    batch_size = {ntype: size for ntype, size in batch_size.items() if y_true[ntype].sum() > 0}
+
+    if isinstance(y_true, dict):
+        y_true = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+    if isinstance(y_pred, dict):
+        y_pred = torch.cat([y_pred[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+    if isinstance(weights, dict):
+        weights = torch.cat([weights[ntype][:size] for ntype, size in batch_size.items()], dim=0)
+
+    return y_pred, y_true, weights
+
+
+def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights: Dict[str, Tensor] = None):
     if isinstance(y_true, dict) and isinstance(y_pred, dict):
         ntypes = list(y_pred.keys())
         # Filter node types which have no data

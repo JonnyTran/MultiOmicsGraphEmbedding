@@ -16,12 +16,12 @@ from torch_sparse.tensor import SparseTensor
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
-from moge.model.classifier import DenseClassification
+from moge.model.classifier import DenseClassification, LinkPredictionClassifier
 from moge.model.losses import ClassificationLoss
 from moge.model.sampling import negative_sample
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.transformers.encoder import SequenceEncoder
-from moge.model.utils import filter_samples_weights, process_tensor_dicts
+from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -94,7 +94,10 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                 hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
                 logging.info("embedding_dim {}".format(hparams.embedding_dim))
 
-            self.classifier = DenseClassification(hparams)
+            if "cls_graph" in hparams and hparams.cls_graph:
+                self.classifier = LinkPredictionClassifier(hparams)
+            else:
+                self.classifier = DenseClassification(hparams)
         else:
             assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
 
@@ -222,7 +225,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss, edge_pred_dict = self.forward(X)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
 
@@ -240,7 +243,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred, proximity_loss, edge_pred_dict = self.forward(X, save_betas=False)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
 
@@ -692,7 +695,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                      sizes=sizes)
             out[ntype][:, :, -1, :] = h_dict[ntype]
 
-            print(ntype, out[ntype].sum(1).norm(p=2, dim=-1).mean(0))  #
+            # print(ntype, out[ntype].sum(1).norm(p=2, dim=-1).mean(0)) # Show which relation has non-neg vectors
             # print("\n Layer", self.layer, ntype, tensor_sizes(out))
 
             beta[ntype] = self.get_beta_weights(h_dict[ntype], out[ntype], ntype=ntype)
@@ -709,9 +712,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             beta[ntype] = beta[ntype].mean(1)
 
-        # print('save_betas', save_betas, tensor_sizes(beta))
-        # print(self.metapaths)
-        if save_betas:
+        if not self.training and save_betas:
             self.save_relation_weights(beta, global_node_idx)
 
         proximity_loss = None

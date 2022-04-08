@@ -2,17 +2,14 @@ from typing import Optional, Any, Callable
 
 import numpy as np
 import torch
+import torchmetrics
+from ignite.exceptions import NotComputableError
+from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
-
-from ignite.exceptions import NotComputableError
-from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
 from sklearn.metrics import average_precision_score
-
-import torchmetrics
-from torchmetrics import F1, AUROC, MeanSquaredError, Accuracy, Precision as PrecisionMetric, \
-    Recall as RecallMetric, PrecisionRecallCurve
+from torchmetrics import F1, AUROC, MeanSquaredError, Accuracy
 
 from .utils import filter_samples, tensor_sizes, activation
 
@@ -97,15 +94,20 @@ class Metrics(torch.nn.Module):
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
         y_pred = activation(y_pred, loss_type=self.loss_type)
 
-        if self.multilabel and any([m in self.metrics \
-                                    for m in ["auroc", "aupr", "precision", "recall", "micro_f1", "macro_f1"]]):
-            mask_labels = y_pred.sum(0) > 0
-            y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
+        # if self.multilabel and any([m in self.metrics \
+        #                             for m in ["auroc", "aupr", "precision", "recall", "micro_f1", "macro_f1"]]):
+        #     mask_labels = y_pred.sum(0) != 0
+        #     # y_pred_full, y_true_full = y_pred, y_true
+        #     y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
 
         for metric in self.metrics:
             # torchmetrics metrics
             if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
-                self.metrics[metric].update(y_pred, y_true)
+                try:
+                    self.metrics[metric].update(y_pred, y_true)
+                except Exception as e:
+                    print(e, "\n", metric, tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
+                    # self.metrics[metric].update(y_pred_full, y_true_full)
 
             # Torch ignite metrics
             elif "precision" in metric or "recall" in metric or "accuracy" in metric:

@@ -130,6 +130,17 @@ class LinkPredictionClassifier(nn.Module):
 
         return go_encoder
 
+    def get_class_embeddings(self):
+        if hasattr(self, "g"):
+            if self.g.device != self.attn_kernels.device:
+                self.g = self.g.to(self.attn_kernels.device)
+
+            classes = self.embedder(self.g)["_N"]
+            classes = self.dropout(classes)
+        else:
+            classes = self.embeddings.weight
+        return classes
+
     def forward(self, embeddings: Tensor, classes=None):
         nodes = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
 
@@ -150,17 +161,6 @@ class LinkPredictionClassifier(nn.Module):
         score = torch.bmm(nodes, cls_emb).transpose(1, 0)  # * scale[None, :, None]
         score = score.sum(1)
         return score
-
-    def get_class_embeddings(self):
-        if hasattr(self, "g"):
-            if self.g.device != self.attn_kernels.device:
-                self.g = self.g.to(self.attn_kernels.device)
-
-            classes = self.embedder(self.g)["_N"]
-            classes = self.dropout(classes)
-        else:
-            classes = self.embeddings.weight
-        return classes
 
 
 class DenseClassification(nn.Module):
