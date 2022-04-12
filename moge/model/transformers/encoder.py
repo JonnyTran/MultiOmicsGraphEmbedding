@@ -9,7 +9,7 @@ from transformers import BertModel
 
 class BertForSequenceClassification(nn.Module):
 
-    def __init__(self, embed_dim):
+    def __init__(self, embed_dim, num_labels):
         super(BertForSequenceClassification, self).__init__()
         self.bert = BertModel.from_pretrained('bert-base-uncased')
         self.dropout = nn.Dropout(0.5)
