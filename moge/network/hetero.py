@@ -308,7 +308,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             # DNA/RNA sequence
             if sequence and SEQUENCE_COL in annotations:
-                hetero[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL].to_numpy()
+                hetero[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL]  # .to_numpy()
 
         # Labels
         y_label = filter_multilabel(self.all_annotations[target],

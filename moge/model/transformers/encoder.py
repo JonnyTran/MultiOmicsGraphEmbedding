@@ -75,8 +75,7 @@ class Seq2SeqTransformer(nn.Module):
         self.generator = nn.Linear(emb_size, tgt_vocab_size)
         self.src_tok_emb = TokenEmbedding(src_vocab_size, emb_size)
         self.tgt_tok_emb = TokenEmbedding(tgt_vocab_size, emb_size)
-        self.positional_encoding = PositionalEncoding(
-            emb_size, dropout=dropout)
+        self.positional_encoding = PositionalEncoding(emb_size, dropout=dropout)
 
     def forward(self,
                 src: Tensor,
@@ -102,7 +101,7 @@ class Seq2SeqTransformer(nn.Module):
             tgt_mask)
 
 
-class SequenceEncoder(nn.Module):
+class LSTMSequenceEncoder(nn.Module):
     def __init__(self, vocab_size, embed_dim, hidden_dim=32):
         super().__init__()
         self.vocab_size, self.embedding_dim, self.hidden_dim = vocab_size, embed_dim, hidden_dim

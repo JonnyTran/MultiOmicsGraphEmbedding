@@ -19,7 +19,7 @@ from moge.model.PyG.latte import LATTE
 from moge.model.classifier import DenseClassification, LinkPredictionClassifier
 from moge.model.losses import ClassificationLoss
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.transformers.encoder import SequenceEncoder
+from moge.model.transformers.encoder import LSTMSequenceEncoder
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation
 
 
@@ -91,7 +91,7 @@ class LATTENodeClf(NodeClfTrainer):
 
         else:
             self.sequence_encoders = nn.ModuleDict({
-                ntype: SequenceEncoder(vocab_size=len(vocab.vocab), embed_dim=hparams.embedding_dim) \
+                ntype: LSTMSequenceEncoder(vocab_size=len(vocab.vocab), embed_dim=hparams.embedding_dim) \
                 for ntype, vocab in hparams.vocab.items()})
 
         if hparams.nb_cls_dense_size >= 0:

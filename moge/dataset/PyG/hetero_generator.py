@@ -1,17 +1,19 @@
-from typing import List, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict, Optional
 
+import pandas as pd
 import torch
 from torch import Tensor
 from torch_geometric.data import HeteroData
 
-# from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.PyG.neighbor_sampler import HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
+from moge.model.transformers.tokenizers import DNATokenizer
 
+
+# from torch_geometric.loader import HGTLoader, NeighborLoader
 
 class HeteroDataSampler(HeteroGraphDataset):
-
-    def __init__(self, dataset: HeteroData,
+    def __init__(self, dataset: HeteroData, vocabularies: Dict[str, str] = None, max_length: Dict[str, int] = None,
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
@@ -20,6 +22,8 @@ class HeteroDataSampler(HeteroGraphDataset):
                          add_reverse_metapaths, inductive, **kwargs)
 
         self.neighbor_sizes = neighbor_sizes
+        if vocabularies:
+            self.process_sequences(vocabularies, max_length)
 
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.G = hetero
@@ -30,6 +34,17 @@ class HeteroDataSampler(HeteroGraphDataset):
 
         self.metapaths = hetero.edge_types
         self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
+
+    def process_sequences(self, vocabularies: Dict[str, str], max_length: Dict[str, int] = None):
+        self.tokenizers = {}
+        self.word_lengths = {}
+        self.max_length = max_length
+
+        for ntype, vocab_file in vocabularies.items():
+            self.tokenizers[ntype] = DNATokenizer.from_pretrained(vocab_file)
+            self.word_lengths[ntype] = pd.Series(self.tokenizers[ntype].vocab.keys()).str.len().mode().item()
+
+        print("Vocab word lengths", self.word_lengths)
 
     @classmethod
     def from_pyg_heterodata(cls, hetero: HeteroData,
@@ -56,6 +71,13 @@ class HeteroDataSampler(HeteroGraphDataset):
         X['sizes'] = {ntype: size for ntype, size in batch.num_nodes_dict.items() if size}
         X['batch_size'] = batch.batch_size_dict
 
+        if hasattr(self, "tokenizers"):
+            X["sequences"] = {}
+            for ntype in X["global_node_index"]:
+                X["sequences"][ntype] = self.encode_sequences(batch, ntype,
+                                                              max_length=self.max_length[ntype] if isinstance(
+                                                                  self.max_length, dict) else None)
+
         y_dict = {ntype: y for ntype, y in batch.y_dict.items() if y.size(0)}
 
         if len(y_dict) == 1:
@@ -78,6 +100,15 @@ class HeteroDataSampler(HeteroGraphDataset):
                     weights[ntype] = (label.sum(1) > 0).to(torch.float)
 
         return X, y_dict, weights
+
+    def encode_sequences(self, batch: HeteroData, ntype: str, max_length: Optional[int] = None):
+        seqs = batch[ntype].sequence.iloc[batch[ntype].nid]
+        seqs = seqs.str.findall("...").str.join(" ")
+
+        encoding = self.tokenizers[ntype].batch_encode_plus(seqs, add_special_tokens=True, return_tensors="pt",
+                                                            padding='longest',
+                                                            max_length=max_length)
+        return encoding
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = HGTLoader(self.G, num_neighbors=self.neighbor_sizes,
@@ -110,3 +141,4 @@ class HeteroDataSampler(HeteroGraphDataset):
                             shuffle=False, num_workers=num_workers, **kwargs)
 
         return dataset
+

@@ -9,7 +9,7 @@ from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from sklearn.metrics import average_precision_score
-from torchmetrics import F1, AUROC, MeanSquaredError, Accuracy
+from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy
 
 from .utils import filter_samples, tensor_sizes, activation
 
@@ -43,11 +43,11 @@ class Metrics(torch.nn.Module):
                     self.metrics[metric] = TopKCategoricalAccuracy(k=max(int(np.log(n_classes)), 1),
                                                                    output_transform=None)
             elif "macro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="macro",
-                                          top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
+                self.metrics[metric] = F1Score(num_classes=n_classes, average="macro",
+                                               top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "micro_f1" in metric:
-                self.metrics[metric] = F1(num_classes=n_classes, average="micro",
-                                          top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
+                self.metrics[metric] = F1Score(num_classes=n_classes, average="micro",
+                                               top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
