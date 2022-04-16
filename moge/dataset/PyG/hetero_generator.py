@@ -22,7 +22,7 @@ class HeteroDataSampler(HeteroGraphDataset):
 
         self.neighbor_sizes = neighbor_sizes
         if vocabularies:
-            self.sequence_dataset = HeteroSequence(vocabularies, max_length)
+            self.sequences = HeteroSequence(vocabularies, max_length)
 
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.G = hetero
@@ -33,8 +33,6 @@ class HeteroDataSampler(HeteroGraphDataset):
 
         self.metapaths = hetero.edge_types
         self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
-
-
 
     @classmethod
     def from_pyg_heterodata(cls, hetero: HeteroData,
@@ -61,12 +59,11 @@ class HeteroDataSampler(HeteroGraphDataset):
         X['sizes'] = {ntype: size for ntype, size in batch.num_nodes_dict.items() if size}
         X['batch_size'] = batch.batch_size_dict
 
-        if hasattr(self, "tokenizers"):
+        if hasattr(batch, "sequence_dict"):
             X["sequences"] = {}
             for ntype in X["global_node_index"]:
-                X["sequences"][ntype] = self.sequence_dataset.encode_sequences(
-                    batch, ntype=ntype,
-                    max_length=self.max_length[ntype] if isinstance(self.max_length, dict) else None)
+                X["sequences"][ntype] = self.sequences.encode_sequences(
+                    batch, ntype=ntype, max_length=None)
 
         y_dict = {ntype: y for ntype, y in batch.y_dict.items() if y.size(0)}
 

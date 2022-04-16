@@ -1,6 +1,7 @@
 from typing import Dict, Optional
 
 import pandas as pd
+from tokenizers import AutoTokenizer
 from torch_geometric.data import HeteroData
 
 from moge.model.transformers import DNATokenizer
@@ -8,9 +9,9 @@ from moge.model.transformers import DNATokenizer
 
 class HeteroSequence():
     def __init__(self, vocabularies: Dict[str, str], max_length: Dict[str, int] = None):
-        self.tokenizers = {}
-        self.word_lengths = {}
-        self.max_length = max_length
+        self.tokenizers: Dict[str, AutoTokenizer] = {}
+        self.word_lengths: Dict[str, int] = {}
+        self.max_length: Dict[str, int] = max_length
 
         for ntype, vocab_file in vocabularies.items():
             self.tokenizers[ntype] = DNATokenizer.from_pretrained(vocab_file)
@@ -19,12 +20,13 @@ class HeteroSequence():
 
         print("Vocab word lengths", self.word_lengths)
 
-    def encode_sequences(self, batch: HeteroData, ntype: str, max_length: Optional[int] = None):
+    def encode_sequences(self, batch: HeteroData, ntype: str, max_length: Optional[int] = None, **kwargs):
         assert hasattr(batch, "sequence_dict")
         seqs = batch[ntype].sequence.iloc[batch[ntype].nid]
         seqs = seqs.str.findall("...").str.join(" ")
 
-        encoding = self.tokenizers[ntype].batch_encode_plus(seqs, add_special_tokens=True, return_tensors="pt",
-                                                            padding='longest',
-                                                            max_length=max_length)
+        if max_length is None:
+
+        encoding = self.tokenizers[ntype].batch_encode_plus(seqs, padding='longest', max_length=max_length,
+                                                            add_special_tokens=True, return_tensors="pt", )
         return encoding

@@ -102,12 +102,12 @@ class SiameseTripletGraphEmbedding(SiameseGraphEmbedding):
                                                              batch_size=self.batch_size, replace=True, seed=seed,
                                                              verbose=self.verbose, maxlen=self.max_length,
                                                              padding='post', truncating="post",
-                                                             tokenizer=generator_train.tokenizer) \
+                                                             tokenizer=generator_train.sequences) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
 
-        assert generator_train.tokenizer.word_index == self.generator_val.tokenizer.word_index
+        assert generator_train.sequences.word_index == self.generator_val.tokenizer.word_index
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
         try:

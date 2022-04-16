@@ -33,5 +33,5 @@ def make_dataset(network, directed=False,
         maxlen=max_length, padding='post', truncating='post',
         seed=seed, verbose=verbose)
 
-    assert generator_train.tokenizer.word_index == generator_test.tokenizer.word_index
+    assert generator_train.sequences.word_index == generator_test.sequences.word_index
     return generator_train, generator_test
