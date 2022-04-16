@@ -291,12 +291,12 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                                replace=True, seed=seed, verbose=self.verbose,
                                                maxlen=self.max_length,
                                                padding='post', truncating="post",
-                                               tokenizer=generator_train.sequences) \
+                                               tokenizer=generator_train.seq_tokenizer) \
                 if not hasattr(self, "generator_val") else self.generator_val
         else:
             self.generator_val = None
 
-        assert generator_train.sequences.word_index == self.generator_val.tokenizer.word_index
+        assert generator_train.seq_tokenizer.word_index == self.generator_val.tokenizer.word_index
         if not hasattr(self, "siamese_net") or rebuild_model: self.build_keras_model(multi_gpu)
 
         try:
@@ -326,7 +326,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                                  padding='post', truncating=self.truncating) \
                 if not hasattr(self, "generator_train") else self.generator_train
         self.node_list = self.generator_train.node_list
-        self.word_index = self.generator_train.sequences.word_index
+        self.word_index = self.generator_train.seq_tokenizer.word_index
         return self.generator_train
 
     def build_tensorboard(self, histogram_freq, embeddings, write_grads):

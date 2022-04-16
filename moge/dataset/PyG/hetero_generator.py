@@ -6,7 +6,7 @@ from torch_geometric.data import HeteroData
 
 from moge.dataset.PyG.neighbor_sampler import HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import HeteroSequence
+from moge.dataset.sequences import SequenceTokenizer
 
 
 # from torch_geometric.loader import HGTLoader, NeighborLoader
@@ -22,7 +22,7 @@ class HeteroDataSampler(HeteroGraphDataset):
 
         self.neighbor_sizes = neighbor_sizes
         if vocabularies:
-            self.sequences = HeteroSequence(vocabularies, max_length)
+            self.seq_tokenizer = SequenceTokenizer(vocabularies, max_length)
 
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.G = hetero
@@ -62,7 +62,7 @@ class HeteroDataSampler(HeteroGraphDataset):
         if hasattr(batch, "sequence_dict"):
             X["sequences"] = {}
             for ntype in X["global_node_index"]:
-                X["sequences"][ntype] = self.sequences.encode_sequences(
+                X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(
                     batch, ntype=ntype, max_length=None)
 
         y_dict = {ntype: y for ntype, y in batch.y_dict.items() if y.size(0)}

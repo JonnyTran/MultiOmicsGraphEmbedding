@@ -12,15 +12,16 @@ from torch import nn as nn, Tensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
+from transformers import BertForSequenceClassification, BertConfig
 
 from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.sequences import SequenceTokenizer
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 from moge.model.classifier import DenseClassification, LinkPredictionClassifier
 from moge.model.losses import ClassificationLoss
 from moge.model.sampling import negative_sample
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.transformers.encoder import LSTMSequenceEncoder
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
 
 
@@ -53,10 +54,19 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                               hparams=hparams)
 
         # Node feature projection
-        if "vocab" in hparams or hparams.vocab is not None:
+        if hasattr(dataset, 'seq_tokenizer'):
+            dataset.seq_tokenizer: SequenceTokenizer
+
             self.sequence_encoders = nn.ModuleDict({
-                ntype: LSTMSequenceEncoder(vocab_size=len(vocab.vocab), embed_dim=hparams.embedding_dim) \
-                for ntype, vocab in hparams.vocab.items()})
+                ntype: BertForSequenceClassification(
+                    BertConfig(vocab_size=tokenizer.vocab_size,
+                               hidden_size=hparams.embedding_dim,
+                               num_hidden_layers=4,
+                               num_attention_heads=8,
+                               intermediate_size=256,
+                               pad_token_id=tokenizer.vocab["[PAD]"],
+                               num_labels=128)) \
+                for ntype, tokenizer in dataset.seq_tokenizer.tokenizers.items()})
 
         else:
             self.embeddings = self.initialize_embeddings(hparams.embedding_dim,

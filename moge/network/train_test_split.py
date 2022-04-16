@@ -78,7 +78,7 @@ class TrainTestSplit():
         kwargs['node_list'] = node_list
 
         gen_inst = generator(**kwargs)
-        self.tokenizer = gen_inst.sequences
+        self.tokenizer = gen_inst.seq_tokenizer
 
         return gen_inst
 
