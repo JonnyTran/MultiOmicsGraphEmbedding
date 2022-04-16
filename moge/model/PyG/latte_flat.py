@@ -1,6 +1,6 @@
 import copy
 import logging
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
 from transformers import BertForSequenceClassification, BertConfig
 
-from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset import HeteroDataSampler
 from moge.dataset.sequences import SequenceTokenizer
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
@@ -26,7 +26,7 @@ from moge.model.utils import filter_samples_weights, process_tensor_dicts, selec
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroGraphDataset, metrics=["accuracy"],
+    def __init__(self, hparams, dataset: HeteroDataSampler, metrics=["accuracy"],
                  collate_fn=None) -> None:
         super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
@@ -53,21 +53,24 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
                               hparams=hparams)
 
-        # Node feature projection
+        # Sequence BERT encodings
         if hasattr(dataset, 'seq_tokenizer'):
             dataset.seq_tokenizer: SequenceTokenizer
 
-            self.sequence_encoders = nn.ModuleDict({
+            self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict({
                 ntype: BertForSequenceClassification(
                     BertConfig(vocab_size=tokenizer.vocab_size,
-                               hidden_size=hparams.embedding_dim,
+                               hidden_size=128,
                                num_hidden_layers=4,
                                num_attention_heads=8,
                                intermediate_size=256,
                                pad_token_id=tokenizer.vocab["[PAD]"],
-                               num_labels=128)) \
+                               num_labels=hparams.embedding_dim)) \
                 for ntype, tokenizer in dataset.seq_tokenizer.tokenizers.items()})
 
+            # print({ntype: encoders.config for ntype, encoders in self.seq_encoders.items()})
+
+        # Node feature projection
         else:
             self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
                                                          dataset.num_nodes_dict,
@@ -96,7 +99,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                     for ntype in self.node_types
                 })
 
-            self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
+        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
 
         # Last layer
         if "cls_graph" in hparams and hparams.cls_graph is not None:
@@ -182,16 +185,18 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         return h_dict
 
-    def forward(self, inputs: Dict[str, Any], **kwargs):
+    def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]], **kwargs):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        if "x_dict" in inputs or hasattr(self, "embeddings"):
-            h_out = self.transform_inp_feats(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
+        if "sequences" in inputs and hasattr(self, "seq_encoders"):
+            h_out = {ntype: self.seq_encoders[ntype](encoding["input_ids"],
+                                                     encoding["attention_mask"],
+                                                     encoding["token_type_ids"]).logits \
+                     for ntype, encoding in inputs["sequences"].items()}
 
-        elif "sequence" in inputs:
-            h_out = {ntype: self.sequence_encoders[ntype](inputs["sequence"][ntype], inputs["seq_len"][ntype]) \
-                     for ntype in inputs["sequence"]}
+        elif ("x_dict" in inputs and hasattr(self, "feature_projection")) or hasattr(self, "embeddings"):
+            h_out = self.transform_inp_feats(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
 
         embeddings, proximity_loss, edge_index_dict = self.embedder.forward(h_dict=h_out,
                                                                             edge_index_dict=inputs["edge_index_dict"],

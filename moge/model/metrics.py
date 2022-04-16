@@ -264,9 +264,8 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
     - `update` must receive output of the form `(y_pred, y)` or `{'y_pred': y_pred, 'y': y}` Tensors of size (batch_size, n_classes).
     """
 
-    def __init__(self, k_s=[5, 10, 50, 100, 200], compute_on_step: bool = True, dist_sync_on_step: bool = False,
-                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
-        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
+    def __init__(self, k_s=[5, 10, 50, 100, 200], compute_on_step: bool = True, **kwargs):
+        super().__init__(compute_on_step, **kwargs)
         self.k_s = k_s
 
     def reset(self):

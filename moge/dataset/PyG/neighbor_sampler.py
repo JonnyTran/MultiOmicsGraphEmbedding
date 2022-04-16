@@ -440,6 +440,9 @@ class HGTLoader(BaseDataLoader):
         out = copy.copy(data)
 
         for node_type in data.node_types:
+            if node_type not in node_dict:
+                node_dict[node_type] = torch.tensor([], dtype=torch.long)
+
             filter_node_store_(data[node_type], out[node_type],
                                node_dict[node_type])
 

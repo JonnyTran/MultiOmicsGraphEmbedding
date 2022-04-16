@@ -12,7 +12,7 @@ from moge.dataset.sequences import SequenceTokenizer
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 
 class HeteroDataSampler(HeteroGraphDataset):
-    def __init__(self, dataset: HeteroData, vocabularies: Dict[str, str] = None, max_length: Dict[str, int] = None,
+    def __init__(self, dataset: HeteroData, seq_tokenizer: SequenceTokenizer = None,
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
@@ -21,8 +21,8 @@ class HeteroDataSampler(HeteroGraphDataset):
                          add_reverse_metapaths, inductive, **kwargs)
 
         self.neighbor_sizes = neighbor_sizes
-        if vocabularies:
-            self.seq_tokenizer = SequenceTokenizer(vocabularies, max_length)
+        if seq_tokenizer:
+            self.seq_tokenizer = seq_tokenizer
 
     def process_pyg_heterodata(self, hetero: HeteroData):
         self.G = hetero
@@ -62,8 +62,7 @@ class HeteroDataSampler(HeteroGraphDataset):
         if hasattr(batch, "sequence_dict"):
             X["sequences"] = {}
             for ntype in X["global_node_index"]:
-                X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(
-                    batch, ntype=ntype, max_length=None)
+                X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(batch, ntype=ntype, max_length=None)
 
         y_dict = {ntype: y for ntype, y in batch.y_dict.items() if y.size(0)}
 

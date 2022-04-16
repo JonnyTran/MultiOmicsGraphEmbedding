@@ -134,8 +134,8 @@ class LinkPredictionClassifier(nn.Module):
     def forward(self, embeddings: Tensor, classes=None) -> Tensor:
         nodes = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
 
-        if self.g.device != self.device:
-            self.g = self.g.to(self.device)
+        if self.g.device != self.attn_kernels.device:
+            self.g = self.g.to(self.attn_kernels.device)
 
         cls_emb = self.embedder(self.g)["_N"]
         cls_emb = self.dropout(cls_emb)
