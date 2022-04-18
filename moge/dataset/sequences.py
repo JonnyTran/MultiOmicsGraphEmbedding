@@ -3,11 +3,9 @@ from pprint import pprint
 from typing import Dict, Optional, Union
 
 import pandas as pd
-from torch import Tensor
-from torch_geometric.data import HeteroData
-from transformers import AutoTokenizer, BertTokenizer
-
 from moge.model.transformers import DNATokenizer
+from torch_geometric.data import HeteroData
+from transformers import AutoTokenizer, BertTokenizer, BatchEncoding
 
 
 class SequenceTokenizer():
@@ -34,8 +32,11 @@ class SequenceTokenizer():
     def __getitem__(self, item: str):
         return self.tokenizers[item]
 
+    def items(self):
+        return self.tokenizers.items()
+
     def encode_sequences(self, batch: HeteroData, ntype: str, max_length: Optional[int] = None, **kwargs) -> \
-            Dict[str, Tensor]:
+            BatchEncoding:
         seqs = batch[ntype].sequence.iloc[batch[ntype].nid]
         seqs = seqs.str.findall("." * self.word_lengths[ntype]).str.join(" ")
 
@@ -43,5 +44,5 @@ class SequenceTokenizer():
             max_length = self.max_length[ntype]
 
         encodings = self.tokenizers[ntype].batch_encode_plus(seqs.tolist(), padding='longest', max_length=max_length,
-                                                             add_special_tokens=True, return_tensors="pt", )
+                                                             add_special_tokens=True, return_tensors="pt", **kwargs)
         return encodings

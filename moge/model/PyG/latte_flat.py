@@ -8,21 +8,19 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
-from torch import nn as nn, Tensor
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-from torch_sparse.tensor import SparseTensor
-from transformers import BertForSequenceClassification, BertConfig
-
 from moge.dataset import HeteroDataSampler
-from moge.dataset.sequences import SequenceTokenizer
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 from moge.model.classifier import DenseClassification, LinkPredictionClassifier
+from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.sampling import negative_sample
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
+from torch import nn as nn, Tensor
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
+from torch_sparse.tensor import SparseTensor
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -37,6 +35,13 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         self._name = f"LATTE-{hparams.t_order}"
         self.collate_fn = collate_fn
 
+        # Node attr input
+        if hasattr(dataset, 'seq_tokenizer'):
+            self.encoder = HeteroSequenceEncoder(hparams, dataset)
+        else:
+            self.encoder = HeteroNodeEncoder(hparams, dataset)
+
+        # Graph embedding
         self.embedder = LATTE(n_layers=hparams.n_layers,
                               t_order=min(hparams.t_order, hparams.n_layers),
                               embedding_dim=hparams.embedding_dim,
@@ -53,55 +58,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
                               hparams=hparams)
 
-        # Sequence BERT encodings
-        if hasattr(dataset, 'seq_tokenizer'):
-            dataset.seq_tokenizer: SequenceTokenizer
-
-            self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict({
-                ntype: BertForSequenceClassification(
-                    BertConfig(vocab_size=tokenizer.vocab_size,
-                               hidden_size=128,
-                               num_hidden_layers=4,
-                               num_attention_heads=8,
-                               intermediate_size=256,
-                               pad_token_id=tokenizer.vocab["[PAD]"],
-                               num_labels=hparams.embedding_dim)) \
-                for ntype, tokenizer in dataset.seq_tokenizer.tokenizers.items()})
-
-            # print({ntype: encoders.config for ntype, encoders in self.seq_encoders.items()})
-
-        # Node feature projection
-        else:
-            self.embeddings = self.initialize_embeddings(hparams.embedding_dim,
-                                                         dataset.num_nodes_dict,
-                                                         dataset.node_attr_shape,
-                                                         pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
-                                                         freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True)
-
-            # node types that needs a projection to align to the embedding_dim
-            self.proj_ntypes = [ntype for ntype in self.node_types \
-                                if (ntype in dataset.node_attr_shape and
-                                    dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
-                                or (self.embeddings and ntype in self.embeddings and
-                                    self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
-
-            self.feature_projection = nn.ModuleDict({
-                ntype: nn.Linear(
-                    in_features=dataset.node_attr_shape[ntype] \
-                        if not self.embeddings or ntype not in self.embeddings \
-                        else self.embeddings[ntype].weight.size(1),
-                    out_features=hparams.embedding_dim) \
-                for ntype in self.proj_ntypes})
-
-            if hparams.batchnorm:
-                self.batchnorm = nn.ModuleDict({
-                    ntype: nn.BatchNorm1d(dataset.node_attr_shape[ntype]) \
-                    for ntype in self.node_types
-                })
-
-        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
-
-        # Last layer
+        # Output layer
         if "cls_graph" in hparams and hparams.cls_graph is not None:
             self.classifier = LinkPredictionClassifier(hparams)
 
@@ -126,77 +83,14 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         self.val_moving_loss = torch.tensor([3.0, ] * 5, dtype=torch.float)
 
-    def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict,
-                              pretrain_embeddings: Dict[str, Tensor],
-                              freeze=True):
-        # If some node type are not attributed, instantiate nn.Embedding for them
-        if isinstance(in_channels_dict, dict):
-            non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
-        else:
-            non_attr_node_types = []
-
-        if non_attr_node_types:
-            module_dict = {}
-
-            for ntype in non_attr_node_types:
-                if pretrain_embeddings is None or ntype not in pretrain_embeddings:
-                    print("Initialized trainable embeddings", ntype)
-                    module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
-                                                      embedding_dim=embedding_dim,
-                                                      scale_grad_by_freq=True,
-                                                      sparse=False)
-                else:
-                    print(f"Pretrained embeddings freeze={freeze}", ntype)
-                    max_norm = pretrain_embeddings[ntype].norm(dim=1).mean()
-                    module_dict[ntype] = nn.Embedding.from_pretrained(pretrain_embeddings[ntype],
-                                                                      freeze=freeze,
-                                                                      scale_grad_by_freq=True,
-                                                                      max_norm=max_norm)
-
-            embeddings = nn.ModuleDict(module_dict)
-        else:
-            embeddings = None
-
-        return embeddings
-
-    def transform_inp_feats(self, node_feats: Dict[str, Tensor], global_node_idx: Dict[str, Tensor]) -> Dict[
-        str, Tensor]:
-        h_dict = node_feats
-
-        for ntype in global_node_idx:
-            if global_node_idx[ntype].numel() == 0: continue
-
-            if ntype not in h_dict:
-                h_dict[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
-
-            # project to embedding_dim if node features are not same same dimension
-            if ntype in self.proj_ntypes:
-                if hasattr(self, "batchnorm"):
-                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
-
-                h_dict[ntype] = self.feature_projection[ntype](h_dict[ntype])
-                h_dict[ntype] = F.relu(h_dict[ntype])
-                if self.dropout:
-                    h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
-
-            else:
-                # Skips projection
-                h_dict[ntype] = node_feats[ntype]
-
-        return h_dict
-
     def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]], **kwargs):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        if "sequences" in inputs and hasattr(self, "seq_encoders"):
-            h_out = {ntype: self.seq_encoders[ntype](encoding["input_ids"],
-                                                     encoding["attention_mask"],
-                                                     encoding["token_type_ids"]).logits \
-                     for ntype, encoding in inputs["sequences"].items()}
-
-        elif ("x_dict" in inputs and hasattr(self, "feature_projection")) or hasattr(self, "embeddings"):
-            h_out = self.transform_inp_feats(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
+        if "sequences" in inputs:
+            h_out = self.encoder.forward(inputs['sequences'])
+        elif "x_dict" in inputs or hasattr(self, "embeddings"):
+            h_out = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
 
         embeddings, proximity_loss, edge_index_dict = self.embedder.forward(h_dict=h_out,
                                                                             edge_index_dict=inputs["edge_index_dict"],
@@ -752,7 +646,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # First order
         edge_pred_dict = {}
         for metapath in self.get_tail_relations(ntype, order=1):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] == None: continue
+            if metapath not in edge_index_dict or edge_index_dict[metapath] is None \
+                    or edge_index_dict[metapath].size(1) == 0: continue
             head, tail = metapath[0], metapath[-1]
             num_node_head, num_node_tail = sizes[head], sizes[tail]
 

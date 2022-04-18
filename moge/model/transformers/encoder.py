@@ -4,24 +4,6 @@ import torch
 from torch import nn, Tensor
 from torch.nn import Transformer
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from transformers import BertModel
-
-
-class BertForSequenceClassification(nn.Module):
-
-    def __init__(self, embed_dim, num_labels):
-        super(BertForSequenceClassification, self).__init__()
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
-        self.dropout = nn.Dropout(0.5)
-        self.classifier = nn.Linear(embed_dim, num_labels)
-        nn.init.xavier_normal_(self.classifier.weight)
-
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None):
-        _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False)
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-
-        return logits
 
 
 class PositionalEncoding(nn.Module):
