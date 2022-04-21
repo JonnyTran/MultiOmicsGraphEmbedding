@@ -89,7 +89,7 @@ class HeteroDataSampler(HeteroGraphDataset):
 
 
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
         dataset = HGTLoader(self.G, num_neighbors=self.neighbor_sizes,
                             batch_size=batch_size,
                             # directed=True,
@@ -101,7 +101,7 @@ class HeteroDataSampler(HeteroGraphDataset):
 
         return dataset
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
         dataset = HGTLoader(self.G, num_neighbors=self.neighbor_sizes,
                             batch_size=batch_size,
                             # directed=False,
@@ -111,7 +111,7 @@ class HeteroDataSampler(HeteroGraphDataset):
 
         return dataset
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
         dataset = HGTLoader(self.G, num_neighbors=self.neighbor_sizes,
                             batch_size=batch_size,
                             # directed=False,
@@ -120,4 +120,3 @@ class HeteroDataSampler(HeteroGraphDataset):
                             shuffle=False, num_workers=num_workers, **kwargs)
 
         return dataset
-

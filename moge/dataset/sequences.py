@@ -1,11 +1,12 @@
 import os.path
 from pprint import pprint
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 
 import pandas as pd
-from moge.model.transformers import DNATokenizer
 from torch_geometric.data import HeteroData
 from transformers import AutoTokenizer, BertTokenizer, BatchEncoding
+
+from moge.model.transformers import DNATokenizer
 
 
 class SequenceTokenizer():
@@ -46,3 +47,13 @@ class SequenceTokenizer():
         encodings = self.tokenizers[ntype].batch_encode_plus(seqs.tolist(), padding='longest', max_length=max_length,
                                                              add_special_tokens=True, return_tensors="pt", **kwargs)
         return encodings
+
+
+def kmers(s: str, k: int = 3, concat: bool = True) -> Union[List[str], str]:
+    res = [s[i: j] \
+           for i in range(len(s)) \
+           for j in range(i + 1, len(s) + 1) if len(s[i:j]) == k]
+
+    if concat:
+        res = " ".join(res)
+    return res

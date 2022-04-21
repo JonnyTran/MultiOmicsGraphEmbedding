@@ -2,10 +2,11 @@ from argparse import Namespace
 from typing import Dict
 
 import torch.nn.functional as F
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizer
 from torch import nn, Tensor
 from transformers import BertConfig, BertForSequenceClassification
+
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.sequences import SequenceTokenizer
 
 
 class HeteroSequenceEncoder(nn.Module):
@@ -18,13 +19,16 @@ class HeteroSequenceEncoder(nn.Module):
             if max_position_embeddings is None:
                 max_position_embeddings = 512
 
-            bert_config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=768,
-                                     max_position_embeddings=max_position_embeddings,
-                                     num_hidden_layers=1, num_attention_heads=8, intermediate_size=128,
-                                     pad_token_id=tokenizer.vocab["[PAD]"],
-                                     num_labels=hparams.embedding_dim,
-                                     position_embedding_type="relative",
-                                     classifier_dropout=0.1)
+            if hasattr(hparams, "bert_config") and ntype in hparams.bert_config:
+                bert_config = hparams.bert_config[ntype]
+            else:
+                bert_config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=64,
+                                         max_position_embeddings=max_position_embeddings,
+                                         num_hidden_layers=2, num_attention_heads=2, intermediate_size=128,
+                                         pad_token_id=tokenizer.vocab["[PAD]"],
+                                         num_labels=hparams.embedding_dim,
+                                         position_embedding_type=None,  # "relative_key",
+                                         classifier_dropout=0.1)
 
             seq_encoders[ntype] = BertForSequenceClassification(bert_config)
 
