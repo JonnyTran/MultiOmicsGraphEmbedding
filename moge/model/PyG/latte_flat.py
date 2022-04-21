@@ -8,6 +8,11 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
+from torch import nn as nn, Tensor
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset import HeteroDataSampler
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
@@ -17,10 +22,6 @@ from moge.model.losses import ClassificationLoss
 from moge.model.sampling import negative_sample
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
-from torch import nn as nn, Tensor
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-from torch_sparse.tensor import SparseTensor
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -87,9 +88,9 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        if "sequences" in inputs:
+        if "sequences" in inputs and isinstance(self.encoder, HeteroSequenceEncoder):
             h_out = self.encoder.forward(inputs['sequences'])
-        elif "x_dict" in inputs or hasattr(self, "embeddings"):
+        elif "x_dict" in inputs:
             h_out = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
 
         embeddings, proximity_loss, edge_index_dict = self.embedder.forward(h_dict=h_out,

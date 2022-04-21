@@ -1,6 +1,6 @@
 import os.path
 from pprint import pprint
-from typing import Dict, Optional, Union, List
+from typing import Dict, Optional, Union
 
 import pandas as pd
 from torch_geometric.data import HeteroData
@@ -49,11 +49,9 @@ class SequenceTokenizer():
         return encodings
 
 
-def kmers(s: str, k: int = 3, concat: bool = True) -> Union[List[str], str]:
-    res = [s[i: j] \
-           for i in range(len(s)) \
-           for j in range(i + 1, len(s) + 1) if len(s[i:j]) == k]
+def k_mers(sentence: str, k: int = 3, concat: bool = True):
+    substrs = [sentence[i: i + k + 1] for i in range(0, len(sentence) - k + 1)]
 
     if concat:
-        res = " ".join(res)
-    return res
+        substrs = " ".join(substrs)
+    return substrs

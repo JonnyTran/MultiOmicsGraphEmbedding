@@ -59,7 +59,7 @@ class HeteroDataSampler(HeteroGraphDataset):
         X['sizes'] = {ntype: size for ntype, size in batch.num_nodes_dict.items() if size}
         X['batch_size'] = batch.batch_size_dict
 
-        if hasattr(batch, "sequence_dict"):
+        if hasattr(batch, "sequence_dict") and hasattr(self, "seq_tokenizer"):
             X["sequences"] = {}
             for ntype in X["global_node_index"]:
                 X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(batch, ntype=ntype, max_length=None)

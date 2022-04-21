@@ -7,6 +7,7 @@ from transformers import BertConfig, BertForSequenceClassification
 
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizer
+from moge.model.utils import tensor_sizes
 
 
 class HeteroSequenceEncoder(nn.Module):
@@ -22,12 +23,14 @@ class HeteroSequenceEncoder(nn.Module):
             if hasattr(hparams, "bert_config") and ntype in hparams.bert_config:
                 bert_config = hparams.bert_config[ntype]
             else:
-                bert_config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=64,
+                bert_config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=128,
                                          max_position_embeddings=max_position_embeddings,
-                                         num_hidden_layers=2, num_attention_heads=2, intermediate_size=128,
+                                         num_hidden_layers=2, num_attention_heads=8, intermediate_size=128,
+                                         hidden_dropout_prob=0.1,
                                          pad_token_id=tokenizer.vocab["[PAD]"],
                                          num_labels=hparams.embedding_dim,
                                          position_embedding_type=None,  # "relative_key",
+                                         use_cache=False,
                                          classifier_dropout=0.1)
 
             seq_encoders[ntype] = BertForSequenceClassification(bert_config)
@@ -52,9 +55,10 @@ class HeteroNodeEncoder(nn.Module):
                                                      dataset.node_attr_shape,
                                                      pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
                                                      freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True)
+        print("model.encoder.embeddings: ", tensor_sizes(self.embeddings))
 
         # node types that needs a projection to align to the embedding_dim
-        self.proj_ntypes = [ntype for ntype in self.node_types \
+        self.proj_ntypes = [ntype for ntype in dataset.node_types \
                             if (ntype in dataset.node_attr_shape and
                                 dataset.node_attr_shape[ntype] != hparams.embedding_dim) \
                             or (self.embeddings and ntype in self.embeddings and
@@ -69,10 +73,15 @@ class HeteroNodeEncoder(nn.Module):
             for ntype in self.proj_ntypes})
 
         if hparams.batchnorm:
-            self.batchnorm = nn.ModuleDict({
+            self.batchnorm: Dict[str, nn.BatchNorm1d] = nn.ModuleDict({
                 ntype: nn.BatchNorm1d(dataset.node_attr_shape[ntype]) \
-                for ntype in self.node_types
+                for ntype in dataset.node_types
             })
+
+        if hasattr(hparams, "dropout") and hparams.dropout:
+            self.dropout = hparams.dropout
+        else:
+            self.dropout = None
 
     def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict,
                               pretrain_embeddings: Dict[str, Tensor],
@@ -120,11 +129,11 @@ class HeteroNodeEncoder(nn.Module):
             # project to embedding_dim if node features are not same same dimension
             if ntype in self.proj_ntypes:
                 if hasattr(self, "batchnorm"):
-                    h_dict[ntype] = self.batchnorm[ntype](h_dict[ntype])
+                    h_dict[ntype] = self.batchnorm[ntype].forward(h_dict[ntype])
 
                 h_dict[ntype] = self.feature_projection[ntype](h_dict[ntype])
                 h_dict[ntype] = F.relu(h_dict[ntype])
-                if self.dropout:
+                if hasattr(self, "dropout") and self.dropout:
                     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
 
             else:
