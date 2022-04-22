@@ -2,12 +2,11 @@ from argparse import Namespace
 from typing import Dict
 
 import torch.nn.functional as F
-from torch import nn, Tensor
-from transformers import BertConfig, BertForSequenceClassification
-
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizer
 from moge.model.utils import tensor_sizes
+from torch import nn, Tensor
+from transformers import BertConfig, BertForSequenceClassification
 
 
 class HeteroSequenceEncoder(nn.Module):
@@ -40,8 +39,9 @@ class HeteroSequenceEncoder(nn.Module):
     def forward(self, sequences: Dict[str, Dict[str, Tensor]]):
         h_out = {}
         for ntype, encoding in sequences.items():
-            out = self.seq_encoders[ntype].forward(encoding["input_ids"], encoding["attention_mask"],
-                                                   encoding["token_type_ids"])
+            out = self.seq_encoders[ntype].forward(input_ids=encoding["input_ids"],
+                                                   attention_mask=encoding["attention_mask"],
+                                                   token_type_ids=encoding["token_type_ids"])
             h_out[ntype] = out.logits
 
         return h_out
