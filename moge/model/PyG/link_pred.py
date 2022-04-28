@@ -1,16 +1,18 @@
+from typing import List, Tuple, Dict
+
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import nn, Tensor
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from moge.dataset import HeteroGraphDataset
+from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.latte import LATTE
 from moge.model.losses import LinkPredLoss
 from ..trainer import LinkPredTrainer
 
 
 class DistMulti(torch.nn.Module):
-    def __init__(self, embedding_dim, metapaths):
+    def __init__(self, embedding_dim, metapaths: List[Tuple[str, str, str]]):
         super(DistMulti, self).__init__()
         self.metapaths = metapaths
         self.embedding_dim = embedding_dim
@@ -23,7 +25,7 @@ class DistMulti(torch.nn.Module):
         self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
         nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
 
-    def forward(self, inputs, embeddings):
+    def forward(self, inputs: Dict[str, Dict[Tuple[str, str, str], Tensor]], embeddings: Dict[str, Tensor]):
         output = {}
 
         # Single edges
@@ -51,7 +53,8 @@ class DistMulti(torch.nn.Module):
 
         return output
 
-    def predict(self, edge_index_dict: dict, embeddings: dict, mode: str):
+    def predict(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+                embeddings: Dict[str, Tensor], mode: str) -> Dict[Tuple[str, str, str], Tensor]:
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():

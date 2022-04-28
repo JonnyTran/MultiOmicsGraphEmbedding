@@ -71,7 +71,8 @@ class HeteroDataSampler(HeteroGraphDataset):
     def sample(self, batch: HeteroData):
         X = {}
         X["x_dict"] = {ntype: x for ntype, x in batch.x_dict.items() if x.size(0)}
-        X["edge_index_dict"] = batch.edge_index_dict
+        X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in batch.edge_index_dict.items() if
+                                "associated" not in metapath[1]}
         X["global_node_index"] = {ntype: nid for ntype, nid in batch.nid_dict.items() if nid.numel()}
         X['sizes'] = {ntype: size for ntype, size in batch.num_nodes_dict.items() if size}
         X['batch_size'] = batch.batch_size_dict
@@ -82,7 +83,6 @@ class HeteroDataSampler(HeteroGraphDataset):
                 X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(batch, ntype=ntype, max_length=None)
 
         y_dict = {ntype: y for ntype, y in batch.y_dict.items() if y.size(0)}
-
         if len(y_dict) == 1:
             y_dict = y_dict[list(y_dict.keys()).pop()]
 
@@ -101,6 +101,8 @@ class HeteroDataSampler(HeteroGraphDataset):
                     weights[ntype] = (y_dict >= 0).to(torch.float)
                 elif label.dim() == 2:
                     weights[ntype] = (label.sum(1) > 0).to(torch.float)
+        else:
+            weights = None
 
         return X, y_dict, weights
 

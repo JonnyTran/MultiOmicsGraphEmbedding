@@ -57,7 +57,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             print(node_type, " nodes:", len(self.nodes[node_type]), self.multiomics[node_type].gene_index)
 
         print("Total nodes:", len(self.get_node_list()))
-        self.nodes = pd.Series(self.nodes)
+        self.nodes: Dict[str, pd.Index] = pd.Series(self.nodes)
         self.node_to_modality = pd.Series(self.node_to_modality)
 
     def process_annotations(self):
@@ -281,7 +281,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                        torch.tensor(biadj.col, dtype=torch.long)])
 
         # Add node attributes
-        node_attr_cols = self.all_annotations.columns.drop([target, "omic", SEQUENCE_COL])
+        node_attr_cols = self.all_annotations.columns.drop([target, "omic", SEQUENCE_COL], errors="ignore")
         if attr_cols:
             node_attr_cols = node_attr_cols.intersection(attr_cols)
 
@@ -302,46 +302,53 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 node_expression = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]].values
                 node_feats.append(torch.tensor(node_expression, dtype=torch.float))
 
-            hetero[ntype].x = torch.cat(node_feats, dim=1)
-            hetero[ntype]['nid'] = torch.arange(hetero[ntype].num_nodes, dtype=torch.long)
+            if node_feats:
+                hetero[ntype].x = torch.cat(node_feats, dim=1)
+            hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
 
             # DNA/RNA sequence
             if sequence and SEQUENCE_COL in annotations:
                 hetero[ntype][SEQUENCE_COL] = annotations[SEQUENCE_COL]  # .to_numpy()
 
         # Labels
-        y_label = filter_multilabel(self.all_annotations[target],
-                                    min_count=min_count,
-                                    label_subset=label_subset, dropna=False, delimiter=self.delimiter)
-        self.feature_transformer[target].fit_transform(y_label)
+        if target:
+            y_label = filter_multilabel(self.all_annotations[target],
+                                        min_count=min_count,
+                                        label_subset=label_subset, dropna=False, delimiter=self.delimiter)
+            self.feature_transformer[target].fit_transform(y_label)
 
-        ## Filter nodes
-        if label_subset is not None:
-            self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
-                                                                       label_subset, assume_unique=True)
-        if geneontology is not None:
-            self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
-                                                                       geneontology.data.index, assume_unique=True)
-        classes = self.feature_transformer[target].classes_
-        print(f"Selected {len(self.feature_transformer[target].classes_)} classes:", classes)
+            ## Filter nodes
+            if label_subset is not None:
+                self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
+                                                                           label_subset, assume_unique=True)
+            if geneontology is not None:
+                self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
+                                                                           geneontology.data.index, assume_unique=True)
+            classes = self.feature_transformer[target].classes_
+            print(f"Selected {len(self.feature_transformer[target].classes_)} classes:", classes)
 
-        ## Node labels
-        y_dict = {}
-        for ntype in self.node_types:
-            if target not in self.multiomics[ntype].annotations.columns: continue
-            y_label = filter_multilabel(self.multiomics[ntype].annotations.loc[self.nodes[ntype], target],
-                                        min_count=None, label_subset=classes, dropna=False,
-                                        delimiter=self.delimiter)
-            y_dict[ntype] = self.feature_transformer[target].transform(y_label)
-            y_dict[ntype] = torch.tensor(y_dict[ntype])
+            ## Node labels
+            y_dict = {}
+            for ntype in self.node_types:
+                if target not in self.multiomics[ntype].annotations.columns: continue
+                y_label = filter_multilabel(self.multiomics[ntype].annotations.loc[self.nodes[ntype], target],
+                                            min_count=None, label_subset=classes, dropna=False,
+                                            delimiter=self.delimiter)
+                y_dict[ntype] = self.feature_transformer[target].transform(y_label)
+                y_dict[ntype] = torch.tensor(y_dict[ntype])
 
-            hetero[ntype]["y"] = y_dict[ntype]
+                hetero[ntype]["y"] = y_dict[ntype]
+        else:
+            classes = None
 
         # Add links for annotations ontology:
         if geneontology is not None:
             all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
-            go_nodes = np.concatenate(
-                [classes, np.array(list(set(all_go) - set(classes)))])  # Order nodes with classes nodes first
+            # Order nodes with classes nodes first
+            if classes:
+                go_nodes = np.concatenate([classes, np.array(list(set(all_go) - set(classes)))])
+            else:
+                go_nodes = np.array(list(all_go))
 
             # Edges between GO terms
             edge_types = {e for u, v, e in geneontology.network.edges}
@@ -351,7 +358,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                               format="pyg", d_ntype=go_ntype)
             for metapath, edge_index in edge_index_dict.items():
                 if edge_index.size(1) < 200: continue
-                print(metapath, edge_index.shape, edge_index.max(1).values)
                 hetero[metapath].edge_index = edge_index
 
             # Cls node attrs
@@ -397,6 +403,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     for ntype, ntype_nids in self.nodes.items()}
 
         for ntype in self.node_types:
+            if hetero[ntype].num_nodes is None:
+                hetero[ntype].num_nodes = len(self.nodes[ntype])
+
             if ntype in train_idx:
                 mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
                 mask[train_idx[ntype]] = 1
