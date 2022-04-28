@@ -6,7 +6,7 @@ from torch import nn, Tensor
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.dataset.graph import HeteroGraphDataset
-from moge.model.PyG.latte import LATTE
+from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import LinkPredLoss
 from ..trainer import LinkPredTrainer
 
@@ -112,12 +112,14 @@ class LATTELinkPred(LinkPredTrainer):
         self._name = f"LATTE-{hparams.n_layers}{' Link' if hparams.use_proximity else ''}"
         self.collate_fn = collate_fn
 
-        self.embedder = LATTE(n_layers=hparams.n_layers, embedding_dim=hparams.embedding_dim,
-                              in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
+        self.embedder = LATTE(n_layers=hparams.n_layers, t_order=hparams.t_order,
+                              embedding_dim=hparams.embedding_dim,
+                              num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(), attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout,
                               use_proximity=hparams.use_proximity, neg_sampling_ratio=hparams.neg_sampling_ratio,
-                              cpu_embeddings=True if "cpu_embedding" in hparams else False)
+                              layer_pooling=hparams.layer_pooling,
+                              )
 
         self.classifier = DistMulti(embedding_dim=hparams.embedding_dim * hparams.n_layers, metapaths=dataset.metapaths)
         self.criterion = LinkPredLoss()
@@ -125,10 +127,11 @@ class LATTELinkPred(LinkPredTrainer):
         hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
 
     def forward(self, inputs: dict, edges_true: dict, **kwargs):
-        embeddings, proximity_loss, _ = self.embedder(inputs["x_dict"],
-                                                      edge_index_dict=inputs["edge_index_dict"],
-                                                      global_node_idx=inputs["global_node_index"],
-                                                      **kwargs)
+        embeddings, proximity_loss, _ = self.embedder.forward(inputs["x_dict"],
+                                                              edge_index_dict=inputs["edge_index_dict"],
+                                                              global_node_idx=inputs["global_node_index"],
+                                                              sizes=inputs["sizes"],
+                                                              **kwargs)
 
         edges_pred = self.classifier(edges_true, embeddings)
 
