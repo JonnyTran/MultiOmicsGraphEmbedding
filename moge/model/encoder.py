@@ -2,11 +2,12 @@ from argparse import Namespace
 from typing import Dict
 
 import torch.nn.functional as F
+from torch import nn, Tensor
+from transformers import BertConfig, BertForSequenceClassification
+
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizer
 from moge.model.utils import tensor_sizes
-from torch import nn, Tensor
-from transformers import BertConfig, BertForSequenceClassification
 
 
 class HeteroSequenceEncoder(nn.Module):
@@ -71,11 +72,13 @@ class HeteroNodeEncoder(nn.Module):
                     else self.embeddings[ntype].weight.size(1),
                 out_features=hparams.embedding_dim) \
             for ntype in self.proj_ntypes})
+        print("model.encoder.feature_projection", self.feature_projection)
 
         if hparams.batchnorm:
             self.batchnorm: Dict[str, nn.BatchNorm1d] = nn.ModuleDict({
                 ntype: nn.BatchNorm1d(dataset.node_attr_shape[ntype]) \
-                for ntype in dataset.node_types
+                for ntype in dataset.node_types \
+                if ntype in dataset.node_attr_shape
             })
 
         if hasattr(hparams, "dropout") and hparams.dropout:
@@ -124,7 +127,7 @@ class HeteroNodeEncoder(nn.Module):
             if global_node_idx[ntype].numel() == 0: continue
 
             if ntype not in h_dict:
-                h_dict[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(self.device)
+                h_dict[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(global_node_idx[ntype].device)
 
             # project to embedding_dim if node features are not same same dimension
             if ntype in self.proj_ntypes:
