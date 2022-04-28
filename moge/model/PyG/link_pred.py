@@ -34,15 +34,15 @@ class DistMulti(torch.nn.Module):
         # Sampled head or tail batch
         if "head-batch" in inputs or "tail-batch" in inputs:
             # Head batch
-            edge_head_batch, neg_samp_size = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
-                                                                                neg_edges=inputs["head-batch"],
-                                                                                mode="head")
+            edge_head_batch = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
+                                                                 neg_edges=inputs["head-batch"],
+                                                                 mode="head")
             output["head-batch"] = self.predict(edge_head_batch, embeddings, mode="head")
 
             # Tail batch
-            edge_tail_batch, neg_samp_size = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
-                                                                                neg_edges=inputs["tail-batch"],
-                                                                                mode="tail")
+            edge_tail_batch = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
+                                                                 neg_edges=inputs["tail-batch"],
+                                                                 mode="tail")
             output["tail-batch"] = self.predict(edge_tail_batch, embeddings, mode="tail")
 
         # Single edges
@@ -54,7 +54,8 @@ class DistMulti(torch.nn.Module):
         return output
 
     def predict(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
-                embeddings: Dict[str, Tensor], mode: str) -> Dict[Tuple[str, str, str], Tensor]:
+                embeddings: Dict[str, Tensor],
+                mode: str) -> Dict[Tuple[str, str, str], Tensor]:
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
@@ -81,7 +82,9 @@ class DistMulti(torch.nn.Module):
 
         return edge_pred_dict
 
-    def get_edge_index_from_neg_batch(self, pos_edges, neg_edges, mode):
+    def get_edge_index_from_neg_batch(self, pos_edges: Dict[Tuple[str, str, str], Tensor],
+                                      neg_edges: Dict[Tuple[str, str, str], Tensor],
+                                      mode: str) -> Dict[Tuple[str, str, str], Tensor]:
         edge_index_dict = {}
 
         for metapath, edge_index in pos_edges.items():
@@ -96,7 +99,7 @@ class DistMulti(torch.nn.Module):
                 nid_B = neg_edges[metapath].reshape(-1)
                 edge_index_dict[metapath] = torch.stack([nid_A, nid_B], dim=0)
 
-        return edge_index_dict, neg_samp_size
+        return edge_index_dict
 
 
 class LATTELinkPred(LinkPredTrainer):

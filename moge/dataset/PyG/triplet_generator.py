@@ -1,7 +1,10 @@
+from typing import Dict, Tuple, List
+
 import numpy as np
 import pandas as pd
 import torch
 from ogb.linkproppred import PygLinkPropPredDataset
+from torch import Tensor
 
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.graph import HeteroGraphDataset
@@ -12,11 +15,11 @@ from moge.model.PyG.utils import is_negative
 class TripletDataset(HeteroGraphDataset):
     def __init__(self, dataset: PygLinkPropPredDataset, node_types=None, metapaths=None, head_node_type=None,
                  edge_dir=True,
-                 resample_train=None, add_reverse_metapaths=True, **kwargs):
-        super(TripletDataset, self).__init__(dataset, node_types=node_types, metapaths=metapaths,
-                                             head_node_type=head_node_type, edge_dir=edge_dir,
-                                             reshuffle_train=resample_train,
-                                             add_reverse_metapaths=add_reverse_metapaths, **kwargs)
+                 reshuffle_train=None, add_reverse_metapaths=True, **kwargs):
+        super().__init__(dataset, node_types=node_types, metapaths=metapaths,
+                         head_node_type=head_node_type, edge_dir=edge_dir,
+                         reshuffle_train=reshuffle_train,
+                         add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.n_classes = None
         self.classes = None
         assert hasattr(self, "validation_idx") and hasattr(self, "triples")
@@ -194,7 +197,9 @@ class TripletDataset(HeteroGraphDataset):
         return node_index_dict
 
     @staticmethod
-    def get_relabled_edge_index(triples, global_node_index, relation_ids_all, metapaths, local2batch=None):
+    def get_relabled_edge_index(triples, global_node_index, relation_ids_all,
+                                metapaths: List[Tuple[str, str, str]], local2batch=None) \
+            -> Dict[Tuple[str, str, str], Tensor]:
         edges_pos = {}
         edges_neg = {}
 
@@ -233,12 +238,12 @@ class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
                  negative_sampling_size=10, test_negative_sampling_size=500,
                  force_negative_sampling=False,
                  node_types=None, metapaths=None, head_node_type=None, edge_dir=True,
-                 resample_train=None, add_reverse_metapaths=True, **kwargs):
-        super(BidirectionalGenerator, self).__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
-                                                     metapaths=metapaths,
-                                                     head_node_type=head_node_type, edge_dir=edge_dir,
-                                                     resample_train=resample_train,
-                                                     add_reverse_metapaths=add_reverse_metapaths, **kwargs)
+                 reshuffle_train=None, add_reverse_metapaths=True, **kwargs):
+        super().__init__(dataset, neighbor_sizes=neighbor_sizes, node_types=node_types,
+                         metapaths=metapaths,
+                         head_node_type=head_node_type, edge_dir=edge_dir,
+                         reshuffle_train=reshuffle_train,
+                         add_reverse_metapaths=add_reverse_metapaths, **kwargs)
         self.neg_sampling_size = negative_sampling_size
         self.test_neg_sampling_size = test_negative_sampling_size
         self.force_neg_sampling = force_negative_sampling
