@@ -1,4 +1,5 @@
-from typing import Dict
+from collections.abc import MutableMapping
+from typing import Dict, Any
 
 import numpy as np
 import torch
@@ -108,10 +109,9 @@ def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], w
     return y_pred, y_true, weights
 
 
-def tensor_sizes(input):
-    if isinstance(input, dict):
-        return {metapath if not isinstance(metapath, tuple) else \
-                    ".".join(metapath): tensor_sizes(v) \
+def tensor_sizes(input: Any) -> Any:
+    if isinstance(input, (dict, MutableMapping)):
+        return {metapath: tensor_sizes(v) \
                 for metapath, v in input.items()}
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)

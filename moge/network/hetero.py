@@ -8,6 +8,7 @@ import pandas as pd
 import torch
 import torch_geometric.transforms as T
 from openomics import MultiOmics
+from openomics.database.ontology import Ontology
 from openomics.utils.df import concat_uniques
 from torch import Tensor
 from torch_geometric.data import HeteroData
@@ -261,8 +262,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         return G, labels, num_classes, training_idx, validation_idx, testing_idx
 
     def to_pyg_heterodata(self, target="go_id", min_count=10, label_subset=None, sequence=False,
-                          attr_cols=[], expression=True, add_reverse=True) -> Tuple[
-        Union[HeteroData, Any], Any, dict, dict, dict]:
+                          attr_cols=[], expression=True, add_reverse=True,
+                          geneontology: Ontology = None, train_date='2017-06-15', valid_date='2017-11-15') \
+            -> Tuple[Union[HeteroData, Any], Any, dict, dict, dict]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
@@ -277,9 +279,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                     format="coo")
             hetero[relation].edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long),
                                                        torch.tensor(biadj.col, dtype=torch.long)])
-        if add_reverse:
-            transform = T.ToUndirected()
-            hetero = transform(hetero)
 
         # Add node attributes
         node_attr_cols = self.all_annotations.columns.drop([target, "omic", SEQUENCE_COL])
@@ -315,11 +314,18 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                     min_count=min_count,
                                     label_subset=label_subset, dropna=False, delimiter=self.delimiter)
         self.feature_transformer[target].fit_transform(y_label)
-        classes = self.feature_transformer[target].classes_
+
+        ## Filter nodes
         if label_subset is not None:
-            self.feature_transformer[target].classes_ = np.intersect1d(classes, label_subset, assume_unique=True)
+            self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
+                                                                       label_subset, assume_unique=True)
+        if geneontology is not None:
+            self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
+                                                                       geneontology.data.index, assume_unique=True)
+        classes = self.feature_transformer[target].classes_
         print(f"Selected {len(self.feature_transformer[target].classes_)} classes:", classes)
 
+        ## Node labels
         y_dict = {}
         for ntype in self.node_types:
             if target not in self.multiomics[ntype].annotations.columns: continue
@@ -330,6 +336,57 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             y_dict[ntype] = torch.tensor(y_dict[ntype])
 
             hetero[ntype]["y"] = y_dict[ntype]
+
+        # Add links for annotations ontology:
+        if geneontology is not None:
+            all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
+            go_nodes = np.concatenate(
+                [classes, np.array(list(set(all_go) - set(classes)))])  # Order nodes with classes nodes first
+
+            # Edges between GO terms
+            edge_types = {e for u, v, e in geneontology.network.edges}
+            go_ntype = "go_term"
+
+            edge_index_dict = geneontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
+                                                              format="pyg", d_ntype=go_ntype)
+            for metapath, edge_index in edge_index_dict.items():
+                if edge_index.size(1) < 200: continue
+                print(metapath, edge_index.shape, edge_index.max(1).values)
+                hetero[metapath].edge_index = edge_index
+
+            # Cls node attrs
+            for attr, values in geneontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
+                hetero[go_ntype][attr] = values.to_numpy()
+
+            hetero[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
+            hetero[go_ntype].num_nodes = len(go_nodes)
+
+            # Edges between RNA nodes and GO terms
+            train_go_ann, valid_go_ann, test_go_ann = geneontology.annotation_train_val_test_split(
+                train_date=train_date, valid_date=valid_date, )
+
+            go_ann = pd.concat([train_go_ann, valid_go_ann, test_go_ann], axis=0)
+            nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].explode().to_frame().reset_index(),
+                                               source="gene_name", target="go_id", create_using=nx.DiGraph)
+
+            relation = ("Protein", "associated", go_ntype)
+            biadj = nx.bipartite.biadjacency_matrix(nx_graph,
+                                                    row_order=self.nodes[relation[0]],
+                                                    column_order=go_nodes,
+                                                    format="coo")
+            hetero[relation].edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long),
+                                                       torch.tensor(biadj.col, dtype=torch.long)])
+
+            # Set test nodes as new nodes in annotations
+            self.training.node_list = train_go_ann.index
+            self.validation.node_list = valid_go_ann.index.drop(train_go_ann.index, errors="ignore")
+            self.testing.node_list = test_go_ann.index.drop(train_go_ann.index, errors="ignore") \
+                .drop(valid_go_ann.index, errors="ignore")
+
+        # Add reverse metapaths to allow reverse message passing for directed edges
+        if add_reverse:
+            transform = T.ToUndirected(merge=False)
+            hetero = transform(hetero, )
 
         # Train test split
         train_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \

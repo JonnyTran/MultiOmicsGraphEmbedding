@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 from torch_geometric.data import HeteroData
 
-from moge.dataset.PyG.neighbor_sampler import HGTLoader
+from moge.dataset.PyG.neighbor_sampler import NeighborLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizer
 
@@ -29,7 +29,7 @@ class HeteroDataSampler(HeteroGraphDataset):
         self.x_dict = hetero.x_dict
         self.node_types = hetero.node_types
         self.num_nodes_dict = {ntype: hetero[ntype].num_nodes for ntype in hetero.node_types}
-        self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types}
+        self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
 
         self.metapaths = hetero.edge_types
         self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
@@ -87,36 +87,37 @@ class HeteroDataSampler(HeteroGraphDataset):
 
         return X, y_dict, weights
 
-
-
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
-        dataset = HGTLoader(self.G, num_neighbors=self.neighbor_sizes,
-                            batch_size=batch_size,
-                            # directed=True,
-                            transform=self.sample,
-                            input_nodes=(self.head_node_type, self.G[self.head_node_type].train_mask),
-                            shuffle=True,
-                            num_workers=num_workers,
-                            **kwargs)
+        dataset = NeighborLoader(self.G,
+                                 num_neighbors={etype: self.neighbor_sizes \
+                                     if etype[1] != 'associated' else [-1, max(self.neighbor_sizes)] \
+                                                for etype in self.metapaths},
+                                 batch_size=batch_size,
+                                 # directed=True,
+                                 transform=self.sample,
+                                 input_nodes=(self.head_node_type, self.G[self.head_node_type].train_mask),
+                                 shuffle=True,
+                                 num_workers=num_workers,
+                                 **kwargs)
 
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        dataset = HGTLoader(self.G, num_neighbors=self.neighbor_sizes,
-                            batch_size=batch_size,
-                            # directed=False,
-                            transform=self.sample,
-                            input_nodes=(self.head_node_type, self.G[self.head_node_type].valid_mask),
-                            shuffle=False, num_workers=num_workers, **kwargs)
+        dataset = NeighborLoader(self.G, num_neighbors=self.neighbor_sizes,
+                                 batch_size=batch_size,
+                                 # directed=False,
+                                 transform=self.sample,
+                                 input_nodes=(self.head_node_type, self.G[self.head_node_type].valid_mask),
+                                 shuffle=False, num_workers=num_workers, **kwargs)
 
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        dataset = HGTLoader(self.G, num_neighbors=self.neighbor_sizes,
-                            batch_size=batch_size,
-                            # directed=False,
-                            transform=self.sample,
-                            input_nodes=(self.head_node_type, self.G[self.head_node_type].test_mask),
-                            shuffle=False, num_workers=num_workers, **kwargs)
+        dataset = NeighborLoader(self.G, num_neighbors=self.neighbor_sizes,
+                                 batch_size=batch_size,
+                                 # directed=False,
+                                 transform=self.sample,
+                                 input_nodes=(self.head_node_type, self.G[self.head_node_type].test_mask),
+                                 shuffle=False, num_workers=num_workers, **kwargs)
 
         return dataset
