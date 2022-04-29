@@ -39,12 +39,14 @@ class SequenceTokenizer():
     def encode_sequences(self, batch: HeteroData, ntype: str, max_length: Optional[int] = None, **kwargs) -> \
             BatchEncoding:
         seqs = batch[ntype].sequence.iloc[batch[ntype].nid]
-        seqs = seqs.str.findall("." * self.word_lengths[ntype]).str.join(" ")
+        match_regex = "." * self.word_lengths[ntype]
+        seqs = seqs.str.findall(match_regex).str.join(" ")
 
         if max_length is None and self.max_length is not None:
             max_length = self.max_length[ntype]
 
-        encodings = self.tokenizers[ntype].batch_encode_plus(seqs.tolist(), padding='longest', max_length=max_length,
+        encodings = self.tokenizers[ntype].batch_encode_plus(seqs.tolist(), padding=True,
+                                                             max_length=max_length, truncation=True,
                                                              add_special_tokens=True, return_tensors="pt", **kwargs)
         return encodings
 

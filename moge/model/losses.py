@@ -3,8 +3,7 @@ import codecs as cs
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-from .utils import tensor_sizes
+from torch import Tensor
 
 
 class ClassificationLoss(nn.Module):
@@ -117,7 +116,7 @@ class LinkPredLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, pos_pred, neg_pred, pos_weights=None, neg_weights=None):
+    def forward(self, pos_pred: Tensor, neg_pred: Tensor, pos_weights: Tensor = None, neg_weights=None) -> Tensor:
         if pos_weights is None:
             pos_loss = -torch.mean(F.logsigmoid(pos_pred), dim=-1)
             neg_loss = -torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
@@ -214,10 +213,3 @@ class EntropyLoss(nn.Module):
         return entropy
 
 
-class LinkPredLoss(nn.Module):
-
-    def forward(self, adj, anext, s_l):
-        link_pred_loss = (
-                adj - s_l.matmul(s_l.transpose(-1, -2))).norm(dim=(1, 2))
-        link_pred_loss = link_pred_loss / (adj.size(1) * adj.size(2))
-        return link_pred_loss.mean()

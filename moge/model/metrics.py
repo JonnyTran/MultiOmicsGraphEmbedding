@@ -94,11 +94,11 @@ class Metrics(torch.nn.Module):
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights, max_mode=True)
         y_pred = activation(y_pred, loss_type=self.loss_type)
 
-        # if self.multilabel and any([m in self.metrics \
-        #                             for m in ["auroc", "aupr", "precision", "recall", "micro_f1", "macro_f1"]]):
-        #     mask_labels = y_pred.sum(0) != 0
-        #     # y_pred_full, y_true_full = y_pred, y_true
-        #     y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
+        if self.multilabel and any([m in self.metrics \
+                                    for m in ["auroc", "aupr", "precision", "recall", "micro_f1", "macro_f1"]]):
+            mask_labels = y_pred.sum(0) != 0
+            # y_pred_full, y_true_full = y_pred, y_true
+            y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
 
         for metric in self.metrics:
             # torchmetrics metrics

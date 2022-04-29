@@ -263,7 +263,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
     def to_pyg_heterodata(self, target="go_id", min_count=10, label_subset=None, sequence=False,
                           attr_cols=[], expression=True, add_reverse=True,
-                          geneontology: Ontology = None, train_date='2017-06-15', valid_date='2017-11-15') \
+                          geneontology: Ontology = None, train_date='2017-06-15', valid_date='2017-11-15',
+                          head_node_type="Protein") \
             -> Tuple[Union[HeteroData, Any], Any, dict, dict, dict]:
         # Filter node that doesn't have a sequence
         if sequence:
@@ -345,14 +346,14 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         if geneontology is not None:
             all_go = set(geneontology.network.nodes).intersection(geneontology.data.index)
             # Order nodes with classes nodes first
-            if classes:
+            if classes is not None:
                 go_nodes = np.concatenate([classes, np.array(list(set(all_go) - set(classes)))])
             else:
                 go_nodes = np.array(list(all_go))
 
             # Edges between GO terms
             edge_types = {e for u, v, e in geneontology.network.edges}
-            go_ntype = "go_term"
+            go_ntype = "GO_term"
 
             edge_index_dict = geneontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
                                                               format="pyg", d_ntype=go_ntype)
@@ -375,7 +376,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].explode().to_frame().reset_index(),
                                                source="gene_name", target="go_id", create_using=nx.DiGraph)
 
-            relation = ("Protein", "associated", go_ntype)
+            relation = (head_node_type, "associated", go_ntype)
             biadj = nx.bipartite.biadjacency_matrix(nx_graph,
                                                     row_order=self.nodes[relation[0]],
                                                     column_order=go_nodes,

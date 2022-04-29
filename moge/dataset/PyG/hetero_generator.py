@@ -33,7 +33,7 @@ class HeteroDataSampler(HeteroGraphDataset):
                 for etype in self.metapaths}
         elif self.neighbor_loader == "HGTLoader":
             self.num_neighbors = {
-                ntype: neighbor_sizes if ntype != 'go_term' else [self.num_nodes_dict["go_term"], ] * len(
+                ntype: neighbor_sizes if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(
                     neighbor_sizes)
                 for ntype in self.node_types}
 

@@ -1,6 +1,7 @@
 from argparse import Namespace
 from typing import Dict
 
+import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 from transformers import BertConfig, BertForSequenceClassification
@@ -37,13 +38,20 @@ class HeteroSequenceEncoder(nn.Module):
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]]):
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], batch_size=1):
         h_out = {}
         for ntype, encoding in sequences.items():
-            out = self.seq_encoders[ntype].forward(input_ids=encoding["input_ids"],
-                                                   attention_mask=encoding["attention_mask"],
-                                                   token_type_ids=encoding["token_type_ids"])
-            h_out[ntype] = out.logits
+            batch_output = []
+
+            for input_ids, attention_mask, token_type_ids in zip(torch.split(encoding["input_ids"], batch_size),
+                                                                 torch.split(encoding["attention_mask"], batch_size),
+                                                                 torch.split(encoding["token_type_ids"], batch_size)):
+                out = self.seq_encoders[ntype].forward(input_ids=input_ids,
+                                                       attention_mask=attention_mask,
+                                                       token_type_ids=token_type_ids)
+                batch_output.append(out.logits)
+
+            h_out[ntype] = torch.cat(batch_output, dim=0)
 
         return h_out
 

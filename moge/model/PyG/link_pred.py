@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any, Optional
 
 import torch
 import torch.nn.functional as F
@@ -126,16 +126,17 @@ class LATTELinkPred(LinkPredTrainer):
 
         hparams.embedding_dim = hparams.embedding_dim * hparams.n_layers
 
-    def forward(self, inputs: dict, edges_true: dict, **kwargs):
-        embeddings, proximity_loss, _ = self.embedder.forward(inputs["x_dict"],
-                                                              edge_index_dict=inputs["edge_index_dict"],
-                                                              global_node_idx=inputs["global_node_index"],
-                                                              sizes=inputs["sizes"],
-                                                              **kwargs)
+    def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]], **kwargs) \
+            -> Tuple[Dict[str, Tensor], Optional, Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
+        embeddings, aux_loss, _ = self.embedder.forward(inputs["x_dict"],
+                                                        edge_index_dict=inputs["edge_index_dict"],
+                                                        global_node_idx=inputs["global_node_index"],
+                                                        sizes=inputs["sizes"],
+                                                        **kwargs)
 
-        edges_pred = self.classifier(edges_true, embeddings)
+        edges_pred = self.classifier.forward(edges_true, embeddings)
 
-        return embeddings, proximity_loss, edges_pred
+        return embeddings, aux_loss, edges_pred
 
     def training_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
