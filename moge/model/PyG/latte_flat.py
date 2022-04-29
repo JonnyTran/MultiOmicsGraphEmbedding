@@ -700,7 +700,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Propapate flows from higher order source nodes to target nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(h_dict['head'], h_dict[tail]),
+                x=(h_dict[head], h_dict[tail]),
+                alpha=(alpha_l[metapath], alpha_r[metapath]),
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
                 metapath=str(metapath),

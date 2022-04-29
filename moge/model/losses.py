@@ -9,7 +9,7 @@ from torch import Tensor
 class ClassificationLoss(nn.Module):
     def __init__(self, n_classes: int, loss_type="SOFTMAX_CROSS_ENTROPY", class_weight: torch.Tensor = None,
                  multilabel=True, reduction="mean", use_hierar=False, hierar_penalty=1e-6, hierar_relations=None):
-        super(ClassificationLoss, self).__init__()
+        super().__init__()
         self.n_classes = n_classes
         self.loss_type = loss_type
         self.hierar_penalty = hierar_penalty
@@ -68,7 +68,6 @@ class ClassificationLoss(nn.Module):
         loss = self.criterion.forward(logits, targets)
 
         if (self.reduction == None or self.reduction == "none") and weights is not None:
-            print("got")
             loss = (weights * loss).sum() / weights.sum()
 
         return loss
