@@ -264,7 +264,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
     def to_pyg_heterodata(self, target="go_id", min_count=10, label_subset=None, sequence=False,
                           attr_cols=[], expression=True, add_reverse=True) \
-            -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array]]:
+            -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]]]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
@@ -317,7 +317,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
                                                                            label_subset, assume_unique=True)
             classes = self.feature_transformer[target].classes_
-            print(f"Selected {len(self.feature_transformer[target].classes_)} classes:", classes)
+            print(f"Selected {len(self.feature_transformer[target].classes_)} classes.")
 
             ## Node labels
             y_dict = {}
@@ -365,4 +365,4 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 mask[test_idx[ntype]] = 1
                 hetero[ntype].test_mask = mask
 
-        return hetero, classes
+        return hetero, classes, self.nodes

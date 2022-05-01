@@ -15,7 +15,7 @@ from moge.dataset.sequences import SequenceTokenizer
 from moge.dataset.utils import get_edge_index
 
 
-class HeteroNodeSampler(HeteroGraphDataset):
+class HeteroNodeClfDataset(HeteroGraphDataset):
     def __init__(self, dataset: HeteroData,
                  seq_tokenizer: SequenceTokenizer = None,
                  neighbor_loader: str = "NeighborLoader",
@@ -79,7 +79,7 @@ class HeteroNodeSampler(HeteroGraphDataset):
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 200: continue
-            self.hetero[metapath].edge_index = edge_index
+            self.G[metapath].edge_index = edge_index
 
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
@@ -218,8 +218,7 @@ class HeteroNodeSampler(HeteroGraphDataset):
         return dataset
 
 
-class HeteroTripletSampler(HeteroNodeSampler):
-
+class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def __init__(self, dataset: HeteroData, seq_tokenizer: SequenceTokenizer = None,
                  neighbor_loader: str = "NeighborLoader",
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
@@ -227,6 +226,19 @@ class HeteroTripletSampler(HeteroNodeSampler):
                  reshuffle_train: float = None, add_reverse_metapaths: bool = True, inductive: bool = False, **kwargs):
         super().__init__(dataset, seq_tokenizer, neighbor_loader, neighbor_sizes, node_types, metapaths, head_node_type,
                          edge_dir, reshuffle_train, add_reverse_metapaths, inductive, **kwargs)
+        if self.neighbor_loader == "NeighborLoader":
+            Loader = NeighborLoader
+        elif self.neighbor_loader == "HGTLoader":
+            Loader = HGTLoader
+
+        self.neighbor_sampler = Loader(self.G,
+                                       num_neighbors=self.num_neighbors,
+                                       batch_size=1,
+                                       # directed=True,
+                                       transform=self.sample,
+                                       shuffle=True,
+                                       num_workers=10,
+                                       **kwargs)
 
     def add_ontology_edges(self, ontology: Ontology, train_date='2017-06-15', valid_date='2017-11-15',
                            metapaths: List[Tuple[str, str, str]] = None):
@@ -240,7 +252,7 @@ class HeteroTripletSampler(HeteroNodeSampler):
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 200: continue
-            self.hetero[metapath].edge_index = edge_index
+            self.G[metapath].edge_index = edge_index
 
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
@@ -252,9 +264,7 @@ class HeteroTripletSampler(HeteroNodeSampler):
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
             train_date=train_date, valid_date=valid_date, groupby=["gene_name"])
-        go_ann = pd.concat([train_go_ann, valid_go_ann, test_go_ann], axis=0)
 
-        #
         for go_ann in [train_go_ann, valid_go_ann, test_go_ann]:
             triples = {}
             # Positive links
@@ -265,3 +275,51 @@ class HeteroTripletSampler(HeteroNodeSampler):
             triples[metapath] = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
 
             outputs = triples[metapath]
+
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
+        if self.neighbor_loader == "NeighborLoader":
+            Loader = NeighborLoader
+        elif self.neighbor_loader == "HGTLoader":
+            Loader = HGTLoader
+
+        dataset = Loader(self.G,
+                         num_neighbors=self.num_neighbors,
+                         batch_size=batch_size,
+                         # directed=True,
+                         transform=self.sample,
+                         input_nodes=(self.head_node_type, self.G[self.head_node_type].train_mask),
+                         shuffle=True,
+                         num_workers=num_workers,
+                         **kwargs)
+
+        return dataset
+
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
+        if self.neighbor_loader == "NeighborLoader":
+            Loader = NeighborLoader
+        elif self.neighbor_loader == "HGTLoader":
+            Loader = HGTLoader
+
+        dataset = NeighborLoader(self.G, num_neighbors=self.num_neighbors,
+                                 batch_size=batch_size,
+                                 # directed=False,
+                                 transform=self.sample,
+                                 input_nodes=(self.head_node_type, self.G[self.head_node_type].valid_mask),
+                                 shuffle=False, num_workers=num_workers, **kwargs)
+
+        return dataset
+
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
+        if self.neighbor_loader == "NeighborLoader":
+            Loader = NeighborLoader
+        elif self.neighbor_loader == "HGTLoader":
+            Loader = HGTLoader
+
+        dataset = Loader(self.G, num_neighbors=self.num_neighbors,
+                         batch_size=batch_size,
+                         # directed=False,
+                         transform=self.sample,
+                         input_nodes=(self.head_node_type, self.G[self.head_node_type].test_mask),
+                         shuffle=False, num_workers=num_workers, **kwargs)
+
+        return dataset
