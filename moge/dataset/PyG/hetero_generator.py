@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from torch import Tensor
+from openomics.database.ontology import Ontology
 from torch_geometric.data import HeteroData
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
@@ -21,7 +21,7 @@ class HeteroNodeSampler(HeteroGraphDataset):
                  neighbor_loader: str = "NeighborLoader",
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
-                 edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = True,
+                 edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = False,
                  inductive: bool = False, **kwargs):
         super().__init__(dataset, node_types, metapaths, head_node_type, edge_dir, reshuffle_train,
                          add_reverse_metapaths, inductive, **kwargs)
@@ -45,19 +45,11 @@ class HeteroNodeSampler(HeteroGraphDataset):
         pprint(self.num_neighbors)
 
     @classmethod
-    def from_pyg_heterodata(cls, hetero: HeteroData,
-                            classes: List[str],
-                            train_idx: Dict[str, Tensor],
-                            val_idx: Dict[str, Tensor],
-                            test_idx: Dict[str, Tensor], **kwargs):
+    def from_pyg_heterodata(cls, hetero: HeteroData, classes: List[str], **kwargs):
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False,
                    edge_dir="in", **kwargs)
         self.classes = classes
         self._name = ""
-
-        self.train_idx = train_idx
-        self.val_idx = val_idx
-        self.test_idx = test_idx
 
         return self
 
@@ -112,7 +104,7 @@ class HeteroNodeSampler(HeteroGraphDataset):
         test_node_list = test_go_ann.index.drop(train_go_ann.index, errors="ignore") \
             .drop(valid_go_ann.index, errors="ignore")
 
-        # Set train test split
+        # Set train test split on hetero graph
         train_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(train_node_list)) \
                      for ntype, ntype_nids in self.nodes.items()}
         valid_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(valid_node_list)) \
@@ -225,18 +217,51 @@ class HeteroNodeSampler(HeteroGraphDataset):
 
         return dataset
 
-# class HeteroTripletSampler(HeteroNodeSampler):
-# metapaths:List[Tuple[str,str,str]]=None
 
-# if mode=="link_pred":
-#     outputs = []
-#     for go_ann in [train_go_ann, valid_go_ann, test_go_ann]:
-#         triples = {}
-#         # Positive links
-#         nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].dropna().explode().to_frame().reset_index(),
-#                                            source="gene_name", target="go_id", create_using=nx.DiGraph)
-#
-#         metapath = (head_node_type, "associated", go_ntype)
-#         triples[metapath] = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
-#
-#         outputs = triples[metapath]
+class HeteroTripletSampler(HeteroNodeSampler):
+
+    def __init__(self, dataset: HeteroData, seq_tokenizer: SequenceTokenizer = None,
+                 neighbor_loader: str = "NeighborLoader",
+                 neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
+                 metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None, edge_dir: str = "in",
+                 reshuffle_train: float = None, add_reverse_metapaths: bool = True, inductive: bool = False, **kwargs):
+        super().__init__(dataset, seq_tokenizer, neighbor_loader, neighbor_sizes, node_types, metapaths, head_node_type,
+                         edge_dir, reshuffle_train, add_reverse_metapaths, inductive, **kwargs)
+
+    def add_ontology_edges(self, ontology: Ontology, train_date='2017-06-15', valid_date='2017-11-15',
+                           metapaths: List[Tuple[str, str, str]] = None):
+        all_go = set(ontology.network.nodes).intersection(ontology.data.index)
+        go_nodes = np.array(list(all_go))
+
+        # Edges between GO terms
+        edge_types = {e for u, v, e in ontology.network.edges}
+        go_ntype = "GO_term"
+        edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
+                                                      format="pyg", d_ntype=go_ntype)
+        for metapath, edge_index in edge_index_dict.items():
+            if edge_index.size(1) < 200: continue
+            self.hetero[metapath].edge_index = edge_index
+
+        # Cls node attrs
+        for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
+            self.G[go_ntype][attr] = values.to_numpy()
+
+        self.G[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
+        self.G[go_ntype].num_nodes = len(go_nodes)
+
+        # Edges between RNA nodes and GO terms
+        train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
+            train_date=train_date, valid_date=valid_date, groupby=["gene_name"])
+        go_ann = pd.concat([train_go_ann, valid_go_ann, test_go_ann], axis=0)
+
+        #
+        for go_ann in [train_go_ann, valid_go_ann, test_go_ann]:
+            triples = {}
+            # Positive links
+            nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].dropna().explode().to_frame().reset_index(),
+                                               source="gene_name", target="go_id", create_using=nx.DiGraph)
+
+            metapath = (self.head_node_type, "associated", go_ntype)
+            triples[metapath] = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
+
+            outputs = triples[metapath]

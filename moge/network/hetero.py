@@ -9,6 +9,7 @@ import torch
 import torch_geometric.transforms as T
 from openomics import MultiOmics
 from openomics.utils.df import concat_uniques
+from pandas import Series
 from torch import Tensor
 from torch_geometric.data import HeteroData
 
@@ -263,7 +264,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
     def to_pyg_heterodata(self, target="go_id", min_count=10, label_subset=None, sequence=False,
                           attr_cols=[], expression=True, add_reverse=True) \
-            -> Tuple[Union[HeteroData, Any], Any, dict, dict, dict]:
+            -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array]]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
@@ -364,4 +365,4 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 mask[test_idx[ntype]] = 1
                 hetero[ntype].test_mask = mask
 
-        return hetero, classes, train_idx, valid_idx, test_idx
+        return hetero, classes
