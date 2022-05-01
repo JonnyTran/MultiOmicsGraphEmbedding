@@ -364,6 +364,9 @@ class NeighborLoader(BaseDataLoader):
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}()'
 
+    def sample(self, nids: Union[List[int], Tensor]):
+        pass
+
 
 class HGTLoader(BaseDataLoader):
     def __init__(

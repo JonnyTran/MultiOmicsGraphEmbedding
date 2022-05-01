@@ -13,7 +13,7 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 from torch_sparse.tensor import SparseTensor
 
-from moge.dataset import HeteroDataSampler
+from moge.dataset import HeteroNodeSampler
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 from moge.model.classifier import DenseClassification, LinkPredictionClassifier
@@ -25,7 +25,7 @@ from moge.model.utils import filter_samples_weights, process_tensor_dicts, selec
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroDataSampler, metrics=["accuracy"],
+    def __init__(self, hparams, dataset: HeteroNodeSampler, metrics=["accuracy"],
                  collate_fn=None) -> None:
         super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type

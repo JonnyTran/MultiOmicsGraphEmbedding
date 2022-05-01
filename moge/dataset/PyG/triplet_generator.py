@@ -175,7 +175,8 @@ class TripletDataset(HeteroGraphDataset):
         return X, y, None
 
     @staticmethod
-    def gather_node_set(triples, relation_ids, metapaths):
+    def gather_node_set(triples: Dict[str, Tensor], relation_ids: Tensor, metapaths: List[Tuple[str, str, str]]) \
+            -> Dict[str, Tensor]:
         # Gather all nodes sampled
         node_index_dict = {}
 
@@ -192,13 +193,14 @@ class TripletDataset(HeteroGraphDataset):
                 node_index_dict.setdefault(tail_type, []).append(triples["tail_neg"][mask].view(-1))
 
         # Find union of nodes from all relations
-        node_index_dict = {node_type: torch.cat(node_sets, dim=0).unique() \
-                           for node_type, node_sets in node_index_dict.items()}
+        node_index_dict = {ntype: torch.cat(nids, dim=0).unique() \
+                           for ntype, nids in node_index_dict.items()}
         return node_index_dict
 
     @staticmethod
-    def get_relabled_edge_index(triples, global_node_index, relation_ids_all,
-                                metapaths: List[Tuple[str, str, str]], local2batch=None) \
+    def get_relabled_edge_index(triples: Dict[str, Tensor], global_node_index: Dict[str, Tensor],
+                                relation_ids_all,
+                                metapaths: List[Tuple[str, str, str]], local2batch: Dict[str, Tensor] = None) \
             -> Dict[Tuple[str, str, str], Tensor]:
         edges_pos = {}
         edges_neg = {}
@@ -233,7 +235,6 @@ class TripletDataset(HeteroGraphDataset):
 
 
 class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
-
     def __init__(self, dataset: PygLinkPropPredDataset, neighbor_sizes,
                  negative_sampling_size=10, test_negative_sampling_size=500,
                  force_negative_sampling=False,

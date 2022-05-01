@@ -1,3 +1,6 @@
+from typing import List, Union
+
+import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
@@ -66,3 +69,14 @@ def merge_node_index(old_node_index, new_node_index):
 
         merged[ntype] = torch.cat(merged[ntype], dim=0)
     return merged
+
+
+def get_edge_index(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
+                   nodes_B: Union[List[str], np.array]) -> torch.LongTensor:
+    biadj = nx.bipartite.biadjacency_matrix(nx_graph,
+                                            row_order=nodes_A,
+                                            column_order=nodes_B,
+                                            format="coo")
+    edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long),
+                              torch.tensor(biadj.col, dtype=torch.long)])
+    return edge_index
