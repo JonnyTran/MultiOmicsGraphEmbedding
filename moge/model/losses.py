@@ -116,22 +116,22 @@ class LinkPredLoss(nn.Module):
         super().__init__()
 
     def forward(self, pos_pred: Tensor, neg_pred: Tensor, pos_weights: Tensor = None, neg_weights=None) -> Tensor:
-        if pos_weights is None:
-            pos_loss = -torch.mean(F.logsigmoid(pos_pred), dim=-1)
-            neg_loss = -torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
-            loss = (pos_loss + neg_loss) / 2
-        else:
-            pos_loss = - (pos_weights * F.logsigmoid(pos_pred)).sum() / pos_weights.sum()
-            neg_loss = - torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
-            loss = (pos_loss + neg_loss) / 2
+        # if pos_weights is None:
+        #     pos_loss = -torch.mean(F.logsigmoid(pos_pred), dim=-1)
+        #     neg_loss = -torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
+        #     loss = (pos_loss + neg_loss) / 2
+        # else:
+        #     pos_loss = - (pos_weights * F.logsigmoid(pos_pred)).sum() / pos_weights.sum()
+        #     neg_loss = - torch.mean(F.logsigmoid(-neg_pred.view(-1)), dim=-1)
+        #     loss = (pos_loss + neg_loss) / 2
 
-        # preds = torch.cat([pos_pred, neg_pred.view(-1)])
-        #
-        # pos_target = torch.ones_like(pos_pred, requires_grad=False)
-        # neg_target = torch.zeros_like(neg_pred.view(-1), requires_grad=False)
-        # targets = torch.cat([pos_target, neg_target])
-        #
-        # loss = F.binary_cross_entropy_with_logits(preds, targets)
+        scores_pred = torch.cat([pos_pred, neg_pred.view(-1)])
+
+        pos_target = torch.ones_like(pos_pred, requires_grad=False)
+        neg_target = torch.zeros_like(neg_pred.view(-1), requires_grad=False)
+        scores_true = torch.cat([pos_target, neg_target])
+
+        loss = F.binary_cross_entropy_with_logits(scores_pred, scores_true)
         return loss
 
 

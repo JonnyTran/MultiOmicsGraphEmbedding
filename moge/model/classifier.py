@@ -81,7 +81,7 @@ class HeteroRGCN(nn.Module):
         return h_dict
 
 
-class LinkPredictionClassifier(nn.Module):
+class ClsGraphNodeClassifier(nn.Module):
     def __init__(self, hparams: Namespace):
         super().__init__()
         self.n_classes = hparams.n_classes

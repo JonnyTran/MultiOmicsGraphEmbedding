@@ -338,7 +338,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             transform = T.ToUndirected(merge=False)
             hetero = transform(hetero)
 
-        # Train test split
+        # Train test split (from previously saved node train/test split)
         train_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \
                      for ntype, ntype_nids in self.nodes.items()}
         valid_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.validation.node_list)) \

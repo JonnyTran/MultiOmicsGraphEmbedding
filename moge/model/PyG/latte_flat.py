@@ -16,7 +16,7 @@ from torch_sparse.tensor import SparseTensor
 from moge.dataset import HeteroNodeClfDataset
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
-from moge.model.classifier import DenseClassification, LinkPredictionClassifier
+from moge.model.classifier import DenseClassification, ClsGraphNodeClassifier
 from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.sampling import negative_sample
@@ -61,7 +61,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         # Output layer
         if "cls_graph" in hparams and hparams.cls_graph is not None:
-            self.classifier = LinkPredictionClassifier(hparams)
+            self.classifier = ClsGraphNodeClassifier(hparams)
 
         elif hparams.nb_cls_dense_size >= 0:
             if hparams.layer_pooling == "concat":
@@ -210,7 +210,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
 class LATTE(nn.Module):
     def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: Dict[str, int],
-                 metapaths: List[Tuple[str, str, str]], layer_pooling,
+                 metapaths: List[Tuple[str, str, str]], layer_pooling: str = None,
                  activation: str = "relu", attn_heads: int = 1, attn_activation="sharpening", attn_dropout: float = 0.5,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
                  hparams=None):

@@ -220,9 +220,8 @@ class OGBNodeClfMetrics(torchmetrics.Metric):
 
 
 class OGBLinkPredMetrics(torchmetrics.Metric):
-    def __init__(self, evaluator: LinkEvaluator, compute_on_step: bool = True, dist_sync_on_step: bool = False,
-                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
-        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
+    def __init__(self, evaluator: LinkEvaluator, compute_on_step: bool = True):
+        super().__init__(compute_on_step, )
         self.evaluator = evaluator
         self.outputs = {}
 
