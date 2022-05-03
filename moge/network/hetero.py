@@ -365,4 +365,4 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 mask[test_idx[ntype]] = 1
                 hetero[ntype].test_mask = mask
 
-        return hetero, classes, self.nodes
+        return hetero, classes, self.nodes.to_dict()

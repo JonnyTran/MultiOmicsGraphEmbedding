@@ -79,4 +79,5 @@ def get_edge_index(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
                                             format="coo")
     edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long),
                               torch.tensor(biadj.col, dtype=torch.long)])
+
     return edge_index

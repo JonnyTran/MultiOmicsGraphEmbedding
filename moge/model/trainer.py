@@ -268,7 +268,7 @@ class NodeClfTrainer(ClusteringEvaluator):
             dataset.neighbor_sampler.fanouts = fanouts
             dataset.neighbor_sampler.num_layers = len(fanouts)
         elif isinstance(dataset, HeteroNeighborGenerator):
-            dataset.graph_sampler.neighbor_sampler.sizes = fanouts
+            dataset.graph_sampler.graph_sampler.sizes = fanouts
 
         print(f"Changed graph neighbor sampling sizes to {fanouts}, because method have {len(fanouts)} layers.")
 

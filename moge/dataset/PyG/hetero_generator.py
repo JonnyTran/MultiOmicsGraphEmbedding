@@ -5,7 +5,9 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from openomics.database.ontology import Ontology
+from openomics.database.ontology import GeneOntology
+from torch import Tensor
+from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
@@ -35,6 +37,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             self.num_neighbors = {
                 etype: neighbor_sizes if etype[1] != 'associated' else [-1, ] * len(neighbor_sizes)
                 for etype in self.metapaths}
+
         elif self.neighbor_loader == "HGTLoader":
             self.num_neighbors = {
                 ntype: neighbor_sizes if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(
@@ -45,10 +48,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         pprint(self.num_neighbors)
 
     @classmethod
-    def from_pyg_heterodata(cls, hetero: HeteroData, classes: List[str], **kwargs):
+    def from_pyg_heterodata(cls, hetero: HeteroData, classes: List[str], nodes: Dict[str, pd.Index], **kwargs):
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False,
                    edge_dir="in", **kwargs)
         self.classes = classes
+        self.nodes = nodes
         self._name = ""
 
         return self
@@ -63,7 +67,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.metapaths = hetero.edge_types
         self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
 
-    def add_ontology_edges(self, ontology, train_date='2017-06-15', valid_date='2017-11-15', ):
+    def add_ontology_edges(self, ontology, train_date='2017-06-15', valid_date='2017-11-15', go_ntype="GO_term"):
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
 
         # Order nodes with classes nodes first
@@ -74,7 +78,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
-        go_ntype = "GO_term"
         edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
@@ -87,6 +90,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         self.G[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
         self.G[go_ntype].num_nodes = len(go_nodes)
+        self.nodes[go_ntype] = pd.Index(go_nodes)
 
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
@@ -131,7 +135,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 mask[test_idx[ntype]] = 1
                 self.G[ntype].test_mask = mask
 
-    def sample(self, batch: HeteroData):
+    def transform(self, batch: HeteroData):
         X = {}
         X["x_dict"] = {ntype: x for ntype, x in batch.x_dict.items() if x.size(0)}
         X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in batch.edge_index_dict.items() if
@@ -169,7 +173,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return X, y_dict, weights
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
+    def create_graph_sampler(self, batch_size: int, node_mask: Tensor, transform_fn=None, num_workers=10, **kwargs):
         if self.neighbor_loader == "NeighborLoader":
             Loader = NeighborLoader
         elif self.neighbor_loader == "HGTLoader":
@@ -179,79 +183,62 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                          num_neighbors=self.num_neighbors,
                          batch_size=batch_size,
                          # directed=True,
-                         transform=self.sample,
-                         input_nodes=(self.head_node_type, self.G[self.head_node_type].train_mask),
+                         transform=transform_fn,
+                         input_nodes=(self.head_node_type, node_mask),
                          shuffle=True,
                          num_workers=num_workers,
                          **kwargs)
+        return dataset
+
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
+        dataset = self.create_graph_sampler(batch_size, node_mask=self.G[self.head_node_type].train_mask,
+                                            transform_fn=self.transform)
 
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        if self.neighbor_loader == "NeighborLoader":
-            Loader = NeighborLoader
-        elif self.neighbor_loader == "HGTLoader":
-            Loader = HGTLoader
-
-        dataset = NeighborLoader(self.G, num_neighbors=self.num_neighbors,
-                                 batch_size=batch_size,
-                                 # directed=False,
-                                 transform=self.sample,
-                                 input_nodes=(self.head_node_type, self.G[self.head_node_type].valid_mask),
-                                 shuffle=False, num_workers=num_workers, **kwargs)
+        dataset = self.create_graph_sampler(batch_size, node_mask=self.G[self.head_node_type].valid_mask,
+                                            transform_fn=self.transform)
 
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        if self.neighbor_loader == "NeighborLoader":
-            Loader = NeighborLoader
-        elif self.neighbor_loader == "HGTLoader":
-            Loader = HGTLoader
-
-        dataset = Loader(self.G, num_neighbors=self.num_neighbors,
-                         batch_size=batch_size,
-                         # directed=False,
-                         transform=self.sample,
-                         input_nodes=(self.head_node_type, self.G[self.head_node_type].test_mask),
-                         shuffle=False, num_workers=num_workers, **kwargs)
+        dataset = self.create_graph_sampler(batch_size, node_mask=self.G[self.head_node_type].test_mask,
+                                            transform_fn=self.transform)
 
         return dataset
 
 
 class HeteroLinkPredDataset(HeteroNodeClfDataset):
-    def __init__(self, dataset: HeteroData, seq_tokenizer: SequenceTokenizer = None,
+    def __init__(self, dataset: HeteroData,
+                 negative_sampling_size=10,
+                 seq_tokenizer: SequenceTokenizer = None,
                  neighbor_loader: str = "NeighborLoader",
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
                  metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None, edge_dir: str = "in",
                  reshuffle_train: float = None, add_reverse_metapaths: bool = True, inductive: bool = False, **kwargs):
         super().__init__(dataset, seq_tokenizer, neighbor_loader, neighbor_sizes, node_types, metapaths, head_node_type,
                          edge_dir, reshuffle_train, add_reverse_metapaths, inductive, **kwargs)
-        if self.neighbor_loader == "NeighborLoader":
-            Loader = NeighborLoader
-        elif self.neighbor_loader == "HGTLoader":
-            Loader = HGTLoader
+        self.negative_sampling_size = negative_sampling_size
 
-        self.neighbor_sampler = Loader(self.G,
-                                       num_neighbors=self.num_neighbors,
-                                       batch_size=1,
-                                       # directed=True,
-                                       transform=self.sample,
-                                       shuffle=True,
-                                       num_workers=10,
-                                       **kwargs)
+        self.graph_sampler = self.create_graph_sampler(batch_size=1,
+                                                       node_mask=self.G[self.head_node_type].train_mask,
+                                                       transform_fn=super().transform)
 
-    def add_ontology_edges(self, ontology: Ontology, train_date='2017-06-15', valid_date='2017-11-15',
+    def add_ontology_edges(self, ontology: GeneOntology, train_date='2017-06-15', valid_date='2017-11-15',
+                           go_ntype="GO_term",
                            metapaths: List[Tuple[str, str, str]] = None):
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
         go_nodes = np.array(list(all_go))
+        self.go_ntype = go_ntype
 
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
-        go_ntype = "GO_term"
+
         edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
-            if edge_index.size(1) < 200: continue
+            if edge_index.size(1) < 100: continue
             self.G[metapath].edge_index = edge_index
 
         # Cls node attrs
@@ -261,65 +248,98 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.G[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
         self.G[go_ntype].num_nodes = len(go_nodes)
 
+        self.nodes[go_ntype] = pd.Index(go_nodes)
+
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
             train_date=train_date, valid_date=valid_date, groupby=["gene_name"])
 
+        self.triples_pos = {}
+        self.triples_neg = {}
+        train_valid_test_sizes = []
         for go_ann in [train_go_ann, valid_go_ann, test_go_ann]:
-            triples = {}
-            # Positive links
+            # Positive links (undirected)
             nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].dropna().explode().to_frame().reset_index(),
-                                               source="gene_name", target="go_id", create_using=nx.DiGraph)
+                                               source="gene_name", target="go_id", create_using=nx.Graph)
 
             metapath = (self.head_node_type, "associated", go_ntype)
-            triples[metapath] = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
+            edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
+            train_valid_test_sizes.append(edge_index.size(1))
+            self.triples_pos.setdefault(metapath, []).append(edge_index)
 
-            outputs = triples[metapath]
+            # Negative links (undirected)
+            nx_graph = nx.from_pandas_edgelist(go_ann["neg_go_id"].dropna().explode().to_frame().reset_index(),
+                                               source="gene_name", target="neg_go_id", create_using=nx.Graph)
+
+            metapath = (self.head_node_type, "associated", go_ntype)
+            edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
+            self.triples_neg.setdefault(metapath, []).append(edge_index)
+
+        self.triples_pos = {metapath: torch.cat(li_edge_index, dim=1) \
+                            for metapath, li_edge_index in self.triples_pos.items()}
+        self.triples_neg = {metapath: torch.cat(li_edge_index, dim=1) \
+                            for metapath, li_edge_index in self.triples_neg.items()}
+
+        self.training_idx = torch.arange(0, train_valid_test_sizes[0])
+        self.validation_idx = torch.arange(train_valid_test_sizes[0],
+                                           train_valid_test_sizes[0] + train_valid_test_sizes[1])
+        self.testing_idx = torch.arange(train_valid_test_sizes[0] + train_valid_test_sizes[1],
+                                        train_valid_test_sizes[0] + train_valid_test_sizes[1] + train_valid_test_sizes[
+                                            2])
+
+        # reinstantiate graph sampler since hetero graph was modified
+        self.graph_sampler = self.create_graph_sampler(batch_size=1,
+                                                       node_mask=self.G[self.head_node_type].train_mask,
+                                                       transform_fn=super().transform)
+
+    def transform(self, edge_idx: List[int]):
+        if not isinstance(edge_idx, torch.LongTensor):
+            edge_idx = torch.LongTensor(edge_idx)
+
+        edges_pos = {}
+        metapath = (self.head_node_type, "associated", self.go_ntype)
+        edges_pos[metapath] = self.triples_pos[metapath][:, edge_idx]
+
+        query_nodes = self.gather_node_set(edges_pos)
+        X, _, _ = self.graph_sampler.transform_fn(self.graph_sampler.collate_fn(query_nodes))
+        del X["batch_size"]
+
+        y = {"edge_pos": edges_pos, }
+
+        # Negative sampling
+        head_batch = {}
+        tail_batch = {}
+        for metapath, edge_index in edges_pos.items():
+            head_batch[metapath] = \
+                torch.randint(high=X["sizes"][metapath[0]],
+                              size=(edge_index.shape[1], self.negative_sampling_size,))
+            tail_batch[metapath] = \
+                torch.randint(high=X["sizes"][metapath[-1]],
+                              size=(edge_index.shape[1], self.negative_sampling_size,))
+
+        y.update({"head-batch": head_batch, "tail-batch": tail_batch, })
+
+        edge_weights = None
+        return X, y, edge_weights
+
+    def gather_node_set(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dict[str, Tensor]:
+        nodes = {}
+        for metapath, edge_index in edge_index_dict.items():
+            nodes.setdefault(metapath[0], []).append(edge_index[0])
+            nodes.setdefault(metapath[-1], []).append(edge_index[1])
+
+        nodes = {ntype: torch.unique(torch.cat(nids, dim=0)) for ntype, nids in nodes.items()}
+
+        return nodes
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
-        if self.neighbor_loader == "NeighborLoader":
-            Loader = NeighborLoader
-        elif self.neighbor_loader == "HGTLoader":
-            Loader = HGTLoader
-
-        dataset = Loader(self.G,
-                         num_neighbors=self.num_neighbors,
-                         batch_size=batch_size,
-                         # directed=True,
-                         transform=self.sample,
-                         input_nodes=(self.head_node_type, self.G[self.head_node_type].train_mask),
-                         shuffle=True,
-                         num_workers=num_workers,
-                         **kwargs)
-
+        dataset = DataLoader(self.training_idx, batch_size=batch_size)
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        if self.neighbor_loader == "NeighborLoader":
-            Loader = NeighborLoader
-        elif self.neighbor_loader == "HGTLoader":
-            Loader = HGTLoader
-
-        dataset = NeighborLoader(self.G, num_neighbors=self.num_neighbors,
-                                 batch_size=batch_size,
-                                 # directed=False,
-                                 transform=self.sample,
-                                 input_nodes=(self.head_node_type, self.G[self.head_node_type].valid_mask),
-                                 shuffle=False, num_workers=num_workers, **kwargs)
-
+        dataset = None
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        if self.neighbor_loader == "NeighborLoader":
-            Loader = NeighborLoader
-        elif self.neighbor_loader == "HGTLoader":
-            Loader = HGTLoader
-
-        dataset = Loader(self.G, num_neighbors=self.num_neighbors,
-                         batch_size=batch_size,
-                         # directed=False,
-                         transform=self.sample,
-                         input_nodes=(self.head_node_type, self.G[self.head_node_type].test_mask),
-                         shuffle=False, num_workers=num_workers, **kwargs)
-
+        dataset = None
         return dataset
