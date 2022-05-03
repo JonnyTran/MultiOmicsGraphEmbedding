@@ -251,7 +251,7 @@ class LATTE(nn.Module):
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
                                                  order=layer_t_orders[l],  # Select only up to t-order
                                                  # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
-                                                 tail_type=self.head_node_type if is_last_layer else None)
+                                                 tail_type=[self.head_node_type, "GO_term"] if is_last_layer else None)
 
             layer = LATTEConv(input_dim=embedding_dim,
                               output_dim=hparams.n_classes if is_last_layer and is_output_layer else embedding_dim,
@@ -480,7 +480,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.t_order = t_order
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
-        print("LATTE layer", self.layer, self.metapaths, "\n")
+        print(f"LATTE {self.layer + 1} layer", self.metapaths, "\n")
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = output_dim
         self.use_proximity = use_proximity

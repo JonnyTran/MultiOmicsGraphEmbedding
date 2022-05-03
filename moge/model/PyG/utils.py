@@ -47,9 +47,8 @@ def join_metapaths(metapath_A, metapath_B):
 
 def filter_metapaths(metapaths: List[Tuple[str]],
                      order: Union[int, List[int]] = None,
-                     head_type: Union[str, Iterable] = None,
-                     tail_type: Union[str, Iterable] = None,
-                     remove_duplicates=True):
+                     head_type: Union[str, List[str]] = None,
+                     tail_type: Union[str, List[str]] = None):
     def filter_func(metapath: Tuple[str]):
         condition = True
 

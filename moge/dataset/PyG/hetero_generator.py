@@ -83,13 +83,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 200: continue
             self.G[metapath].edge_index = edge_index
-
+            self.metapaths.append(metapath)
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
             self.G[go_ntype][attr] = values.to_numpy()
 
         self.G[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
         self.G[go_ntype].num_nodes = len(go_nodes)
+        self.num_nodes_dict[go_ntype] = len(go_nodes)
+        self.node_types.append(go_ntype)
+
         self.nodes[go_ntype] = pd.Index(go_nodes)
 
         # Edges between RNA nodes and GO terms
@@ -242,6 +245,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 100: continue
             self.G[metapath].edge_index = edge_index
+            self.metapaths.append(metapath)
 
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
