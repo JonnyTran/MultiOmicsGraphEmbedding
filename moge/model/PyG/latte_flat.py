@@ -12,11 +12,12 @@ from colorhash import ColorHash
 from torch import nn as nn, Tensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+from torch_sparse import spspmm
 from torch_sparse.tensor import SparseTensor
 
 from moge.dataset import HeteroNodeClfDataset
 from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values
 from moge.model.classifier import DenseClassification, ClsGraphNodeClassifier
 from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
@@ -314,7 +315,7 @@ class LATTE(nn.Module):
         proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
 
         h_layers = {ntype: [] for ntype in global_node_idx}
-        for l in range(self.layers):
+        for l in range(self.n_layers):
             if l == 0:
                 h_dict, t_loss, edge_pred_dict = self.layers[l].forward(feats=h_dict,
                                                                         edge_index_dict=edge_index_dict,
@@ -385,8 +386,8 @@ class LATTE(nn.Module):
     @staticmethod
     def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Tensor],
                           edge_index_dict_B: Dict[Tuple[str, str, str], Tensor],
-                          global_node_idx: Dict[str, Tensor],
-                          edge_sampling: bool = False) -> Dict[Tuple[str, str, str], Tensor]:
+                          sizes: Dict[str, int],
+                          edge_sampling: bool = False) -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
         output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
@@ -401,22 +402,22 @@ class LATTE(nn.Module):
                 if edge_index_b is None: continue
 
                 try:
-                    new_edge_index, new_values = adamic_adar(indexA=edge_index_a, valueA=values_a,
-                                                             indexB=edge_index_b, valueB=values_b,
-                                                             m=global_node_idx[metapath_a[0]].size(0),
-                                                             k=global_node_idx[metapath_b[0]].size(0),
-                                                             n=global_node_idx[metapath_b[-1]].size(0),
-                                                             coalesced=True,
-                                                             sampling=edge_sampling
-                                                             )
+                    new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=values_a,
+                                                        indexB=edge_index_b, valueB=values_b,
+                                                        m=sizes[metapath_a[0]],
+                                                        k=sizes[metapath_b[0]],
+                                                        n=sizes[metapath_b[-1]],
+                                                        coalesced=True,
+                                                        # sampling=edge_sampling
+                                                        )
                     if new_edge_index.size(1) == 0: continue
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
 
                 except Exception as e:
                     print(f"{e} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
-                    print("\t", {"m": global_node_idx[metapath_a[0]].size(0),
-                                 "k": global_node_idx[metapath_a[-1]].size(0),
-                                 "n": global_node_idx[metapath_b[-1]].size(0), })
+                    print("\t", {"m": sizes[metapath_a[0]],
+                                 "k": sizes[metapath_a[-1]],
+                                 "n": sizes[metapath_b[-1]], })
                     continue
 
         return output_edge_index
@@ -609,7 +610,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    def forward(self, feats, edge_index_dict, global_node_idx, sizes: Dict[str, int], save_betas=False) -> \
+    def forward(self, feats: Dict[str, Tensor],
+                edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
+                global_node_idx: Dict[str, Tensor],
+                sizes: Dict[str, int],
+                save_betas=False) -> \
             Tuple[Dict[str, Tensor], Optional[Any], Dict[Tuple[str, str, str], Tensor]]:
         """
         Args:
@@ -618,7 +623,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
             x_r: Context embedding of the previous order, required for t >= 2. Default: None (if first order). A dict of (ntype: tensor)
         Returns:
-             output_emb, loss
+             output_emb, loss:
         """
         h_dict = {ntype: self.linear[ntype].forward(feats).view(-1, self.attn_heads, self.out_channels) \
                   for ntype, feats in feats.items()}
@@ -711,16 +716,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         print("\n>", ntype)
         pprint(tensor_sizes(edge_pred_dict), width=250)
 
-        # Create high-order edge index for next layer
         remaining_orders = list(range(2, min(self.layer + 1, self.t_order) + 1))
         higher_relations = self.get_tail_relations(ntype, order=remaining_orders)
-        print(self.t_order, remaining_orders, higher_relations)
-        higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
-                                                    edge_index_dict_B=edge_index_dict,
-                                                    sizes=sizes, layer=self.layer,
-                                                    metapaths=higher_relations,
-                                                    edge_threshold=self.edge_threshold,
-                                                    edge_sampling=False)
+        print("\t t-order", self.t_order, "remaining_orders", remaining_orders, "higher_relations", higher_relations)
+
+        # Create high-order edge index for next layer (but may not be used for aggregation)
+        higher_order_edge_index = LATTE.join_edge_indexes(edge_index_dict_A=edge_pred_dict,
+                                                          edge_index_dict_B=edge_index_dict,
+                                                          sizes=sizes,  # layer=self.layer,
+                                                          edge_sampling=False)
         pprint(tensor_sizes(higher_order_edge_index), width=250)
 
         # Aggregate higher order relations
