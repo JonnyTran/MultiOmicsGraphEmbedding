@@ -12,12 +12,11 @@ from colorhash import ColorHash
 from torch import nn as nn, Tensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
-from torch_sparse import spspmm
 from torch_sparse.tensor import SparseTensor
 
 from moge.dataset import HeteroNodeClfDataset
 from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 from moge.model.classifier import DenseClassification, ClsGraphNodeClassifier
 from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
@@ -356,72 +355,6 @@ class LATTE(nn.Module):
 
         return out, proximity_loss, edge_pred_dict
 
-    @staticmethod
-    def join_metapaths(metapaths_A, metapaths_B):
-        metapaths = []
-        for relation_a in metapaths_A:
-            for relation_b in metapaths_B:
-                if relation_a[-1] == relation_b[0]:
-                    new_relation = relation_a + relation_b[1:]
-                    metapaths.append(new_relation)
-        return metapaths
-
-    @staticmethod
-    def get_edge_index_values(edge_index_tup: Union[Tensor, Tuple[Tensor, Tensor]]) -> Tuple[Tensor, Optional[Tensor]]:
-        if isinstance(edge_index_tup, tuple):
-            edge_index = edge_index_tup[0]
-            edge_values = edge_index[1]
-
-        elif isinstance(edge_index_tup, Tensor) and edge_index_tup.size(1) > 0:
-            edge_index = edge_index_tup
-            edge_values = torch.ones(edge_index_tup.size(1), dtype=torch.float64, device=edge_index_tup.device)
-        else:
-            return None, None
-
-        if edge_values.dtype != torch.float:
-            edge_values = edge_values.to(torch.float)
-
-        return edge_index, edge_values
-
-    @staticmethod
-    def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Tensor],
-                          edge_index_dict_B: Dict[Tuple[str, str, str], Tensor],
-                          sizes: Dict[str, int],
-                          edge_sampling: bool = False) -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
-        output_edge_index = {}
-        for metapath_a, edge_index_a in edge_index_dict_A.items():
-            if is_negative(metapath_a): continue
-            edge_index_a, values_a = LATTE.get_edge_index_values(edge_index_a)
-            if edge_index_a is None: continue
-
-            for metapath_b, edge_index_b in edge_index_dict_B.items():
-                if metapath_a[-1] != metapath_b[0] or is_negative(metapath_b): continue
-
-                new_metapath = metapath_a + metapath_b[1:]
-                edge_index_b, values_b = LATTE.get_edge_index_values(edge_index_b)
-                if edge_index_b is None: continue
-
-                try:
-                    new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=values_a,
-                                                        indexB=edge_index_b, valueB=values_b,
-                                                        m=sizes[metapath_a[0]],
-                                                        k=sizes[metapath_b[0]],
-                                                        n=sizes[metapath_b[-1]],
-                                                        coalesced=True,
-                                                        # sampling=edge_sampling
-                                                        )
-                    if new_edge_index.size(1) == 0: continue
-                    output_edge_index[new_metapath] = (new_edge_index, new_values)
-
-                except Exception as e:
-                    print(f"{e} \n {metapath_a}: {edge_index_a.size(1)}, {metapath_b}: {edge_index_b.size(1)}")
-                    print("\t", {"m": sizes[metapath_a[0]],
-                                 "k": sizes[metapath_a[-1]],
-                                 "n": sizes[metapath_b[-1]], })
-                    continue
-
-        return output_edge_index
-
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
 
@@ -600,7 +533,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 print(e, "\n", metapath, tensor_sizes(h_dict))
         return alpha_l, alpha_r
 
-    def get_beta_weights(self, node_emb, rel_embs, ntype):
+    def get_beta_weights(self, node_emb: Tensor, rel_embs: Tensor, ntype: str) -> Tensor:
         alpha_l = (node_emb * self.rel_attn_l[ntype]).sum(dim=-1)
         alpha_r = (rel_embs * self.rel_attn_r[ntype][:, None, :]).sum(dim=-1)
 
@@ -634,7 +567,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
         beta = {}
-        print("> Layer", self.layer + 1)
+        # print("> Layer", self.layer + 1)
 
         for ntype in global_node_idx:
             if global_node_idx[ntype].size(0) == 0: continue
@@ -659,21 +592,21 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if hasattr(self, "activation"):
                 out[ntype] = self.activation(out[ntype])
 
-            beta[ntype] = beta[ntype].mean(1)
-
         if not self.training and save_betas:
-            self.save_relation_weights(beta, global_node_idx)
+            self.save_relation_weights({ntype: beta[ntype].mean(1) for ntype in beta}, global_node_idx)
 
         proximity_loss = None
         if self.use_proximity:
-            proximity_loss, _ = self.proximity_loss(edge_index_dict,
-                                                    alpha_l=alpha_l, alpha_r=alpha_r,
+            proximity_loss, _ = self.proximity_loss(edge_index_dict, alpha_l=alpha_l, alpha_r=alpha_r,
                                                     global_node_idx=global_node_idx)
 
         return out, proximity_loss, edge_pred_dict
 
-    def agg_relation_neighbors(self, ntype: str, alpha_l: Dict[str, Tensor], alpha_r: Dict[str, Tensor],
-                               h_dict: Dict[str, Tensor], edge_index_dict: Dict[Tuple[str], Tensor],
+    def agg_relation_neighbors(self, ntype: str,
+                               alpha_l: Dict[Tuple[str, str, str], Tensor],
+                               alpha_r: Dict[Tuple[str, str, str], Tensor],
+                               h_dict: Dict[str, Tensor],
+                               edge_index_dict: Dict[Tuple[str], Tensor],
                                sizes: Dict[str, int]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
@@ -691,7 +624,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             head, tail = metapath[0], metapath[-1]
             num_node_head, num_node_tail = sizes[head], sizes[tail]
 
-            edge_index, values = LATTE.get_edge_index_values(edge_index_dict[metapath])
+            edge_index, values = get_edge_index_values(edge_index_dict[metapath])
             if edge_index is None or edge_index.size(1) == 0: continue
 
             # print("\n", metapath)
@@ -713,19 +646,20 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # print(ntype, out.shape, emb_relations.shape)
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
-        print("\n>", ntype)
-        pprint(tensor_sizes(edge_pred_dict), width=250)
+        # print("\n>", ntype, self.get_tail_relations(ntype))
 
         remaining_orders = list(range(2, min(self.layer + 1, self.t_order) + 1))
         higher_relations = self.get_tail_relations(ntype, order=remaining_orders)
-        print("\t t-order", self.t_order, "remaining_orders", remaining_orders, "higher_relations", higher_relations)
+        # print("\t t-order", self.t_order, "remaining_orders", remaining_orders, "higher_relations", higher_relations)
 
         # Create high-order edge index for next layer (but may not be used for aggregation)
-        higher_order_edge_index = LATTE.join_edge_indexes(edge_index_dict_A=edge_pred_dict,
-                                                          edge_index_dict_B=edge_index_dict,
-                                                          sizes=sizes,  # layer=self.layer,
-                                                          edge_sampling=False)
-        pprint(tensor_sizes(higher_order_edge_index), width=250)
+        higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_index_dict,
+                                                    edge_index_dict_B=edge_pred_dict,
+                                                    sizes=sizes,
+                                                    metapaths=higher_relations,
+                                                    edge_sampling=False)
+        # print("higher_order_edge_index")
+        # pprint(tensor_sizes(higher_order_edge_index), width=250)
 
         # Aggregate higher order relations
         for metapath in higher_relations:
@@ -752,14 +686,29 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
 
+        # print(f'edge_pred_dict')
+        # pprint(tensor_sizes(edge_pred_dict),width=300)
+
         return emb_relations, edge_pred_dict
 
-    def message(self, x_j, alpha_j, alpha_i, index, ptr, size_i, metapath_idx):
-        alpha = alpha_j if alpha_i is None else alpha_j + alpha_i
-        alpha = self.attn_activation(alpha, metapath_idx)
-        alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
-        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
+    def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
+        if values is None:
+            x = torch.cat([x_i, x_j], dim=2)
+            if isinstance(self.alpha_activation, Tensor):
+                x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
+            elif isinstance(self.alpha_activation, nn.Module):
+                x = self.alpha_activation(x)
+
+            alpha = (x * self.attn[metapath]).sum(dim=-1)
+            alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+        else:
+            if values.dim() == 1:
+                values = values.unsqueeze(-1)
+            alpha = values
+            # alpha = softmax(alpha, index=index, ptr=ptr, num_nodes=size_i)
+
         self._alpha = alpha
+        alpha = F.dropout(alpha, p=self.attn_dropout, training=self.training)
 
         return x_j * alpha.unsqueeze(-1)
 
