@@ -6,12 +6,12 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 from colorhash import ColorHash
+from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.sampling import negative_sample
 from .utils import is_negative, get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, \
     tag_negative, untag_negative
 
@@ -340,18 +340,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    def get_h_dict(self, input, source_target="source"):
-        h_dict = {}
-        for ntype in input:
-            if source_target == "source":
-                h_dict[ntype] = self.linear_l[ntype].forward(input[ntype])
-            elif source_target == "target":
-                h_dict[ntype] = self.linear_r[ntype].forward(input[ntype])
-
-            h_dict[ntype] = h_dict[ntype].view(input[ntype].size(0), self.attn_heads, self.out_channels)
-
-        return h_dict
-
     def forward(self, x: Dict[str, Tensor],
                 prev_h_in: Dict[str, List[Tensor]],
                 edge_index_dict: Dict[Tuple, Tensor],
@@ -379,8 +367,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # if prev_h_in:
             #     prev_h_in = {ntype: [self.dropout(h) for h in h_list] for ntype, h_list in prev_h_in.items()}
 
-        l_dict = self.get_h_dict(x, source_target="source")
-        r_dict = self.get_h_dict(x_r, source_target="target")
+        l_dict = {ntype: self.linear_l[ntype].forward(feat).view(feat.size(0), self.attn_heads, self.out_channels) \
+                  for ntype, feat in x.items()}
+        r_dict = {ntype: self.linear_r[ntype].forward(feat).view(feat.size(0), self.attn_heads, self.out_channels) \
+                  for ntype, feat in x.items()}
 
         # # Predict relations attention coefficients
         # beta = self.get_beta_weights(x_r)

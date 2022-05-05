@@ -5,16 +5,15 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from openomics.database.ontology import GeneOntology
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizer
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index
+from openomics.database.ontology import GeneOntology
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -65,6 +64,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
         edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
+                                                      reverse=True,
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 200: continue
@@ -243,6 +243,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_types = {e for u, v, e in ontology.network.edges}
 
         edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
+                                                      reverse=True,
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 100: continue
