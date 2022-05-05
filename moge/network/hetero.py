@@ -335,7 +335,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Add reverse metapaths to allow reverse message passing for directed edges
         if add_reverse:
-            transform = T.ToUndirected(merge=False)
+            transform = T.ToUndirected(merge=True)
             hetero = transform(hetero)
 
         # Train test split (from previously saved node train/test split)

@@ -1,7 +1,7 @@
 import copy
 import logging
 from pprint import pprint
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union, Optional, Any
 
 import numpy as np
 import pandas as pd
@@ -314,19 +314,19 @@ class LATTE(nn.Module):
         proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
 
         h_layers = {ntype: [] for ntype in global_node_idx}
-        for t in range(self.t_order):
-            if t == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[t].forward(feats=h_dict,
+        for l in range(self.layers):
+            if l == 0:
+                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(feats=h_dict,
                                                                         edge_index_dict=edge_index_dict,
                                                                         global_node_idx=global_node_idx,
                                                                         sizes=sizes,
                                                                         save_betas=save_betas)
             else:
-                h_dict, t_loss, _ = self.layers[t].forward(feats=h_dict,
-                                                           edge_index_dict=edge_index_dict,
-                                                           global_node_idx=global_node_idx,
-                                                           sizes=sizes,
-                                                           save_betas=save_betas)
+                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(feats=h_dict,
+                                                                        edge_index_dict=edge_index_dict,
+                                                                        global_node_idx=global_node_idx,
+                                                                        sizes=sizes,
+                                                                        save_betas=save_betas)
 
             for ntype in global_node_idx:
                 h_layers[ntype].append(h_dict[ntype])
@@ -356,17 +356,17 @@ class LATTE(nn.Module):
         return out, proximity_loss, edge_pred_dict
 
     @staticmethod
-    def join_metapaths(metapath_A, metapath_B):
+    def join_metapaths(metapaths_A, metapaths_B):
         metapaths = []
-        for relation_a in metapath_A:
-            for relation_b in metapath_B:
+        for relation_a in metapaths_A:
+            for relation_b in metapaths_B:
                 if relation_a[-1] == relation_b[0]:
                     new_relation = relation_a + relation_b[1:]
                     metapaths.append(new_relation)
         return metapaths
 
     @staticmethod
-    def get_edge_index_values(edge_index_tup: [tuple, Tensor]):
+    def get_edge_index_values(edge_index_tup: Union[Tensor, Tuple[Tensor, Tensor]]) -> Tuple[Tensor, Optional[Tensor]]:
         if isinstance(edge_index_tup, tuple):
             edge_index = edge_index_tup[0]
             edge_values = edge_index[1]
@@ -383,7 +383,10 @@ class LATTE(nn.Module):
         return edge_index, edge_values
 
     @staticmethod
-    def join_edge_indexes(edge_index_dict_A, edge_index_dict_B, global_node_idx, edge_sampling=False):
+    def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Tensor],
+                          edge_index_dict_B: Dict[Tuple[str, str, str], Tensor],
+                          global_node_idx: Dict[str, Tensor],
+                          edge_sampling: bool = False) -> Dict[Tuple[str, str, str], Tensor]:
         output_edge_index = {}
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if is_negative(metapath_a): continue
@@ -606,7 +609,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    def forward(self, feats, edge_index_dict, global_node_idx, sizes: Dict[str, int], save_betas=False):
+    def forward(self, feats, edge_index_dict, global_node_idx, sizes: Dict[str, int], save_betas=False) -> \
+            Tuple[Dict[str, Tensor], Optional[Any], Dict[Tuple[str, str, str], Tensor]]:
         """
         Args:
             feats: a dict of node attributes indexed ntype
@@ -625,7 +629,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
         beta = {}
-        # print("> Layer", self.layer+1)
+        print("> Layer", self.layer + 1)
 
         for ntype in global_node_idx:
             if global_node_idx[ntype].size(0) == 0: continue
@@ -660,6 +664,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             proximity_loss, _ = self.proximity_loss(edge_index_dict,
                                                     alpha_l=alpha_l, alpha_r=alpha_r,
                                                     global_node_idx=global_node_idx)
+
         return out, proximity_loss, edge_pred_dict
 
     def agg_relation_neighbors(self, ntype: str, alpha_l: Dict[str, Tensor], alpha_r: Dict[str, Tensor],
@@ -703,19 +708,22 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # print(ntype, out.shape, emb_relations.shape)
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
+        print("\n>", ntype)
+        pprint(tensor_sizes(edge_pred_dict), width=250)
 
-        # Higher order
-        remaining_orders = range(2, min(self.layer + 1, self.t_order) + 1)
+        # Create high-order edge index for next layer
+        remaining_orders = list(range(2, min(self.layer + 1, self.t_order) + 1))
         higher_relations = self.get_tail_relations(ntype, order=remaining_orders)
-        # print(self.t_order, remaining_orders, higher_relations)
+        print(self.t_order, remaining_orders, higher_relations)
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
                                                     edge_index_dict_B=edge_index_dict,
                                                     sizes=sizes, layer=self.layer,
                                                     metapaths=higher_relations,
                                                     edge_threshold=self.edge_threshold,
                                                     edge_sampling=False)
-        # print("higher_order_edge_index", tensor_sizes(higher_order_edge_index))
+        pprint(tensor_sizes(higher_order_edge_index), width=250)
 
+        # Aggregate higher order relations
         for metapath in higher_relations:
             if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
 

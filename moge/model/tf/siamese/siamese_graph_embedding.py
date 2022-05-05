@@ -484,10 +484,10 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
                                                            minlen=minlen)
 
         if variable_length:
-            embs = [self.lstm_network.predict(seq,,
+            embs = [self.lstm_network.score(seq,,
             for seq in seqs]
             else:
-                embs = self.lstm_network.predict(seqs,,
+                embs = self.lstm_network.score(seqs,,
 
                        embs = np.array(embs)
             embs = embs.reshape(embs.shape[0], embs.shape[-1])

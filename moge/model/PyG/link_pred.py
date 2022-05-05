@@ -1,6 +1,7 @@
 import logging
 from typing import List, Tuple, Dict, Any
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
@@ -24,24 +25,15 @@ class DistMulti(torch.nn.Module):
         self.metapaths = metapaths
         self.embedding_dim = embedding_dim
 
-        # self.linears = nn.ModuleDict(
-        #     {metapath: nn.Parameter(torch.Tensor((embedding_dim, embedding_dim))) \
-        #      for metapath in metapaths}
-        # )
-
         self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
         nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
 
     def forward(self, inputs: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
         output = {}
-        # pprint(tensor_sizes({"inputs":inputs, "embeddings":embeddings}), width=200)
-        # print("edge_pos", {m: inputs["edge_pos"][m].max(1).values for m in inputs["edge_pos"]})
-        # print("head-batch", {m: torch.max(inputs["head-batch"][m]) for m in inputs["head-batch"]})
-        # print("tail-batch", {m: torch.max(inputs["tail-batch"][m]) for m in inputs["tail-batch"]})
 
         # Single edges
-        output["edge_pos"] = self.predict(inputs["edge_pos"], embeddings, mode="single")
+        output["edge_pos"] = self.score(inputs["edge_pos"], embeddings, mode="single")
 
         # Sampled head or tail negative sampling
         if "head-batch" in inputs or "tail-batch" in inputs:
@@ -49,25 +41,26 @@ class DistMulti(torch.nn.Module):
             edge_head_batch = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
                                                                  neg_edges=inputs["head-batch"],
                                                                  mode="head")
-            output["head-batch"] = self.predict(edge_head_batch, embeddings, mode="head")
+            output["head-batch"] = self.score(edge_head_batch, embeddings, mode="head")
 
             # Tail batch
             edge_tail_batch = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
                                                                  neg_edges=inputs["tail-batch"],
                                                                  mode="tail")
-            output["tail-batch"] = self.predict(edge_tail_batch, embeddings, mode="tail")
+            output["tail-batch"] = self.score(edge_tail_batch, embeddings, mode="tail")
 
         # True negative edges
         elif "edge_neg" in inputs:
-            output["edge_neg"] = self.predict(edge_index_dict=inputs["edge_neg"], embeddings=embeddings, mode="single")
+            output["edge_neg"] = self.score(edge_index_dict=inputs["edge_neg"], embeddings=embeddings, mode="single")
+
         else:
             raise Exception(f"No negative edges in inputs {inputs.keys()}")
 
         return output
 
-    def predict(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
-                embeddings: Dict[str, Tensor],
-                mode: str) -> Dict[Tuple[str, str, str], Tensor]:
+    def score(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+              embeddings: Dict[str, Tensor],
+              mode: str) -> Dict[Tuple[str, str, str], Tensor]:
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
@@ -80,14 +73,13 @@ class DistMulti(torch.nn.Module):
                 side_A = (embeddings[head_type] * kernel)[edge_index[0]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
                 emb_B = embeddings[tail_type][edge_index[1]].unsqueeze(2)  # (n_nodes, emb_dim, 1)
                 # score = side_A * emb_B
-                score = torch.bmm(side_A, emb_B)
-                score = score.sum(-1)
+                score = torch.bmm(side_A, emb_B).sum(-1)
             else:
                 emb_A = embeddings[head_type][edge_index[0]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
                 side_B = (kernel * embeddings[tail_type][edge_index[1]]).unsqueeze(2)  # (n_nodes, emb_dim, 1)
-
                 # score = emb_A * side_B
                 score = torch.bmm(emb_A, side_B)
+                # print(metapath, score.shape)
                 score = score.sum(-1)
 
             score = score.sum(dim=1)
@@ -147,9 +139,13 @@ class LATTELinkPred(LinkPredTrainer):
                                   if hasattr(hparams, "neg_sampling_ratio") else None,
                               edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
                               hparams=hparams)
+
         if hparams.layer_pooling == "concat":
             hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
             logging.info("embedding_dim {}".format(hparams.embedding_dim))
+
+        if "negative_sampling_size" in hparams:
+            self.dataset.negative_sampling_size = hparams.negative_sampling_size
 
         self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.pred_metapaths)
         self.criterion = LinkPredLoss()
@@ -179,7 +175,7 @@ class LATTELinkPred(LinkPredTrainer):
 
     def training_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
-        embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
+        embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
@@ -193,21 +189,22 @@ class LATTELinkPred(LinkPredTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
-        embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
+        embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
+        np.set_printoptions(precision=2)
         print("pos", F.sigmoid(e_pos[:5]).detach().cpu().numpy(),
               "\t neg", F.sigmoid(e_neg[:5, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
-        self.log("val_loss", loss)
+        self.log("val_loss", loss, prog_bar=True)
 
         return loss
 
     def test_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
-        embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
+        embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)

@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Union, Tuple, Iterable, List, Dict
+from typing import Union, Tuple, Iterable, List, Dict, Optional
 
 import pandas as pd
 import torch
@@ -95,13 +95,13 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[Tensor, Tensor], Tensor],
 
 def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str], Union[Tensor, Tuple[Tensor]]],
                       edge_index_dict_B: Dict[Tuple[str], Union[Tensor, Tuple[Tensor]]],
-                      sizes: List[Dict[str, Tuple[int]]],
-                      layer: int,
+                      sizes: Union[Dict[str, Tuple[int]], List[Dict[str, Tuple[int]]]],
+                      layer: Optional[int],
                       metapaths: List[Tuple[str]] = None,
-                      edge_threshold: float = None,
+                      edge_threshold: Optional[float] = None,
                       edge_sampling: bool = False):
     """
-    Return a cartesian product from two set of adjacency matrices, such that the output adjacency matricees are
+    Return a cartesian product from two set of adjacency matrices, such that the output adjacency matrices are
     relation-matching.
     """
     output_edge_index = {}

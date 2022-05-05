@@ -283,6 +283,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
             edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
             self.triples_neg.setdefault(metapath, []).append(edge_index)
+
+        print("train_valid_test_sizes", train_valid_test_sizes)
         self.pred_metapaths.append(metapath)
 
         self.triples_pos = {metapath: torch.cat(li_edge_index, dim=1) \
@@ -374,15 +376,18 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
         dataset = DataLoader(self.training_idx, batch_size=batch_size, collate_fn=self.transform,
+                             shuffle=True,
                              num_workers=num_workers)
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
         dataset = DataLoader(self.validation_idx, batch_size=batch_size, collate_fn=self.transform,
+                             shuffle=True,
                              num_workers=num_workers)
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
         dataset = DataLoader(self.testing_idx, batch_size=batch_size, collate_fn=self.transform,
+                             shuffle=False,
                              num_workers=num_workers)
         return dataset
