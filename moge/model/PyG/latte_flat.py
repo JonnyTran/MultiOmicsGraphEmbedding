@@ -1,5 +1,6 @@
 import copy
 import logging
+from pprint import pprint
 from typing import List, Dict, Tuple, Union
 
 import numpy as np
@@ -21,7 +22,7 @@ from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.sampling import negative_sample
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
+from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch, tensor_sizes
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -47,7 +48,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                               t_order=min(hparams.t_order, hparams.n_layers),
                               embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(khop=True if "khop" in collate_fn else None),
+                              metapaths=dataset.get_metapaths(khop=None),
                               layer_pooling=hparams.layer_pooling,
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads,
@@ -174,21 +175,38 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'embedding', 'layernorm']
+        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embeddings",
+                    'LayerNorm.bias', 'LayerNorm.weight',
+                    'BatchNorm.bias', 'BatchNorm.weight']
+
         optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
+            {'params': [p for name, p in param_optimizer \
+                        if not any(key in name for key in no_decay) \
+                        and "embeddings" not in name],
              'weight_decay': self.hparams.weight_decay},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
+             'weight_decay': 0.0},
         ]
 
         optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
-                                                               eta_min=self.lr / 100)
+        extra = {}
+        if "lr_annealing" in self.hparams and self.hparams.lr_annealing == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                                   T_max=self.num_training_steps,
+                                                                   eta_min=self.lr / 100
+                                                                   )
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using CosineAnnealingLR", scheduler.state_dict())
 
-        return {"optimizer": optimizer,
-                "lr_scheduler": scheduler,
-                "monitor": "val_loss"}
+        elif "lr_annealing" in self.hparams and self.hparams.lr_annealing == "restart":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
+                                                                             T_0=50, T_mult=1,
+                                                                             eta_min=self.lr / 100)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
+
+        return {"optimizer": optimizer, **extra}
 
     @property
     def num_training_steps(self) -> int:
@@ -480,7 +498,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.t_order = t_order
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
-        print(f"LATTE {self.layer + 1} layer", self.metapaths, "\n")
+        print(f"LATTE {self.layer + 1} layer")
+        pprint({ntype: [m for m in self.metapaths if m[-1] == ntype] \
+                for ntype in {m[-1] for m in self.metapaths}}, width=200)
+
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = output_dim
         self.use_proximity = use_proximity
@@ -546,7 +567,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         for ntype, rel_attn in self.rel_attn_r.items():
             nn.init.xavier_normal_(rel_attn, gain=gain)
 
-    def get_h_dict(self, x_dict):
+    def get_h_dict(self, x_dict: Dict[str, Tensor]) -> Dict[str, Tensor]:
         h_dict = {}
         for ntype in x_dict:
             if x_dict[ntype].size(0) == 0: continue
@@ -556,17 +577,23 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return h_dict
 
-    def get_alphas(self, edge_index_dict, h_dict):
+    def get_alphas(self, h_dict: Dict[str, Tensor]) -> \
+            Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         alpha_l, alpha_r = {}, {}
 
         for i, metapath in enumerate(self.metapaths):
-            if metapath not in edge_index_dict or edge_index_dict[metapath] is None or \
-                    edge_index_dict[metapath].numel() == 0:
-                continue
+            # if metapath not in edge_index_dict or edge_index_dict[metapath] is None or \
+            #         edge_index_dict[metapath].numel() == 0:
+            #     continue
             head, tail = metapath[0], metapath[-1]
 
-            alpha_l[metapath] = (h_dict[head] * self.attn_l[i]).sum(dim=-1)
-            alpha_r[metapath] = (h_dict[tail] * self.attn_r[i]).sum(dim=-1)
+            if head not in h_dict or tail not in h_dict: continue
+
+            try:
+                alpha_l[metapath] = (h_dict[head] * self.attn_l[i]).sum(dim=-1)
+                alpha_r[metapath] = (h_dict[tail] * self.attn_r[i]).sum(dim=-1)
+            except Exception as e:
+                print(e, "\n", metapath, tensor_sizes(h_dict))
         return alpha_l, alpha_r
 
     def get_beta_weights(self, node_emb, rel_embs, ntype):
@@ -593,21 +620,23 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                   for ntype, feats in feats.items()}
 
         # Compute node-level attention coefficients
-        alpha_l, alpha_r = self.get_alphas(edge_index_dict, h_dict)
+        alpha_l, alpha_r = self.get_alphas(h_dict)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         out = {}
         beta = {}
+        # print("> Layer", self.layer+1)
+
         for ntype in global_node_idx:
             if global_node_idx[ntype].size(0) == 0: continue
-            # print(">", ntype)
             out[ntype], edge_pred_dict = self.agg_relation_neighbors(ntype=ntype, alpha_l=alpha_l, alpha_r=alpha_r,
                                                                      h_dict=h_dict, edge_index_dict=edge_index_dict,
                                                                      sizes=sizes)
+
             out[ntype][:, :, -1, :] = h_dict[ntype]
 
             # print(ntype, out[ntype].sum(1).norm(p=2, dim=-1).mean(0)) # Show which relation has non-neg vectors
-            # print("\n Layer", self.layer, ntype, tensor_sizes(out))
+            # print(ntype, tensor_sizes(out))
 
             beta[ntype] = self.get_beta_weights(h_dict[ntype], out[ntype], ntype=ntype)
 

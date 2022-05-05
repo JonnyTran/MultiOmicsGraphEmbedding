@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Union, Iterable
+from typing import Union, Iterable, Dict, Tuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -275,11 +275,11 @@ class NodeClfTrainer(ClusteringEvaluator):
 
 class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
-        super(LinkPredTrainer, self).__init__(hparams, dataset, metrics, *args, **kwargs)
+        super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
-        self.test_batch_size = 2048
-
-    def reshape_e_pos_neg(self, edge_pred_dict, edge_weights_dict=None):
+    def get_pos_neg_edges(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+                          edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None) -> \
+            Tuple[Tensor, Tensor, Optional[Tensor]]:
         e_pos = []
         e_neg = []
         e_weights = []

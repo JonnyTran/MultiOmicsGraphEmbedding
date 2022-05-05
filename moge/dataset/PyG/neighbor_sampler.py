@@ -307,16 +307,25 @@ class HGTLoader(BaseDataLoader):
         super().__init__(input_nodes[1].tolist(), collate_fn=self.sample,
                          **kwargs)
 
-    def sample(self, indices: List[int]) -> HeteroData:
-        input_node_dict = {self.input_nodes[0]: torch.tensor(indices)}
+    def sample(self, indices: Dict[List[int], Dict[str, List[int]]]) -> HeteroData:
+        if isinstance(indices, dict):
+            query_nodes = {ntype: torch.tensor(nids) if not isinstance(nids, Tensor) else nids \
+                           for ntype, nids in indices.items()}
+        else:
+            query_nodes = {self.input_nodes[0]: torch.tensor(indices) \
+                if not isinstance(indices, Tensor) else indices}
+
+        batch_size = sum([nids.numel() for ntype, nids in query_nodes.items()])
+
+        # input_node_dict = {self.input_nodes[0]: torch.tensor(indices)}
         node_dict, row_dict, col_dict, edge_dict = self.sample_fn(
             self.colptr_dict,
             self.row_dict,
-            input_node_dict,
+            query_nodes,
             self.num_samples,
             self.num_hops,
         )
-        return node_dict, row_dict, col_dict, edge_dict, len(indices)
+        return node_dict, row_dict, col_dict, edge_dict, batch_size
 
     def transform_fn(self, out: Any) -> HeteroData:
         node_dict, row_dict, col_dict, edge_dict, batch_size = out

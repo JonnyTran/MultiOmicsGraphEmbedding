@@ -33,20 +33,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.neighbor_loader = neighbor_loader
         self.neighbor_sizes = neighbor_sizes
 
-        if self.neighbor_loader == "NeighborLoader":
-            self.num_neighbors = {
-                etype: neighbor_sizes if etype[1] != 'associated' else [-1, ] * len(neighbor_sizes)
-                for etype in self.metapaths}
-
-        elif self.neighbor_loader == "HGTLoader":
-            self.num_neighbors = {
-                ntype: neighbor_sizes if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(
-                    neighbor_sizes)
-                for ntype in self.node_types}
-
-        print(f"{self.neighbor_loader} neighbor_sizes:")
-        pprint(self.num_neighbors)
-
     @classmethod
     def from_pyg_heterodata(cls, hetero: HeteroData, classes: List[str], nodes: Dict[str, pd.Index], **kwargs):
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False,
@@ -178,6 +164,21 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def create_graph_sampler(self, batch_size: int, node_mask: Tensor, transform_fn=None, num_workers=10, **kwargs):
         if self.neighbor_loader == "NeighborLoader":
+            self.num_neighbors = {
+                etype: self.neighbor_sizes \
+                # if etype[1] != 'associated' else [-1, ] * len(self.neighbor_sizes)
+                for etype in self.metapaths}
+
+        elif self.neighbor_loader == "HGTLoader":
+            self.num_neighbors = {
+                ntype: self.neighbor_sizes \
+                # if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
+                for ntype in self.node_types}
+
+        print(f"{self.neighbor_loader} neighbor_sizes:")
+        pprint(self.num_neighbors)
+
+        if self.neighbor_loader == "NeighborLoader":
             Loader = NeighborLoader
         elif self.neighbor_loader == "HGTLoader":
             Loader = HGTLoader
@@ -225,9 +226,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                          edge_dir, reshuffle_train, add_reverse_metapaths, inductive, **kwargs)
         self.negative_sampling_size = negative_sampling_size
         self.pred_metapaths = pred_metapaths
+        self.neighbor_sizes = neighbor_sizes
 
         self.graph_sampler = self.create_graph_sampler(batch_size=1,
-                                                       node_mask=self.G[self.head_node_type].train_mask,
+                                                       node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
                                                        transform_fn=super().transform,
                                                        num_workers=0)
 
@@ -297,8 +299,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # reinstantiate graph sampler since hetero graph was modified
         self.graph_sampler = self.create_graph_sampler(batch_size=1,
-                                                       node_mask=self.G[self.head_node_type].train_mask,
-                                                       transform_fn=super().transform)
+                                                       node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
+                                                       transform_fn=super().transform,
+                                                       num_workers=0)
 
     @staticmethod
     def get_relabled_edge_index(edge_index_dict: Dict[str, Tensor],

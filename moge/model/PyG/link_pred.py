@@ -4,7 +4,6 @@ from typing import List, Tuple, Dict, Any
 import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import LinkPredLoss
@@ -119,7 +118,7 @@ class DistMulti(torch.nn.Module):
 
 class LATTELinkPred(LinkPredTrainer):
     def __init__(self, hparams, dataset: HeteroLinkPredDataset, metrics=["obgl-biokg"],
-                 collate_fn="neighbor_sampler") -> None:
+                 collate_fn=None) -> None:
         super().__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
@@ -137,7 +136,7 @@ class LATTELinkPred(LinkPredTrainer):
                               t_order=min(hparams.t_order, hparams.n_layers),
                               embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(khop=True if "khop" in collate_fn else None),
+                              metapaths=dataset.get_metapaths(khop=None),
                               layer_pooling=hparams.layer_pooling,
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads,
@@ -154,6 +153,9 @@ class LATTELinkPred(LinkPredTrainer):
 
         self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.pred_metapaths)
         self.criterion = LinkPredLoss()
+
+        self.hparams.n_params = self.get_n_params()
+        self.lr = self.hparams.lr
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]], **kwargs) \
             -> Tuple[Dict[str, Tensor], Any, Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
@@ -179,7 +181,7 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_weights)
+        e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
@@ -193,12 +195,12 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_weights)
+        e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
-        print(F.sigmoid(e_pos[:5]).detach().cpu().numpy(), "\t",
-              F.sigmoid(e_neg[:5, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
+        print("pos", F.sigmoid(e_pos[:5]).detach().cpu().numpy(),
+              "\t neg", F.sigmoid(e_neg[:5, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
         self.log("val_loss", loss)
 
         return loss
@@ -207,28 +209,44 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, prox_loss, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.reshape_e_pos_neg(edge_pred_dict, edge_weights)
+        e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
-        # print(tensor_sizes({"e_pos": e_pos, "e_neg": e_neg}))
-        # return
 
         self.log("test_loss", loss)
         return loss
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'embedding']
+        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embedding",
+                    'LayerNorm.bias', 'LayerNorm.weight',
+                    'BatchNorm.bias', 'BatchNorm.weight']
+
         optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer if not any(key in name for key in no_decay)],
-             'weight_decay': 0.01},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)], 'weight_decay': 0.0}
+            {'params': [p for name, p in param_optimizer \
+                        if not any(key in name for key in no_decay) \
+                        and "embeddings" not in name],
+             'weight_decay': self.hparams.weight_decay},
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
+             'weight_decay': 0.0},
         ]
 
-        # optimizer = torch.optim.AdamW(optimizer_grouped_parameters, eps=1e-06, lr=self.hparams.lr)
-        optimizer = torch.optim.Adam(optimizer_grouped_parameters,
-                                     lr=self.hparams.lr,  # momentum=self.hparams.momentum,
-                                     weight_decay=self.hparams.weight_decay)
-        scheduler = ReduceLROnPlateau(optimizer)
+        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "loss"}
+        extra = {}
+        if "lr_annealing" in self.hparams and self.hparams.lr_annealing == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                                   T_max=self.num_training_steps,
+                                                                   eta_min=self.lr / 100
+                                                                   )
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using CosineAnnealingLR", scheduler.state_dict())
+
+        elif "lr_annealing" in self.hparams and self.hparams.lr_annealing == "restart":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
+                                                                             T_0=50, T_mult=1,
+                                                                             eta_min=self.lr / 100)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
+
+        return {"optimizer": optimizer, **extra}
