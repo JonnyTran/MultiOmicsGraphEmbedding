@@ -40,20 +40,20 @@ class DistMulti(torch.nn.Module):
             output["edge_neg"] = self.score(edges_true["edge_neg"], embeddings=embeddings, mode="single")
 
         # Sampled head or tail negative sampling
-        if "head-batch" in edges_true or "tail-batch" in edges_true:
+        if "head_batch" in edges_true or "tail_batch" in edges_true:
             # Head batch
             edge_head_batch = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
-                                                                 neg_edges=edges_true["head-batch"],
+                                                                 neg_edges=edges_true["head_batch"],
                                                                  mode="head")
-            output["head-batch"] = self.score(edge_head_batch, embeddings, mode="head")
+            output["head_batch"] = self.score(edge_head_batch, embeddings, mode="head")
 
             # Tail batch
             edge_tail_batch = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
-                                                                 neg_edges=edges_true["tail-batch"],
+                                                                 neg_edges=edges_true["tail_batch"],
                                                                  mode="tail")
-            output["tail-batch"] = self.score(edge_tail_batch, embeddings, mode="tail")
+            output["tail_batch"] = self.score(edge_tail_batch, embeddings, mode="tail")
 
-        assert "edge_neg" in output or "head-batch" in output, f"No negative edges in inputs {edges_true.keys()}"
+        assert "edge_neg" in output or "head_batch" in output, f"No negative edges in inputs {edges_true.keys()}"
 
         return output
 
@@ -152,7 +152,9 @@ class LATTELinkPred(LinkPredTrainer):
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
 
-    def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]], **kwargs) \
+    def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+                return_score=False,
+                **kwargs) \
             -> Tuple[Dict[str, Tensor], Any, Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]
@@ -169,6 +171,9 @@ class LATTELinkPred(LinkPredTrainer):
                                                         **kwargs)
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
+        if return_score:
+            edges_pred = {pos_neg: {m: F.sigmoid(edge_weight) for m, edge_weight in edge_dict.items()} \
+                          for pos_neg, edge_dict in edges_pred.items()}
 
         return embeddings, aux_loss, edges_pred
 
@@ -179,7 +184,12 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
-        self.train_metrics.update_metrics(e_pos, e_neg, weights=None)
+        self.train_metrics.update_metrics(e_pos, e_neg, weights=None, subset=["ogbl-biokg"])
+        if "edge_neg" in edge_pred_dict:
+            neg_edges = torch.cat([edge_scores for m, edge_scores in edge_pred_dict["edge_neg"].items()])
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(neg_edges)]).unsqueeze(-1)
+            y_pred = torch.cat([e_pos, neg_edges]).unsqueeze(-1)
+            self.train_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
 
         logs = {'loss': loss, **self.train_metrics.compute_metrics()}
         self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
@@ -190,10 +200,18 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
+        e_pos, neg_sampled_edges, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
+        loss = self.criterion.forward(e_pos, neg_sampled_edges, pos_weights=e_weights)
 
-        self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
+        self.valid_metrics.update_metrics(e_pos, neg_sampled_edges, weights=None,
+                                          subset=["ogbl-biokg"]
+                                          )
+        if "edge_neg" in edge_pred_dict:
+            neg_edges = torch.cat([edge_scores for m, edge_scores in edge_pred_dict["edge_neg"].items()])
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(neg_edges)]).unsqueeze(-1)
+            y_pred = torch.cat([e_pos, neg_edges]).unsqueeze(-1)
+            self.valid_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
+
         self.log("val_loss", loss, prog_bar=True)
 
         return loss
@@ -209,7 +227,12 @@ class LATTELinkPred(LinkPredTrainer):
               "\nneg", F.sigmoid(e_neg[:5, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
-        self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
+        self.test_metrics.update_metrics(e_pos, e_neg, weights=None, subset=["ogbl-biokg"])
+        if "edge_neg" in edge_pred_dict:
+            neg_edges = torch.cat([edge_scores for m, edge_scores in edge_pred_dict["edge_neg"].items()])
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(neg_edges)]).unsqueeze(-1)
+            y_pred = torch.cat([e_pos, neg_edges]).unsqueeze(-1)
+            self.test_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
 
         self.log("test_loss", loss)
         return loss

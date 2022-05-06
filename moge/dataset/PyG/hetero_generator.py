@@ -1,4 +1,3 @@
-from pprint import pprint
 from typing import List, Tuple, Union, Dict
 
 import networkx as nx
@@ -177,8 +176,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 # if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
                 for ntype in self.node_types}
 
-        print(f"{self.neighbor_loader} neighbor_sizes:")
-        pprint(self.num_neighbors)
+        # print(f"{self.neighbor_loader} neighbor_sizes:")
+        # pprint(self.num_neighbors)
 
         if self.neighbor_loader == "NeighborLoader":
             Loader = NeighborLoader
@@ -229,6 +228,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.negative_sampling_size = negative_sampling_size
         self.pred_metapaths = pred_metapaths
         self.neighbor_sizes = neighbor_sizes
+        self.multilabel = False
 
         self.graph_sampler = self.create_graph_sampler(batch_size=1,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
@@ -298,6 +298,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.triples_neg = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_neg.items()}
 
+        # Train/valid/test positive edges
         self.training_idx = torch.arange(0, pos_train_valid_test_sizes[0])
         self.validation_idx = torch.arange(pos_train_valid_test_sizes[0],
                                            pos_train_valid_test_sizes[0] + pos_train_valid_test_sizes[1])
@@ -305,6 +306,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                         pos_train_valid_test_sizes[0] + pos_train_valid_test_sizes[1] + \
                                         pos_train_valid_test_sizes[2])
 
+        # Train/valid/test positive edges
         self.training_idx_neg = torch.arange(0, neg_train_valid_test_sizes[0])
         self.validation_idx_neg = torch.arange(neg_train_valid_test_sizes[0],
                                                neg_train_valid_test_sizes[0] + neg_train_valid_test_sizes[1])
@@ -312,7 +314,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                             neg_train_valid_test_sizes[0] + neg_train_valid_test_sizes[1] + \
                                             neg_train_valid_test_sizes[2])
 
-        # reinstantiate graph sampler since hetero graph was modified
+        # Reinstantiate graph sampler since hetero graph was modified
         self.graph_sampler = self.create_graph_sampler(batch_size=1,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
                                                        transform_fn=super().transform,
@@ -365,8 +367,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                 local2batch=local2batch)
 
         y = {"edge_pos": edge_pos, }
-        y["edge_neg"] = self.get_relabled_edge_index(edge_neg, global_node_index=X["global_node_index"],
-                                                     local2batch=local2batch, )
+        if sum(edge_index.size(1) for m, edge_index in edge_neg.items()):
+            y["edge_neg"] = self.get_relabled_edge_index(edge_neg, global_node_index=X["global_node_index"],
+                                                         local2batch=local2batch, )
 
         # Negative sampling
         head_batch = {}
@@ -381,7 +384,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 torch.randint(high=X["sizes"][metapath[-1]],
                               size=(num_pos_edges, self.negative_sampling_size,))
 
-        y.update({"head-batch": head_batch, "tail-batch": tail_batch, })
+        y.update({"head_batch": head_batch, "tail_batch": tail_batch, })
 
         edge_weights = None
         return X, y, edge_weights

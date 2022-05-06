@@ -6,29 +6,28 @@ import torch
 from torch import Tensor
 
 
-def activation(y_pred, loss_type):
+def activation(y_pred: Tensor, loss_type: str):
     # Apply softmax/sigmoid activation if needed
     if "LOGITS" in loss_type or "FOCAL" in loss_type:
         if "SOFTMAX" in loss_type:
             y_pred = torch.softmax(y_pred, dim=1)
         else:
             y_pred = torch.sigmoid(y_pred)
+
     elif "NEGATIVE_LOG_LIKELIHOOD" == loss_type or "SOFTMAX_CROSS_ENTROPY" in loss_type:
         y_pred = torch.softmax(y_pred, dim=1)
+
     return y_pred
 
 
-def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor, max_mode=False):
+def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
     if weights is None or weights.shape == None or weights.numel() == 0:
         return Y_hat, Y
 
     if not isinstance(weights, Tensor):
         weights = torch.tensor(weights)
 
-    if max_mode:
-        idx = weights == weights.max()
-    else:
-        idx = torch.nonzero(weights).view(-1)
+    idx = torch.nonzero(weights).view(-1)
 
     if Y.dim() > 1:
         Y = Y[idx, :]

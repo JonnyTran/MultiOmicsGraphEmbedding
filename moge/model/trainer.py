@@ -294,9 +294,9 @@ class LinkPredTrainer(NodeClfTrainer):
                 e_weights.append(edge_weights_dict[metapath])
 
             # Negative sampling
-            if "head-batch" in edge_pred_dict:
-                e_pred_head = edge_pred_dict["head-batch"][metapath].view(num_edges, -1)
-                e_pred_tail = edge_pred_dict["tail-batch"][metapath].view(num_edges, -1)
+            if "head_batch" in edge_pred_dict or "tail_batch" in edge_pred_dict:
+                e_pred_head = edge_pred_dict["head_batch"][metapath].view(num_edges, -1)
+                e_pred_tail = edge_pred_dict["tail_batch"][metapath].view(num_edges, -1)
                 e_neg.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
 
             # True negatives
