@@ -1,4 +1,4 @@
-from typing import Optional, Any, Callable
+from typing import Optional, Any, Callable, List, Dict
 
 import numpy as np
 import torch
@@ -9,7 +9,8 @@ from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from sklearn.metrics import average_precision_score
-from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy
+from torch import Tensor
+from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, Metric
 
 from .utils import filter_samples, tensor_sizes, activation
 
@@ -26,7 +27,7 @@ class Metrics(torch.nn.Module):
         self.top_ks = top_k
         self.prefix = prefix
 
-        self.metrics = {}
+        self.metrics: Dict[str, Metric] = {}
         for metric in metrics:
             if "precision" == metric:
                 self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)
@@ -82,11 +83,12 @@ class Metrics(torch.nn.Module):
             labels = torch.eye(self.n_classes)[labels].type_as(type_as)
             return labels
 
-    def update_metrics(self, y_hat: torch.Tensor, y: torch.Tensor, weights=None):
+    def update_metrics(self, y_hat: Tensor, y: Tensor, weights=Optional[Tensor], subset: List[str] = None):
         """
-        :param y_pred:
-        :param y_true:
-        :param weights:
+        Args:
+            y_pred:
+            y_true:
+            weights:
         """
         y_pred = y_hat.detach()
         y_true = y.detach()
@@ -100,7 +102,12 @@ class Metrics(torch.nn.Module):
             # y_pred_full, y_true_full = y_pred, y_true
             y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
 
-        for metric in self.metrics:
+        if not subset:
+            metrics = self.metrics
+        else:
+            metrics = subset
+
+        for metric in metrics:
             # torchmetrics metrics
             if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
                 try:
@@ -158,7 +165,7 @@ class Metrics(torch.nn.Module):
                 print(f"Had problem with metric {metric}, {str(e)}\r")
 
         # Needed for Precision(average=False) metrics
-        logs = {k: v.mean() if isinstance(v, torch.Tensor) and v.numel() > 1 else v for k, v in logs.items()}
+        logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v for k, v in logs.items()}
 
         return logs
 

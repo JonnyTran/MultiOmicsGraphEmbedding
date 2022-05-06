@@ -5,15 +5,16 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from openomics.database.ontology import GeneOntology
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizer
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index
-from openomics.database.ontology import GeneOntology
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -70,6 +71,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             if edge_index.size(1) < 200: continue
             self.G[metapath].edge_index = edge_index
             self.metapaths.append(metapath)
+
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
             self.G[go_ntype][attr] = values.to_numpy()
@@ -267,7 +269,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         self.triples_pos = {}
         self.triples_neg = {}
-        train_valid_test_sizes = []
+        pos_train_valid_test_sizes = []
+        neg_train_valid_test_sizes = []
         metapath = (self.head_node_type, "associated", go_ntype)
         for go_ann in [train_go_ann, valid_go_ann, test_go_ann]:
             # True Positive links (undirected)
@@ -275,7 +278,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                source="gene_name", target="go_id", create_using=nx.Graph)
 
             edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
-            train_valid_test_sizes.append(edge_index.size(1))
+            pos_train_valid_test_sizes.append(edge_index.size(1))
             self.triples_pos.setdefault(metapath, []).append(edge_index)
 
             # True Negative links (undirected)
@@ -284,8 +287,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
             edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
             self.triples_neg.setdefault(metapath, []).append(edge_index)
+            neg_train_valid_test_sizes.append(edge_index.size(1))
 
-        print("train_valid_test_sizes", train_valid_test_sizes)
+        print("pos_train_valid_test_sizes", pos_train_valid_test_sizes)
+        print("neg_train_valid_test_sizes", neg_train_valid_test_sizes)
         self.pred_metapaths.append(metapath)
 
         self.triples_pos = {metapath: torch.cat(li_edge_index, dim=1) \
@@ -293,12 +298,19 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.triples_neg = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_neg.items()}
 
-        self.training_idx = torch.arange(0, train_valid_test_sizes[0])
-        self.validation_idx = torch.arange(train_valid_test_sizes[0],
-                                           train_valid_test_sizes[0] + train_valid_test_sizes[1])
-        self.testing_idx = torch.arange(train_valid_test_sizes[0] + train_valid_test_sizes[1],
-                                        train_valid_test_sizes[0] + train_valid_test_sizes[1] + train_valid_test_sizes[
-                                            2])
+        self.training_idx = torch.arange(0, pos_train_valid_test_sizes[0])
+        self.validation_idx = torch.arange(pos_train_valid_test_sizes[0],
+                                           pos_train_valid_test_sizes[0] + pos_train_valid_test_sizes[1])
+        self.testing_idx = torch.arange(pos_train_valid_test_sizes[0] + pos_train_valid_test_sizes[1],
+                                        pos_train_valid_test_sizes[0] + pos_train_valid_test_sizes[1] + \
+                                        pos_train_valid_test_sizes[2])
+
+        self.training_idx_neg = torch.arange(0, neg_train_valid_test_sizes[0])
+        self.validation_idx_neg = torch.arange(neg_train_valid_test_sizes[0],
+                                               neg_train_valid_test_sizes[0] + neg_train_valid_test_sizes[1])
+        self.testing_idx_neg = torch.arange(neg_train_valid_test_sizes[0] + neg_train_valid_test_sizes[1],
+                                            neg_train_valid_test_sizes[0] + neg_train_valid_test_sizes[1] + \
+                                            neg_train_valid_test_sizes[2])
 
         # reinstantiate graph sampler since hetero graph was modified
         self.graph_sampler = self.create_graph_sampler(batch_size=1,
@@ -326,39 +338,48 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return renamed_edge_index_dict
 
-    def transform(self, edge_idx: List[int]):
+    def transform(self, edge_idx: List[int], mode=None):
         if not isinstance(edge_idx, torch.LongTensor):
             edge_idx = torch.LongTensor(edge_idx)
 
         edge_pos = {metapath: self.triples_pos[metapath][:, edge_idx] for metapath in self.pred_metapaths}
-        # TODO edges_neg
+        edge_neg = {metapath: self.triples_neg[metapath][:, self.training_idx_neg if mode == "train" else \
+                                                                self.validation_idx_neg if mode == "valid" else \
+                                                                    self.testing_idx_neg if mode == "test" else None] \
+                    for metapath in self.pred_metapaths}
 
-        query_nodes = self.gather_node_set(edge_pos)
+        combined_edges = {metapath: torch.cat([edge_pos[metapath], edge_neg[metapath]], dim=1) \
+                          for metapath in edge_pos}
+        query_nodes = self.gather_node_set(combined_edges)
+
         # Get subgraph induced by neighborhood hopping from the query nodes
         X, _, _ = self.graph_sampler.transform_fn(self.graph_sampler.collate_fn(query_nodes))
-        del X["batch_size"]
 
         # Rename node index from global to batch
         local2batch = {
-            node_type: dict(zip(
-                X["global_node_index"][node_type].numpy(),
-                range(len(X["global_node_index"][node_type])))
-            ) for node_type in X["global_node_index"]}
+            ntype: dict(zip(
+                X["global_node_index"][ntype].numpy(),
+                range(len(X["global_node_index"][ntype])))
+            ) for ntype in X["global_node_index"]}
         edge_pos = self.get_relabled_edge_index(edge_pos, global_node_index=X["global_node_index"],
                                                 local2batch=local2batch)
 
         y = {"edge_pos": edge_pos, }
+        y["edge_neg"] = self.get_relabled_edge_index(edge_neg, global_node_index=X["global_node_index"],
+                                                     local2batch=local2batch, )
 
         # Negative sampling
         head_batch = {}
         tail_batch = {}
         for metapath, edge_index in edge_pos.items():
+            num_pos_edges = edge_index.shape[1]
+
             head_batch[metapath] = \
                 torch.randint(high=X["sizes"][metapath[0]],
-                              size=(edge_index.shape[1], self.negative_sampling_size,))
+                              size=(num_pos_edges, self.negative_sampling_size,))
             tail_batch[metapath] = \
                 torch.randint(high=X["sizes"][metapath[-1]],
-                              size=(edge_index.shape[1], self.negative_sampling_size,))
+                              size=(num_pos_edges, self.negative_sampling_size,))
 
         y.update({"head-batch": head_batch, "tail-batch": tail_batch, })
 
@@ -376,19 +397,22 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return nodes
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
-        dataset = DataLoader(self.training_idx, batch_size=batch_size, collate_fn=self.transform,
+        dataset = DataLoader(self.training_idx, batch_size=batch_size,
+                             collate_fn=lambda idx: self.transform(idx, mode="train"),
                              shuffle=True,
                              num_workers=num_workers)
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        dataset = DataLoader(self.validation_idx, batch_size=batch_size, collate_fn=self.transform,
-                             shuffle=True,
+        dataset = DataLoader(self.validation_idx, batch_size=batch_size,
+                             collate_fn=lambda idx: self.transform(idx, mode="valid"),
+                             shuffle=False,
                              num_workers=num_workers)
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        dataset = DataLoader(self.testing_idx, batch_size=batch_size, collate_fn=self.transform,
+        dataset = DataLoader(self.testing_idx, batch_size=batch_size,
+                             collate_fn=lambda idx: self.transform(idx, mode="test"),
                              shuffle=False,
                              num_workers=num_workers)
         return dataset

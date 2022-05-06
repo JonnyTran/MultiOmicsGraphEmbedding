@@ -28,33 +28,32 @@ class DistMulti(torch.nn.Module):
         self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
         nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
 
-    def forward(self, inputs: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+    def forward(self, edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
         output = {}
 
         # Single edges
-        output["edge_pos"] = self.score(inputs["edge_pos"], embeddings, mode="single")
+        output["edge_pos"] = self.score(edges_true["edge_pos"], embeddings, mode="single")
+
+        # True negative edges
+        if "edge_neg" in edges_true:
+            output["edge_neg"] = self.score(edges_true["edge_neg"], embeddings=embeddings, mode="single")
 
         # Sampled head or tail negative sampling
-        if "head-batch" in inputs or "tail-batch" in inputs:
+        if "head-batch" in edges_true or "tail-batch" in edges_true:
             # Head batch
-            edge_head_batch = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
-                                                                 neg_edges=inputs["head-batch"],
+            edge_head_batch = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
+                                                                 neg_edges=edges_true["head-batch"],
                                                                  mode="head")
             output["head-batch"] = self.score(edge_head_batch, embeddings, mode="head")
 
             # Tail batch
-            edge_tail_batch = self.get_edge_index_from_neg_batch(inputs["edge_pos"],
-                                                                 neg_edges=inputs["tail-batch"],
+            edge_tail_batch = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
+                                                                 neg_edges=edges_true["tail-batch"],
                                                                  mode="tail")
             output["tail-batch"] = self.score(edge_tail_batch, embeddings, mode="tail")
 
-        # True negative edges
-        elif "edge_neg" in inputs:
-            output["edge_neg"] = self.score(edge_index_dict=inputs["edge_neg"], embeddings=embeddings, mode="single")
-
-        else:
-            raise Exception(f"No negative edges in inputs {inputs.keys()}")
+        assert "edge_neg" in output or "head-batch" in output, f"No negative edges in inputs {edges_true.keys()}"
 
         return output
 
@@ -195,9 +194,6 @@ class LATTELinkPred(LinkPredTrainer):
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
         self.valid_metrics.update_metrics(e_pos, e_neg, weights=None)
-        np.set_printoptions(precision=2)
-        print("pos", F.sigmoid(e_pos[:5]).detach().cpu().numpy(),
-              "\t neg", F.sigmoid(e_neg[:5, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
         self.log("val_loss", loss, prog_bar=True)
 
         return loss
@@ -207,6 +203,11 @@ class LATTELinkPred(LinkPredTrainer):
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
+
+        np.set_printoptions(precision=3, suppress=True)
+        print("pos", F.sigmoid(e_pos[:5]).detach().cpu().numpy(),
+              "\nneg", F.sigmoid(e_neg[:5, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
+
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
         self.test_metrics.update_metrics(e_pos, e_neg, weights=None)
 
