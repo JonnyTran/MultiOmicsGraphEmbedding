@@ -184,11 +184,13 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
-        self.train_metrics.update_metrics(e_pos, e_neg, weights=None, subset=["ogbl-biokg"])
+        self.train_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
+                                          weights=None, subset=["ogbl-biokg"])
+
         if "edge_neg" in edge_pred_dict:
-            neg_edges = torch.cat([edge_scores for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(neg_edges)]).unsqueeze(-1)
-            y_pred = torch.cat([e_pos, neg_edges]).unsqueeze(-1)
+            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
+            y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
             self.train_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
 
         logs = {'loss': loss, **self.train_metrics.compute_metrics()}
@@ -200,16 +202,16 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, neg_sampled_edges, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(e_pos, neg_sampled_edges, pos_weights=e_weights)
+        e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
+        loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
 
-        self.valid_metrics.update_metrics(e_pos, neg_sampled_edges, weights=None,
-                                          subset=["ogbl-biokg"]
-                                          )
+        self.valid_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
+                                          weights=None, subset=["ogbl-biokg"])
+
         if "edge_neg" in edge_pred_dict:
-            neg_edges = torch.cat([edge_scores for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(neg_edges)]).unsqueeze(-1)
-            y_pred = torch.cat([e_pos, neg_edges]).unsqueeze(-1)
+            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
+            y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
             self.valid_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
 
         self.log("val_loss", loss, prog_bar=True)
@@ -227,11 +229,13 @@ class LATTELinkPred(LinkPredTrainer):
               "\nneg", F.sigmoid(e_neg[:5, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
-        self.test_metrics.update_metrics(e_pos, e_neg, weights=None, subset=["ogbl-biokg"])
+        self.test_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
+                                         weights=None, subset=["ogbl-biokg"])
+
         if "edge_neg" in edge_pred_dict:
-            neg_edges = torch.cat([edge_scores for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(neg_edges)]).unsqueeze(-1)
-            y_pred = torch.cat([e_pos, neg_edges]).unsqueeze(-1)
+            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
+            y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
             self.test_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
 
         self.log("test_loss", loss)

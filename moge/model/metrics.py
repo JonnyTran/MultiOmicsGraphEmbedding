@@ -94,7 +94,7 @@ class Metrics(torch.nn.Module):
         y_true = y_true.detach()
 
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights)
-        y_pred = activation(y_pred, loss_type=self.loss_type)
+        y_pred_act = activation(y_pred, loss_type=self.loss_type)
 
         if self.multilabel and any([m in self.metrics \
                                     for m in ["auroc", "aupr", "precision", "recall", "micro_f1", "macro_f1"]]):
@@ -111,16 +111,16 @@ class Metrics(torch.nn.Module):
             # Torch ignite metrics
             if "precision" in metric or "recall" in metric or "accuracy" in metric:
                 if not self.multilabel and y_true.dim() == 1:
-                    self.metrics[metric].update((self.hot_encode(y_pred.argmax(1, keepdim=False), type_as=y_true),
+                    self.metrics[metric].update((self.hot_encode(y_pred_act.argmax(1, keepdim=False), type_as=y_true),
                                                  self.hot_encode(y_true, type_as=y_pred)))
                 else:
-                    self.metrics[metric].update(((y_pred > self.threshold).type_as(y_true), y_true))
+                    self.metrics[metric].update(((y_pred_act > self.threshold).type_as(y_true), y_true))
 
             # Torch ignite metrics
             elif metric == "top_k":
-                self.metrics[metric].update((y_pred, y_true))
+                self.metrics[metric].update((y_pred_act, y_true))
             elif metric == "avg_precision":
-                self.metrics[metric].update((y_pred, y_true))
+                self.metrics[metric].update((y_pred_act, y_true))
 
             # OGB metrics
             elif "ogbn" in metric:
@@ -130,16 +130,17 @@ class Metrics(torch.nn.Module):
                     # print(tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
                     pass
 
-                self.metrics[metric].update((y_pred, y_true))
+                self.metrics[metric].update((y_pred_act, y_true))
+
             elif "ogbl" in metric:
                 self.metrics[metric].update(y_pred, y_true)
 
             # torchmetrics metrics
             elif isinstance(self.metrics[metric], torchmetrics.metric.Metric):
                 try:
-                    self.metrics[metric].update(y_pred, y_true)
+                    self.metrics[metric].update(y_pred_act, y_true)
                 except Exception as e:
-                    print(e, "\n", metric, tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
+                    print(e, "\n", metric, tensor_sizes({"y_pred": y_pred_act, "y_true": y_true}))
                     # self.metrics[metric].update(y_pred_full, y_true_full)
 
             else:
@@ -238,7 +239,6 @@ class OGBLinkPredMetrics(torchmetrics.Metric):
         self.outputs = {}
 
     def update(self, e_pred_pos, e_pred_neg):
-
         if e_pred_pos.dim() > 1:
             e_pred_pos = e_pred_pos.squeeze(-1)
 
