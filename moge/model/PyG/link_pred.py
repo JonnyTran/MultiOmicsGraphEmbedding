@@ -189,8 +189,8 @@ class LATTELinkPred(LinkPredTrainer):
 
         if "edge_neg" in edge_pred_dict:
             edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
             y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
             self.train_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
 
         logs = {'loss': loss, **self.train_metrics.compute_metrics()}
@@ -210,8 +210,8 @@ class LATTELinkPred(LinkPredTrainer):
 
         if "edge_neg" in edge_pred_dict:
             edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
             y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
             self.valid_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
 
         self.log("val_loss", loss, prog_bar=True)
@@ -234,8 +234,8 @@ class LATTELinkPred(LinkPredTrainer):
 
         if "edge_neg" in edge_pred_dict:
             edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
             y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
+            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
             self.test_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
 
         self.log("test_loss", loss)

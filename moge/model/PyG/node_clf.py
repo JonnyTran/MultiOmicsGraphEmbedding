@@ -16,7 +16,7 @@ from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.latte import LATTE
-from moge.model.classifier import DenseClassification, ClsGraphNodeClassifier
+from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
 from moge.model.losses import ClassificationLoss
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.transformers.encoder import LSTMSequenceEncoder
@@ -102,7 +102,7 @@ class LATTENodeClf(NodeClfTrainer):
                 hparams.embedding_dim = hparams.embedding_dim * self.embedder.layers[-1].t_order
 
             if "cls_graph" in hparams and hparams.cls_graph:
-                self.classifier = ClsGraphNodeClassifier(hparams)
+                self.classifier = LabelGraphNodeClassifier(hparams)
             else:
                 self.classifier = DenseClassification(hparams)
         else:

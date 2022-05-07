@@ -6,7 +6,7 @@ import tqdm
 
 
 def filter_multilabel(y_str: pd.Series, min_count=None, max_count=None, label_subset: pd.Index = None,
-                      dropna=False, delimiter="|") -> pd.Series:
+                      dropna=False, delimiter="|", verbose=False) -> pd.Series:
     if dropna:
         index = y_str.dropna().index
     else:
@@ -21,7 +21,7 @@ def filter_multilabel(y_str: pd.Series, min_count=None, max_count=None, label_su
     if label_subset is not None:
         labels_filter = labels_filter.intersection(label_subset)
 
-    print(f"{y_str.name} num of labels selected: {len(labels_filter)} with min_count={min_count}")
+    print(f"{y_str.name} num of labels selected: {len(labels_filter)} with min_count={min_count}") if verbose else None
 
     y_df = y_list.map(lambda go_terms: \
                           [item for item in go_terms if item in labels_filter] \

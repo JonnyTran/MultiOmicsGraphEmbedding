@@ -6,16 +6,16 @@ import torch.nn.functional as F
 from torch import nn, Tensor
 from transformers import BertConfig, BertForSequenceClassification
 
+from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizer
 from moge.model.utils import tensor_sizes
 
 
 class HeteroSequenceEncoder(nn.Module):
-    def __init__(self, hparams: Namespace, dataset: HeteroGraphDataset) -> None:
+    def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset) -> None:
         super().__init__()
-        dataset.seq_tokenizer: SequenceTokenizer
         seq_encoders = {}
+
         for ntype, tokenizer in dataset.seq_tokenizer.items():
             max_position_embeddings = dataset.seq_tokenizer.max_length[ntype]
             if max_position_embeddings is None:
@@ -35,10 +35,11 @@ class HeteroSequenceEncoder(nn.Module):
                                          classifier_dropout=0.1)
 
             seq_encoders[ntype] = BertForSequenceClassification(bert_config)
+            print("BertForSequenceClassification", ntype)
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], batch_size=1):
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], batch_size=1) -> Dict[str, Tensor]:
         h_out = {}
         for ntype, encoding in sequences.items():
             batch_output = []

@@ -137,6 +137,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if hasattr(batch, "sequence_dict") and hasattr(self, "seq_tokenizer"):
             X["sequences"] = {}
             for ntype in X["global_node_index"]:
+                if not hasattr(batch[ntype], "sequence"): continue
                 X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(batch, ntype=ntype, max_length=None)
 
         y_dict = {ntype: y for ntype, y in batch.y_dict.items() if y.size(0)}
@@ -255,6 +256,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
             self.G[go_ntype][attr] = values.to_numpy()
+        self.G[go_ntype]["sequence"] = pd.Series(self.G[go_ntype]["name"] + ":" + self.G[go_ntype]["def"],
+                                                 index=self.nodes[go_ntype])
 
         self.G[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
         self.G[go_ntype].num_nodes = len(go_nodes)
