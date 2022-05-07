@@ -44,15 +44,22 @@ class HeteroSequenceEncoder(nn.Module):
         for ntype, encoding in sequences.items():
             batch_output = []
 
-            for input_ids, attention_mask, token_type_ids in zip(torch.split(encoding["input_ids"], batch_size),
-                                                                 torch.split(encoding["attention_mask"], batch_size),
-                                                                 torch.split(encoding["token_type_ids"], batch_size)):
-                out = self.seq_encoders[ntype].forward(input_ids=input_ids,
-                                                       attention_mask=attention_mask,
-                                                       token_type_ids=token_type_ids)
-                batch_output.append(out.logits)
+            if batch_size:
+                for input_ids, attention_mask, token_type_ids in zip(torch.split(encoding["input_ids"], batch_size),
+                                                                     torch.split(encoding["attention_mask"],
+                                                                                 batch_size),
+                                                                     torch.split(encoding["token_type_ids"],
+                                                                                 batch_size)):
+                    out = self.seq_encoders[ntype].forward(input_ids=input_ids,
+                                                           attention_mask=attention_mask,
+                                                           token_type_ids=token_type_ids)
+                    batch_output.append(out.logits)
 
-            h_out[ntype] = torch.cat(batch_output, dim=0)
+                h_out[ntype] = torch.cat(batch_output, dim=0)
+            else:
+                h_out[ntype] = self.seq_encoders[ntype].forward(input_ids=encoding["input_ids"],
+                                                                attention_mask=encoding["attention_mask"],
+                                                                token_type_ids=encoding["token_type_ids"])
 
         return h_out
 

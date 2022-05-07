@@ -256,15 +256,16 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
             self.G[go_ntype][attr] = values.to_numpy()
-        self.G[go_ntype]["sequence"] = pd.Series(self.G[go_ntype]["name"] + ":" + self.G[go_ntype]["def"],
-                                                 index=self.nodes[go_ntype])
 
         self.G[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
         self.G[go_ntype].num_nodes = len(go_nodes)
         self.num_nodes_dict[go_ntype] = len(go_nodes)
         self.node_types.append(go_ntype)
 
+        # Set sequence
         self.nodes[go_ntype] = pd.Index(go_nodes)
+        self.G[go_ntype]["sequence"] = pd.Series(self.G[go_ntype]["name"] + ":" + self.G[go_ntype]["def"],
+                                                 index=self.nodes[go_ntype])
 
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(

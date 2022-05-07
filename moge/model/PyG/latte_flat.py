@@ -88,9 +88,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        print(inputs.keys())
-
-        if isinstance(self.encoder, HeteroSequenceEncoder):
+        if 'sequences' in inputs or isinstance(self.encoder, HeteroSequenceEncoder):
             h_out = self.encoder.forward(inputs['sequences'])
         elif isinstance(self.encoder, HeteroNodeEncoder):
             h_out = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
