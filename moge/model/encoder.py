@@ -39,7 +39,7 @@ class HeteroSequenceEncoder(nn.Module):
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], batch_size=1) -> Dict[str, Tensor]:
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], batch_size=10) -> Dict[str, Tensor]:
         h_out = {}
         for ntype, encoding in sequences.items():
             batch_output = []
@@ -56,6 +56,7 @@ class HeteroSequenceEncoder(nn.Module):
                     batch_output.append(out.logits)
 
                 h_out[ntype] = torch.cat(batch_output, dim=0)
+
             else:
                 h_out[ntype] = self.seq_encoders[ntype].forward(input_ids=encoding["input_ids"],
                                                                 attention_mask=encoding["attention_mask"],

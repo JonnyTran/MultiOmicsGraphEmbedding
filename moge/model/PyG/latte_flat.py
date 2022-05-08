@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
+from fairscale.nn import checkpoint_wrapper, auto_wrap
 from torch import nn as nn, Tensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
@@ -83,6 +84,15 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         self.lr = self.hparams.lr
 
         self.val_moving_loss = torch.tensor([3.0, ] * 5, dtype=torch.float)
+
+    def configure_sharded_model(self):
+        # modules are sharded across processes
+        # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
+        # During the forward/backward passes, weights get synced across processes
+        # and de-allocated once computation is complete, saving memory.
+
+        # Wraps the layer in a Fully Sharded Wrapper automatically
+        self.encoder = auto_wrap(checkpoint_wrapper(self.final_block))
 
     def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]], **kwargs):
         if not self.training:
