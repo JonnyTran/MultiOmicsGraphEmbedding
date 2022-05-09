@@ -39,7 +39,7 @@ class HeteroSequenceEncoder(nn.Module):
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], batch_size=10) -> Dict[str, Tensor]:
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], batch_size=None) -> Dict[str, Tensor]:
         h_out = {}
         for ntype, encoding in sequences.items():
             batch_output = []

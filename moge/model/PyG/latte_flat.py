@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
-from fairscale.nn import checkpoint_wrapper, auto_wrap
+from fairscale.nn import auto_wrap
 from torch import nn as nn, Tensor
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
@@ -92,7 +92,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         # and de-allocated once computation is complete, saving memory.
 
         # Wraps the layer in a Fully Sharded Wrapper automatically
-        self.encoder = auto_wrap(checkpoint_wrapper(self.final_block))
+        self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]], **kwargs):
         if not self.training:
@@ -441,15 +441,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  layer: int = 0, t_order: int = 1,
                  activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
                  layernorm=False, batchnorm=False, dropout=0.2,
-                 edge_threshold=0.0, use_proximity=False, neg_sampling_ratio=1.0) -> None:
+                 edge_threshold=0.0, use_proximity=False, neg_sampling_ratio=1.0, verbose=False) -> None:
         super().__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.t_order = t_order
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
-        print(f"LATTE {self.layer + 1} layer")
+        print(f"LATTE {self.layer + 1} layer") if verbose else None
         pprint({ntype: [m for m in self.metapaths if m[-1] == ntype] \
-                for ntype in {m[-1] for m in self.metapaths}}, width=200)
+                for ntype in {m[-1] for m in self.metapaths}}, width=200) if verbose else None
 
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = output_dim

@@ -4,14 +4,11 @@ from abc import abstractmethod
 from typing import Union, List, Tuple, Dict
 
 import dgl
-import moge.model.PyG.utils
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
-from cogdl.datasets.han_data import HANDataset
-from moge.model.PyG.utils import is_negative, get_edge_index_values
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -21,6 +18,9 @@ from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_geometric.utils import is_undirected
 from torch_sparse import transpose
+
+import moge.model.PyG.utils
+from moge.model.PyG.utils import is_negative, get_edge_index_values
 
 
 class Graph:
