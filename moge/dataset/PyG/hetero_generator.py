@@ -403,21 +403,21 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return nodes
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = DataLoader(self.training_idx, batch_size=batch_size,
                              collate_fn=lambda idx: self.transform(idx, mode="train"),
                              shuffle=True,
                              num_workers=num_workers)
         return dataset
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = DataLoader(self.validation_idx, batch_size=batch_size,
                              collate_fn=lambda idx: self.transform(idx, mode="valid"),
                              shuffle=False,
                              num_workers=num_workers)
         return dataset
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = DataLoader(self.testing_idx, batch_size=batch_size,
                              collate_fn=lambda idx: self.transform(idx, mode="test"),
                              shuffle=False,

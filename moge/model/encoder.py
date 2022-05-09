@@ -58,9 +58,10 @@ class HeteroSequenceEncoder(nn.Module):
                 h_out[ntype] = torch.cat(batch_output, dim=0)
 
             else:
-                h_out[ntype] = self.seq_encoders[ntype].forward(input_ids=encoding["input_ids"],
-                                                                attention_mask=encoding["attention_mask"],
-                                                                token_type_ids=encoding["token_type_ids"])
+                out = self.seq_encoders[ntype].forward(input_ids=encoding["input_ids"],
+                                                       attention_mask=encoding["attention_mask"],
+                                                       token_type_ids=encoding["token_type_ids"])
+                h_out[ntype] = out.logits
 
         return h_out
 
