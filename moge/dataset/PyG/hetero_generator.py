@@ -8,6 +8,7 @@ from openomics.database.ontology import GeneOntology
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
@@ -302,6 +303,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.triples_neg = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_neg.items()}
 
+        self.triples_pos_adj = {metapath: SparseTensor.from_edge_index(edge_index) \
+                                for metapath, edge_index in self.triples_pos.items()}
+
         # Train/valid/test positive edges
         self.training_idx = torch.arange(0, pos_train_valid_test_sizes[0])
         self.validation_idx = torch.arange(pos_train_valid_test_sizes[0],
@@ -325,9 +329,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        num_workers=0)
 
     @staticmethod
-    def get_relabled_edge_index(edge_index_dict: Dict[str, Tensor],
+    def get_relabled_edge_index(edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                                 global_node_index: Dict[str, Tensor],
-                                local2batch: Dict[str, Tensor] = None) -> Dict[Tuple[str, str, str], Tensor]:
+                                local2batch: Dict[str, Tensor] = None,
+                                mode=None) -> Dict[Tuple[str, str, str], Tensor]:
         if local2batch is None:
             local2batch = {
                 node_type: dict(zip(
@@ -336,11 +341,22 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 ) for node_type in global_node_index}
 
         renamed_edge_index_dict = {}
-        for metapath in edge_index_dict:
+        for metapath, edge_index in edge_index_dict.items():
             head_type, edge_type, tail_type = metapath
-            sources = edge_index_dict[metapath][0].apply_(local2batch[head_type].get)
-            targets = edge_index_dict[metapath][-1].apply_(local2batch[tail_type].get)
-            renamed_edge_index_dict[metapath] = torch.stack([sources, targets], dim=1).t()
+
+            if edge_index.size(0) == 2 and mode is None:
+                sources = edge_index[0].apply_(local2batch[head_type].get)
+                targets = edge_index[-1].apply_(local2batch[tail_type].get)
+
+                renamed_edge_index_dict[metapath] = torch.stack([sources, targets], dim=1).t()
+
+            elif mode == "head_batch":
+                renamed_edge_index_dict[metapath] = edge_index.apply_(local2batch[head_type].get)
+            elif mode == "tail_batch":
+                renamed_edge_index_dict[metapath] = edge_index.apply_(local2batch[tail_type].get)
+            else:
+                raise Exception("Must provide an edge_index with shape (2, N) or pass 'head_batch' or 'tail_batch' "
+                                "in `mode`.")
 
         return renamed_edge_index_dict
 
@@ -361,6 +377,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Get subgraph induced by neighborhood hopping from the query nodes
         X, _, _ = self.graph_sampler.transform_fn(self.graph_sampler.collate_fn(query_nodes))
 
+        head_batch, tail_batch = self.generate_negative_sampling(edge_pos, global_node_index=X["global_node_index"])
+
         # Rename node index from global to batch
         local2batch = {
             ntype: dict(zip(
@@ -376,22 +394,55 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                          local2batch=local2batch, )
 
         # Negative sampling
-        head_batch = {}
-        tail_batch = {}
-        for metapath, edge_index in edge_pos.items():
-            num_pos_edges = edge_index.shape[1]
-
-            head_batch[metapath] = \
-                torch.randint(high=X["sizes"][metapath[0]],
-                              size=(num_pos_edges, self.negative_sampling_size,))
-            tail_batch[metapath] = \
-                torch.randint(high=X["sizes"][metapath[-1]],
-                              size=(num_pos_edges, self.negative_sampling_size,))
+        # head_batch = {}
+        # tail_batch = {}
+        # for metapath, edge_index in edge_pos.items():
+        #     num_pos_edges = edge_index.shape[1]
+        #
+        #     head_batch[metapath] = torch.randint(high=X["sizes"][metapath[0]],
+        #                                          size=(num_pos_edges, self.negative_sampling_size,))
+        #     tail_batch[metapath] = torch.randint(high=X["sizes"][metapath[-1]],
+        #                                          size=(num_pos_edges, self.negative_sampling_size,))
 
         y.update({"head_batch": head_batch, "tail_batch": tail_batch, })
 
         edge_weights = None
         return X, y, edge_weights
+
+    def generate_negative_sampling(self, edge_pos: Dict[Tuple[str, str, str], Tensor],
+                                   global_node_index: Dict[str, Tensor]) -> Tuple[
+        Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
+        head_batch = {}
+        tail_batch = {}
+
+        # for metapath, edge_index in edge_pos.items():
+        #     num_pos_edges = edge_index.shape[1]
+        #
+        #     head_batch[metapath] = torch.randint(high=X["sizes"][metapath[0]],
+        #                                          size=(num_pos_edges, self.negative_sampling_size,))
+        #     tail_batch[metapath] = torch.randint(high=X["sizes"][metapath[-1]],
+        #                                          size=(num_pos_edges, self.negative_sampling_size,))
+
+        for metapath, edge_index in edge_pos.items():
+            head_type, tail_type = metapath[0], metapath[-1]
+            adj = self.triples_pos_adj[metapath]
+
+            head_neg_nodes = global_node_index[head_type].tolist()
+
+            head_neg_adjs = [1 - adj[head_neg_nodes, j.item()].to_dense().view(-1) for j in edge_index[1]]
+            head_batch[metapath] = torch.cat(
+                [torch.multinomial(neg_adj,
+                                   num_samples=self.negative_sampling_size, replacement=True).unsqueeze(0) \
+                 for neg_adj in head_neg_adjs], dim=0)
+
+            tail_neg_nodes = global_node_index[tail_type].tolist()
+            tail_neg_adjs = [1 - adj[i.item(), tail_neg_nodes].to_dense().view(-1) for i in edge_index[0]]
+            tail_batch[metapath] = torch.cat([
+                torch.multinomial(neg_adj,
+                                  num_samples=self.negative_sampling_size, replacement=True).unsqueeze(0) \
+                for neg_adj in tail_neg_adjs], dim=0)
+
+        return head_batch, tail_batch
 
     def gather_node_set(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dict[str, Tensor]:
         nodes = {}
