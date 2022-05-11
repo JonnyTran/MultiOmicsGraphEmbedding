@@ -182,7 +182,9 @@ class LATTELinkPred(LinkPredTrainer):
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
+        loss = self.criterion.forward(pos_pred=e_pos,
+                                      neg_pred=torch.cat([e_neg.view(-1), edge_pred_dict["edge_neg"].view(-1)]),
+                                      pos_weights=e_weights)
 
         self.train_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
                                           weights=None, subset=["ogbl-biokg"])
@@ -220,9 +222,9 @@ class LATTELinkPred(LinkPredTrainer):
 
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
 
-        np.set_printoptions(precision=3, suppress=True)
-        print("pos", F.sigmoid(e_pos[:10]).detach().cpu().numpy(),
-              "\nneg", F.sigmoid(e_neg[:10, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
+        np.set_printoptions(precision=3, suppress=True, linewidth=300)
+        print("\npos", F.sigmoid(e_pos[:20]).detach().cpu().numpy(),
+              "\nneg", F.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
         self.test_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),

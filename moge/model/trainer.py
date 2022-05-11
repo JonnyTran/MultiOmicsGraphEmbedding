@@ -300,8 +300,10 @@ class LinkPredTrainer(NodeClfTrainer):
                 e_neg.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
 
             # True negatives
-            if "edge_neg" in edge_pred_dict:
+            elif "edge_neg" in edge_pred_dict:
                 e_neg.append(edge_pred_dict["edge_neg"][metapath].view(num_edges, -1))
+            else:
+                raise Exception(f"No negative edges in {edge_pred_dict.keys()}")
 
         e_pos = torch.cat(e_pos, dim=0)
         e_neg = torch.cat(e_neg, dim=0)

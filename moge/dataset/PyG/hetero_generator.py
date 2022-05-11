@@ -365,11 +365,20 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             edge_idx = torch.LongTensor(edge_idx)
 
         edge_pos = {metapath: self.triples_pos[metapath][:, edge_idx] for metapath in self.pred_metapaths}
+
+        # True negative edges
         edge_neg = {metapath: self.triples_neg[metapath][:, self.training_idx_neg if mode == "train" else \
                                                                 self.validation_idx_neg if mode == "valid" else \
                                                                     self.testing_idx_neg if mode == "test" else None] \
                     for metapath in self.pred_metapaths}
 
+        if sum(edge_index.size(1) for m, edge_index in edge_neg.items()) > edge_idx.numel():
+            edge_neg = {metapath: edge_index[:, torch.multinomial(torch.ones(edge_index.size(1)),
+                                                                  num_samples=edge_idx.numel(),
+                                                                  replacement=False)] \
+                        for metapath, edge_index in edge_neg.items()}
+
+        # Get all nodes induced by sampled edges
         combined_edges = {metapath: torch.cat([edge_pos[metapath], edge_neg[metapath]], dim=1) \
                           for metapath in edge_pos}
         query_nodes = self.gather_node_set(combined_edges)
