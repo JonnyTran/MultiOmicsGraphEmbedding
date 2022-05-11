@@ -589,9 +589,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self.save_relation_weights({ntype: beta[ntype].mean(1) for ntype in beta}, global_node_idx)
 
         proximity_loss = None
-        if self.use_proximity:
-            proximity_loss, _ = self.proximity_loss(edge_index_dict, alpha_l=alpha_l, alpha_r=alpha_r,
-                                                    global_node_idx=global_node_idx)
 
         return h_out, proximity_loss, edge_pred_dict
 

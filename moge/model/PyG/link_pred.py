@@ -188,8 +188,8 @@ class LATTELinkPred(LinkPredTrainer):
                                           weights=None, subset=["ogbl-biokg"])
 
         if "edge_neg" in edge_pred_dict:
-            self.binary_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                metrics=self.train_metrics, subset=["precision", "recall"])
+            self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
+                                   metrics=self.train_metrics, subset=["precision", "recall"])
 
         logs = {'loss': loss, **self.train_metrics.compute_metrics()}
         self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
@@ -207,8 +207,8 @@ class LATTELinkPred(LinkPredTrainer):
                                           weights=None, subset=["ogbl-biokg"])
 
         if "edge_neg" in edge_pred_dict:
-            self.binary_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                metrics=self.valid_metrics, subset=["precision", "recall"])
+            self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
+                                   metrics=self.valid_metrics, subset=["precision", "recall"])
 
         self.log("val_loss", loss, prog_bar=True)
 
@@ -229,13 +229,13 @@ class LATTELinkPred(LinkPredTrainer):
                                          weights=None, subset=["ogbl-biokg"])
 
         if "edge_neg" in edge_pred_dict:
-            self.binary_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                metrics=self.test_metrics, subset=["precision", "recall"])
+            self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
+                                   metrics=self.test_metrics, subset=["precision", "recall"])
 
         self.log("test_loss", loss)
         return loss
 
-    def binary_metrics(self, e_pos, e_neg, metrics: Metrics, subset=["precision", "recall"]):
+    def update_pr_metrics(self, e_pos, e_neg, metrics: Metrics, subset=["precision", "recall"]):
         edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in e_neg.items()])
         e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]  # randomly select |e_neg| edges
         y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
