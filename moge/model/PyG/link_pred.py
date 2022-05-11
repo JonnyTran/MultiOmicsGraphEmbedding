@@ -9,6 +9,7 @@ from torch import nn, Tensor
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import LinkPredLoss
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
+from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
 from ...dataset import HeteroLinkPredDataset
 
@@ -33,7 +34,7 @@ class DistMulti(torch.nn.Module):
         output = {}
 
         # Single edges
-        output["edge_pos"] = self.score(edges_true["edge_pos"], embeddings, mode="single")
+        output["edge_pos"] = self.score(edges_true["edge_pos"], embeddings=embeddings, mode="single")
 
         # True negative edges
         if "edge_neg" in edges_true:
@@ -78,7 +79,6 @@ class DistMulti(torch.nn.Module):
                 side_B = (kernel * embeddings[tail_type][edge_index[1]]).unsqueeze(2)  # (n_nodes, emb_dim, 1)
                 # score = emb_A * side_B
                 score = torch.bmm(emb_A, side_B)
-                # print(metapath, score.shape)
                 score = score.sum(-1)
 
             score = score.sum(dim=1)
@@ -96,13 +96,13 @@ class DistMulti(torch.nn.Module):
             e_size, neg_samp_size = neg_edges[metapath].shape
 
             if mode == "head":
-                nid_A = neg_edges[metapath].reshape(-1)
-                nid_B = pos_edges[metapath][1].repeat_interleave(neg_samp_size)
-                edge_index_dict[metapath] = torch.stack([nid_A, nid_B], dim=0)
+                head_nodes = neg_edges[metapath].reshape(-1)
+                tail_nodes = pos_edges[metapath][1].repeat_interleave(neg_samp_size)
+                edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
             elif mode == "tail":
-                nid_A = pos_edges[metapath][0].repeat_interleave(neg_samp_size)
-                nid_B = neg_edges[metapath].reshape(-1)
-                edge_index_dict[metapath] = torch.stack([nid_A, nid_B], dim=0)
+                head_nodes = pos_edges[metapath][0].repeat_interleave(neg_samp_size)
+                tail_nodes = neg_edges[metapath].reshape(-1)
+                edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
 
         return edge_index_dict
 
@@ -188,11 +188,8 @@ class LATTELinkPred(LinkPredTrainer):
                                           weights=None, subset=["ogbl-biokg"])
 
         if "edge_neg" in edge_pred_dict:
-            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]
-            y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
-            self.train_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
+            self.binary_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
+                                metrics=self.train_metrics, subset=["precision", "recall"])
 
         logs = {'loss': loss, **self.train_metrics.compute_metrics()}
         self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
@@ -210,11 +207,8 @@ class LATTELinkPred(LinkPredTrainer):
                                           weights=None, subset=["ogbl-biokg"])
 
         if "edge_neg" in edge_pred_dict:
-            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]
-            y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
-            self.valid_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
+            self.binary_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
+                                metrics=self.valid_metrics, subset=["precision", "recall"])
 
         self.log("val_loss", loss, prog_bar=True)
 
@@ -227,22 +221,27 @@ class LATTELinkPred(LinkPredTrainer):
         e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
 
         np.set_printoptions(precision=3, suppress=True)
-        print("pos", F.sigmoid(e_pos[:5]).detach().cpu().numpy(),
-              "\nneg", F.sigmoid(e_neg[:5, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
+        print("pos", F.sigmoid(e_pos[:10]).detach().cpu().numpy(),
+              "\nneg", F.sigmoid(e_neg[:10, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
         self.test_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
                                          weights=None, subset=["ogbl-biokg"])
 
         if "edge_neg" in edge_pred_dict:
-            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred_dict["edge_neg"].items()])
-            e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]
-            y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
-            y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
-            self.test_metrics.update_metrics(y_pred, y_true, weights=None, subset=["precision", "recall"])
+            self.binary_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
+                                metrics=self.test_metrics, subset=["precision", "recall"])
 
         self.log("test_loss", loss)
         return loss
+
+    def binary_metrics(self, e_pos, e_neg, metrics: Metrics, subset=["precision", "recall"]):
+        edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in e_neg.items()])
+        e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]  # randomly select |e_neg| edges
+        y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
+        y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
+
+        metrics.update_metrics(y_pred, y_true, weights=None, subset=subset)
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
