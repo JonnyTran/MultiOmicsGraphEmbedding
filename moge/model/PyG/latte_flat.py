@@ -530,7 +530,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta = alpha_l[:, None, :] + alpha_r
         beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = F.softmax(beta, dim=1)
-        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
     def forward(self, feats: Dict[str, Tensor],
@@ -551,9 +551,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                   for ntype, x in feats.items()}
         r_dict = {ntype: self.linear_r[ntype].forward(x).view(x.size(0), self.attn_heads, self.out_channels) \
                   for ntype, x in feats.items()}
-
-        # Compute node-level attention coefficients
-        # alpha_l, alpha_r = self.get_alphas(h_dict)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
@@ -580,9 +577,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
 
-            h_out[ntype] = self.activation(h_out[ntype])
+            if hasattr(self, "dropout"):
+                h_out[ntype] = self.dropout(h_out[ntype])
+
             if hasattr(self, "activation"):
-                pass
+                h_out[ntype] = self.activation(h_out[ntype])
 
         if not self.training and save_betas:
             self.save_relation_weights({ntype: beta[ntype].mean(1) for ntype in beta}, global_node_idx)
@@ -792,30 +791,3 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 for node_type in self._beta_avg for (metapath, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
 
-#
-# def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=False, sampling=True):
-#     A = SparseTensor(row=indexA[0], col=indexA[1], value=valueA,
-#                      sparse_sizes=(m, k), is_sorted=not coalesced)
-#     B = SparseTensor(row=indexB[0], col=indexB[1], value=valueB,
-#                      sparse_sizes=(k, n), is_sorted=not coalesced)
-#
-#     deg_A = A.storage.colcount()
-#     deg_B = B.storage.rowcount()
-#     deg_normalized = 1.0 / (deg_A + deg_B).to(torch.float)
-#     deg_normalized[deg_normalized == float('inf')] = 0.0
-#
-#     D = SparseTensor(row=torch.arange(deg_normalized.size(0), device=valueA.device),
-#                      col=torch.arange(deg_normalized.size(0), device=valueA.device),
-#                      value=deg_normalized.type_as(valueA),
-#                      sparse_sizes=(deg_normalized.size(0), deg_normalized.size(0)))
-#
-#     out = A @ D @ B
-#     row, col, values = out.coo()
-#
-#     num_samples = min(int(valueA.numel()), int(valueB.numel()), values.numel())
-#     if sampling and values.numel() > num_samples:
-#         idx = torch.multinomial(values, num_samples=num_samples,
-#                                 replacement=False)
-#         row, col, values = row[idx], col[idx], values[idx]
-#
-#     return torch.stack([row, col], dim=0), values

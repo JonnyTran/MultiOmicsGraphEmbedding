@@ -1,4 +1,4 @@
-from typing import Optional, Any, Callable, List, Dict
+from typing import Optional, Any, Callable, List, Dict, Union, Tuple
 
 import numpy as np
 import torch
@@ -16,8 +16,10 @@ from .utils import filter_samples, tensor_sizes, activation
 
 
 class Metrics(torch.nn.Module):
-    def __init__(self, prefix: str, loss_type: str, threshold=0.5, top_k=[5, 10, 50], n_classes: int = None,
-                 multilabel: bool = None, metrics=["precision", "recall", "top_k", "accuracy"]):
+    def __init__(self, prefix: str, loss_type: str, threshold: float = 0.5,
+                 top_k: List[int] = [5, 10, 50], n_classes: int = None,
+                 multilabel: bool = None,
+                 metrics: List[Union[str, Tuple[str]]] = ["precision", "recall", "top_k", "accuracy"]):
         super().__init__()
 
         self.loss_type = loss_type.upper()
@@ -25,9 +27,9 @@ class Metrics(torch.nn.Module):
         self.n_classes = n_classes
         self.multilabel = multilabel
         self.top_ks = top_k
-        self.prefix = prefix
+        self.prefix = prefix if isinstance(prefix, str) else ""
 
-        self.metrics: Dict[str, Metric] = {}
+        self.metrics: Dict[Union[str, Tuple[str]], Metric] = {}
         for metric in metrics:
             if "precision" == metric:
                 self.metrics[metric] = Precision(average=True, is_multilabel=multilabel)
@@ -60,19 +62,22 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
                                                 subset_accuracy=multilabel)
 
-            elif "ogbn" in metric:
-                self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric.split(".")[0]))
-            elif "ogbl" in metric:
-                self.metrics[metric] = OGBLinkPredMetrics(LinkEvaluator(metric.split(".")[0]))
-            elif "ogbg" in metric:
-                self.metrics[metric] = OGBNodeClfMetrics(GraphEvaluator(metric.split(".")[0]))
+            elif "ogbn" in metric or any("ogbn" in s for s in metric):
+                self.metrics[metric] = OGBNodeClfMetrics(
+                    NodeEvaluator(metric[0] if isinstance(metric, (list, tuple)) else metric))
+            elif "ogbl" in metric or any("ogbl" in s for s in metric):
+                self.metrics[metric] = OGBLinkPredMetrics(
+                    LinkEvaluator(metric[0] if isinstance(metric, (list, tuple)) else metric))
+            elif "ogbg" in metric or any("ogbg" in s for s in metric):
+                self.metrics[metric] = OGBNodeClfMetrics(
+                    GraphEvaluator(metric[0] if isinstance(metric, (list, tuple)) else metric))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
                 continue
 
             # Needed to add the PytorchGeometric methods as Modules, so they'll be on the correct CUDA device during training
             if isinstance(self.metrics[metric], torchmetrics.metric.Metric):
-                setattr(self, metric, self.metrics[metric])
+                setattr(self, str(metric), self.metrics[metric])
 
         self.reset_metrics()
 
@@ -105,6 +110,9 @@ class Metrics(torch.nn.Module):
 
         if subset is None:
             metrics = self.metrics.keys()
+        elif not any(metric in subset for metric in self.metrics):
+            print(f"Argument `subset`={subset} did not match any metrics in {self.metrics.keys()}")
+            return
         else:
             metrics = subset
 
@@ -134,7 +142,10 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric].update((y_pred_act, y_true))
 
             elif "ogbl" in metric:
-                self.metrics[metric].update(y_pred, y_true)
+                # Both y_pred, y_true must have activation func applied, not with `y_pred_act`
+                edge_pos = y_pred
+                edge_neg = y_true
+                self.metrics[metric].update(edge_pos, edge_neg)
 
             # torchmetrics metrics
             elif isinstance(self.metrics[metric], torchmetrics.metric.Metric):
@@ -151,20 +162,26 @@ class Metrics(torch.nn.Module):
         logs = {}
         for metric in self.metrics:
             try:
+                if isinstance(metric, (list, tuple)):
+                    prefix = self.prefix + "_".join(metric[1:])
+                else:
+                    prefix = self.prefix
+
                 if "ogb" in metric:
-                    logs.update(self.metrics[metric].compute(prefix=self.prefix))
+                    logs.update(self.metrics[metric].compute(prefix=prefix))
 
                 elif metric == "top_k" and isinstance(self.metrics[metric], TopKMultilabelAccuracy):
-                    logs.update(self.metrics[metric].compute(prefix=self.prefix))
+                    logs.update(self.metrics[metric].compute(prefix=prefix))
 
                 elif metric == "top_k" and isinstance(self.metrics[metric], TopKCategoricalAccuracy):
-                    metric_name = (metric if self.prefix is None else \
-                                       self.prefix + metric) + f"@{self.metrics[metric]._k}"
+                    metric_name = (str(metric) if prefix is None else prefix + str(metric)) + \
+                                  f"@{self.metrics[metric]._k}"
                     logs[metric_name] = self.metrics[metric].compute()
 
                 else:
-                    metric_name = metric if self.prefix is None else self.prefix + metric
+                    metric_name = str(metric) if prefix is None else prefix + str(metric)
                     logs[metric_name] = self.metrics[metric].compute()
+
             except Exception as e:
                 print(f"Had problem with metric {metric}, {str(e)}\r")
 

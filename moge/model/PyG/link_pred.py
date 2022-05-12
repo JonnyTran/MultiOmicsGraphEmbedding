@@ -11,7 +11,6 @@ from moge.model.losses import LinkPredLoss
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
-from ..utils import tensor_sizes
 from ...dataset import HeteroLinkPredDataset
 
 
@@ -204,7 +203,7 @@ class LATTELinkPred(LinkPredTrainer):
         self.train_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
                                           weights=None, subset=["ogbl-biokg"])
 
-        if "edge_neg" in edge_pred_dict:
+        if "edge_neg" in edge_pred_dict and "precision" in self.train_metrics.metrics:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
                                    metrics=self.train_metrics, subset=["precision", "recall"])
 
@@ -219,12 +218,21 @@ class LATTELinkPred(LinkPredTrainer):
 
         e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
-        print(tensor_sizes({"e_pos": e_pos, "e_neg": e_neg}))
 
+        # for metapath in edge_pred_dict["edge_pos"]:
+        #     go_type = "BPO" if metapath[-1] == 'biological_process' else "CCO" if metapath[-1] == 'cellular_component' else \
+        #             "MFO" if metapath[-1] == 'molecular_function' else None
+        #
+        #     neg_batch = torch.concat([edge_pred_dict["head_batch"][metapath], edge_pred_dict["tail_batch"][metapath]],
+        #                              dim=1)
+        #     self.valid_metrics.update_metrics(F.sigmoid(edge_pred_dict["edge_pos"][metapath].detach()),
+        #                                       F.sigmoid(neg_batch.detach()),
+        #                                       weights=None, subset=[("ogbl-biokg", go_type)])
         self.valid_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
                                           weights=None, subset=["ogbl-biokg"])
+        # print(self.valid_metrics.compute_metrics())
 
-        if "edge_neg" in edge_pred_dict:
+        if "edge_neg" in edge_pred_dict and "precision" in self.valid_metrics.metrics:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
                                    metrics=self.valid_metrics, subset=["precision", "recall"])
 
@@ -246,7 +254,7 @@ class LATTELinkPred(LinkPredTrainer):
         self.test_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
                                          weights=None, subset=["ogbl-biokg"])
 
-        if "edge_neg" in edge_pred_dict:
+        if "edge_neg" in edge_pred_dict and "precision" in self.test_metrics.metrics:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
                                    metrics=self.test_metrics, subset=["precision", "recall"])
 

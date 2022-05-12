@@ -129,17 +129,16 @@ class HeteroSequenceEncoder(nn.Module):
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], batch_size=None) -> Dict[str, Tensor]:
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: int = None) -> Dict[str, Tensor]:
         h_out = {}
         for ntype, encoding in sequences.items():
             batch_output = []
 
-            if batch_size:
-                for input_ids, attention_mask, token_type_ids in zip(torch.split(encoding["input_ids"], batch_size),
-                                                                     torch.split(encoding["attention_mask"],
-                                                                                 batch_size),
-                                                                     torch.split(encoding["token_type_ids"],
-                                                                                 batch_size)):
+            if minibatch:
+                for input_ids, attention_mask, token_type_ids in \
+                        zip(torch.split(encoding["input_ids"], minibatch),
+                            torch.split(encoding["attention_mask"], minibatch),
+                            torch.split(encoding["token_type_ids"], minibatch)):
                     out = self.seq_encoders[ntype].forward(input_ids=input_ids,
                                                            attention_mask=attention_mask,
                                                            token_type_ids=token_type_ids)

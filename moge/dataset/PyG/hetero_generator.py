@@ -557,24 +557,24 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         for metapath, edge_index in edge_pos.items():
             head_type, tail_type = metapath[0], metapath[-1]
-            adj: SparseTensor = self.triples_pos_adj[metapath] \
-                if metapath in self.triples_pos_adj else self.triples_pos_adj[metapath[:-1] + (self.go_ntype,)]
+            adj: SparseTensor = self.triples_pos_adj[metapath] if metapath in self.triples_pos_adj \
+                else self.triples_pos_adj[metapath[:-1] + (self.go_ntype,)]
 
             head_neg_nodes = global_node_index[head_type].tolist()
-            head_neg_adj = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
-            head_batch[metapath] = torch.multinomial(head_neg_adj,
-                                                     num_samples=self.negative_sampling_size // 2, replacement=False)
+            head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
+            head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=self.negative_sampling_size // 2,
+                                                     replacement=True)
 
             tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype].tolist()
-            tail_neg_adj = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
-            # Only generate negative samples within BPO, CCO, or MFO terms of the positive edge's tail go_type
+            tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
+            # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
             for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
                 if go_type != tail_type: continue
                 go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
-                tail_neg_adj[:, go_terms_mask] = 0
+                tail_prob_dist[:, go_terms_mask] = 0
 
-            tail_batch[metapath] = torch.multinomial(tail_neg_adj,
-                                                     num_samples=self.negative_sampling_size // 2, replacement=False)
+            tail_batch[metapath] = torch.multinomial(tail_prob_dist, num_samples=self.negative_sampling_size // 2,
+                                                     replacement=True)
 
         return head_batch, tail_batch
 
