@@ -61,11 +61,11 @@ class Metrics(torch.nn.Module):
                                                 subset_accuracy=multilabel)
 
             elif "ogbn" in metric:
-                self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric))
-            elif "ogbg" in metric:
-                self.metrics[metric] = OGBNodeClfMetrics(GraphEvaluator(metric))
+                self.metrics[metric] = OGBNodeClfMetrics(NodeEvaluator(metric.split(".")[0]))
             elif "ogbl" in metric:
-                self.metrics[metric] = OGBLinkPredMetrics(LinkEvaluator(metric))
+                self.metrics[metric] = OGBLinkPredMetrics(LinkEvaluator(metric.split(".")[0]))
+            elif "ogbg" in metric:
+                self.metrics[metric] = OGBNodeClfMetrics(GraphEvaluator(metric.split(".")[0]))
             else:
                 print(f"WARNING: metric {metric} doesn't exist")
                 continue
@@ -83,7 +83,8 @@ class Metrics(torch.nn.Module):
             labels = torch.eye(self.n_classes)[labels].type_as(type_as)
             return labels
 
-    def update_metrics(self, y_pred: Tensor, y_true: Tensor, weights=Optional[Tensor], subset: List[str] = None):
+    def update_metrics(self, y_pred: Tensor, y_true: Tensor,
+                       weights=Optional[Tensor], subset: List[str] = None):
         """
         Args:
             y_pred:
@@ -146,7 +147,7 @@ class Metrics(torch.nn.Module):
             else:
                 raise Exception(f"Metric {metric} has problem at .update()")
 
-    def compute_metrics(self):
+    def compute_metrics(self) -> Dict[str, Tensor]:
         logs = {}
         for metric in self.metrics:
             try:

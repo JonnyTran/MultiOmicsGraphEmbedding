@@ -277,8 +277,8 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics, *args, **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
-    def get_pos_neg_edges(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                          edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None) -> \
+    def stack_pos_head_tail_batch(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+                                  edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None) -> \
             Tuple[Tensor, Tensor, Optional[Tensor]]:
         e_pos = []
         e_neg = []

@@ -11,11 +11,12 @@ from moge.model.losses import LinkPredLoss
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
+from ..utils import tensor_sizes
 from ...dataset import HeteroLinkPredDataset
 
 
 class DistMulti(torch.nn.Module):
-    def __init__(self, embedding_dim: int, metapaths: List[Tuple[str, str, str]]):
+    def __init__(self, embedding_dim: int, metapaths: List[Tuple[str, str, str]], ntype_mapping: Dict[str, str] = None):
         """
 
         Args:
@@ -25,6 +26,10 @@ class DistMulti(torch.nn.Module):
         super(DistMulti, self).__init__()
         self.metapaths = metapaths
         self.embedding_dim = embedding_dim
+
+        self.ntype_mapping = {ntype: ntype for m in metapaths for ntype in [m[0], m[-1]]}
+        if ntype_mapping:
+            self.ntype_mapping = {**self.ntype_mapping, **ntype_mapping}
 
         self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
         nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
@@ -43,16 +48,18 @@ class DistMulti(torch.nn.Module):
         # Sampled head or tail negative sampling
         if "head_batch" in edges_true or "tail_batch" in edges_true:
             # Head batch
-            edge_head_batch = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
-                                                                 neg_edges=edges_true["head_batch"],
-                                                                 mode="head")
-            output["head_batch"] = self.score(edge_head_batch, embeddings, mode="head")
+            edge_head_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
+                                                                                neg_edges=edges_true["head_batch"],
+                                                                                mode="head")
+            output["head_batch"] = self.score(edge_head_batch, embeddings, mode="head",
+                                              reshape_batch_size=neg_samp_size)
 
             # Tail batch
-            edge_tail_batch = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
-                                                                 neg_edges=edges_true["tail_batch"],
-                                                                 mode="tail")
-            output["tail_batch"] = self.score(edge_tail_batch, embeddings, mode="tail")
+            edge_tail_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
+                                                                                neg_edges=edges_true["tail_batch"],
+                                                                                mode="tail")
+            output["tail_batch"] = self.score(edge_tail_batch, embeddings, mode="tail",
+                                              reshape_batch_size=neg_samp_size)
 
         assert "edge_neg" in output or "head_batch" in output, f"No negative edges in inputs {edges_true.keys()}"
 
@@ -60,12 +67,15 @@ class DistMulti(torch.nn.Module):
 
     def score(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
               embeddings: Dict[str, Tensor],
-              mode: str) -> Dict[Tuple[str, str, str], Tensor]:
+              mode: str,
+              reshape_batch_size: int = None) -> Dict[Tuple[str, str, str], Tensor]:
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
             head_type, edge_type, tail_type = metapath
+            head_type = self.ntype_mapping[head_type] if head_type not in embeddings else head_type
+            tail_type = self.ntype_mapping[tail_type] if tail_type not in embeddings else tail_type
 
             kernel = self.relation_embedding[metapath_idx]  # (emb_dim)
 
@@ -83,13 +93,15 @@ class DistMulti(torch.nn.Module):
 
             score = score.sum(dim=1)
             # assert score.dim() == 1, f"{mode} score={score.shape}"
+            if reshape_batch_size:
+                score = score.view(-1, reshape_batch_size)
             edge_pred_dict[metapath] = score
 
         return edge_pred_dict
 
     def get_edge_index_from_neg_batch(self, pos_edges: Dict[Tuple[str, str, str], Tensor],
                                       neg_edges: Dict[Tuple[str, str, str], Tensor],
-                                      mode: str) -> Dict[Tuple[str, str, str], Tensor]:
+                                      mode: str) -> Tuple[Dict[Tuple[str, str, str], Tensor], int]:
         edge_index_dict = {}
 
         for metapath, edge_index in pos_edges.items():
@@ -99,12 +111,13 @@ class DistMulti(torch.nn.Module):
                 head_nodes = neg_edges[metapath].reshape(-1)
                 tail_nodes = pos_edges[metapath][1].repeat_interleave(neg_samp_size)
                 edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
+
             elif mode == "tail":
                 head_nodes = pos_edges[metapath][0].repeat_interleave(neg_samp_size)
                 tail_nodes = neg_edges[metapath].reshape(-1)
                 edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
 
-        return edge_index_dict
+        return edge_index_dict, neg_samp_size
 
 
 class LATTELinkPred(LinkPredTrainer):
@@ -146,7 +159,8 @@ class LATTELinkPred(LinkPredTrainer):
         if "negative_sampling_size" in hparams:
             self.dataset.negative_sampling_size = hparams.negative_sampling_size
 
-        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.pred_metapaths)
+        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.pred_metapaths,
+                                    ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
         self.criterion = LinkPredLoss()
 
         self.hparams.n_params = self.get_n_params()
@@ -181,9 +195,10 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
+        e_neg_pred = torch.cat([pred.view(-1) for m, pred in edge_pred_dict["edge_neg"].items()])
         loss = self.criterion.forward(pos_pred=e_pos,
-                                      neg_pred=torch.cat([e_neg.view(-1), edge_pred_dict["edge_neg"].view(-1)]),
+                                      neg_pred=torch.cat([e_neg.view(-1), e_neg_pred]),
                                       pos_weights=e_weights)
 
         self.train_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
@@ -202,8 +217,9 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
         loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
+        print(tensor_sizes({"e_pos": e_pos, "e_neg": e_neg}))
 
         self.valid_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
                                           weights=None, subset=["ogbl-biokg"])
@@ -220,7 +236,7 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.get_pos_neg_edges(edge_pred_dict, edge_weights)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
 
         np.set_printoptions(precision=3, suppress=True, linewidth=300)
         print("\npos", F.sigmoid(e_pos[:20]).detach().cpu().numpy(),
@@ -240,6 +256,7 @@ class LATTELinkPred(LinkPredTrainer):
     def update_pr_metrics(self, e_pos, e_neg, metrics: Metrics, subset=["precision", "recall"]):
         edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in e_neg.items()])
         e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]  # randomly select |e_neg| edges
+
         y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
         y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
 
@@ -266,8 +283,8 @@ class LATTELinkPred(LinkPredTrainer):
         if "lr_annealing" in self.hparams and self.hparams.lr_annealing == "cosine":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                    T_max=self.num_training_steps,
-                                                                   eta_min=self.lr / 100
-                                                                   )
+                                                                   eta_min=self.lr / 100)
+
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
             print("Using CosineAnnealingLR", scheduler.state_dict())
 
