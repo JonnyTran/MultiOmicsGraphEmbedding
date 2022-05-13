@@ -467,13 +467,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
-        if layernorm:
-            self.layernorm = torch.nn.ModuleDict({
-                node_type: nn.LayerNorm(output_dim) \
-                for node_type in self.node_types})
         if batchnorm:
             self.batchnorm = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(output_dim) \
+                for node_type in self.node_types})
+        if layernorm:
+            self.layernorm = torch.nn.ModuleDict({
+                node_type: nn.LayerNorm(output_dim) \
                 for node_type in self.node_types})
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
@@ -564,24 +564,23 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                        edge_index_dict=edge_index_dict,
                                                                        sizes=sizes)
 
-            h_out[ntype][:, -1] = r_dict[ntype]
-
-            # print(ntype, out[ntype].sum(1).norm(p=2, dim=-1).mean(0)) # Show which relation has non-neg vectors
-            # print(ntype, tensor_sizes(out))
+            h_out[ntype][:, -1] = l_dict[ntype]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
             h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
             h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
-            if hasattr(self, "layernorm"):
-                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
-
-            if hasattr(self, "dropout"):
-                h_out[ntype] = self.dropout(h_out[ntype])
-
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])
+
+            if hasattr(self, "layernorm"):
+                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+            elif hasattr(self, "batchnorm"):
+                feats = {ntype: self.batchnorm[ntype](feats[ntype]) for ntype in feats}
+
+            # if hasattr(self, "dropout"):
+            #     h_out[ntype] = self.dropout(h_out[ntype])
 
         if not self.training and save_betas:
             self.save_relation_weights({ntype: beta[ntype].mean(1) for ntype in beta}, global_node_idx)

@@ -1,3 +1,4 @@
+from pprint import pprint
 from typing import List, Tuple, Union, Dict
 
 import networkx as nx
@@ -140,8 +141,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 # if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
                 for ntype in self.node_types}
 
-        # print(f"{self.neighbor_loader} neighbor_sizes:")
-        # pprint(self.num_neighbors)
+        print(f"{self.neighbor_loader} neighbor_sizes:")
+        pprint(self.num_neighbors, width=300)
 
         if self.neighbor_loader == "NeighborLoader":
             Loader = NeighborLoader
@@ -378,7 +379,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                       reverse=True,
                                                       format="pyg", d_ntype="GO_term")
 
-        for metapath, edge_index in self.split_edge_index_by_go_namespace(edge_index_dict, go_node_index_dict).items():
+        for metapath, edge_index in edge_index_dict.items():
             print(metapath, edge_index.shape)
             if edge_index.size(1) < 100: continue
             self.G[metapath].edge_index = edge_index
@@ -523,8 +524,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Edge_pos must be global index, not batch index
         edge_pos_split = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=None)
-        head_batch, tail_batch = self.generate_negative_sampling(edge_pos_split,
-                                                                 global_node_index=X["global_node_index"])
+        head_batch, tail_batch = self.generate_negative_sampling(
+            edge_pos_split,
+            global_node_index=X["global_node_index"])
 
         # Rename node index from global to batch
         local2batch = {
@@ -560,15 +562,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             adj: SparseTensor = self.triples_pos_adj[metapath] if metapath in self.triples_pos_adj \
                 else self.triples_pos_adj[metapath[:-1] + (self.go_ntype,)]
 
-            head_neg_nodes = global_node_index[head_type].tolist()
+            head_neg_nodes = global_node_index[head_type]
             head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
             head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=self.negative_sampling_size // 2,
                                                      replacement=True)
 
-            tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype].tolist()
+            tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype]
             tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
-            # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
             for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
+                # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
                 if go_type != tail_type: continue
                 go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
                 tail_prob_dist[:, go_terms_mask] = 0

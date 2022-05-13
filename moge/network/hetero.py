@@ -277,8 +277,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Add node attributes
         node_attr_cols = self.all_annotations.columns.drop([target, "omic", SEQUENCE_COL], errors="ignore")
-        if attr_cols:
-            node_attr_cols = node_attr_cols.intersection(attr_cols)
+        node_attr_cols = node_attr_cols.intersection(attr_cols if attr_cols is not None else [])
 
         for ntype in self.node_types:
             annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]

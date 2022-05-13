@@ -30,72 +30,73 @@ class DistMulti(torch.nn.Module):
         if ntype_mapping:
             self.ntype_mapping = {**self.ntype_mapping, **ntype_mapping}
 
-        self.relation_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
-        nn.init.uniform_(tensor=self.relation_embedding, a=-1, b=1)
+        self.rel_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
+        nn.init.uniform_(tensor=self.rel_embedding, a=-1, b=1)
 
-    def forward(self, edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+    def forward(self, edges_input: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
         output = {}
 
-        # Single edges
-        output["edge_pos"] = self.score(edges_true["edge_pos"], embeddings=embeddings, mode="single")
+        # True positive edges
+        output["edge_pos"] = self.score(edges_input["edge_pos"], embeddings=embeddings, mode="single_pos")
 
         # True negative edges
-        if "edge_neg" in edges_true:
-            output["edge_neg"] = self.score(edges_true["edge_neg"], embeddings=embeddings, mode="single")
+        if "edge_neg" in edges_input:
+            output["edge_neg"] = self.score(edges_input["edge_neg"], embeddings=embeddings, mode="single_neg")
 
         # Sampled head or tail negative sampling
-        if "head_batch" in edges_true or "tail_batch" in edges_true:
+        if "head_batch" in edges_input or "tail_batch" in edges_input:
             # Head batch
-            edge_head_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
-                                                                                neg_edges=edges_true["head_batch"],
-                                                                                mode="head")
-            output["head_batch"] = self.score(edge_head_batch, embeddings, mode="head",
-                                              reshape_batch_size=neg_samp_size)
+            edge_head_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_input["edge_pos"],
+                                                                                neg_edges=edges_input["head_batch"],
+                                                                                mode="head_batch")
+            output["head_batch"] = self.score(edge_head_batch, embeddings=embeddings, mode="tail_batch",
+                                              neg_sampling_batch_size=neg_samp_size)
 
             # Tail batch
-            edge_tail_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_true["edge_pos"],
-                                                                                neg_edges=edges_true["tail_batch"],
-                                                                                mode="tail")
-            output["tail_batch"] = self.score(edge_tail_batch, embeddings, mode="tail",
-                                              reshape_batch_size=neg_samp_size)
+            edge_tail_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_input["edge_pos"],
+                                                                                neg_edges=edges_input["tail_batch"],
+                                                                                mode="tail_batch")
+            output["tail_batch"] = self.score(edge_tail_batch, embeddings=embeddings, mode="tail_batch",
+                                              neg_sampling_batch_size=neg_samp_size)
 
-        assert "edge_neg" in output or "head_batch" in output, f"No negative edges in inputs {edges_true.keys()}"
+        assert "edge_neg" in output or "head_batch" in output, f"No negative edges in inputs {edges_input.keys()}"
 
         return output
 
     def score(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
               embeddings: Dict[str, Tensor],
               mode: str,
-              reshape_batch_size: int = None) -> Dict[Tuple[str, str, str], Tensor]:
+              neg_sampling_batch_size: int = None) -> Dict[Tuple[str, str, str], Tensor]:
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
+            kernel = self.rel_embedding[metapath_idx]  # (emb_dim)
+
             head_type, edge_type, tail_type = metapath
             head_type = self.ntype_mapping[head_type] if head_type not in embeddings else head_type
             tail_type = self.ntype_mapping[tail_type] if tail_type not in embeddings else tail_type
 
-            kernel = self.relation_embedding[metapath_idx]  # (emb_dim)
-
-            if "tail" == mode:
-                side_A = (embeddings[head_type] * kernel)[edge_index[0]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
-                emb_B = embeddings[tail_type][edge_index[1]].unsqueeze(2)  # (n_nodes, emb_dim, 1)
-                # score = side_A * emb_B
-                score = torch.bmm(side_A, emb_B).sum(-1)
+            if mode == "tail_batch":
+                side_A = (embeddings[head_type] * kernel)[edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
+                emb_B = embeddings[tail_type][edge_index[1]].unsqueeze(2)  # (n_edges, emb_dim, 1)
+                scores = torch.bmm(side_A, emb_B).squeeze(-1)
             else:
-                emb_A = embeddings[head_type][edge_index[0]].unsqueeze(1)  # (n_nodes, 1, emb_dim)
-                side_B = (kernel * embeddings[tail_type][edge_index[1]]).unsqueeze(2)  # (n_nodes, emb_dim, 1)
-                # score = emb_A * side_B
-                score = torch.bmm(emb_A, side_B)
-                score = score.sum(-1)
+                emb_A = embeddings[head_type][edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
+                side_B = (kernel * embeddings[tail_type])[edge_index[1]].unsqueeze(2)  # (n_edges, emb_dim, 1)
+                scores = torch.bmm(emb_A, side_B).squeeze(-1)
 
-            score = score.sum(dim=1)
-            # assert score.dim() == 1, f"{mode} score={score.shape}"
-            if reshape_batch_size:
-                score = score.view(-1, reshape_batch_size)
-            edge_pred_dict[metapath] = score
+            # scores = (embeddings[head_type][edge_index[0]] * kernel * embeddings[tail_type][edge_index[1]])
+            scores = scores.sum(dim=1)
 
+            if neg_sampling_batch_size:
+                scores = scores.view(-1, neg_sampling_batch_size)
+            edge_pred_dict[metapath] = scores
+
+        # print("\n", mode)
+        # torch.set_printoptions(precision=3, linewidth=300)
+        # pprint(edge_pred_dict)
         return edge_pred_dict
 
     def get_edge_index_from_neg_batch(self, pos_edges: Dict[Tuple[str, str, str], Tensor],
@@ -104,16 +105,16 @@ class DistMulti(torch.nn.Module):
         edge_index_dict = {}
 
         for metapath, edge_index in pos_edges.items():
-            e_size, neg_samp_size = neg_edges[metapath].shape
+            num_edges, neg_samp_size = neg_edges[metapath].shape
 
-            if mode == "head":
-                head_nodes = neg_edges[metapath].reshape(-1)
+            if mode == "head_batch":
+                head_nodes = neg_edges[metapath].view(-1)
                 tail_nodes = pos_edges[metapath][1].repeat_interleave(neg_samp_size)
                 edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
 
-            elif mode == "tail":
+            elif mode == "tail_batch":
                 head_nodes = pos_edges[metapath][0].repeat_interleave(neg_samp_size)
-                tail_nodes = neg_edges[metapath].reshape(-1)
+                tail_nodes = neg_edges[metapath].view(-1)
                 edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
 
         return edge_index_dict, neg_samp_size

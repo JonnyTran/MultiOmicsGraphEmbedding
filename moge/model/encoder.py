@@ -29,7 +29,7 @@ class HeteroNodeEncoder(nn.Module):
                            or (self.embeddings and ntype in self.embeddings and
                                self.embeddings[ntype].weight.size(1) != hparams.embedding_dim)]
 
-        self.feature_projection = nn.ModuleDict({
+        self.feature_projection: Dict[str, nn.Linear] = nn.ModuleDict({
             ntype: nn.Linear(in_features=dataset.node_attr_shape[ntype],
                              out_features=hparams.embedding_dim) \
             for ntype in proj_node_types})
@@ -93,7 +93,7 @@ class HeteroNodeEncoder(nn.Module):
                 if hasattr(self, "batchnorm"):
                     h_dict[ntype] = self.batchnorm[ntype].forward(h_dict[ntype])
 
-                h_dict[ntype] = self.feature_projection[ntype](h_dict[ntype])
+                h_dict[ntype] = self.feature_projection[ntype].forward(h_dict[ntype])
                 h_dict[ntype] = F.relu(h_dict[ntype])
                 if hasattr(self, "dropout") and self.dropout:
                     h_dict[ntype] = F.dropout(h_dict[ntype], p=self.dropout, training=self.training)
