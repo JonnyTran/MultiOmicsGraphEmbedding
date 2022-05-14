@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Union
 
 import numpy as np
 import torch
@@ -201,14 +201,17 @@ class LATTELinkPred(LinkPredTrainer):
                                       neg_pred=torch.cat([e_neg.view(-1), e_neg_pred]),
                                       pos_weights=e_weights)
 
-        self.train_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
-                                          weights=None, subset=["ogbl-biokg"])
+        metrics = self.train_metrics
+        self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)
+        # print(self.valid_metrics.compute_metrics())
 
-        if "edge_neg" in edge_pred_dict and "precision" in self.train_metrics.metrics:
+        if "edge_neg" in edge_pred_dict:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=self.train_metrics, subset=["precision", "recall"])
+                                   metrics=metrics, subset=["precision", "recall"])
 
-        logs = {'loss': loss, **self.train_metrics.compute_metrics()}
+        logs = {'loss': loss,
+                # **self.train_metrics.compute_metrics()
+                }
         self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
         return loss
@@ -218,24 +221,15 @@ class LATTELinkPred(LinkPredTrainer):
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
+        loss = self.criterion.forward(pos_pred=e_pos, neg_pred=e_neg, pos_weights=e_weights)
 
-        # for metapath in edge_pred_dict["edge_pos"]:
-        #     go_type = "BPO" if metapath[-1] == 'biological_process' else "CCO" if metapath[-1] == 'cellular_component' else \
-        #             "MFO" if metapath[-1] == 'molecular_function' else None
-        #
-        #     neg_batch = torch.concat([edge_pred_dict["head_batch"][metapath], edge_pred_dict["tail_batch"][metapath]],
-        #                              dim=1)
-        #     self.valid_metrics.update_metrics(F.sigmoid(edge_pred_dict["edge_pos"][metapath].detach()),
-        #                                       F.sigmoid(neg_batch.detach()),
-        #                                       weights=None, subset=[("ogbl-biokg", go_type)])
-        self.valid_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
-                                          weights=None, subset=["ogbl-biokg"])
+        metrics = self.valid_metrics
+        self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)
         # print(self.valid_metrics.compute_metrics())
 
-        if "edge_neg" in edge_pred_dict and "precision" in self.valid_metrics.metrics:
+        if "edge_neg" in edge_pred_dict:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=self.valid_metrics, subset=["precision", "recall"])
+                                   metrics=metrics, subset=["precision", "recall"])
 
         self.log("val_loss", loss, prog_bar=True)
 
@@ -251,18 +245,38 @@ class LATTELinkPred(LinkPredTrainer):
         print("\npos", F.sigmoid(e_pos[:20]).detach().cpu().numpy(),
               "\nneg", F.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
-        loss = self.criterion.forward(e_pos, e_neg, pos_weights=e_weights)
-        self.test_metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
-                                         weights=None, subset=["ogbl-biokg"])
+        loss = self.criterion.forward(pos_pred=e_pos, neg_pred=e_neg, pos_weights=e_weights)
 
-        if "edge_neg" in edge_pred_dict and "precision" in self.test_metrics.metrics:
+        metrics = self.test_metrics
+        self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)
+
+        if "edge_neg" in edge_pred_dict:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=self.test_metrics, subset=["precision", "recall"])
+                                   metrics=metrics, subset=["precision", "recall"])
 
         self.log("test_loss", loss)
         return loss
 
+    def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
+                                 edge_pred_dict, e_pos: Tensor, e_neg: Tensor):
+        if isinstance(metrics, dict):
+            for metapath in edge_pred_dict["edge_pos"]:
+                go_type = "BPO" if metapath[-1] == 'biological_process' else \
+                    "CCO" if metapath[-1] == 'cellular_component' else \
+                        "MFO" if metapath[-1] == 'molecular_function' else None
+
+                neg_batch = torch.concat([edge_pred_dict["head_batch"][metapath],
+                                          edge_pred_dict["tail_batch"][metapath]], dim=1)
+                metrics[go_type].update_metrics(F.sigmoid(edge_pred_dict["edge_pos"][metapath].detach()),
+                                                F.sigmoid(neg_batch.detach()),
+                                                weights=None, subset=["ogbl-biokg"])
+
+        else:
+            metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
+                                   weights=None, subset=["ogbl-biokg"])
+
     def update_pr_metrics(self, e_pos, e_neg, metrics: Metrics, subset=["precision", "recall"]):
+        if not isinstance(metrics, Metrics): return
         edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in e_neg.items()])
         e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]  # randomly select |e_neg| edges
 

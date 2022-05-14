@@ -564,7 +564,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                                        edge_index_dict=edge_index_dict,
                                                                        sizes=sizes)
 
-            h_out[ntype][:, -1] = l_dict[ntype]
+            h_out[ntype][:, -1] = r_dict[ntype]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)

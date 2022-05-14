@@ -63,6 +63,7 @@ class HeteroNodeEncoder(nn.Module):
                     print("Initialized trainable embeddings: ", ntype)
                     module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                                       embedding_dim=embedding_dim,
+                                                      max_norm=2, norm_type=2,
                                                       scale_grad_by_freq=False,
                                                       sparse=False)
                 else:

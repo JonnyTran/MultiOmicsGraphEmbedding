@@ -1,6 +1,6 @@
 import itertools
 import logging
-from typing import Union, Iterable, Dict, Tuple, Optional
+from typing import Union, Iterable, Dict, Tuple, Optional, List
 
 import numpy as np
 import pandas as pd
@@ -139,15 +139,31 @@ class ClusteringEvaluator(LightningModule):
 
 
 class NodeClfTrainer(ClusteringEvaluator):
-    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
+    def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                     multilabel=dataset.multilabel, metrics=metrics)
-        self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
-                                    multilabel=dataset.multilabel, metrics=metrics)
+        if isinstance(metrics, dict):
+            self.train_metrics = {
+                subtype: Metrics(prefix="" + subtype + "_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                 multilabel=dataset.multilabel, metrics=keywords) \
+                for subtype, keywords in metrics.items()}
+            self.valid_metrics = {
+                subtype: Metrics(prefix="val_" + subtype + "_", loss_type=hparams.loss_type,
+                                 n_classes=dataset.n_classes,
+                                 multilabel=dataset.multilabel, metrics=keywords) \
+                for subtype, keywords in metrics.items()}
+            self.test_metrics = {
+                subtype: Metrics(prefix="test_" + subtype + "_", loss_type=hparams.loss_type,
+                                 n_classes=dataset.n_classes,
+                                 multilabel=dataset.multilabel, metrics=keywords) \
+                for subtype, keywords in metrics.items()}
+        else:
+            self.train_metrics = Metrics(prefix="", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                         multilabel=dataset.multilabel, metrics=metrics)
+            self.valid_metrics = Metrics(prefix="val_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                         multilabel=dataset.multilabel, metrics=metrics)
+            self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
+                                        multilabel=dataset.multilabel, metrics=metrics)
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
         self._set_hparams(hparams)
@@ -159,13 +175,32 @@ class NodeClfTrainer(ClusteringEvaluator):
             return self.__class__.__name__.replace("_", "-")
 
     def training_epoch_end(self, outputs):
-        metrics = self.train_metrics.compute_metrics()
-        self.log_dict(metrics, prog_bar=True)
-        self.train_metrics.reset_metrics()
+        if isinstance(self.train_metrics, Metrics):
+            metrics_dict = self.train_metrics.compute_metrics()
+            self.train_metrics.reset_metrics()
+        elif isinstance(self.train_metrics, dict):
+            metrics_dict = {k: v for subtype, metrics in self.train_metrics.items() \
+                            for k, v in metrics.compute_metrics().items()}
+
+            for subtype, metrics in self.train_metrics.items():
+                metrics.reset_metrics()
+
+        self.log_dict(metrics_dict, prog_bar=True)
+
         return None
 
     def validation_epoch_end(self, outputs):
-        metrics = self.valid_metrics.compute_metrics()
+        if isinstance(self.valid_metrics, Metrics):
+            metrics_dict = self.valid_metrics.compute_metrics()
+
+            self.valid_metrics.reset_metrics()
+
+        elif isinstance(self.valid_metrics, dict):
+            metrics_dict = {k: v for subtype, metrics in self.valid_metrics.items() \
+                            for k, v in metrics.compute_metrics().items()}
+
+            for subtype, metrics in self.valid_metrics.items():
+                metrics.reset_metrics()
 
         if hasattr(self, "val_moving_loss"):
             val_loss = torch.stack([l for l in outputs]).mean()
@@ -177,15 +212,24 @@ class NodeClfTrainer(ClusteringEvaluator):
                      logger=True, prog_bar=False, on_epoch=True)
             self.log("val_loss", val_loss, prog_bar=True)
 
-        self.log_dict(metrics, prog_bar=True)
+        self.log_dict(metrics_dict, prog_bar=True)
 
-        self.valid_metrics.reset_metrics()
+
         return None
 
     def test_epoch_end(self, outputs):
-        metrics = self.test_metrics.compute_metrics()
-        self.log_dict(metrics, prog_bar=True)
-        self.test_metrics.reset_metrics()
+        if isinstance(self.test_metrics, Metrics):
+            metrics_dict = self.test_metrics.compute_metrics()
+            self.test_metrics.reset_metrics()
+
+        elif isinstance(self.test_metrics, dict):
+            metrics_dict = {k: v for subtype, metrics in self.test_metrics.items() \
+                            for k, v in metrics.compute_metrics().items()}
+
+            for subtype, metrics in self.test_metrics.items():
+                metrics.reset_metrics()
+
+        self.log_dict(metrics_dict, prog_bar=True)
         return None
 
     def predict(self, dataloader, node_names=None, filter_nan_labels=True):
@@ -274,7 +318,7 @@ class NodeClfTrainer(ClusteringEvaluator):
 
 
 class LinkPredTrainer(NodeClfTrainer):
-    def __init__(self, hparams, dataset, metrics, *args, **kwargs):
+    def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
     def stack_pos_head_tail_batch(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
