@@ -359,6 +359,30 @@ class LinkPredTrainer(NodeClfTrainer):
 
         return e_pos, e_neg, e_weights
 
+    def create_pu_learning_tensors(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> Tuple[
+        Tensor, Tensor]:
+        y_pred, y_true = [], []
+        for metapath, edge_pos_pred in edge_pred_dict["edge_pos"].items():
+            y_pred.append(edge_pos_pred.view(-1))
+            y_true.append(torch.ones_like(edge_pos_pred.view(-1)))
+
+        for metapath, edge_neg_batch_pred in edge_pred_dict["head_batch"].items():
+            y_pred.append(edge_neg_batch_pred.view(-1))
+            y_true.append(-torch.ones_like(edge_neg_batch_pred.view(-1)))
+
+        for metapath, edge_neg_batch_pred in edge_pred_dict["tail_batch"].items():
+            y_pred.append(edge_neg_batch_pred.view(-1))
+            y_true.append(-torch.ones_like(edge_neg_batch_pred.view(-1)))
+
+        for metapath, edge_neg_batch_pred in edge_pred_dict["edge_neg"].items():
+            y_pred.append(edge_neg_batch_pred.view(-1))
+            y_true.append(torch.zeros_like(edge_neg_batch_pred.view(-1)))
+
+        y_pred = torch.cat(y_pred)
+        y_true = torch.cat(y_true)
+
+        return y_pred, y_true
+
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
                                              batch_size=self.hparams.batch_size)

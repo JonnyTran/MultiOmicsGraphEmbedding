@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torch import nn, Tensor
 
 from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import LinkPredLoss
+from moge.model.losses import PULoss
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -161,7 +161,9 @@ class LATTELinkPred(LinkPredTrainer):
 
         self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.pred_metapaths,
                                     ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
-        self.criterion = LinkPredLoss()
+
+        self.criterion = PULoss(prior=dataset.get_prior())
+        # self.criterion = LinkPredLoss()
 
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
@@ -196,10 +198,9 @@ class LATTELinkPred(LinkPredTrainer):
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        e_neg_pred = torch.cat([pred.view(-1) for m, pred in edge_pred_dict["edge_neg"].items()])
-        loss = self.criterion.forward(pos_pred=e_pos,
-                                      neg_pred=torch.cat([e_neg.view(-1), e_neg_pred]),
-                                      pos_weights=e_weights)
+
+        loss = self.criterion.forward(*self.create_pu_learning_tensors(edge_pred_dict), e_weights)
+        # loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
         metrics = self.train_metrics
         self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)
@@ -221,7 +222,8 @@ class LATTELinkPred(LinkPredTrainer):
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(pos_pred=e_pos, neg_pred=e_neg, pos_weights=e_weights)
+        loss = self.criterion.forward(*self.create_pu_learning_tensors(edge_pred_dict), e_weights)
+        # loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
         metrics = self.valid_metrics
         self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)
@@ -245,7 +247,7 @@ class LATTELinkPred(LinkPredTrainer):
         print("\npos", F.sigmoid(e_pos[:20]).detach().cpu().numpy(),
               "\nneg", F.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
-        loss = self.criterion.forward(pos_pred=e_pos, neg_pred=e_neg, pos_weights=e_weights)
+        loss = self.criterion.forward(*self.create_pu_learning_tensors(edge_pred_dict), e_weights)
 
         metrics = self.test_metrics
         self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)

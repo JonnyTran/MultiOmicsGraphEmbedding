@@ -368,6 +368,12 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        transform_fn=super().transform,
                                                        num_workers=0)
 
+    def get_prior(self):
+        pos_count = sum([edge_index.size(1) for edge_index in self.triples_pos.values()])
+        neg_count = sum([edge_index.size(1) for edge_index in self.triples_neg.values()])
+
+        return torch.tensor(pos_count / (pos_count + neg_count))
+
     @staticmethod
     def get_relabled_edge_index(edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                                 global_node_index: Dict[str, Tensor],

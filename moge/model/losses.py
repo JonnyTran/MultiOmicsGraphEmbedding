@@ -76,7 +76,7 @@ class ClassificationLoss(nn.Module):
 class PULoss(nn.Module):
     """wrapper of loss function for PU learning"""
     def __init__(self, prior, loss=(lambda x: torch.sigmoid(-x)),
-                 gamma=1, beta=0, nnPU=False):
+                 gamma=1, beta=0, nnPU=True):
         super(PULoss, self).__init__()
         if not 0 < prior < 1:
             raise NotImplementedError("The class prior should be in (0, 1)")
@@ -89,15 +89,15 @@ class PULoss(nn.Module):
         self.unlabeled = -1
         self.min_count = torch.tensor(1.)
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: Tensor, y_true: Tensor, weights=None):
         assert (y_pred.shape == y_true.shape)
         positive, unlabeled = y_true == self.positive, y_true == self.unlabeled
         positive, unlabeled = positive.type(torch.float), unlabeled.type(torch.float)
         if y_pred.is_cuda:
             self.min_count = self.min_count.type_as(y_pred)
             self.prior = self.prior.type_as(y_pred)
-        n_positive, n_unlabeled = torch.max(self.min_count, torch.sum(positive)), torch.max(self.min_count,
-                                                                                            torch.sum(unlabeled))
+        n_positive, n_unlabeled = torch.max(self.min_count, torch.sum(positive)), \
+                                  torch.max(self.min_count, torch.sum(unlabeled))
 
         y_positive = self.loss_func(positive * y_pred) * positive
         y_positive_inv = self.loss_func(-positive * y_pred) * positive
