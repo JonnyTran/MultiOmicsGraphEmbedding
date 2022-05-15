@@ -5,17 +5,18 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from openomics.database.ontology import GeneOntology
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizer
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index, edge_index_to_adj
 from moge.model.PyG.utils import num_edges
-from openomics.database.ontology import GeneOntology
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -131,13 +132,13 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if self.neighbor_loader == "NeighborLoader":
             self.num_neighbors = {
                 etype: self.neighbor_sizes \
-                # if etype[1] != 'associated' else [-1, ] * len(self.neighbor_sizes)
+                    if etype[1] != 'associated' else [-1, ] * len(self.neighbor_sizes)
                 for etype in self.metapaths}
 
         elif self.neighbor_loader == "HGTLoader":
             self.num_neighbors = {
                 ntype: self.neighbor_sizes \
-                    # if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
+                    if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
                 for ntype in self.node_types}
 
         print(f"{self.neighbor_loader} neighbor_sizes:")
@@ -507,22 +508,31 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return nodes
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        def collate_fn(idx):
+            return self.transform(idx, mode="train")
+
         dataset = DataLoader(self.training_idx, batch_size=batch_size,
-                             collate_fn=lambda idx: self.transform(idx, mode="train"),
+                             collate_fn=collate_fn,
                              shuffle=True,
                              num_workers=num_workers)
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        def collate_fn(idx):
+            return self.transform(idx, mode="valid")
+
         dataset = DataLoader(self.validation_idx, batch_size=batch_size,
-                             collate_fn=lambda idx: self.transform(idx, mode="valid"),
+                             collate_fn=collate_fn,
                              shuffle=False,
                              num_workers=num_workers)
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        def collate_fn(idx):
+            return self.transform(idx, mode="test")
+
         dataset = DataLoader(self.testing_idx, batch_size=batch_size,
-                             collate_fn=lambda idx: self.transform(idx, mode="test"),
+                             collate_fn=collate_fn,
                              shuffle=False,
                              num_workers=num_workers)
         return dataset

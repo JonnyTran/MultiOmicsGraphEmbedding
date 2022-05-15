@@ -3,10 +3,11 @@ from typing import List, Tuple, Dict, Any, Union
 
 import torch
 import torch.nn.functional as F
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import ClassificationLoss
+from fairscale.nn import auto_wrap
 from torch import nn, Tensor
 
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.losses import ClassificationLoss
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -175,7 +176,8 @@ class LATTELinkPred(LinkPredTrainer):
         # and de-allocated once computation is complete, saving memory.
 
         # Wraps the layer in a Fully Sharded Wrapper automatically
-        self.seq_encoder = auto_wrap(self.seq_encoder)
+        if hasattr(self, "seq_encoder"):
+            self.seq_encoder = auto_wrap(self.seq_encoder)
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 return_score=False,

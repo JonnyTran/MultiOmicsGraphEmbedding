@@ -10,6 +10,10 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
+from torch import nn as nn, Tensor
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
+
 from moge.dataset import HeteroNodeClfDataset
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
@@ -18,9 +22,6 @@ from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
-from torch import nn as nn, Tensor
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -591,8 +592,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             elif hasattr(self, "batchnorm"):
                 feats = {ntype: self.batchnorm[ntype](feats[ntype]) for ntype in feats}
 
-            if hasattr(self, "dropout"):
-                h_out[ntype] = self.dropout(h_out[ntype])
+            # if hasattr(self, "dropout"):
+            #     h_out[ntype] = self.dropout(h_out[ntype])
 
         if not self.training and save_betas:
             self.save_relation_weights({ntype: beta[ntype].mean(1) for ntype in beta}, global_node_idx)
