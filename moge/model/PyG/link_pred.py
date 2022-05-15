@@ -131,8 +131,9 @@ class LATTELinkPred(LinkPredTrainer):
 
         # Node attr input
         if hasattr(dataset, 'seq_tokenizer'):
-            self.encoder = HeteroSequenceEncoder(hparams, dataset)
-        else:
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
+
+        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.dataset.node_types):
             self.encoder = HeteroNodeEncoder(hparams, dataset)
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
@@ -174,10 +175,13 @@ class LATTELinkPred(LinkPredTrainer):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        if "sequences" in inputs and isinstance(self.encoder, HeteroSequenceEncoder):
-            h_out = self.encoder.forward(inputs['sequences'])
-        elif "x_dict" in inputs:
-            h_out = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
+        if 'sequences' in inputs and hasattr(self, "seq_encoder"):
+            h_out = self.seq_encoder.forward(inputs['sequences'])
+        else:
+            h_out = {}
+
+        if len(h_out) < len(inputs["global_node_index"].keys()):
+            h_out = {**h_out, **self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])}
 
         embeddings, aux_loss, _ = self.embedder.forward(h_out,
                                                         edge_index_dict=inputs["edge_index_dict"],

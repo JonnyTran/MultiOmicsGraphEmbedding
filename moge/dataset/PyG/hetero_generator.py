@@ -275,6 +275,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
     def add_ontology_edges(self, ontology: GeneOntology, train_date='2017-06-15', valid_date='2017-11-15',
                            go_ntype="GO_term", metapaths: List[Tuple[str, str, str]] = None):
+        self._name = f"{self.head_node_type}-{go_ntype}-{train_date}"
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
         go_nodes = np.array(list(all_go))
         self.go_ntype = go_ntype
@@ -302,7 +303,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Set sequence
         self.nodes[go_ntype] = pd.Index(go_nodes)
-        self.G[go_ntype]["sequence"] = pd.Series(self.G[go_ntype]["name"] + ":" + self.G[go_ntype]["def"],
+        self.G[go_ntype]["sequence"] = pd.Series(self.G[go_ntype]["name"] + " : " + self.G[go_ntype]["def"],
                                                  index=self.nodes[go_ntype])
 
         # Edges between RNA nodes and GO terms

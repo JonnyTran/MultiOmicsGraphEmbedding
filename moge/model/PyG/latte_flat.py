@@ -10,10 +10,6 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
-from torch import nn as nn, Tensor
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-
 from moge.dataset import HeteroNodeClfDataset
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
@@ -22,6 +18,9 @@ from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
+from torch import nn as nn, Tensor
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -38,8 +37,9 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         # Node attr input
         if hasattr(dataset, 'seq_tokenizer'):
-            self.encoder = HeteroSequenceEncoder(hparams, dataset)
-        else:
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
+
+        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.node_types):
             self.encoder = HeteroNodeEncoder(hparams, dataset)
 
         # Graph embedding
@@ -97,10 +97,13 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
-        if 'sequences' in inputs or isinstance(self.encoder, HeteroSequenceEncoder):
-            h_out = self.encoder.forward(inputs['sequences'])
-        elif isinstance(self.encoder, HeteroNodeEncoder):
-            h_out = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
+        if 'sequences' in inputs and hasattr(self, "seq_encoder"):
+            h_out = self.seq_encoder.forward(inputs['sequences'])
+        else:
+            h_out = {}
+
+        if len(h_out) < len(inputs["global_node_index"].keys()):
+            h_out = {**h_out, **self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])}
 
         embeddings, proximity_loss, edge_index_dict = self.embedder.forward(h_dict=h_out,
                                                                             edge_index_dict=inputs["edge_index_dict"],
@@ -579,8 +582,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             elif hasattr(self, "batchnorm"):
                 feats = {ntype: self.batchnorm[ntype](feats[ntype]) for ntype in feats}
 
-            # if hasattr(self, "dropout"):
-            #     h_out[ntype] = self.dropout(h_out[ntype])
+            if hasattr(self, "dropout"):
+                h_out[ntype] = self.dropout(h_out[ntype])
 
         if not self.training and save_betas:
             self.save_relation_weights({ntype: beta[ntype].mean(1) for ntype in beta}, global_node_idx)
