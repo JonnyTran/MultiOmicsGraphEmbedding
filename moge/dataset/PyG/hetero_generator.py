@@ -367,8 +367,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        num_workers=0)
 
     def get_prior(self) -> Tensor:
-        pos_count = sum([edge_index.size(1) for edge_index in self.triples_pos.values()])
-        neg_count = sum([edge_index.size(1) for edge_index in self.triples_neg.values()])
+        pos_count = num_edges(self.triples_pos)
+        neg_count = num_edges(self.triples_neg)
 
         return torch.tensor(pos_count) / (pos_count + neg_count)
 
@@ -408,6 +408,13 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         if not isinstance(edge_idx, torch.LongTensor):
             edge_idx = torch.LongTensor(edge_idx)
 
+        if edge_idx[0] in self.training_idx:
+            mode = "train"
+        elif edge_idx[0] in self.validation_idx:
+            mode = "valid"
+        elif edge_idx[0] in self.testing_idx:
+            mode = "test"
+
         edge_pos = {metapath: self.triples_pos[metapath][:, edge_idx] for metapath in self.triples_pos}
 
         # True negative edges
@@ -441,9 +448,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Edge_pos must be global index, not batch index
         edge_pos_split = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=None)
-        head_batch, tail_batch = self.generate_negative_sampling(
-            edge_pos_split,
-            global_node_index=X["global_node_index"])
+        head_batch, tail_batch = self.generate_negative_sampling(edge_pos_split,
+                                                                 global_node_index=X["global_node_index"], mode=mode)
 
         # Rename node index from global to batch
         local2batch = {
@@ -469,10 +475,18 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return X, y, edge_weights
 
     def generate_negative_sampling(self, edge_pos: Dict[Tuple[str, str, str], Tensor],
-                                   global_node_index: Dict[str, Tensor]) -> \
+                                   global_node_index: Dict[str, Tensor], mode: str = None) -> \
             Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         head_batch = {}
         tail_batch = {}
+        if mode == "train":
+            head_tail_ntypes = [ntype for metapath in edge_pos for ntype in [metapath[0], metapath[-1]]]
+            sampling_size = min(
+                global_node_index[ntype if ntype in global_node_index else self.ntype_mapping[ntype]].size(0) \
+                for ntype in head_tail_ntypes)
+            sampling_size = min(sampling_size, self.negative_sampling_size // 2)
+        else:
+            sampling_size = self.negative_sampling_size // 2
 
         for metapath, edge_index in edge_pos.items():
             head_type, tail_type = metapath[0], metapath[-1]
@@ -481,7 +495,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
             head_neg_nodes = global_node_index[head_type]
             head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
-            head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=self.negative_sampling_size // 2,
+            head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=sampling_size,
                                                      replacement=True)
 
             tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype]
@@ -492,7 +506,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
                 tail_prob_dist[:, go_terms_mask] = 0
 
-            tail_batch[metapath] = torch.multinomial(tail_prob_dist, num_samples=self.negative_sampling_size // 2,
+            tail_batch[metapath] = torch.multinomial(tail_prob_dist, num_samples=sampling_size,
                                                      replacement=True)
 
         return head_batch, tail_batch
@@ -508,31 +522,22 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return nodes
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        def collate_fn(idx):
-            return self.transform(idx, mode="train")
-
         dataset = DataLoader(self.training_idx, batch_size=batch_size,
-                             collate_fn=collate_fn,
+                             collate_fn=self.transform,
                              shuffle=True,
                              num_workers=num_workers)
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        def collate_fn(idx):
-            return self.transform(idx, mode="valid")
-
         dataset = DataLoader(self.validation_idx, batch_size=batch_size,
-                             collate_fn=collate_fn,
+                             collate_fn=self.transform,
                              shuffle=False,
                              num_workers=num_workers)
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        def collate_fn(idx):
-            return self.transform(idx, mode="test")
-
         dataset = DataLoader(self.testing_idx, batch_size=batch_size,
-                             collate_fn=collate_fn,
+                             collate_fn=self.transform,
                              shuffle=False,
                              num_workers=num_workers)
         return dataset

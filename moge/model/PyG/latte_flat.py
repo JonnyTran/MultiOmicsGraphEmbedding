@@ -92,7 +92,10 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         # and de-allocated once computation is complete, saving memory.
 
         # Wraps the layer in a Fully Sharded Wrapper automatically
-        self.seq_encoder = auto_wrap(self.seq_encoder)
+        if hasattr(self, "seq_encoder"):
+            self.seq_encoder = auto_wrap(self.seq_encoder)
+        if hasattr(self, "encoder"):
+            self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]], **kwargs):
         if not self.training:

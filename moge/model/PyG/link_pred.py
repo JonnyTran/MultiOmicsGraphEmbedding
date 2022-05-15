@@ -127,7 +127,7 @@ class LATTELinkPred(LinkPredTrainer):
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self._name = f"LATTE-{hparams.t_order} Link"
+        self._name = f"LATTE-{hparams.t_order}_Link"
         self.collate_fn = collate_fn
 
         # Node attr input
@@ -178,6 +178,8 @@ class LATTELinkPred(LinkPredTrainer):
         # Wraps the layer in a Fully Sharded Wrapper automatically
         if hasattr(self, "seq_encoder"):
             self.seq_encoder = auto_wrap(self.seq_encoder)
+        if hasattr(self, "encoder"):
+            self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 return_score=False,
@@ -217,10 +219,6 @@ class LATTELinkPred(LinkPredTrainer):
 
         self.update_link_pred_metrics(self.train_metrics, edge_pred_dict, e_pos, e_neg)
 
-        if "edge_neg" in edge_pred_dict:
-            self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=self.train_metrics, subset=["precision", "recall"])
-
         logs = {'loss': loss,
                 # **self.train_metrics.compute_metrics()
                 }
@@ -237,10 +235,6 @@ class LATTELinkPred(LinkPredTrainer):
         loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
         self.update_link_pred_metrics(self.valid_metrics, edge_pred_dict, e_pos, e_neg)
-
-        if "edge_neg" in edge_pred_dict:
-            self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=self.valid_metrics, subset=["precision", "recall"])
 
         self.log("val_loss", loss, prog_bar=True)
 
@@ -259,10 +253,6 @@ class LATTELinkPred(LinkPredTrainer):
         # print("\npos", F.sigmoid(e_pos[:20]).detach().cpu().numpy(),
         #       "\nneg", F.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
-        if "edge_neg" in edge_pred_dict:
-            self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=self.test_metrics, subset=["precision", "recall"])
-
         self.log("test_loss", loss)
         return loss
 
@@ -280,13 +270,23 @@ class LATTELinkPred(LinkPredTrainer):
                                                 F.sigmoid(neg_batch.detach()),
                                                 weights=None, subset=["ogbl-biokg"])
 
+                self.update_pr_metrics(e_pos=edge_pred_dict["edge_pos"][metapath],
+                                       edge_pred=edge_pred_dict["edge_neg"][metapath],
+                                       metrics=metrics[go_type], subset=["precision", "recall"])
+
         else:
             metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
                                    weights=None, subset=["ogbl-biokg"])
+            self.update_pr_metrics(e_pos=e_pos, edge_pred=edge_pred_dict["edge_neg"],
+                                   metrics=metrics, subset=["precision", "recall"])
 
-    def update_pr_metrics(self, e_pos: Tensor, e_neg: Tensor, metrics: Metrics, subset=["precision", "recall"]):
-        if not isinstance(metrics, Metrics): return
-        edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in e_neg.items()])
+    def update_pr_metrics(self, e_pos: Tensor, edge_pred: Union[Tensor, Dict[Tuple[str, str, str], Tensor]],
+                          metrics: Metrics, subset=["precision", "recall"]):
+        if isinstance(edge_pred, dict):
+            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred.items()])
+        else:
+            edge_neg_score = edge_pred
+
         e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]  # randomly select |e_neg| edges
 
         y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
