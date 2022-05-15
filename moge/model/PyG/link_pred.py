@@ -168,6 +168,15 @@ class LATTELinkPred(LinkPredTrainer):
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
 
+    def configure_sharded_model(self):
+        # modules are sharded across processes
+        # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
+        # During the forward/backward passes, weights get synced across processes
+        # and de-allocated once computation is complete, saving memory.
+
+        # Wraps the layer in a Fully Sharded Wrapper automatically
+        self.seq_encoder = auto_wrap(self.seq_encoder)
+
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 return_score=False,
                 **kwargs) \

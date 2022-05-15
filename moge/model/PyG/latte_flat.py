@@ -91,7 +91,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         # and de-allocated once computation is complete, saving memory.
 
         # Wraps the layer in a Fully Sharded Wrapper automatically
-        self.encoder = auto_wrap(self.encoder)
+        self.seq_encoder = auto_wrap(self.seq_encoder)
 
     def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]], **kwargs):
         if not self.training:
@@ -310,6 +310,15 @@ class LATTE(nn.Module):
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('relu')
+
+    def configure_sharded_model(self):
+        # modules are sharded across processes
+        # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
+        # During the forward/backward passes, weights get synced across processes
+        # and de-allocated once computation is complete, saving memory.
+
+        # Wraps the layer in a Fully Sharded Wrapper automatically
+        self.layers = auto_wrap(self.layers)
 
     def forward(self, h_dict: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str], Tensor],
