@@ -1,19 +1,18 @@
 import itertools
 import logging
-from typing import Union, Iterable, Dict, Tuple, Optional, List
+from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable
 
 import numpy as np
 import pandas as pd
 import torch
-from pytorch_lightning import LightningModule
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.utils.data.distributed import DistributedSampler
-
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
+from pytorch_lightning import LightningModule
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.utils.data.distributed import DistributedSampler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -321,8 +320,40 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
+    def reshape_edge_pred_dict(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> \
+            Tuple[Tensor, Tensor]:
+
+        y_pred, y_true = [], []
+        for metapath, edge_pos_pred in edge_pred_dict["edge_pos"].items():
+            y_pred.append(edge_pos_pred.view(-1))
+            y_true.append(torch.ones_like(edge_pos_pred.view(-1)))
+
+        for metapath, edge_neg_batch_pred in edge_pred_dict["edge_neg"].items():
+            y_pred.append(edge_neg_batch_pred.view(-1))
+            y_true.append(torch.zeros_like(edge_neg_batch_pred.view(-1)))
+
+        for metapath, edge_neg_batch_pred in edge_pred_dict["head_batch"].items():
+            y_pred.append(edge_neg_batch_pred.view(-1))
+            if self.hparams.loss_type == "PU_LOSS_WITH_LOGITS":
+                y_true.append(-torch.ones_like(edge_neg_batch_pred.view(-1)))
+            else:
+                y_true.append(torch.zeros_like(edge_neg_batch_pred.view(-1)))
+
+        for metapath, edge_neg_batch_pred in edge_pred_dict["tail_batch"].items():
+            y_pred.append(edge_neg_batch_pred.view(-1))
+            if self.hparams.loss_type == "PU_LOSS_WITH_LOGITS":
+                y_true.append(-torch.ones_like(edge_neg_batch_pred.view(-1)))
+            else:
+                y_true.append(torch.zeros_like(edge_neg_batch_pred.view(-1)))
+
+        y_pred = torch.cat(y_pred)
+        y_true = torch.cat(y_true)
+
+        return y_pred, y_true
+
     def stack_pos_head_tail_batch(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                                  edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None) -> \
+                                  edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None,
+                                  activation: Callable = None) -> \
             Tuple[Tensor, Tensor, Optional[Tensor]]:
         e_pos = []
         e_neg = []
@@ -357,31 +388,11 @@ class LinkPredTrainer(NodeClfTrainer):
         else:
             e_weights = None
 
+        if callable(activation):
+            e_pos = activation(e_pos)
+            e_neg = activation(e_neg)
+
         return e_pos, e_neg, e_weights
-
-    def create_pu_learning_tensors(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> Tuple[
-        Tensor, Tensor]:
-        y_pred, y_true = [], []
-        for metapath, edge_pos_pred in edge_pred_dict["edge_pos"].items():
-            y_pred.append(edge_pos_pred.view(-1))
-            y_true.append(torch.ones_like(edge_pos_pred.view(-1)))
-
-        for metapath, edge_neg_batch_pred in edge_pred_dict["head_batch"].items():
-            y_pred.append(edge_neg_batch_pred.view(-1))
-            y_true.append(-torch.ones_like(edge_neg_batch_pred.view(-1)))
-
-        for metapath, edge_neg_batch_pred in edge_pred_dict["tail_batch"].items():
-            y_pred.append(edge_neg_batch_pred.view(-1))
-            y_true.append(-torch.ones_like(edge_neg_batch_pred.view(-1)))
-
-        for metapath, edge_neg_batch_pred in edge_pred_dict["edge_neg"].items():
-            y_pred.append(edge_neg_batch_pred.view(-1))
-            y_true.append(torch.zeros_like(edge_neg_batch_pred.view(-1)))
-
-        y_pred = torch.cat(y_pred)
-        y_true = torch.cat(y_true)
-
-        return y_pred, y_true
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,

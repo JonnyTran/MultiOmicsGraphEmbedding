@@ -7,8 +7,8 @@ from torch import Tensor
 
 
 class ClassificationLoss(nn.Module):
-    def __init__(self, n_classes: int, loss_type="SOFTMAX_CROSS_ENTROPY", class_weight: torch.Tensor = None,
-                 multilabel=True, reduction="mean", use_hierar=False, hierar_penalty=1e-6, hierar_relations=None):
+    def __init__(self, n_classes: int = None, loss_type="SOFTMAX_CROSS_ENTROPY", class_weight: torch.Tensor = None,
+                 multilabel=False, reduction="mean", use_hierar=False, hierar_penalty=1e-6, hierar_relations=None):
         super().__init__()
         self.n_classes = n_classes
         self.loss_type = loss_type
@@ -39,19 +39,21 @@ class ClassificationLoss(nn.Module):
         elif loss_type == "KL_DIVERGENCE":
             self.criterion = torch.nn.KLDivLoss(reduction=reduction)
         elif loss_type == "PU_LOSS_WITH_LOGITS":
-            assert multilabel
-            self.criterion = PULoss(prior=torch.tensor(0.5))
+            self.criterion = PULoss(prior=torch.tensor(0.9))
+        elif loss_type == "LINK_PRED_WITH_LOGITS":
+            self.criterion = LinkPredLoss()
+        elif "CONTRASTIVE" in loss_type:
+            self.criterion = ContrastiveLoss()
         else:
             raise TypeError(f"Unsupported loss type:{loss_type}")
 
-    def forward(self, logits, targets, weights=None, dense_weight: torch.Tensor = None):
+    def forward(self, logits, targets, weights=None):
         """
 
         Args:
             logits (torch.Tensor): y_pred
             targets (torch.Tensor): y_true
             weights (): Sample weights.
-            dense_weight (torch.Tensor): A tensor of the Dense layer's weights, only used when using recursive regularization.
 
         Returns:
 
@@ -61,8 +63,8 @@ class ClassificationLoss(nn.Module):
                                       "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"], self.loss_type
             targets = targets.type_as(logits)
         else:
-            if self.loss_type not in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD",
-                                      "SOFTMAX_FOCAL_CROSS_ENTROPY"]:
+            if self.loss_type in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD", "SOFTMAX_FOCAL_CROSS_ENTROPY"] \
+                    and targets.dim() == 1:
                 targets = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[targets]
 
         loss = self.criterion.forward(logits, targets)
@@ -73,14 +75,40 @@ class ClassificationLoss(nn.Module):
         return loss
 
 
+class ContrastiveLoss(nn.Module):
+    def __init__(self, temperature=0.07, base_temperature=0.07) -> None:
+        super().__init__()
+        self.temperature = temperature
+        self.base_temperature = base_temperature
+
+    def forward(self, e_pos: Tensor, e_neg: Tensor):
+        pos_logits = torch.div(e_pos, self.temperature)
+        neg_logits = torch.div(e_neg, self.temperature)
+
+        logits_max, _ = torch.max(torch.cat([pos_logits.unsqueeze(1), neg_logits], dim=1),
+                                  dim=1, keepdim=False)
+
+        pos_logits = pos_logits - logits_max.detach()
+        neg_logits = neg_logits - logits_max.unsqueeze(1).detach()
+
+        mean_log_prob_pos = pos_logits - torch.log(torch.exp(neg_logits).sum(1))
+
+        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
+        loss = loss.mean()
+
+        return loss
+
+
 class PULoss(nn.Module):
     """wrapper of loss function for PU learning"""
-    def __init__(self, prior, loss=(lambda x: torch.sigmoid(-x)),
+
+    def __init__(self, prior, loss=(lambda x: torch.sigmoid(x)),
                  gamma=1, beta=0, nnPU=True):
         super(PULoss, self).__init__()
         if not 0 < prior < 1:
             raise NotImplementedError("The class prior should be in (0, 1)")
         self.prior = prior
+        print("PULoss Prior: ", prior)
         self.gamma = gamma
         self.beta = beta
         self.loss_func = loss  # lambda x: (torch.tensor(1., device=x.device) - torch.sign(x))/torch.tensor(2, device=x.device)
@@ -199,14 +227,5 @@ def get_hierar_relations(hierar_taxonomy_file, label_map):
                                   for child_label in children_label if child_label in label_map]
             hierar_relations[parent_label_id] = children_label_ids
     return hierar_relations
-
-
-class EntropyLoss(nn.Module):
-    # Return Scalar
-    def forward(self, adj, anext, s_l):
-        entropy = (torch.distributions.Categorical(
-            probs=s_l).entropy()).sum(-1).mean(-1)
-        assert not torch.isnan(entropy)
-        return entropy
 
 

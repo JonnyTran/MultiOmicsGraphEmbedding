@@ -1,13 +1,12 @@
 import logging
 from typing import List, Tuple, Dict, Any, Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.losses import ClassificationLoss
 from torch import nn, Tensor
 
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import PULoss
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -162,7 +161,7 @@ class LATTELinkPred(LinkPredTrainer):
         self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.pred_metapaths,
                                     ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
 
-        self.criterion = PULoss(prior=dataset.get_prior())
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
         # self.criterion = LinkPredLoss()
 
         self.hparams.n_params = self.get_n_params()
@@ -197,18 +196,15 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=F.sigmoid)
+        # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
+        loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
-        loss = self.criterion.forward(*self.create_pu_learning_tensors(edge_pred_dict), e_weights)
-        # loss = self.criterion.forward(e_pos, e_neg, e_weights)
-
-        metrics = self.train_metrics
-        self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)
-        # print(self.valid_metrics.compute_metrics())
+        self.update_link_pred_metrics(self.train_metrics, edge_pred_dict, e_pos, e_neg)
 
         if "edge_neg" in edge_pred_dict:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=metrics, subset=["precision", "recall"])
+                                   metrics=self.train_metrics, subset=["precision", "recall"])
 
         logs = {'loss': loss,
                 # **self.train_metrics.compute_metrics()
@@ -221,17 +217,15 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(*self.create_pu_learning_tensors(edge_pred_dict), e_weights)
-        # loss = self.criterion.forward(e_pos, e_neg, e_weights)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=F.sigmoid)
+        # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
+        loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
-        metrics = self.valid_metrics
-        self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)
-        # print(self.valid_metrics.compute_metrics())
+        self.update_link_pred_metrics(self.valid_metrics, edge_pred_dict, e_pos, e_neg)
 
         if "edge_neg" in edge_pred_dict:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=metrics, subset=["precision", "recall"])
+                                   metrics=self.valid_metrics, subset=["precision", "recall"])
 
         self.log("val_loss", loss, prog_bar=True)
 
@@ -241,20 +235,18 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=F.sigmoid)
+        # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
+        loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
-        np.set_printoptions(precision=3, suppress=True, linewidth=300)
-        print("\npos", F.sigmoid(e_pos[:20]).detach().cpu().numpy(),
-              "\nneg", F.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
-
-        loss = self.criterion.forward(*self.create_pu_learning_tensors(edge_pred_dict), e_weights)
-
-        metrics = self.test_metrics
-        self.update_link_pred_metrics(metrics, edge_pred_dict, e_pos, e_neg)
+        self.update_link_pred_metrics(self.test_metrics, edge_pred_dict, e_pos, e_neg)
+        # np.set_printoptions(precision=3, suppress=True, linewidth=300)
+        # print("\npos", F.sigmoid(e_pos[:20]).detach().cpu().numpy(),
+        #       "\nneg", F.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
         if "edge_neg" in edge_pred_dict:
             self.update_pr_metrics(e_pos=e_pos, e_neg=edge_pred_dict["edge_neg"],
-                                   metrics=metrics, subset=["precision", "recall"])
+                                   metrics=self.test_metrics, subset=["precision", "recall"])
 
         self.log("test_loss", loss)
         return loss
@@ -277,7 +269,7 @@ class LATTELinkPred(LinkPredTrainer):
             metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
                                    weights=None, subset=["ogbl-biokg"])
 
-    def update_pr_metrics(self, e_pos, e_neg, metrics: Metrics, subset=["precision", "recall"]):
+    def update_pr_metrics(self, e_pos: Tensor, e_neg: Tensor, metrics: Metrics, subset=["precision", "recall"]):
         if not isinstance(metrics, Metrics): return
         edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in e_neg.items()])
         e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]  # randomly select |e_neg| edges

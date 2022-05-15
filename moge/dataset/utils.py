@@ -1,9 +1,11 @@
-from typing import List, Union
+from typing import List, Union, Dict, Tuple
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from torch import Tensor
+from torch_sparse import SparseTensor
 
 
 def one_hot_encoder(x, embed_dim=None):
@@ -55,6 +57,19 @@ def nonduplicate_indices(edge_index):
     edge_df = pd.DataFrame(edge_index.t().numpy())  # shape: (n_edges, 2)
     return ~edge_df.duplicated(subset=[0, 1])
 
+
+def edge_index_to_adj(edge_index_dict: Dict[Tuple[str, str, str], Tensor], nodes=Dict[str, List[str]]) \
+        -> Dict[Tuple[str, str, str], SparseTensor]:
+    adj_dict = {}
+
+    for metapath, edge_index in edge_index_dict.items():
+        head_type, tail_type = metapath[0], metapath[-1]
+        adj = SparseTensor.from_edge_index(edge_index,
+                                           sparse_sizes=(len(nodes[head_type]), len(nodes[tail_type])))
+
+        adj_dict[metapath] = adj
+
+    return adj_dict
 
 def merge_node_index(old_node_index, new_node_index):
     merged = {k: [v] for k, v in old_node_index.items()}

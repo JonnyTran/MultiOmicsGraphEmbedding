@@ -5,18 +5,17 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.sequences import SequenceTokenizer
+# from torch_geometric.loader import HGTLoader, NeighborLoader
+from moge.dataset.utils import get_edge_index, edge_index_to_adj
+from moge.model.PyG.utils import num_edges
 from openomics.database.ontology import GeneOntology
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
 from torch_sparse.tensor import SparseTensor
-
-from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizer
-# from torch_geometric.loader import HGTLoader, NeighborLoader
-from moge.dataset.utils import get_edge_index
-from moge.model.PyG.utils import num_edges
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -341,10 +340,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.triples_neg = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_neg.items()}
 
-        self.triples_pos_adj = {metapath: SparseTensor.from_edge_index(edge_index,
-                                                                       sparse_sizes=(len(self.nodes[metapath[0]]),
-                                                                                     len(self.nodes[metapath[-1]]))) \
-                                for metapath, edge_index in self.triples_pos.items()}
+        self.triples_pos_adj = edge_index_to_adj(self.triples_pos, nodes=self.nodes)
 
         # Train/valid/test positive edges
         self.training_idx = torch.arange(0, pos_train_valid_test_sizes[0])
@@ -368,11 +364,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        transform_fn=super().transform,
                                                        num_workers=0)
 
-    def get_prior(self):
+    def get_prior(self) -> Tensor:
         pos_count = sum([edge_index.size(1) for edge_index in self.triples_pos.values()])
         neg_count = sum([edge_index.size(1) for edge_index in self.triples_neg.values()])
 
-        return torch.tensor(pos_count / (pos_count + neg_count))
+        return torch.tensor(pos_count) / (pos_count + neg_count)
 
     @staticmethod
     def get_relabled_edge_index(edge_index_dict: Dict[Tuple[str, str, str], Tensor],
@@ -413,10 +409,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_pos = {metapath: self.triples_pos[metapath][:, edge_idx] for metapath in self.triples_pos}
 
         # True negative edges
-        edge_neg = {metapath: self.triples_neg[metapath][:, self.training_idx_neg if mode == "train" else \
-                                                                self.validation_idx_neg if mode == "valid" else \
-                                                                    self.testing_idx_neg if mode == "test" else []] \
-                    for metapath in self.triples_neg}
+        if mode == "train":
+            edge_neg = {metapath: self.triples_neg[metapath][:, self.training_idx_neg] \
+                        for metapath in self.triples_neg}
+        elif mode == "valid":
+            edge_neg = {metapath: self.triples_neg[metapath][:, self.validation_idx_neg] \
+                        for metapath in self.triples_neg}
+        elif mode == "test":
+            edge_neg = {metapath: self.triples_neg[metapath][:, self.testing_idx_neg] \
+                        for metapath in self.triples_neg}
 
         # If ensures same number of true neg edges to true pos edges
         if num_edges(edge_neg) > edge_idx.numel():
