@@ -213,8 +213,8 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
         logging.info(
             f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
 
-    elif ".pickle" in name and os.path.exists(name):
-        with open(name, "rb") as file:
+    elif ".pickle" in path:
+        with open(path, "rb") as file:
             network = pickle.load(file)
 
         min_count = None
@@ -243,12 +243,16 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
                                                             head_node_type=head_node_type,
                                                             # neighbor_loader="NeighborLoader", neighbor_sizes=[32, 32],
                                                             neighbor_loader="HGTLoader", neighbor_sizes=[128, 128],
-                                                            seq_tokenizer=sequence_tokenizers
-                                                            )
+                                                            seq_tokenizer=sequence_tokenizers)
+
         train_date = '2018-01-01'
         valid_date = pd.to_datetime(train_date) + pd.to_timedelta(26, "W")
-        geneontology = GeneOntology()
+        geneontology = GeneOntology(file_resources={
+            "go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo",
+        } if "mlm" in name else None)
         dataset.add_ontology_edges(geneontology, train_date=train_date, valid_date=valid_date)
+
+        dataset._name = "_".join([name, train_date])
 
         dataset.pred_metapaths = [('MessengerRNA', 'associated', 'biological_process'),
                                   ('MessengerRNA', 'associated', 'cellular_component'),

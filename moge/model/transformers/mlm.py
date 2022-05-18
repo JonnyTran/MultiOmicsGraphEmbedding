@@ -2,10 +2,9 @@ from argparse import Namespace
 
 import pytorch_lightning as pl
 from fairscale.nn import auto_wrap
+from moge.dataset.sequences import MaskedLMDataset
 from torch import Tensor
 from transformers import BertForMaskedLM, AdamW, BertConfig
-
-from moge.dataset.sequences import MaskedLMDataset
 
 
 class BertMLM(pl.LightningModule):
@@ -15,6 +14,7 @@ class BertMLM(pl.LightningModule):
 
         if isinstance(config, str):
             self.bert = BertForMaskedLM.from_pretrained(config)
+            print(f"Loaded BertForMaskedLM.from_pretrained({config})")
         else:
             self.bert = BertForMaskedLM(config)
 

@@ -310,9 +310,18 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                  index=self.nodes[go_ntype])
 
         # Edges between RNA nodes and GO terms
+        if hasattr(ontology, "gaf_annotations"):
+            self.load_annotation_edges(ontology, go_nodes, train_date, valid_date, go_ntype)
+
+        # Reinstantiate graph sampler since hetero graph was modified
+        self.graph_sampler = self.create_graph_sampler(batch_size=1,
+                                                       node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
+                                                       transform_fn=super().transform,
+                                                       num_workers=0)
+
+    def load_annotation_edges(self, ontology, go_nodes, train_date, valid_date, go_ntype):
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
             train_date=train_date, valid_date=valid_date, groupby=["gene_name"])
-
         self.triples_pos = {}
         self.triples_neg = {}
         pos_train_valid_test_sizes = []
@@ -334,18 +343,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
             self.triples_neg.setdefault(metapath, []).append(edge_index)
             neg_train_valid_test_sizes.append(edge_index.size(1))
-
         print("pos_train_valid_test_sizes", pos_train_valid_test_sizes)
         print("neg_train_valid_test_sizes", neg_train_valid_test_sizes)
         self.pred_metapaths.append(metapath)
-
         self.triples_pos = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_pos.items()}
         self.triples_neg = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_neg.items()}
-
         self.triples_pos_adj = edge_index_to_adj(self.triples_pos, nodes=self.nodes)
-
         # Train/valid/test positive edges
         self.training_idx = torch.arange(0, pos_train_valid_test_sizes[0])
         self.validation_idx = torch.arange(pos_train_valid_test_sizes[0],
@@ -353,7 +358,6 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.testing_idx = torch.arange(pos_train_valid_test_sizes[0] + pos_train_valid_test_sizes[1],
                                         pos_train_valid_test_sizes[0] + pos_train_valid_test_sizes[1] + \
                                         pos_train_valid_test_sizes[2])
-
         # Train/valid/test positive edges
         self.training_idx_neg = torch.arange(0, neg_train_valid_test_sizes[0])
         self.validation_idx_neg = torch.arange(neg_train_valid_test_sizes[0],
@@ -361,12 +365,6 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.testing_idx_neg = torch.arange(neg_train_valid_test_sizes[0] + neg_train_valid_test_sizes[1],
                                             neg_train_valid_test_sizes[0] + neg_train_valid_test_sizes[1] + \
                                             neg_train_valid_test_sizes[2])
-
-        # Reinstantiate graph sampler since hetero graph was modified
-        self.graph_sampler = self.create_graph_sampler(batch_size=1,
-                                                       node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
-                                                       transform_fn=super().transform,
-                                                       num_workers=0)
 
     def get_prior(self) -> Tensor:
         pos_count = num_edges(self.triples_pos)

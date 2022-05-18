@@ -1,19 +1,19 @@
 dataset: "rna_ppi_go_mlm"
 root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 
-node_type: "GO_term"
-model: "dmis-lab/biobert-base-cased-v1.2"
-save_path: "models/bert_mlm_GO_term"
+node_type: "Protein"
+model: "zjukg/OntoProtein"
+save_path: "models/bert_mlm_Protein"
 
 num_hidden_layers: 2
 num_attention_heads: 4
 hidden_dropout_prob: 0.1
-intermediate_size: 128
-hidden_size: 128
+intermediate_size: 64
+hidden_size: 64
 num_labels: 128
 gradient_checkpointing: true
 
-max_length: 150
-batch_size: 425
+max_length: 1200
+batch_size: 300
 max_epochs: 500
 lr: 0.00001
