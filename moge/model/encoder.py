@@ -117,7 +117,7 @@ class HeteroSequenceEncoder(nn.Module):
             else:
                 bert_config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=128,
                                          max_position_embeddings=max_position_embeddings,
-                                         num_hidden_layers=2, num_attention_heads=8, intermediate_size=128,
+                                         num_hidden_layers=2, num_attention_heads=4, intermediate_size=128,
                                          hidden_dropout_prob=0.1,
                                          pad_token_id=tokenizer.vocab["[PAD]"],
                                          num_labels=hparams.embedding_dim,

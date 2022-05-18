@@ -188,7 +188,8 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
     return dataset
 
 
-def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
+def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_ExternalData/OGB/") -> \
+        Union[PygLinkPropPredDataset, HeteroLinkPredDataset]:
     if "ogbl" in name:
         ogbl = PygLinkPropPredDataset(name=name, root=path)
 
@@ -219,23 +220,24 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
 
         min_count = None
         label_col = None
-        go_type = None
-        head_node_type = "MessengerRNA"
+        head_node_type = hparams.head_node_type
 
-        hetero, classes, nodes = \
-            network.to_pyg_heterodata(target=label_col, min_count=min_count,
-                                      # attr_cols=['go_id'],
-                                      expression=False, sequence=True, add_reverse=True,
-                                      )
+        if hasattr(hparams, 'max_length'):
+            sequence_tokenizers = SequenceTokenizers(
+                vocabularies={"MicroRNA": "armheb/DNA_bert_3",
+                              "LncRNA": "armheb/DNA_bert_6",
+                              "MessengerRNA": "armheb/DNA_bert_6",
+                              'Protein': 'zjukg/OntoProtein',
+                              'GO_term': "dmis-lab/biobert-base-cased-v1.2", },
+                max_length=hparams.max_length)
+            use_sequence = True
+        else:
+            sequence_tokenizers = None
+            use_sequence = False
 
-        geneontology = GeneOntology()
+        hetero, classes, nodes = network.to_pyg_heterodata(target=label_col, min_count=min_count, expression=False,
+                                                           sequence=use_sequence, add_reverse=hparams.use_reverse, )
 
-        sequence_tokenizers = SequenceTokenizers(
-            vocabularies={"MicroRNA": "armheb/DNA_bert_3", "LncRNA": "armheb/DNA_bert_6",
-                          "MessengerRNA": "armheb/DNA_bert_6", 'Protein': 'zjukg/OntoProtein',
-                          'GO_term': "dmis-lab/biobert-base-cased-v1.2", },
-            max_length={"MicroRNA": 100, "LncRNA": 100, "MessengerRNA": 100, 'Protein': 100,
-                        'GO_term': 100, })
         dataset = HeteroLinkPredDataset.from_pyg_heterodata(hetero, classes, nodes,
                                                             negative_sampling_size=100,
                                                             pred_metapaths=[],
@@ -246,6 +248,7 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
                                                             )
         train_date = '2018-01-01'
         valid_date = pd.to_datetime(train_date) + pd.to_timedelta(26, "W")
+        geneontology = GeneOntology()
         dataset.add_ontology_edges(geneontology,
                                    train_date=train_date,
                                    valid_date=valid_date)
@@ -260,6 +263,7 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
     else:
         raise Exception(f"dataset {name} not found")
 
+    return dataset
 
 def load_graph_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
     if "ogbg" in name:
