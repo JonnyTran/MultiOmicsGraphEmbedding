@@ -6,23 +6,22 @@ from typing import Union
 
 import dgl
 import dill
+import moge
+import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
 import torch
 from cogdl.datasets.gtn_data import GTNDataset
-from ogb.graphproppred import DglGraphPropPredDataset
-from ogb.linkproppred import PygLinkPropPredDataset
-from ogb.nodeproppred import DglNodePropPredDataset
-from openomics.database.ontology import GeneOntology
-from torch_geometric.datasets import AMiner
-
-import moge
-import moge.dataset.PyG.triplet_generator
 from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
 from moge.dataset.dgl.graph_generator import DGLGraphSampler
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
 from moge.model.utils import preprocess_input
+from ogb.graphproppred import DglGraphPropPredDataset
+from ogb.linkproppred import PygLinkPropPredDataset
+from ogb.nodeproppred import DglNodePropPredDataset
+from openomics.database.ontology import GeneOntology
+from torch_geometric.datasets import AMiner
 
 
 def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler], path: str, skip_ntype: str = None,
@@ -249,9 +248,7 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
         train_date = '2018-01-01'
         valid_date = pd.to_datetime(train_date) + pd.to_timedelta(26, "W")
         geneontology = GeneOntology()
-        dataset.add_ontology_edges(geneontology,
-                                   train_date=train_date,
-                                   valid_date=valid_date)
+        dataset.add_ontology_edges(geneontology, train_date=train_date, valid_date=valid_date)
 
         dataset.pred_metapaths = [('MessengerRNA', 'associated', 'biological_process'),
                                   ('MessengerRNA', 'associated', 'cellular_component'),

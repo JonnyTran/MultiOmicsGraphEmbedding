@@ -5,18 +5,17 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from openomics.database.ontology import GeneOntology
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index, edge_index_to_adj
 from moge.model.PyG.utils import num_edges
+from openomics.database.ontology import GeneOntology
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -277,6 +276,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def add_ontology_edges(self, ontology: GeneOntology, train_date='2017-06-15', valid_date='2017-11-15',
                            go_ntype="GO_term", metapaths: List[Tuple[str, str, str]] = None):
         self._name = f"{self.head_node_type}-{go_ntype}-{train_date}"
+        if ontology.data.index.name != "go_id":
+            ontology.data.set_index("go_id", inplace=True)
+
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
         go_nodes = np.array(list(all_go))
         self.go_ntype = go_ntype

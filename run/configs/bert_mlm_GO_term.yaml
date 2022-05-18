@@ -1,0 +1,17 @@
+dataset: "data/gtex_rna_ppi_multiplex_network.pickle"
+node_type: "GO_term"
+model: "dmis-lab/biobert-base-cased-v1.2"
+save_path: "models/bert_mlm"
+
+num_hidden_layers: 2
+num_attention_heads: 4
+hidden_dropout_prob: 0.1
+intermediate_size: 128
+hidden_size: 128
+num_labels: 128
+gradient_checkpointing: True
+
+max_length: 150
+batch_size: 512
+max_epochs: 500
+lr: 0.00001
