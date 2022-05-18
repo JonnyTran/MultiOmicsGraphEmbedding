@@ -15,7 +15,7 @@ from transformers import (
 from moge.model.transformers import DNATokenizer
 
 
-class SequenceTokenizer():
+class SequenceTokenizers():
     def __init__(self, vocabularies: Dict[str, str], max_length: Union[int, Dict[str, int]] = None):
         self.tokenizers: Dict[str, BertTokenizer] = {}
         self.word_lengths: Dict[str, int] = {}

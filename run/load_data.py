@@ -7,6 +7,7 @@ from typing import Union
 import dgl
 import dill
 import numpy as np
+import pandas as pd
 import torch
 from cogdl.datasets.gtn_data import GTNDataset
 from ogb.graphproppred import DglGraphPropPredDataset
@@ -17,8 +18,9 @@ from torch_geometric.datasets import AMiner
 
 import moge
 import moge.dataset.PyG.triplet_generator
-from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler
+from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
 from moge.dataset.dgl.graph_generator import DGLGraphSampler
+from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
 from moge.model.utils import preprocess_input
 
@@ -210,6 +212,50 @@ def load_link_dataset(name, hparams, path="~/Bioinformatics_ExternalData/OGB/"):
 
         logging.info(
             f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")
+
+    elif ".pickle" in name and os.path.exists(name):
+        with open(name, "rb") as file:
+            network = pickle.load(file)
+
+        min_count = None
+        label_col = None
+        go_type = None
+        head_node_type = "MessengerRNA"
+
+        hetero, classes, nodes = \
+            network.to_pyg_heterodata(target=label_col, min_count=min_count,
+                                      # attr_cols=['go_id'],
+                                      expression=False, sequence=True, add_reverse=True,
+                                      )
+
+        geneontology = GeneOntology()
+
+        sequence_tokenizers = SequenceTokenizers(
+            vocabularies={"MicroRNA": "armheb/DNA_bert_3", "LncRNA": "armheb/DNA_bert_6",
+                          "MessengerRNA": "armheb/DNA_bert_6", 'Protein': 'zjukg/OntoProtein',
+                          'GO_term': "dmis-lab/biobert-base-cased-v1.2", },
+            max_length={"MicroRNA": 100, "LncRNA": 100, "MessengerRNA": 100, 'Protein': 100,
+                        'GO_term': 100, })
+        dataset = HeteroLinkPredDataset.from_pyg_heterodata(hetero, classes, nodes,
+                                                            negative_sampling_size=100,
+                                                            pred_metapaths=[],
+                                                            head_node_type=head_node_type,
+                                                            # neighbor_loader="NeighborLoader", neighbor_sizes=[32, 32],
+                                                            neighbor_loader="HGTLoader", neighbor_sizes=[128, 128],
+                                                            seq_tokenizer=sequence_tokenizers
+                                                            )
+        train_date = '2018-01-01'
+        valid_date = pd.to_datetime(train_date) + pd.to_timedelta(26, "W")
+        dataset.add_ontology_edges(geneontology,
+                                   train_date=train_date,
+                                   valid_date=valid_date)
+
+        dataset.pred_metapaths = [('MessengerRNA', 'associated', 'biological_process'),
+                                  ('MessengerRNA', 'associated', 'cellular_component'),
+                                  ('MessengerRNA', 'associated', 'molecular_function')]
+        dataset.ntype_mapping = {'biological_process': "GO_term",
+                                 'cellular_component': "GO_term",
+                                 'molecular_function': "GO_term"}
 
     else:
         raise Exception(f"dataset {name} not found")

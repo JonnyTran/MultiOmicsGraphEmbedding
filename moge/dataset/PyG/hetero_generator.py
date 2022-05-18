@@ -13,7 +13,7 @@ from torch_sparse.tensor import SparseTensor
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizer
+from moge.dataset.sequences import SequenceTokenizers
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index, edge_index_to_adj
 from moge.model.PyG.utils import num_edges
@@ -21,7 +21,7 @@ from moge.model.PyG.utils import num_edges
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
     def __init__(self, dataset: HeteroData,
-                 seq_tokenizer: SequenceTokenizer = None,
+                 seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128],
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
@@ -257,7 +257,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def __init__(self, dataset: HeteroData,
                  pred_metapaths: List[Tuple[str, str, str]] = [],
                  negative_sampling_size=10,
-                 seq_tokenizer: SequenceTokenizer = None,
+                 seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
                  metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None, edge_dir: str = "in",
