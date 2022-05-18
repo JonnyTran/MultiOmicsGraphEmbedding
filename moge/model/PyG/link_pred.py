@@ -127,7 +127,7 @@ class LATTELinkPred(LinkPredTrainer):
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
-        self._name = f"LATTE-{hparams.t_order}_Link"
+        self._name = f"LATTE-{hparams.n_layers}-{hparams.t_order}th_Link"
         self.collate_fn = collate_fn
 
         # Node attr input

@@ -81,7 +81,7 @@ class LATTENodeClf(NodeClfTrainer):
                     out_features=hparams.embedding_dim) \
                 for ntype in self.proj_ntypes})
 
-            if hparams.batchnorm:
+            if hparams.batchnorm_l:
                 self.batchnorm = nn.ModuleDict({
                     ntype: nn.BatchNorm1d(hparams.embedding_dim) \
                     for ntype in self.proj_ntypes

@@ -3,8 +3,14 @@ from pprint import pprint
 from typing import Dict, Optional, Union
 
 import pandas as pd
+import torch
+from torch.utils.data import DataLoader, Dataset
 from torch_geometric.data import HeteroData
-from transformers import AutoTokenizer, BertTokenizer, BatchEncoding
+from transformers import AutoTokenizer, BatchEncoding
+from transformers import (
+    BertTokenizer,
+    DataCollatorForLanguageModeling
+)
 
 from moge.model.transformers import DNATokenizer
 
@@ -49,6 +55,68 @@ class SequenceTokenizer():
                                                              max_length=max_length, truncation=True,
                                                              add_special_tokens=True, return_tensors="pt", **kwargs)
         return encodings
+
+
+class MaskedLMDataset(Dataset):
+    def __init__(self, data: os.PathLike, tokenizer: BertTokenizer, mlm_probability=0.15, max_len=None):
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+        self.mlm_probability = mlm_probability
+
+        if isinstance(data, str):
+            self.sequences = self.load_lines(data)
+        elif isinstance(data, list):
+            self.sequences = data
+        elif isinstance(data, pd.Series):
+            self.sequences = data.tolist()
+
+        self.ids = self.encode_lines(self.sequences)
+
+        num_train_samples = int(0.98 * len(self.ids))
+        self.training_idx = torch.arange(0, num_train_samples)
+        self.validation_idx = self.testing_idx = torch.arange(num_train_samples, len(self.ids))
+
+        self.data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True,
+                                                             mlm_probability=self.mlm_probability)
+
+    def load_lines(self, file):
+        with open(file) as f:
+            lines = [line for line in f.read().splitlines()
+                     if (len(line) > 0 and not line.isspace())]
+        return lines
+
+    def encode_lines(self, lines):
+        batch_encoding = self.tokenizer.batch_encode_plus(lines, add_special_tokens=True,
+                                                          truncation=True, max_length=self.max_len)
+
+        return batch_encoding["input_ids"]
+
+    def __len__(self):
+        return len(self.sequences)
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.ids[idx], dtype=torch.long)
+
+    def train_dataloader(self, batch_size=128, num_workers=0, **kwargs):
+        loader = DataLoader(self, batch_size=batch_size,
+                            shuffle=True, num_workers=num_workers,
+                            collate_fn=self.data_collator,
+                            **kwargs)
+        return loader
+
+    def valid_dataloader(self, batch_size=128, num_workers=0, **kwargs):
+        loader = DataLoader(self, batch_size=batch_size,
+                            shuffle=True, num_workers=num_workers,
+                            collate_fn=self.data_collator,
+                            **kwargs)
+        return loader
+
+    def test_dataloader(self, batch_size=128, num_workers=0, **kwargs):
+        loader = DataLoader(self, batch_size=batch_size,
+                            shuffle=True, num_workers=num_workers,
+                            collate_fn=self.data_collator,
+                            **kwargs)
+        return loader
 
 
 def k_mers(sentence: str, k: int = 3, concat: bool = True):

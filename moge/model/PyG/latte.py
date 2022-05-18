@@ -6,12 +6,12 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 from colorhash import ColorHash
-from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
+from moge.model.sampling import negative_sample
 from .utils import is_negative, get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, \
     tag_negative, untag_negative
 
@@ -60,7 +60,7 @@ class LATTE(nn.Module):
                           node_types=list(num_nodes_dict.keys()), metapaths=l_layer_metapaths, layer=l,
                           t_order=self.t_order, activation=None if is_output_layer else activation,
                           batchnorm=False if not hasattr(hparams,
-                                                         "batchnorm") or is_output_layer else hparams.batchnorm,
+                                                         "batchnorm") or is_output_layer else hparams.batchnorm_l,
                           layernorm=False if not hasattr(hparams,
                                                          "layernorm") or is_output_layer else hparams.layernorm,
                           dropout=False if not hasattr(hparams,

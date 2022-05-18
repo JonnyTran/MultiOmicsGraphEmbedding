@@ -50,13 +50,13 @@ class LATTENodeClassifier(NodeClfTrainer):
         self.embedder = LATTE(t_order=hparams.n_layers, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
                               metapaths=dataset.get_metapaths(),
-                              batchnorm=hparams.batchnorm if "batchnorm" in hparams else False,
+                              batchnorm=hparams.batchnorm_l if "batchnorm" in hparams else False,
                               layernorm=hparams.layernorm if "layernorm" in hparams else False,
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout)
 
-        if "batchnorm" in hparams and hparams.batchnorm:
+        if "batchnorm" in hparams and hparams.batchnorm_l:
             self.batchnorm = torch.nn.ModuleDict(
                 {node_type: torch.nn.BatchNorm1d(hparams.embedding_dim) for node_type in
                  self.dataset.node_types})

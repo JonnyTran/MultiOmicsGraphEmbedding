@@ -111,7 +111,7 @@ class Metrics(torch.nn.Module):
         if subset is None:
             metrics = self.metrics.keys()
         elif not any(metric in subset for metric in self.metrics):
-            print(f"Argument `subset`={subset} did not match any metrics in {self.metrics.keys()}")
+            # print(f"Argument `subset`={subset} did not match any metrics in {self.metrics.keys()}")
             return
         else:
             metrics = subset

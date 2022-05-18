@@ -33,7 +33,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.t_order}"
+        self._name = f"LATTE-{hparams.n_layers}-{hparams.t_order}th_Link"
         self.collate_fn = collate_fn
 
         # Node attr input
@@ -484,13 +484,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
         if batchnorm:
-            self.batchnorm = torch.nn.ModuleDict({
+            self.batchnorm_l = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(output_dim) \
                 for node_type in self.node_types})
-        if layernorm:
-            self.layernorm = torch.nn.ModuleDict({
-                node_type: nn.LayerNorm(output_dim) \
+            self.batchnorm_r = torch.nn.ModuleDict({
+                node_type: nn.BatchNorm1d(output_dim) \
                 for node_type in self.node_types})
+
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
 
@@ -521,6 +521,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             print(f"WARNING: alpha_activation `{attn_activation}` did not match, so used linear activation")
             self.alpha_activation = None
 
+        if layernorm:
+            self.layernorm = torch.nn.ModuleDict({
+                node_type: nn.LayerNorm(output_dim) \
+                for node_type in self.node_types})
+
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -549,6 +554,20 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
+    def projection(self, feats, linear_projs: Dict[str, nn.Linear], batch_norms: Dict[str, nn.BatchNorm1d]):
+        h_dict = {ntype: linear_projs[ntype].forward(x) for ntype, x in feats.items()}
+
+        if hasattr(self, "dropout"):
+            h_dict = {ntype: self.dropout(h_dict[ntype]) for ntype in h_dict}
+
+        if batch_norms:
+            h_dict = {ntype: batch_norms[ntype](h_dict[ntype]) for ntype in h_dict}
+
+        h_dict = {ntype: h_dict[ntype].view(feats[ntype].size(0), self.attn_heads, self.out_channels) for ntype in
+                  h_dict}
+
+        return h_dict
+
     def forward(self, feats: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                 global_node_idx: Dict[str, Tensor],
@@ -563,10 +582,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         Returns:
              output_emb, loss:
         """
-        l_dict = {ntype: self.linear_l[ntype].forward(x).view(x.size(0), self.attn_heads, self.out_channels) \
-                  for ntype, x in feats.items()}
-        r_dict = {ntype: self.linear_r[ntype].forward(x).view(x.size(0), self.attn_heads, self.out_channels) \
-                  for ntype, x in feats.items()}
+        l_dict = self.projection(feats, linear_projs=self.linear_l,
+                                 batch_norms=self.batchnorm_l if hasattr(self, "batchnorm_l") else None)
+        r_dict = self.projection(feats, linear_projs=self.linear_r,
+                                 batch_norms=self.batchnorm_r if hasattr(self, "batchnorm_r") else None)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
@@ -592,8 +611,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
-            elif hasattr(self, "batchnorm"):
-                feats = {ntype: self.batchnorm[ntype](feats[ntype]) for ntype in feats}
 
             # if hasattr(self, "dropout"):
             #     h_out[ntype] = self.dropout(h_out[ntype])
