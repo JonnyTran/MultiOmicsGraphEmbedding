@@ -4,12 +4,13 @@ from typing import Dict
 
 import torch
 import torch.nn.functional as F
-from moge.dataset import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
+
+from moge.dataset import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
 
 
 class HeteroNodeEncoder(nn.Module):
@@ -125,6 +126,11 @@ class HeteroSequenceEncoder(nn.Module):
                         classifier_dropout=hparams.dropout
                     )
 
+                    # Freeze BERT layers due to
+                    for name, param in seq_encoders[ntype].named_parameters():
+                        if 'classifier' not in name:  # classifier layer
+                            param.requires_grad = False
+
                     print("BertForSequenceClassification pretrained", ntype)
                     print(seq_encoders[ntype].config)
             else:
@@ -165,6 +171,8 @@ class HeteroSequenceEncoder(nn.Module):
                                                        attention_mask=encoding["attention_mask"],
                                                        token_type_ids=encoding["token_type_ids"])
                 h_out[ntype] = out.logits
+
+        h_out = {ntype: F.relu(h_out[ntype]) for ntype in h_out}
 
         return h_out
 

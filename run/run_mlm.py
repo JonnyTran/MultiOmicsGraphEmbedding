@@ -4,13 +4,13 @@ import os.path
 import traceback
 from argparse import Namespace
 
-import yaml
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from transformers import BertConfig
 
 from moge.dataset.sequences import MaskedLMDataset
 from moge.model.transformers.mlm import BertMLM
+from run.latte_link import parse_yaml
 from run.load_data import load_link_dataset
 
 
@@ -100,15 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--hours', type=float, default=None)
 
     parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
-    args = parser.parse_args()
-
-    # yaml priority is higher than args
-    if isinstance(args.config, str) and os.path.exists(args.config):
-        opt = yaml.load(open(args.config), Loader=yaml.FullLoader)
-        args_dict = args.__dict__
-        args_dict.update(opt)
-        args = Namespace(**args_dict)
-        print("\n", args, end="\n\n\n")
+    args = parse_yaml(parser)
 
     train_mlm(hparams=args)
     print()

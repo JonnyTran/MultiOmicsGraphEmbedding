@@ -4,10 +4,10 @@ from typing import List, Tuple, Dict, Any, Union
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import ClassificationLoss
 from torch import nn, Tensor
 
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.losses import ClassificationLoss
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -195,8 +195,6 @@ class LATTELinkPred(LinkPredTrainer):
 
         if len(h_out) < len(inputs["global_node_index"].keys()):
             h_out = {**h_out, **self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])}
-
-        print(h_out)
 
         embeddings, aux_loss, _ = self.embedder.forward(h_out,
                                                         edge_index_dict=inputs["edge_index_dict"],

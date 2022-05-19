@@ -1,7 +1,10 @@
 import logging
+import os
 import random
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
+
+import yaml
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -14,7 +17,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.model.PyG.link_pred import LATTELinkPred
-from run.utils import load_link_dataset
+from run.load_data import load_link_dataset
 
 
 def train(hparams):
@@ -32,13 +35,12 @@ def train(hparams):
     wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
 
     trainer = Trainer(
-        gpus=random.sample([0, 1, 2, 3], NUM_GPUS),
+        gpus=random.sample(range(4), NUM_GPUS),
         distributed_backend='ddp' if NUM_GPUS > 1 else None,
         auto_lr_find=False,
         max_epochs=MAX_EPOCHS,
         callbacks=[EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01, strict=False)],
         logger=wandb_logger,
-        # regularizers=regularizers,
         weights_summary='top',
         amp_level='O1' if USE_AMP else None,
         precision=16 if USE_AMP else 32
@@ -46,6 +48,21 @@ def train(hparams):
 
     trainer.fit(model)
     trainer.test(model)
+
+
+def parse_yaml(parser: ArgumentParser) -> Namespace:
+    parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
+    args = parser.parse_args()
+    # yaml priority is higher than args
+    if isinstance(args.config, str) and os.path.exists(args.config):
+        opt = yaml.load(open(args.config), Loader=yaml.FullLoader)
+        args_dict = args.__dict__
+        args_dict.update(opt)
+        args = Namespace(**args_dict)
+        print("\n", args, end="\n\n\n")
+
+    return args
+
 
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -70,5 +87,6 @@ if __name__ == "__main__":
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--weight_decay', type=float, default=1e-2)
 
-    args = parser.parse_args()
+    args = parse_yaml(parser)
+
     train(args)

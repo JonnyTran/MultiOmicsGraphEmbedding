@@ -2,6 +2,8 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 
+from run.latte_link import parse_yaml
+
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 
@@ -102,5 +104,5 @@ if __name__ == "__main__":
     parser.add_argument('--num_gpus', type=int, default=1)
 
     # add all the available options to the trainer
-    args = parser.parse_args()
+    args = parse_yaml(parser)
     train(args)
