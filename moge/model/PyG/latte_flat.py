@@ -10,10 +10,6 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
-from torch import nn as nn, Tensor
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-
 from moge.dataset import HeteroNodeClfDataset
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
@@ -22,6 +18,9 @@ from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
+from torch import nn as nn, Tensor
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -279,7 +278,8 @@ class LATTE(nn.Module):
         layers = []
         for l in range(n_layers):
             is_last_layer = l + 1 == n_layers
-            is_output_layer = hparams.nb_cls_dense_size < 0
+            is_output_layer = False if not hasattr(hparams,
+                                                   'nb_cls_dense_size') or hparams.nb_cls_dense_size < 0 else True
 
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
                                                  order=layer_t_orders[l],  # Select only up to t-order

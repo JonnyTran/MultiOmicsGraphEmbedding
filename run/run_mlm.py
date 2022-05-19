@@ -4,14 +4,13 @@ import os.path
 import traceback
 from argparse import Namespace
 
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import EarlyStopping
-from transformers import BertConfig
-
 from moge.dataset.sequences import MaskedLMDataset
 from moge.model.transformers.mlm import BertMLM
-from run.latte_link import parse_yaml
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import EarlyStopping
 from run.load_data import load_link_dataset
+from run.utils import parse_yaml
+from transformers import BertConfig
 
 
 def train_mlm(hparams: Namespace):

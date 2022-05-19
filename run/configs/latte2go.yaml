@@ -1,0 +1,39 @@
+dataset: "rna_ppi_go"
+root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
+
+
+#load_path: "models/bert_mlm_Protein"
+save_path: "models/latte2go"
+
+bert_config:
+  MicroRNA: "models/bert_mlm_MicroRNA/"
+  LncRNA: "models/bert_mlm_LncRNA/"
+  MessengerRNA: "models/bert_mlm_MessengerRNA/"
+  Protein: "models/bert_mlm_Protein/"
+  GO_term: "models/bert_mlm_GO_term/"
+
+max_length:
+  MicroRNA: 600
+  LncRNA: 1700
+  MessengerRNA: 1500
+  Protein: 1200
+  GO_term: 150
+
+head_node_type: "Protein"
+embedding_dim: 128
+layer_pooling: "last"
+n_layers: 2
+t_order: 1
+
+attn_heads: 4
+attn_activation: "LeakyReLU"
+attn_dropout: 0.2
+
+batchnorm: false
+layernorm: true
+activation: "relu"
+dropout: 0.2
+input_dropout: false
+
+batch_size: 200
+lr: 0.001

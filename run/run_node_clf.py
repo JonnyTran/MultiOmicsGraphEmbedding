@@ -3,7 +3,7 @@ import random
 import sys
 from argparse import ArgumentParser, Namespace
 
-from run.latte_link import parse_yaml
+from run.utils import parse_yaml
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)

@@ -2,8 +2,6 @@ import logging
 import sys
 from argparse import ArgumentParser, Namespace
 
-from run.latte_link import parse_yaml
-
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 
@@ -16,7 +14,8 @@ from pytorch_lightning.callbacks import EarlyStopping
 from moge.model.dgl.graph_clf import LATTEGraphClassifier
 from pytorch_lightning.loggers import WandbLogger
 
-from run.utils import load_graph_dataset
+from run.utils import load_graph_dataset, parse_yaml
+
 
 def train(hparams):
     EMBEDDING_DIM = 128

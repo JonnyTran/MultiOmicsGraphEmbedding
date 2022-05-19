@@ -4,7 +4,7 @@ from argparse import ArgumentParser, Namespace
 
 # logger = logging.getLogger("wandb")
 # logger.setLevel(logging.INFO)
-from run.latte_link import parse_yaml
+from run.utils import parse_yaml
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
