@@ -2,9 +2,11 @@ from argparse import Namespace
 
 import pytorch_lightning as pl
 from fairscale.nn import auto_wrap
-from moge.dataset.sequences import MaskedLMDataset
 from torch import Tensor
-from transformers import BertForMaskedLM, AdamW, BertConfig
+from torch.optim import AdamW
+from transformers import BertForMaskedLM, BertConfig
+
+from moge.dataset.sequences import MaskedLMDataset
 
 
 class BertMLM(pl.LightningModule):

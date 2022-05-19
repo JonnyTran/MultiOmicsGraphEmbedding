@@ -3,6 +3,7 @@ root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 
 node_type: "GO_term"
 model: "dmis-lab/biobert-base-cased-v1.2"
+load_path: "models/bert_mlm_GO_term"
 save_path: "models/bert_mlm_GO_term"
 
 num_hidden_layers: 2
@@ -15,5 +16,4 @@ gradient_checkpointing: true
 
 max_length: 150
 batch_size: 425
-max_epochs: 500
 lr: 0.00001

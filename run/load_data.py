@@ -6,22 +6,23 @@ from typing import Union
 
 import dgl
 import dill
-import moge
-import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
 import torch
 from cogdl.datasets.gtn_data import GTNDataset
-from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
-from moge.dataset.dgl.graph_generator import DGLGraphSampler
-from moge.dataset.sequences import SequenceTokenizers
-from moge.model.dgl.NARS.data import load_acm, load_mag
-from moge.model.utils import preprocess_input
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
 from openomics.database.ontology import GeneOntology
 from torch_geometric.datasets import AMiner
+
+import moge
+import moge.dataset.PyG.triplet_generator
+from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
+from moge.dataset.dgl.graph_generator import DGLGraphSampler
+from moge.dataset.sequences import SequenceTokenizers
+from moge.model.dgl.NARS.data import load_acm, load_mag
+from moge.model.utils import preprocess_input
 
 
 def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler], path: str, skip_ntype: str = None,
@@ -195,20 +196,20 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
         if isinstance(ogbl, PygLinkPropPredDataset) and not hasattr(ogbl[0], "edge_index_dict") \
                 and not hasattr(ogbl[0], "edge_reltype"):
 
-            dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl,
-                                                                                  neighbor_sizes=[20, 15],
-                                                                                  edge_dir=False,
-                                                                                  add_reverse_metapaths=hparams.use_reverse)
+            dataset = moge.dataset.PyG.triplet_generator.BidirectionalGenerator(ogbl,
+                                                                                neighbor_sizes=[20, 15],
+                                                                                edge_dir=False,
+                                                                                add_reverse_metapaths=hparams.use_reverse)
 
         else:
 
-            dataset = moge.generator.PyG.triplet_generator.BidirectionalGenerator(ogbl, edge_dir=True,
-                                                                                  neighbor_sizes=[
-                                                                                      hparams.n_neighbors_1],
-                                                                                  negative_sampling_size=hparams.neg_sampling_ratio,
-                                                                                  test_negative_sampling_size=500,
-                                                                                  head_node_type=None,
-                                                                                  add_reverse_metapaths=hparams.use_reverse)
+            dataset = moge.dataset.PyG.triplet_generator.BidirectionalGenerator(ogbl, edge_dir=True,
+                                                                                neighbor_sizes=[
+                                                                                    hparams.n_neighbors_1],
+                                                                                negative_sampling_size=hparams.neg_sampling_ratio,
+                                                                                test_negative_sampling_size=500,
+                                                                                head_node_type=None,
+                                                                                add_reverse_metapaths=hparams.use_reverse)
 
         logging.info(
             f"ntypes: {dataset.node_types}, head_nt: {dataset.head_node_type}, metapaths: {dataset.metapaths}")

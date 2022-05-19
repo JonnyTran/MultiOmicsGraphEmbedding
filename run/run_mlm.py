@@ -5,12 +5,13 @@ import traceback
 from argparse import Namespace
 
 import yaml
-from moge.dataset.sequences import MaskedLMDataset
-from moge.model.transformers.mlm import BertMLM
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
-from run.load_data import load_link_dataset
 from transformers import BertConfig
+
+from moge.dataset.sequences import MaskedLMDataset
+from moge.model.transformers.mlm import BertMLM
+from run.load_data import load_link_dataset
 
 
 def train_mlm(hparams: Namespace):
@@ -18,10 +19,11 @@ def train_mlm(hparams: Namespace):
 
     node_type = hparams.node_type
 
+    tokenizer = network_dataset.seq_tokenizer[node_type]
     mlm_dataset = MaskedLMDataset(data=network_dataset.G[node_type]["sequence"],
-                                  tokenizer=network_dataset.seq_tokenizer[node_type],
+                                  tokenizer=tokenizer,
                                   mlm_probability=hparams.mlm_probability,
-                                  max_len=hparams.max_length)
+                                  max_length=hparams.max_length)
 
     if hasattr(hparams, 'load_path') and isinstance(hparams.load_path, str) and os.path.exists(hparams.load_path):
         bert_config = hparams.load_path
@@ -43,7 +45,8 @@ def train_mlm(hparams: Namespace):
     # os.environ["CUDA_LAUNCH_BLOCKING"] = 1
 
     trainer = Trainer(
-        gpus=[hparams.gpu] if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int) else hparams.num_gpus,
+        gpus=[hparams.gpu] if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int) \
+            else hparams.num_gpus,
         auto_select_gpus=True,
         strategy="fsdp" if isinstance(hparams.num_gpus, int) and hparams.num_gpus > 1 else None,
         # auto_lr_find=True,
@@ -53,7 +56,8 @@ def train_mlm(hparams: Namespace):
             EarlyStopping(monitor='loss', patience=5, min_delta=0.01, strict=False),
         ],
         limit_val_batches=0,
-        max_time=datetime.timedelta(hours=hparams.hours) if hasattr(hparams, "hours") else None,
+        max_time=datetime.timedelta(hours=hparams.hours) if hasattr(hparams, "hours") and isinstance(hparams.hours, (
+        int, float)) else None,
         weights_summary='top',
         precision=16
     )
@@ -66,7 +70,8 @@ def train_mlm(hparams: Namespace):
         traceback.print_exc()
 
     finally:
-        if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 10:
+        if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 10 and hparams.save_path is not None:
+            print(f"Saving BERT model at {hparams.save_path}")
             model.bert.save_pretrained(hparams.save_path)
 
 
@@ -92,7 +97,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--mlm_probability', type=float, default=0.15)
     parser.add_argument('-l', '--max_length', type=int, default=150)
-    parser.add_argument('--max_epochs', type=int, default=500)
+    parser.add_argument('--max_epochs', type=int, default=1000)
     parser.add_argument('-b', '--batch_size', type=int, default=5)
     parser.add_argument('--lr', type=float, default=1e-5)
 

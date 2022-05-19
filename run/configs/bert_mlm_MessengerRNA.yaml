@@ -3,6 +3,7 @@ root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 
 node_type: "MessengerRNA"
 model: "armheb/DNA_bert_6"
+load_path: "models/bert_mlm_MessengerRNA"
 save_path: "models/bert_mlm_MessengerRNA"
 
 num_hidden_layers: 2
@@ -14,6 +15,5 @@ num_labels: 128
 gradient_checkpointing: true
 
 max_length: 1500
-batch_size: 425
-max_epochs: 500
+batch_size: 250
 lr: 0.00001

@@ -58,9 +58,10 @@ class SequenceTokenizers():
 
 
 class MaskedLMDataset(Dataset):
-    def __init__(self, data: os.PathLike, tokenizer: BertTokenizer, mlm_probability=0.15, max_len=None):
+    def __init__(self, data: Union[os.PathLike, pd.Series],
+                 tokenizer: BertTokenizer, mlm_probability=0.15, max_length=None):
         self.tokenizer = tokenizer
-        self.max_len = max_len
+        self.max_len = max_length
         self.mlm_probability = mlm_probability
 
         if isinstance(data, str):
@@ -68,7 +69,12 @@ class MaskedLMDataset(Dataset):
         elif isinstance(data, list):
             self.sequences = data
         elif isinstance(data, pd.Series):
-            self.sequences = data.tolist()
+            if not any(" " in seq for seq in data[:10]):
+                word_length = pd.Series(tokenizer.vocab.keys()).str.len().mode().item()
+                self.sequences = data.map(lambda seq: k_mers(seq, k=word_length)).tolist()
+                print(self.sequences[:4])
+            else:
+                self.sequences = data.tolist()
 
         self.ids = self.encode_lines(self.sequences)
 
