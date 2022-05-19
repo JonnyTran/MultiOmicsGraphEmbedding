@@ -4,6 +4,7 @@ from typing import Dict, Optional, Union
 
 import pandas as pd
 import torch
+from moge.model.transformers import DNATokenizer
 from torch.utils.data import DataLoader, Dataset
 from torch_geometric.data import HeteroData
 from transformers import AutoTokenizer, BatchEncoding
@@ -11,8 +12,6 @@ from transformers import (
     BertTokenizer,
     DataCollatorForLanguageModeling
 )
-
-from moge.model.transformers import DNATokenizer
 
 
 class SequenceTokenizers():
@@ -45,8 +44,10 @@ class SequenceTokenizers():
     def encode_sequences(self, batch: HeteroData, ntype: str, max_length: Optional[int] = None, **kwargs) -> \
             BatchEncoding:
         seqs = batch[ntype].sequence.iloc[batch[ntype].nid]
-        match_regex = "." * self.word_lengths[ntype]
-        seqs = seqs.str.findall(match_regex).str.join(" ")
+
+        if not any(" " in seq for seq in seqs):
+            match_regex = "." * self.word_lengths[ntype]
+            seqs = seqs.str.findall(match_regex).str.join(" ")
 
         if max_length is None and self.max_length is not None:
             max_length = self.max_length[ntype]

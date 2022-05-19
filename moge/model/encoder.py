@@ -1,15 +1,15 @@
+import os.path
 from argparse import Namespace
 from typing import Dict
 
 import torch
 import torch.nn.functional as F
-from torch import nn, Tensor
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from transformers import BertConfig, BertForSequenceClassification
-
 from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.utils import tensor_sizes
+from torch import nn, Tensor
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from transformers import BertConfig, BertForSequenceClassification
 
 
 class HeteroNodeEncoder(nn.Module):
@@ -38,8 +38,7 @@ class HeteroNodeEncoder(nn.Module):
         if hparams.batchnorm:
             self.batchnorm: Dict[str, nn.BatchNorm1d] = nn.ModuleDict({
                 ntype: nn.BatchNorm1d(input_size) \
-                for ntype, input_size in dataset.node_attr_shape.items() \
-                })
+                for ntype, input_size in dataset.node_attr_shape.items()})
 
         if hasattr(hparams, "dropout") and hparams.dropout:
             self.dropout = hparams.dropout
@@ -105,7 +104,7 @@ class HeteroNodeEncoder(nn.Module):
 class HeteroSequenceEncoder(nn.Module):
     def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset) -> None:
         super().__init__()
-        seq_encoders = {}
+        seq_encoders: Dict[str, BertForSequenceClassification] = {}
 
         for ntype, tokenizer in dataset.seq_tokenizer.items():
             max_position_embeddings = dataset.seq_tokenizer.max_length[ntype]
@@ -113,11 +112,25 @@ class HeteroSequenceEncoder(nn.Module):
                 max_position_embeddings = 512
 
             if hasattr(hparams, "bert_config") and ntype in hparams.bert_config:
-                bert_config = hparams.bert_config[ntype]
+                if isinstance(hparams.bert_config, BertConfig):
+                    bert_config = hparams.bert_config[ntype]
+                    seq_encoders[ntype] = BertForSequenceClassification(bert_config)
+
+                    print("BertForSequenceClassification custom BertConfig", ntype)
+
+                elif isinstance(hparams.bert_config[ntype], str) and os.path.exists(hparams.bert_config[ntype]):
+                    seq_encoders[ntype] = BertForSequenceClassification.from_pretrained(
+                        hparams.bert_config[ntype],
+                        num_labels=hparams.embedding_dim,
+                        classifier_dropout=hparams.dropout
+                    )
+
+                    print("BertForSequenceClassification pretrained", ntype)
+                    print(seq_encoders[ntype].config)
             else:
                 bert_config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=128,
                                          max_position_embeddings=max_position_embeddings,
-                                         num_hidden_layers=2, num_attention_heads=4, intermediate_size=128,
+                                         num_hidden_layers=2, num_attention_heads=4, intermediate_size=40,
                                          hidden_dropout_prob=0.1,
                                          pad_token_id=tokenizer.vocab["[PAD]"],
                                          num_labels=hparams.embedding_dim,
@@ -125,8 +138,8 @@ class HeteroSequenceEncoder(nn.Module):
                                          use_cache=False,
                                          classifier_dropout=0.1)
 
-            seq_encoders[ntype] = BertForSequenceClassification(bert_config)
-            print("BertForSequenceClassification", ntype)
+                seq_encoders[ntype] = BertForSequenceClassification(bert_config)
+                print("BertForSequenceClassification default BertConfig", ntype)
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
