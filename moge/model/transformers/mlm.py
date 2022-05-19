@@ -43,6 +43,7 @@ class BertMLM(pl.LightningModule):
 
         outputs = self.forward(input_ids=input_ids, labels=labels)
         loss = outputs[0]
+        self.log("loss", loss, on_step=True)
 
         return {"loss": loss}
 

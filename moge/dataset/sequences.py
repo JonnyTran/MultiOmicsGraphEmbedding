@@ -71,10 +71,12 @@ class MaskedLMDataset(Dataset):
         elif isinstance(data, pd.Series):
             if not any(" " in seq for seq in data[:10]):
                 word_length = pd.Series(tokenizer.vocab.keys()).str.len().mode().item()
-                self.sequences = data.map(lambda seq: k_mers(seq, k=word_length)).tolist()
-                print(self.sequences[:4])
-            else:
-                self.sequences = data.tolist()
+
+                # data = data.map(lambda seq: k_mers(seq, k=word_length))
+                data = data.str.findall("." * word_length).str.join(" ")
+                print(data.str.len().describe())
+
+            self.sequences = data.tolist()
 
         self.ids = self.encode_lines(self.sequences)
 
