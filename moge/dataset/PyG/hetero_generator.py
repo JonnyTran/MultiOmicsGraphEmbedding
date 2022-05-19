@@ -1,3 +1,4 @@
+import traceback
 from pprint import pprint
 from typing import List, Tuple, Union, Dict
 
@@ -11,6 +12,7 @@ from moge.dataset.sequences import SequenceTokenizers
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index, edge_index_to_adj
 from moge.model.PyG.utils import num_edges
+from moge.model.utils import tensor_sizes
 from openomics.database.ontology import GeneOntology
 from torch import Tensor
 from torch.utils.data import DataLoader
@@ -494,12 +496,26 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 else self.triples_pos_adj[metapath[:-1] + (self.go_ntype,)]
 
             head_neg_nodes = global_node_index[head_type]
-            head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
+            try:
+                head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
+            except Exception as e:
+                print(metapath, "edge_index", edge_index.shape)
+                print(tensor_sizes({"head_neg_nodes": head_neg_nodes, f"edge_index[{tail_type}]": edge_index[1]}))
+                print("edge_index", edge_index.max(1).values)
+                traceback.print_exc()
+
             head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=sampling_size,
                                                      replacement=True)
 
             tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype]
-            tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
+            try:
+                tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
+            except Exception as e:
+                print(metapath, "edge_index", edge_index.shape)
+                print(tensor_sizes({f"edge_index[{head_type}]": edge_index[0], "tail_neg_nodes": tail_neg_nodes}))
+                print("edge_index", edge_index.max(1).values)
+                traceback.print_exc()
+
             for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
                 # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
                 if go_type != tail_type: continue

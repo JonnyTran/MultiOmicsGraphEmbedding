@@ -7,17 +7,16 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_geometric.transforms as T
-from openomics import MultiOmics
-from openomics.utils.df import concat_uniques
-from pandas import Series
-from torch import Tensor
-from torch_geometric.data import HeteroData
-
 from moge.dataset.utils import get_edge_index
 from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 from moge.network.utils import filter_multilabel
+from openomics import MultiOmics
+from openomics.utils.df import concat_uniques
+from pandas import Series
+from torch import Tensor
+from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -346,8 +345,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     for ntype, ntype_nids in self.nodes.items()}
 
         for ntype in self.node_types:
-            if hetero[ntype].num_nodes is None:
-                hetero[ntype].num_nodes = len(self.nodes[ntype])
+            hetero[ntype].num_nodes = len(self.nodes[ntype])
 
             if ntype in train_idx:
                 mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)

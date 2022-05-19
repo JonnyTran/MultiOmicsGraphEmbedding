@@ -14,7 +14,6 @@ sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 from pytorch_lightning.trainer import Trainer
 
 from pytorch_lightning.callbacks import EarlyStopping
-
 from pytorch_lightning.loggers import WandbLogger
 
 from moge.model.PyG.link_pred import LATTELinkPred
@@ -22,8 +21,6 @@ from run.load_data import load_link_dataset
 
 
 def train(hparams):
-    USE_AMP = True  # True if NUM_GPUS > 1 else False
-
     if hparams.dataset == 'rna_ppi_go':
         assert hasattr(hparams, "max_length")
         assert hasattr(hparams, "bert_config")
@@ -42,7 +39,7 @@ def train(hparams):
 
     model = LATTELinkPred(hparams, dataset, metrics=metrics)
 
-    if hparams.no_wandb:
+    if hasattr(hparams, "no_wandb") and hparams.no_wandb:
         wandb_logger = None
     else:
         wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
@@ -52,14 +49,18 @@ def train(hparams):
             else hparams.num_gpus,
         strategy="fsdp" if isinstance(hparams.num_gpus, int) and hparams.num_gpus > 1 else None,
         # auto_lr_find=False,
+        auto_scale_batch_size='binsearch',
         max_epochs=hparams.max_epochs,
         callbacks=callbacks,
         logger=wandb_logger,
         weights_summary='top',
         max_time=datetime.timedelta(hours=hparams.hours) \
             if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
-        precision=16 if USE_AMP else 32
+        precision=16
     )
+
+    if hparams.num_gpus == 1:
+        trainer.tune(model)
 
     try:
         trainer.fit(model)
@@ -73,6 +74,9 @@ def train(hparams):
         if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 10 and \
                 hasattr(hparams, "save_path") and hparams.save_path is not None:
             torch.save(model, hparams.save_path + ".pt")
+            print(f"Saved model to {hparams.save_path}.pt")
+
+    print()
 
 
 if __name__ == "__main__":
@@ -96,14 +100,14 @@ if __name__ == "__main__":
     parser.add_argument('--head_node_type', type=str, default=None)  # Ignore but needed
 
     parser.add_argument('--use_reverse', type=bool, default=True)
-    parser.add_argument('--no_wandb', type=bool, action='store_true')
+    parser.add_argument('--no_wandb', action='store_true')
 
     parser.add_argument('--max_epochs', type=int, default=2000)
     parser.add_argument('--loss_type', type=str, default="CONTRASTIVE_LOSS")
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--weight_decay', type=float, default=1e-4)
 
-    parser.add_argument('--num_gpus', type=int, default=1)
+    parser.add_argument('-n', '--num_gpus', type=int, default=1)
     parser.add_argument('--gpu', type=int, default=None)
     parser.add_argument('--hours', type=float, default=None)
 

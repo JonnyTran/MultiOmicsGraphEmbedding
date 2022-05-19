@@ -15,6 +15,7 @@ def parse_yaml(parser: ArgumentParser) -> Namespace:
         args_dict.update(opt)
         args = Namespace(**args_dict)
 
+        print("Configs:")
         pprint(args.__dict__)
         print("\n\n\n")
 

@@ -396,11 +396,11 @@ class LinkPredTrainer(NodeClfTrainer):
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=self.hparams.batch_size)
+                                             batch_size=max(self.hparams.batch_size, 4))
 
     def valtrain_dataloader(self):
         return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size)
+                                                batch_size=max(self.hparams.batch_size, 4))
 
     def val_dataloader(self):
         if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
@@ -408,7 +408,7 @@ class LinkPredTrainer(NodeClfTrainer):
         else:
             batch_size = self.hparams.batch_size
         return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=batch_size)
+                                             batch_size=max(batch_size, 4))
 
     def test_dataloader(self):
         if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
@@ -416,7 +416,7 @@ class LinkPredTrainer(NodeClfTrainer):
         else:
             batch_size = self.hparams.batch_size
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=batch_size)
+                                            batch_size=max(batch_size, 4))
 
 
 class GraphClfTrainer(LightningModule):
