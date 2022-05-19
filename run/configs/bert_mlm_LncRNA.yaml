@@ -3,7 +3,7 @@ root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 
 node_type: "LncRNA"
 model: "armheb/DNA_bert_6"
-#load_path: "models/bert_mlm_LncRNA"
+load_path: "models/bert_mlm_LncRNA"
 save_path: "models/bert_mlm_LncRNA"
 
 num_hidden_layers: 2
@@ -13,7 +13,8 @@ intermediate_size: 40
 hidden_size: 128
 num_labels: 128
 gradient_checkpointing: true
+position_embedding_type: none
 
 max_length: 1700
-batch_size: 425
+batch_size: 120
 lr: 0.00001

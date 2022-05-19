@@ -13,7 +13,8 @@ intermediate_size: 40
 hidden_size: 128
 num_labels: 128
 gradient_checkpointing: true
+position_embedding_type: none
 
 max_length: 1500
-batch_size: 250
+batch_size: 100
 lr: 0.00001

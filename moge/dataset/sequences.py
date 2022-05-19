@@ -74,7 +74,7 @@ class MaskedLMDataset(Dataset):
 
                 # data = data.map(lambda seq: k_mers(seq, k=word_length))
                 data = data.str.findall("." * word_length).str.join(" ")
-                print(data.str.len().describe())
+                print("\n Seq length", data.str.len().describe())
 
             self.sequences = data.tolist()
 

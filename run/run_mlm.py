@@ -30,14 +30,15 @@ def train_mlm(hparams: Namespace):
 
     else:
         bert_config = BertConfig.from_pretrained(hparams.model)
+        print("\nSet Bert Config")
         for key in bert_config.__dict__.keys():
-            if key in hparams and hparams.__dict__[key] is not None:
+            if key in hparams:
                 bert_config.__dict__[key] = hparams.__dict__[key]
                 print(key, hparams.__dict__[key])
 
         bert_config.gradient_checkpointing = True
         bert_config.max_position_embeddings = hparams.max_length
-        print(bert_config)
+        print("\n", bert_config)
 
     model = BertMLM(bert_config, dataset=mlm_dataset, hparams=hparams)
 
