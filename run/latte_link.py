@@ -26,8 +26,10 @@ def train(hparams):
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
                    "MFO": ["ogbl-biokg", 'precision', 'recall'], }
-        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=50, min_delta=0.01, strict=False)]
+        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=10, min_delta=0.01, strict=False)]
 
+        if hasattr(hparams, "sweep") and hparams.sweep:
+            callbacks.append(EarlyStopping(monitor='val_loss', patience=20, min_delta=0.01, strict=False))
     else:
         metrics = [hparams.dataset]
         callbacks = [EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01, strict=False)]
@@ -35,6 +37,8 @@ def train(hparams):
     # Load dataset
     dataset = load_link_dataset(hparams.dataset, hparams=hparams, path=hparams.root_path)
     hparams.n_classes = dataset.n_classes
+
+    hparams.batch_size = adjust_batch_size(hparams)
 
     # Resume from model checkpoint
     if hasattr(hparams, "load_path") and hparams.load_path:
@@ -86,6 +90,20 @@ def train(hparams):
     print()
 
 
+def adjust_batch_size(hparams):
+    batch_size = hparams.batch_size
+    if hparams.n_neighbors > 128:
+        batch_size = batch_size // (hparams.n_neighbors // 128)
+    if hparams.embedding_dim > 256:
+        batch_size = batch_size // (hparams.embedding_dim / 256)
+    if hparams.n_layers > 2:
+        batch_size = batch_size // 2
+
+    print(f"Adjusted batch_size to", batch_size)
+
+    return int(batch_size)
+
+
 if __name__ == "__main__":
     parser = ArgumentParser()
 
@@ -121,6 +139,7 @@ if __name__ == "__main__":
 
     parser.add_argument('-n', '--num_gpus', type=int, default=1)
     parser.add_argument('--gpu', type=int, default=None)
+    parser.add_argument('--sweep', type=bool, default=False)
     parser.add_argument('--hours', type=float, default=None)
 
     parser.add_argument('--train_date', type=str, default='2018-01-01')
