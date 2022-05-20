@@ -35,6 +35,6 @@ activation: "relu"
 dropout: 0.2
 input_dropout: false
 
-batch_size: 65536
+batch_size: 16384
 lr: 0.001
 weight_decay: 0
