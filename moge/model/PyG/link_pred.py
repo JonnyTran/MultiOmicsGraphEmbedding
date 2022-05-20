@@ -3,7 +3,6 @@ from pprint import pprint
 from typing import List, Tuple, Dict, Any, Union
 
 import torch
-import torch.nn.functional as F
 from fairscale.nn import auto_wrap
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
@@ -209,7 +208,7 @@ class LATTELinkPred(LinkPredTrainer):
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
         if return_score:
-            edges_pred = {pos_neg: {m: F.sigmoid(edge_weight) for m, edge_weight in edge_dict.items()} \
+            edges_pred = {pos_neg: {m: torch.sigmoid(edge_weight) for m, edge_weight in edge_dict.items()} \
                           for pos_neg, edge_dict in edges_pred.items()}
 
         return embeddings, aux_loss, edges_pred
@@ -218,7 +217,7 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=F.sigmoid)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
         loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
@@ -235,7 +234,7 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=F.sigmoid)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
         loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
@@ -249,14 +248,14 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=F.sigmoid)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
         loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
         self.update_link_pred_metrics(self.test_metrics, edge_pred_dict, e_pos, e_neg)
         # np.set_printoptions(precision=3, suppress=True, linewidth=300)
-        # print("\npos", F.sigmoid(e_pos[:20]).detach().cpu().numpy(),
-        #       "\nneg", F.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
+        # print("\npos", torch.sigmoid(e_pos[:20]).detach().cpu().numpy(),
+        #       "\nneg", torch.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
         self.log("test_loss", loss)
         return loss
@@ -271,8 +270,8 @@ class LATTELinkPred(LinkPredTrainer):
 
                 neg_batch = torch.concat([edge_pred_dict["head_batch"][metapath],
                                           edge_pred_dict["tail_batch"][metapath]], dim=1)
-                metrics[go_type].update_metrics(F.sigmoid(edge_pred_dict["edge_pos"][metapath].detach()),
-                                                F.sigmoid(neg_batch.detach()),
+                metrics[go_type].update_metrics(torch.sigmoid(edge_pred_dict["edge_pos"][metapath].detach()),
+                                                torch.sigmoid(neg_batch.detach()),
                                                 weights=None, subset=["ogbl-biokg"])
 
                 self.update_pr_metrics(e_pos=edge_pred_dict["edge_pos"][metapath],
@@ -280,7 +279,7 @@ class LATTELinkPred(LinkPredTrainer):
                                        metrics=metrics[go_type], subset=["precision", "recall"])
 
         else:
-            metrics.update_metrics(F.sigmoid(e_pos.detach()), F.sigmoid(e_neg.detach()),
+            metrics.update_metrics(torch.sigmoid(e_pos.detach()), torch.sigmoid(e_neg.detach()),
                                    weights=None, subset=["ogbl-biokg"])
             self.update_pr_metrics(e_pos=e_pos, edge_pred=edge_pred_dict["edge_neg"],
                                    metrics=metrics, subset=["precision", "recall"])
@@ -294,7 +293,7 @@ class LATTELinkPred(LinkPredTrainer):
 
         e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]  # randomly select |e_neg| edges
 
-        y_pred = F.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
+        y_pred = torch.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
         y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
 
         metrics.update_metrics(y_pred, y_true, weights=None, subset=subset)

@@ -18,7 +18,7 @@ max_length:
   Protein: 1200
   GO_term: 150
 
-head_node_type: "Protein"
+head_node_type: "MessengerRNA"
 embedding_dim: 128
 layer_pooling: "last"
 n_layers: 2
