@@ -8,6 +8,7 @@ import dgl
 import dill
 import torch
 import yaml
+
 from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler
 from moge.model.utils import preprocess_input
 
@@ -68,3 +69,24 @@ def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
             raise Exception(f"Cannot recognize type of {dataset.G}")
 
         print(f"Loaded embeddings for {ntype}: {ndata.shape}")
+
+
+def adjust_batch_size(hparams):
+    batch_size = hparams.batch_size
+    if hparams.n_neighbors > 256:
+        batch_size = batch_size // (hparams.n_neighbors // 256)
+    if hparams.embedding_dim > 256:
+        batch_size = batch_size // (hparams.embedding_dim / 256)
+    if hparams.n_layers > 2:
+        batch_size = batch_size // 2
+
+    print(f"Adjusted batch_size to", batch_size)
+
+    return int(batch_size)
+
+
+def select_empty_gpu():
+    gpu_mem_free = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+    best_gpu = max(gpu_mem_free, key=gpu_mem_free.get)
+    print("gpu_mem_free", gpu_mem_free, "selected GPU", best_gpu)
+    return best_gpu

@@ -4,9 +4,7 @@ import sys
 import traceback
 from argparse import ArgumentParser
 
-import torch
-
-from run.utils import parse_yaml
+from run.utils import parse_yaml, adjust_batch_size, select_empty_gpu
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -59,9 +57,7 @@ def train(hparams):
     if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
         GPUS = [hparams.gpu]
     elif hparams.num_gpus == 1:
-        gpu_mem_free = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
-        best_gpu = max(gpu_mem_free, key=gpu_mem_free.get)
-        print("gpu_mem_free", gpu_mem_free, "selected GPU", best_gpu)
+        best_gpu = select_empty_gpu()
         GPUS = [best_gpu]
     else:
         GPUS = hparams.num_gpus
@@ -99,20 +95,6 @@ def train(hparams):
             print(f"Saved model checkpoint to {hparams.save_path}")
 
     print()
-
-
-def adjust_batch_size(hparams):
-    batch_size = hparams.batch_size
-    if hparams.n_neighbors > 256:
-        batch_size = batch_size // (hparams.n_neighbors // 256)
-    if hparams.embedding_dim > 256:
-        batch_size = batch_size // (hparams.embedding_dim / 256)
-    if hparams.n_layers > 2:
-        batch_size = batch_size // 2
-
-    print(f"Adjusted batch_size to", batch_size)
-
-    return int(batch_size)
 
 
 if __name__ == "__main__":
