@@ -5,11 +5,12 @@
 #SBATCH -p gpu-a100                   # Queue name
 #SBATCH -N 1                             # Total number of nodes requested (56 cores/node)
 #SBATCH -n 1                             # Total number of mpi tasks requested
+#SBATCH --cpus-per-task 32              # Number of CPUs each task
 #SBATCH -t 05:10:00                      # Run time (hh:mm:ss)
 
 cd ~/Projects/MultiOmicsGraphEmbedding
 ln -s ../Multiplex-Graph-Embedding/models models
 ln -s ../Multiplex-Graph-Embedding/data data
 
-wandb agent jonnytran/latte-link-pred/7pv7akst
+wandb agent jonnytran/latte-link-pred/7pv7akst & wandb agent jonnytran/latte-link-pred/7pv7akst && echo "done"
 exit
