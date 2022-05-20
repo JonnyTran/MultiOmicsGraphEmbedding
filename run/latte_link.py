@@ -4,6 +4,8 @@ import sys
 import traceback
 from argparse import ArgumentParser
 
+import torch
+
 from run.utils import parse_yaml
 
 logger = logging.getLogger("wandb")
@@ -26,10 +28,10 @@ def train(hparams):
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
                    "MFO": ["ogbl-biokg", 'precision', 'recall'], }
-        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=10, min_delta=0.01, strict=False)]
+        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=10, strict=False)]
 
         if hasattr(hparams, "sweep") and hparams.sweep:
-            callbacks.append(EarlyStopping(monitor='val_loss', patience=20, min_delta=0.01, strict=False))
+            callbacks.append(EarlyStopping(monitor='val_loss', patience=5, strict=False))
     else:
         metrics = [hparams.dataset]
         callbacks = [EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01, strict=False)]
@@ -54,9 +56,18 @@ def train(hparams):
     logger.log_hyperparams(hparams)
 
     # Trainer
+    if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int):
+        GPUS = [hparams.gpu]
+    elif hparams.num_gpus == 1:
+        gpu_mem_free = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+        best_gpu = max(gpu_mem_free, key=gpu_mem_free.get)
+        print("gpu_mem_free", gpu_mem_free, "selected GPU", best_gpu)
+        GPUS = [best_gpu]
+    else:
+        GPUS = hparams.num_gpus
+
     trainer = Trainer(
-        gpus=[hparams.gpu] if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int) \
-            else hparams.num_gpus,
+        gpus=GPUS,
         strategy="fsdp" if isinstance(hparams.num_gpus, int) and hparams.num_gpus > 1 else None,
         enable_progress_bar=False,
         # auto_lr_find=False,

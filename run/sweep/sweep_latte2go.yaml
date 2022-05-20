@@ -19,9 +19,9 @@ parameters:
   attn_activation:
     values: [ "LeakyReLU" ]
   batchnorm:
-    values: [ True, False ]
+    values: [ True ]
   layernorm:
-    values: [ True, False ]
+    values: [ False ]
   dropout:
     max: 0.7
     min: 0.0

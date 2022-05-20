@@ -26,3 +26,4 @@ input_dropout: false
 batch_size: 32768
 max_epochs: 150
 sweep: true
+hours: 0.5
