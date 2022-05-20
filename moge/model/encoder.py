@@ -66,7 +66,7 @@ class HeteroNodeEncoder(nn.Module):
                     print("Initialized trainable embeddings: ", ntype)
                     module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                                       embedding_dim=embedding_dim,
-                                                      max_norm=1, norm_type=2,
+                                                      max_norm=2, norm_type=2,
                                                       scale_grad_by_freq=False,
                                                       sparse=False)
                 else:
@@ -112,11 +112,9 @@ class HeteroSequenceEncoder(nn.Module):
 
         for ntype, tokenizer in dataset.seq_tokenizer.items():
             max_position_embeddings = dataset.seq_tokenizer.max_length[ntype]
-            if max_position_embeddings is None:
-                max_position_embeddings = 512
 
             if hasattr(hparams, "bert_config") and ntype in hparams.bert_config:
-                if isinstance(hparams.bert_config, BertConfig):
+                if isinstance(hparams.bert_config[ntype], BertConfig):
                     bert_config = hparams.bert_config[ntype]
                     seq_encoders[ntype] = BertForSequenceClassification(bert_config)
 
@@ -175,8 +173,6 @@ class HeteroSequenceEncoder(nn.Module):
                                                        attention_mask=encoding["attention_mask"],
                                                        token_type_ids=encoding["token_type_ids"])
                 h_out[ntype] = out.logits
-
-        h_out = {ntype: F.relu(h_out[ntype]) for ntype in h_out}
 
         return h_out
 

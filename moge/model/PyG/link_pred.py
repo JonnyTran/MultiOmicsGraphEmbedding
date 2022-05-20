@@ -206,7 +206,7 @@ class LATTELinkPred(LinkPredTrainer):
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
         if return_score:
-            edges_pred = {pos_neg: {m: torch.sigmoid(edge_weight) for m, edge_weight in edge_dict.items()} \
+            edges_pred = {pos_neg: {metapath: torch.sigmoid(edge_logits) for metapath, edge_logits in edge_dict.items()} \
                           for pos_neg, edge_dict in edges_pred.items()}
 
         return embeddings, aux_loss, edges_pred
