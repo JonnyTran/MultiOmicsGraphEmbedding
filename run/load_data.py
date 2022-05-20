@@ -5,21 +5,22 @@ from argparse import Namespace
 from typing import Union
 
 import dgl
-import moge
-import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
 from cogdl.datasets.gtn_data import GTNDataset
-from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
-from moge.dataset.dgl.graph_generator import DGLGraphSampler
-from moge.dataset.sequences import SequenceTokenizers
-from moge.model.dgl.NARS.data import load_acm, load_mag
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
 from openomics.database.ontology import GeneOntology
-from run.utils import add_node_embeddings
 from torch_geometric.datasets import AMiner
+
+import moge
+import moge.dataset.PyG.triplet_generator
+from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
+from moge.dataset.dgl.graph_generator import DGLGraphSampler
+from moge.dataset.sequences import SequenceTokenizers
+from moge.model.dgl.NARS.data import load_acm, load_mag
+from run.utils import add_node_embeddings
 
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
@@ -195,7 +196,8 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
                                                             pred_metapaths=[],
                                                             head_node_type=hparams.head_node_type,
                                                             # neighbor_loader="NeighborLoader", neighbor_sizes=[32, 32],
-                                                            neighbor_loader="HGTLoader", neighbor_sizes=[128, 128],
+                                                            neighbor_loader="HGTLoader",
+                                                            neighbor_sizes=[hparams.n_neighbors] * hparams.n_layers,
                                                             seq_tokenizer=sequence_tokenizers)
 
         train_date = hparams.train_date

@@ -45,6 +45,7 @@ def train(hparams: Namespace):
     model = LATTENodeClf(hparams, dataset, metrics=METRICS)
 
     logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="ogb_nodepred")
+    logger.log_hyperparams(hparams)
 
     callbacks = []
     callbacks.append(EarlyStopping(monitor='val_moving_loss', patience=5,

@@ -5,14 +5,15 @@ from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable
 import numpy as np
 import pandas as pd
 import torch
-from moge.criterion.clustering import clustering_metrics
-from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
-from moge.model.metrics import Metrics
-from moge.model.utils import tensor_sizes, preprocess_input
 from pytorch_lightning import LightningModule
 from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
+
+from moge.criterion.clustering import clustering_metrics
+from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
+from moge.model.metrics import Metrics
+from moge.model.utils import tensor_sizes, preprocess_input
 
 
 class ClusteringEvaluator(LightningModule):
@@ -184,7 +185,7 @@ class NodeClfTrainer(ClusteringEvaluator):
             for subtype, metrics in self.train_metrics.items():
                 metrics.reset_metrics()
 
-        self.log_dict(metrics_dict, prog_bar=True, logger=True)
+        self.log_dict(metrics_dict, prog_bar=True)
 
         return None
 

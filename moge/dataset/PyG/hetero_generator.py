@@ -6,6 +6,12 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from openomics.database.ontology import GeneOntology
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -13,11 +19,6 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adj
 from moge.model.PyG.utils import num_edges
 from moge.model.utils import tensor_sizes
-from openomics.database.ontology import GeneOntology
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -173,7 +174,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if hasattr(batch, "sequence_dict") and hasattr(self, "seq_tokenizer"):
             X["sequences"] = {}
             for ntype in X["global_node_index"]:
-                if not hasattr(batch[ntype], "sequence"): continue
+                if not hasattr(batch[ntype], "sequence") or ntype not in self.seq_tokenizer.tokenizers: continue
                 X["sequences"][ntype] = self.seq_tokenizer.encode_sequences(batch, ntype=ntype, max_length=None)
 
         y_dict = {ntype: y for ntype, y in batch.y_dict.items() if y.size(0)}

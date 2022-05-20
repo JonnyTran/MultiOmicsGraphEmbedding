@@ -2,7 +2,7 @@ import datetime
 import logging
 import sys
 import traceback
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser
 
 from run.utils import parse_yaml
 
@@ -32,35 +32,42 @@ def train(hparams):
         metrics = [hparams.dataset]
         callbacks = [EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01, strict=False)]
 
+    # Load dataset
     dataset = load_link_dataset(hparams.dataset, hparams=hparams, path=hparams.root_path)
     hparams.n_classes = dataset.n_classes
 
+    # Resume from model checkpoint
     if hasattr(hparams, "load_path") and hparams.load_path:
         model = LATTELinkPred.load_from_checkpoint(hparams.load_path,
-                                                   hparams=Namespace(**hparams), dataset=dataset, metrics=metrics)
+                                                   hparams=hparams, dataset=dataset, metrics=metrics)
         print(f"Loaded model from {hparams.load_path}")
     else:
         model = LATTELinkPred(hparams, dataset, metrics=metrics)
 
+    # Logger
+    logger = None if hasattr(hparams, "no_wandb") and hparams.no_wandb else \
+        WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
+    logger.log_hyperparams(hparams)
+
+    # Trainer
     trainer = Trainer(
         gpus=[hparams.gpu] if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int) \
             else hparams.num_gpus,
         strategy="fsdp" if isinstance(hparams.num_gpus, int) and hparams.num_gpus > 1 else None,
         enable_progress_bar=False,
         # auto_lr_find=False,
-        auto_scale_batch_size='binsearch', log_every_n_steps=1,
+        # auto_scale_batch_size=True, log_every_n_steps=1,
+        log_every_n_steps=len(dataset.training_idx) // hparams.batch_size,
         max_epochs=hparams.max_epochs,
         callbacks=callbacks,
-        logger=None if hasattr(hparams, "no_wandb") and hparams.no_wandb else \
-            WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison"),
+        logger=logger,
         weights_summary='top',
         max_time=datetime.timedelta(hours=hparams.hours) \
             if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
         precision=16
     )
 
-    if hparams.num_gpus == 1:
-        trainer.tune(model)
+    trainer.tune(model)
 
     try:
         trainer.fit(model)
@@ -93,7 +100,7 @@ if __name__ == "__main__":
     parser.add_argument('--attn_activation', type=str, default="sharpening")
     parser.add_argument('--attn_dropout', type=float, default=0.5)
 
-    parser.add_argument('--n_neighbors_1', type=int, default=50)
+    parser.add_argument('--n_neighbors', type=int, default=50)
     parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--neg_sampling_ratio', type=float, default=64.0)
 

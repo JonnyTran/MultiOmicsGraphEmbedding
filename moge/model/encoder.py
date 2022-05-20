@@ -5,14 +5,16 @@ from typing import Dict
 
 import torch
 import torch.nn.functional as F
-from moge.dataset import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
 
+from moge.dataset import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
+
 logging.getLogger("transformers").setLevel(logging.ERROR)
+
 
 class HeteroNodeEncoder(nn.Module):
     def __init__(self, hparams: Namespace, dataset: HeteroGraphDataset) -> None:
@@ -150,12 +152,13 @@ class HeteroSequenceEncoder(nn.Module):
 
     def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: int = None) -> Dict[str, Tensor]:
         h_out = {}
+        if minibatch != None:
+            minibatch = max(int(minibatch), 1)
+
         for ntype, encoding in sequences.items():
             batch_output = []
 
             if minibatch:
-                minibatch = max(int(minibatch), 10)
-
                 for input_ids, attention_mask, token_type_ids in \
                         zip(torch.split(encoding["input_ids"], minibatch),
                             torch.split(encoding["attention_mask"], minibatch),

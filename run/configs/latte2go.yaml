@@ -1,7 +1,7 @@
 dataset: "rna_ppi_go"
 root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 
-#load_path: "models/latte2go.ckpt"
+load_path: "models/latte2go.ckpt"
 save_path: "models/latte2go.ckpt"
 
 bert_config:
@@ -19,10 +19,11 @@ max_length:
   GO_term: 150
 
 head_node_type: "MessengerRNA"
+n_neighbors: 128
+n_layers: 2
+t_order: 2
 embedding_dim: 256
 layer_pooling: "last"
-n_layers: 2
-t_order: 1
 
 attn_heads: 4
 attn_activation: "LeakyReLU"
@@ -34,6 +35,6 @@ activation: "relu"
 dropout: 0.2
 input_dropout: false
 
-batch_size: 1024
+batch_size: 32768
 lr: 0.001
 weight_decay: 0.0001
