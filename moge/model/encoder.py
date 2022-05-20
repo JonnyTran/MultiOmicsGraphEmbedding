@@ -131,7 +131,7 @@ class HeteroSequenceEncoder(nn.Module):
                         if 'classifier' not in name:  # classifier layer
                             param.requires_grad = False
 
-                    print("BertForSequenceClassification pretrained", ntype)
+                    print("BertForSequenceClassification pretrained from:", hparams.bert_config[ntype])
             else:
                 bert_config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=128,
                                          max_position_embeddings=max_position_embeddings,

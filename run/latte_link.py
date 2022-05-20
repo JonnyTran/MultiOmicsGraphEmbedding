@@ -46,6 +46,7 @@ def train(hparams):
         gpus=[hparams.gpu] if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int) \
             else hparams.num_gpus,
         strategy="fsdp" if isinstance(hparams.num_gpus, int) and hparams.num_gpus > 1 else None,
+        enable_progress_bar=False,
         # auto_lr_find=False,
         auto_scale_batch_size='binsearch',
         max_epochs=hparams.max_epochs,
@@ -70,7 +71,7 @@ def train(hparams):
         traceback.print_exc()
 
     finally:
-        if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 10 and \
+        if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 1 and \
                 hasattr(hparams, "save_path") and hparams.save_path is not None:
             trainer.save_checkpoint(model, hparams.save_path)
             print(f"Saved model checkpoint to {hparams.save_path}")

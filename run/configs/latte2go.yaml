@@ -19,7 +19,7 @@ max_length:
   GO_term: 150
 
 head_node_type: "MessengerRNA"
-embedding_dim: 128
+embedding_dim: 256
 layer_pooling: "last"
 n_layers: 2
 t_order: 1
@@ -36,3 +36,4 @@ input_dropout: false
 
 batch_size: 1024
 lr: 0.001
+weight_decay: 0.0001
