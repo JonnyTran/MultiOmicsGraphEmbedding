@@ -510,17 +510,18 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype]
             try:
                 tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
+                for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
+                    # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
+                    if go_type != tail_type: continue
+                    go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
+                    tail_prob_dist[:, go_terms_mask] = 0
+
             except Exception as e:
                 print(metapath, "edge_index", edge_index.shape)
                 print(tensor_sizes({f"edge_index[{head_type}]": edge_index[0], "tail_neg_nodes": tail_neg_nodes}))
                 print("edge_index", edge_index.max(1).values)
                 traceback.print_exc()
 
-            for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
-                # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
-                if go_type != tail_type: continue
-                go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
-                tail_prob_dist[:, go_terms_mask] = 0
 
             tail_batch[metapath] = torch.multinomial(tail_prob_dist, num_samples=sampling_size,
                                                      replacement=True)

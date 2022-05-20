@@ -278,8 +278,7 @@ class LATTE(nn.Module):
         layers = []
         for l in range(n_layers):
             is_last_layer = l + 1 == n_layers
-            is_output_layer = False if not hasattr(hparams,
-                                                   'nb_cls_dense_size') or hparams.nb_cls_dense_size < 0 else True
+            is_output_layer = False
 
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
                                                  order=layer_t_orders[l],  # Select only up to t-order

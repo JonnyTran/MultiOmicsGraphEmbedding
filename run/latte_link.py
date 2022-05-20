@@ -2,9 +2,8 @@ import datetime
 import logging
 import sys
 import traceback
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 
-import torch
 from run.utils import parse_yaml
 
 logger = logging.getLogger("wandb")
@@ -27,7 +26,7 @@ def train(hparams):
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
                    "MFO": ["ogbl-biokg", 'precision', 'recall'], }
-        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=10, min_delta=0.01, strict=False)]
+        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=50, min_delta=0.01, strict=False)]
 
     else:
         metrics = [hparams.dataset]
@@ -37,7 +36,8 @@ def train(hparams):
     hparams.n_classes = dataset.n_classes
 
     if hasattr(hparams, "load_path") and hparams.load_path:
-        model = torch.load(hparams.load_path)
+        model = LATTELinkPred.load_from_checkpoint(hparams.load_path,
+                                                   hparams=Namespace(**hparams), dataset=dataset, metrics=metrics)
         print(f"Loaded model from {hparams.load_path}")
     else:
         model = LATTELinkPred(hparams, dataset, metrics=metrics)
@@ -72,8 +72,8 @@ def train(hparams):
     finally:
         if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 10 and \
                 hasattr(hparams, "save_path") and hparams.save_path is not None:
-            torch.save(model, hparams.save_path + ".pt")
-            print(f"Saved model to {hparams.save_path}.pt")
+            trainer.save_checkpoint(model, hparams.save_path)
+            print(f"Saved model checkpoint to {hparams.save_path}")
 
     print()
 

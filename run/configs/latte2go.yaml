@@ -1,8 +1,8 @@
 dataset: "rna_ppi_go"
 root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 
-#load_path: "models/bert_mlm_Protein"
-save_path: "models/latte2go"
+#load_path: "models/latte2go.ckpt"
+save_path: "models/latte2go.ckpt"
 
 bert_config:
   MicroRNA: "models/bert_mlm_MicroRNA/"
@@ -34,5 +34,5 @@ activation: "relu"
 dropout: 0.2
 input_dropout: false
 
-batch_size: 2
+batch_size: 1024
 lr: 0.001

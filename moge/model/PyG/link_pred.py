@@ -1,12 +1,11 @@
 import logging
-from pprint import pprint
+import math
 from typing import List, Tuple, Dict, Any, Union
 
 import torch
 from fairscale.nn import auto_wrap
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
-from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
@@ -38,8 +37,6 @@ class DistMulti(torch.nn.Module):
     def forward(self, edges_input: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
         output = {}
-        print("edges_input", )
-        pprint(tensor_sizes(edges_input))
 
         # True positive edges
         output["edge_pos"] = self.score(edges_input["edge_pos"], embeddings=embeddings, mode="single_pos")
@@ -192,13 +189,13 @@ class LATTELinkPred(LinkPredTrainer):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
+        h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
-            h_out = self.seq_encoder.forward(inputs['sequences'])
-        else:
-            h_out = {}
+            h_out.update(self.seq_encoder.forward(inputs['sequences'],
+                                                  minibatch=math.log2(self.hparams.batch_size)))
 
         if len(h_out) < len(inputs["global_node_index"].keys()):
-            h_out = {**h_out, **self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])}
+            h_out.update(self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"]))
 
         embeddings, aux_loss, _ = self.embedder.forward(h_out,
                                                         edge_index_dict=inputs["edge_index_dict"],
@@ -274,9 +271,10 @@ class LATTELinkPred(LinkPredTrainer):
                                                 torch.sigmoid(neg_batch.detach()),
                                                 weights=None, subset=["ogbl-biokg"])
 
-                self.update_pr_metrics(e_pos=edge_pred_dict["edge_pos"][metapath],
-                                       edge_pred=edge_pred_dict["edge_neg"][metapath],
-                                       metrics=metrics[go_type], subset=["precision", "recall"])
+                if metapath in edge_pred_dict["edge_pos"] and metapath in edge_pred_dict["edge_neg"]:
+                    self.update_pr_metrics(e_pos=edge_pred_dict["edge_pos"][metapath],
+                                           edge_pred=edge_pred_dict["edge_neg"][metapath],
+                                           metrics=metrics[go_type], subset=["precision", "recall"])
 
         else:
             metrics.update_metrics(torch.sigmoid(e_pos.detach()), torch.sigmoid(e_neg.detach()),

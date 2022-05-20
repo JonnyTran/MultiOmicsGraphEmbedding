@@ -1,3 +1,4 @@
+import logging
 import os.path
 from argparse import Namespace
 from typing import Dict
@@ -11,6 +12,7 @@ from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
 
+logging.getLogger("transformers").setLevel(logging.ERROR)
 
 class HeteroNodeEncoder(nn.Module):
     def __init__(self, hparams: Namespace, dataset: HeteroGraphDataset) -> None:
@@ -122,8 +124,7 @@ class HeteroSequenceEncoder(nn.Module):
                     seq_encoders[ntype] = BertForSequenceClassification.from_pretrained(
                         hparams.bert_config[ntype],
                         num_labels=hparams.embedding_dim,
-                        classifier_dropout=hparams.dropout
-                    )
+                        classifier_dropout=hparams.dropout, )
 
                     # Freeze BERT layers due to
                     for name, param in seq_encoders[ntype].named_parameters():
@@ -147,12 +148,14 @@ class HeteroSequenceEncoder(nn.Module):
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: int = 5) -> Dict[str, Tensor]:
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: int = None) -> Dict[str, Tensor]:
         h_out = {}
         for ntype, encoding in sequences.items():
             batch_output = []
 
             if minibatch:
+                minibatch = max(int(minibatch), 10)
+
                 for input_ids, attention_mask, token_type_ids in \
                         zip(torch.split(encoding["input_ids"], minibatch),
                             torch.split(encoding["attention_mask"], minibatch),
