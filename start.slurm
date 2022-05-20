@@ -11,5 +11,5 @@ cd ~/Projects/Multiplex-Graph-Embedding
 #python ../MultiOmicsGraphEmbedding/run/run_mlm.py -y ../MultiOmicsGraphEmbedding/run/configs/bert_mlm_Protein.yaml --hours 5 &
 #python ../MultiOmicsGraphEmbedding/run/run_mlm.py -y ../MultiOmicsGraphEmbedding/run/configs/bert_mlm_GO_term.yaml --gpu 1 --hours 5 && echo "done"
 
-python ../MultiOmicsGraphEmbedding/run/latte_link.py -y ../MultiOmicsGraphEmbedding/run/configs/latte2go.yaml --num_gpus 1 --hours 5
+python ../MultiOmicsGraphEmbedding/run/latte_link.py -y ../MultiOmicsGraphEmbedding/run/configs/latte2go.yaml --num_gpus 2 --hours 5
 exit

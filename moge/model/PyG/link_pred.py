@@ -192,7 +192,7 @@ class LATTELinkPred(LinkPredTrainer):
         h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  minibatch=math.log2(self.hparams.batch_size) * 2))
+                                                  minibatch=math.sqrt(self.hparams.batch_size // 4)))
 
         if len(h_out) < len(inputs["global_node_index"].keys()):
             h_out.update(self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"]))

@@ -184,7 +184,7 @@ class NodeClfTrainer(ClusteringEvaluator):
             for subtype, metrics in self.train_metrics.items():
                 metrics.reset_metrics()
 
-        self.log_dict(metrics_dict, prog_bar=True)
+        self.log_dict(metrics_dict, prog_bar=True, logger=True)
 
         return None
 

@@ -48,7 +48,7 @@ def train(hparams):
         strategy="fsdp" if isinstance(hparams.num_gpus, int) and hparams.num_gpus > 1 else None,
         enable_progress_bar=False,
         # auto_lr_find=False,
-        auto_scale_batch_size='binsearch',
+        auto_scale_batch_size='binsearch', log_every_n_steps=1,
         max_epochs=hparams.max_epochs,
         callbacks=callbacks,
         logger=None if hasattr(hparams, "no_wandb") and hparams.no_wandb else \
@@ -73,7 +73,7 @@ def train(hparams):
     finally:
         if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 1 and \
                 hasattr(hparams, "save_path") and hparams.save_path is not None:
-            trainer.save_checkpoint(model, hparams.save_path)
+            trainer.save_checkpoint(hparams.save_path)
             print(f"Saved model checkpoint to {hparams.save_path}")
 
     print()
