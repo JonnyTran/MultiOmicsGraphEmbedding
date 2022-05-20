@@ -1,0 +1,32 @@
+program: run/latte_link.py
+method: bayes
+metric:
+  goal: minimize
+  name: "val_loss"
+parameters:
+  embedding_dim:
+    values: [ 128, 256, 512 ]
+  t_order:
+    values: [ 1, 2 ]
+  n_layers:
+    values: [ 1,2,3 ]
+  n_neighbors:
+    values: [ 128, 512, 1024 ]
+  attn_heads:
+    values: [ 1, 2, 4, 8 ]
+  attn_dropout:
+    values: [ 0.0, 0.1, 0.2, 0.3, 0.4 ]
+  attn_activation:
+    values: [ "LeakyReLU" ]
+  batchnorm:
+    values: [ True, False ]
+  layernorm:
+    values: [ True, False ]
+  dropout:
+    max: 0.7
+    min: 0.0
+    distribution: uniform
+  weight_decay:
+    values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
+  config:
+    values: [ "run/configs/_latte2go_helper.yaml" ]

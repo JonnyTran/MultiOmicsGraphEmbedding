@@ -94,11 +94,16 @@ if __name__ == "__main__":
     parser.add_argument('-p', '--root_path', type=str, default="data/gtex_rna_ppi_multiplex_network.pickle")
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
     parser.add_argument('-t', '--n_layers', type=int, default=1)
+    parser.add_argument('--t_order', type=int, default=1)
     parser.add_argument('-b', '--batch_size', type=int, default=12000)
     parser.add_argument('--activation', type=str, default="relu")
     parser.add_argument('--attn_heads', type=int, default=1)
     parser.add_argument('--attn_activation', type=str, default="sharpening")
     parser.add_argument('--attn_dropout', type=float, default=0.5)
+
+    parser.add_argument('--batchnorm', type=bool, default=True)
+    parser.add_argument('--layernorm', type=bool, default=False)
+    parser.add_argument('--dropout', type=float, default=0.5)
 
     parser.add_argument('--n_neighbors', type=int, default=50)
     parser.add_argument('--use_proximity', type=bool, default=False)

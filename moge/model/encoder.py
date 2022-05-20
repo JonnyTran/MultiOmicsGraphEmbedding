@@ -1,5 +1,4 @@
 import logging
-import os.path
 from argparse import Namespace
 from typing import Dict
 
@@ -109,6 +108,7 @@ class HeteroSequenceEncoder(nn.Module):
     def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset) -> None:
         super().__init__()
         seq_encoders: Dict[str, BertForSequenceClassification] = {}
+        print(dataset.seq_tokenizer.tokenizers.keys())
 
         for ntype, tokenizer in dataset.seq_tokenizer.items():
             max_position_embeddings = dataset.seq_tokenizer.max_length[ntype]
@@ -120,7 +120,7 @@ class HeteroSequenceEncoder(nn.Module):
 
                     print("BertForSequenceClassification custom BertConfig", ntype)
 
-                elif isinstance(hparams.bert_config[ntype], str) and os.path.exists(hparams.bert_config[ntype]):
+                elif isinstance(hparams.bert_config[ntype], str):
                     seq_encoders[ntype] = BertForSequenceClassification.from_pretrained(
                         hparams.bert_config[ntype],
                         num_labels=hparams.embedding_dim,
