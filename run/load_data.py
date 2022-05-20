@@ -5,64 +5,21 @@ from argparse import Namespace
 from typing import Union
 
 import dgl
-import dill
 import moge
 import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
-import torch
 from cogdl.datasets.gtn_data import GTNDataset
 from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
 from moge.dataset.dgl.graph_generator import DGLGraphSampler
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
-from moge.model.utils import preprocess_input
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
 from openomics.database.ontology import GeneOntology
+from run.utils import add_node_embeddings
 from torch_geometric.datasets import AMiner
-
-
-def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler], path: str, skip_ntype: str = None,
-                        args: Namespace = None):
-    node_emb = {}
-    if os.path.exists(path) and os.path.isdir(path):
-        for file in os.listdir(path):
-            ntype = file.split(".")[0]
-            ndata = torch.load(os.path.join(path, file)).float()
-
-            node_emb[ntype] = ndata
-
-    elif os.path.exists(path) and os.path.isfile(path):
-        features = dill.load(open(path, 'rb'))  # Assumes .pk file
-
-        for ntype, ndata in preprocess_input(features, device="cpu", dtype=torch.float).items():
-            node_emb[ntype] = ndata
-    else:
-        print(f"Failed to import embeddings from {path}")
-
-    for ntype, ndata in node_emb.items():
-        if skip_ntype == ntype:
-            logging.info(f"Use original features (not embeddings) for node type: {ntype}")
-            continue
-
-        if "freeze_embeddings" in args and args.freeze_embeddings == False:
-            print("got here")
-            if "node_emb_init" not in args:
-                args.node_emb_init = {}
-
-            args.node_emb_init[ntype] = ndata
-
-        elif isinstance(dataset.G, dgl.DGLHeteroGraph):
-            dataset.G.nodes[ntype].data["feat"] = ndata
-
-        elif isinstance(dataset.G, HeteroNeighborGenerator):
-            dataset.G.x_dict[ntype] = ndata
-        else:
-            raise Exception(f"Cannot recognize type of {dataset.G}")
-
-        print(f"Loaded embeddings for {ntype}: {ndata.shape}")
 
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
@@ -217,10 +174,6 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
         with open(path, "rb") as file:
             network = pickle.load(file)
 
-        min_count = None
-        label_col = None
-        head_node_type = hparams.head_node_type
-
         if hasattr(hparams, 'max_length'):
             sequence_tokenizers = SequenceTokenizers(
                 vocabularies={"MicroRNA": "armheb/DNA_bert_3",
@@ -234,33 +187,31 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
             sequence_tokenizers = None
             use_sequence = False
 
-        hetero, classes, nodes = network.to_pyg_heterodata(target=label_col, min_count=min_count, expression=False,
+        hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, expression=False,
                                                            sequence=use_sequence, add_reverse=hparams.use_reverse, )
 
         dataset = HeteroLinkPredDataset.from_pyg_heterodata(hetero, classes, nodes,
                                                             negative_sampling_size=100,
                                                             pred_metapaths=[],
-                                                            head_node_type=head_node_type,
+                                                            head_node_type=hparams.head_node_type,
                                                             # neighbor_loader="NeighborLoader", neighbor_sizes=[32, 32],
                                                             neighbor_loader="HGTLoader", neighbor_sizes=[128, 128],
                                                             seq_tokenizer=sequence_tokenizers)
 
-        train_date = '2018-01-01'
+        train_date = hparams.train_date
         valid_date = pd.to_datetime(train_date) + pd.to_timedelta(26, "W")
-        geneontology = GeneOntology(file_resources={
-            "go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo",
-        } if "mlm" in name else None)
-
+        geneontology = GeneOntology(
+            file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"} \
+                if "mlm" in name else None)
         dataset.add_ontology_edges(geneontology, train_date=train_date, valid_date=valid_date)
-
         dataset._name = "_".join([name, train_date])
 
-        dataset.pred_metapaths = [('MessengerRNA', 'associated', 'biological_process'),
-                                  ('MessengerRNA', 'associated', 'cellular_component'),
-                                  ('MessengerRNA', 'associated', 'molecular_function')]
-        dataset.ntype_mapping = {'biological_process': "GO_term",
-                                 'cellular_component': "GO_term",
-                                 'molecular_function': "GO_term"}
+        dataset.pred_metapaths = [(hparams.head_node_type, 'associated', 'biological_process'),
+                                  (hparams.head_node_type, 'associated', 'cellular_component'),
+                                  (hparams.head_node_type, 'associated', 'molecular_function')]
+        dataset.ntype_mapping = {'biological_process': dataset.go_ntype,
+                                 'cellular_component': dataset.go_ntype,
+                                 'molecular_function': dataset.go_ntype}
 
     else:
         raise Exception(f"dataset {name} not found")

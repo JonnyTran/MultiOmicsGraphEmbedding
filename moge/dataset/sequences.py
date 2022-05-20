@@ -15,7 +15,7 @@ from transformers import (
 
 
 class SequenceTokenizers():
-    def __init__(self, vocabularies: Dict[str, str], max_length: Union[int, Dict[str, int]] = None):
+    def __init__(self, vocabularies: Dict[str, str], max_length: Union[int, Dict[str, int]] = None, verbose=False):
         self.tokenizers: Dict[str, BertTokenizer] = {}
         self.word_lengths: Dict[str, int] = {}
         self.max_length: Dict[str, int] = {ntype: max_length \
@@ -33,7 +33,7 @@ class SequenceTokenizers():
         pprint({f"{ntype} tokenizer": f"vocab_size={tokenizer.vocab_size}, "
                                       f"word_length={self.word_lengths[ntype]}, "
                                       f"max_length={self.max_length[ntype]}" \
-                for ntype, tokenizer in self.tokenizers.items()})
+                for ntype, tokenizer in self.tokenizers.items()}) if verbose else None
 
     def __getitem__(self, item: str):
         return self.tokenizers[item]

@@ -22,8 +22,7 @@ from run.load_data import load_link_dataset
 
 def train(hparams):
     if hparams.dataset == 'rna_ppi_go':
-        assert hasattr(hparams, "max_length")
-        assert hasattr(hparams, "bert_config")
+        assert hasattr(hparams, "max_length") and hasattr(hparams, "bert_config")
 
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
@@ -37,12 +36,11 @@ def train(hparams):
     dataset = load_link_dataset(hparams.dataset, hparams=hparams, path=hparams.root_path)
     hparams.n_classes = dataset.n_classes
 
-    model = LATTELinkPred(hparams, dataset, metrics=metrics)
-
-    if hasattr(hparams, "no_wandb") and hparams.no_wandb:
-        wandb_logger = None
+    if hasattr(hparams, "load_path") and hparams.load_path:
+        model = torch.load(hparams.load_path)
+        print(f"Loaded model from {hparams.load_path}")
     else:
-        wandb_logger = WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
+        model = LATTELinkPred(hparams, dataset, metrics=metrics)
 
     trainer = Trainer(
         gpus=[hparams.gpu] if hasattr(hparams, "gpu") and isinstance(hparams.gpu, int) \
@@ -52,7 +50,8 @@ def train(hparams):
         auto_scale_batch_size='binsearch',
         max_epochs=hparams.max_epochs,
         callbacks=callbacks,
-        logger=wandb_logger,
+        logger=None if hasattr(hparams, "no_wandb") and hparams.no_wandb else \
+            WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison"),
         weights_summary='top',
         max_time=datetime.timedelta(hours=hparams.hours) \
             if hasattr(hparams, "hours") and isinstance(hparams.hours, (int, float)) else None,
@@ -110,6 +109,8 @@ if __name__ == "__main__":
     parser.add_argument('-n', '--num_gpus', type=int, default=1)
     parser.add_argument('--gpu', type=int, default=None)
     parser.add_argument('--hours', type=float, default=None)
+
+    parser.add_argument('--train_date', type=str, default='2018-01-01')
 
     args = parse_yaml(parser)
 

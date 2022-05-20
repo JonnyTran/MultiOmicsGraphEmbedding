@@ -1,13 +1,15 @@
 import logging
+from pprint import pprint
 from typing import List, Tuple, Dict, Any, Union
 
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from torch import nn, Tensor
-
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
+from moge.model.utils import tensor_sizes
+from torch import nn, Tensor
+
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -24,6 +26,7 @@ class DistMulti(torch.nn.Module):
         """
         super(DistMulti, self).__init__()
         self.metapaths = metapaths
+        print("DistMulti", self.metapaths)
         self.embedding_dim = embedding_dim
 
         self.ntype_mapping = {ntype: ntype for m in metapaths for ntype in [m[0], m[-1]]}
@@ -36,6 +39,8 @@ class DistMulti(torch.nn.Module):
     def forward(self, edges_input: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
         output = {}
+        print("edges_input", )
+        pprint(tensor_sizes(edges_input))
 
         # True positive edges
         output["edge_pos"] = self.score(edges_input["edge_pos"], embeddings=embeddings, mode="single_pos")
@@ -160,11 +165,11 @@ class LATTELinkPred(LinkPredTrainer):
         if "negative_sampling_size" in hparams:
             self.dataset.negative_sampling_size = hparams.negative_sampling_size
 
-        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim, metapaths=dataset.pred_metapaths,
+        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim,
+                                    metapaths=dataset.pred_metapaths,
                                     ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
 
         self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
-        # self.criterion = LinkPredLoss()
 
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
