@@ -26,10 +26,10 @@ def train(hparams):
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
                    "MFO": ["ogbl-biokg", 'precision', 'recall'], }
-        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=50, strict=False)]
+        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=50, mode="max", strict=False)]
 
         if hasattr(hparams, "sweep") and hparams.sweep:
-            callbacks.append(EarlyStopping(monitor='val_loss', patience=10, strict=False))
+            callbacks.append(EarlyStopping(monitor='val_loss', patience=50, strict=False))
     else:
         metrics = [hparams.dataset]
         callbacks = [EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01, strict=False)]
