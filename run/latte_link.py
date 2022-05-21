@@ -4,7 +4,6 @@ import sys
 import traceback
 from argparse import ArgumentParser
 
-from run.utils import parse_yaml, adjust_batch_size, select_empty_gpu
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -17,6 +16,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from moge.model.PyG.link_pred import LATTELinkPred
 from run.load_data import load_link_dataset
+from run.utils import parse_yaml_config, adjust_batch_size, select_empty_gpu
 
 
 def train(hparams):
@@ -26,10 +26,10 @@ def train(hparams):
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
                    "MFO": ["ogbl-biokg", 'precision', 'recall'], }
-        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=10, strict=False)]
+        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=50, strict=False)]
 
         if hasattr(hparams, "sweep") and hparams.sweep:
-            callbacks.append(EarlyStopping(monitor='val_loss', patience=5, strict=False))
+            callbacks.append(EarlyStopping(monitor='val_loss', patience=10, strict=False))
     else:
         metrics = [hparams.dataset]
         callbacks = [EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01, strict=False)]
@@ -62,13 +62,16 @@ def train(hparams):
     else:
         GPUS = hparams.num_gpus
 
+    auto_scale_batch_size = True if hparams.batch_size < 0 else False
+
     trainer = Trainer(
         gpus=GPUS,
         strategy="fsdp" if isinstance(hparams.num_gpus, int) and hparams.num_gpus > 1 else None,
         enable_progress_bar=False,
         # auto_lr_find=False,
-        # auto_scale_batch_size=True, log_every_n_steps=1,
-        log_every_n_steps=len(dataset.training_idx) // hparams.batch_size,
+        auto_scale_batch_size=auto_scale_batch_size,
+        log_every_n_steps=1 if auto_scale_batch_size else len(dataset.training_idx) // hparams.batch_size,
+        # log_every_n_steps=len(dataset.training_idx) // hparams.batch_size,
         max_epochs=hparams.max_epochs,
         callbacks=callbacks,
         logger=logger,
@@ -137,6 +140,6 @@ if __name__ == "__main__":
 
     parser.add_argument('--train_date', type=str, default='2018-01-01')
 
-    args = parse_yaml(parser)
+    args = parse_yaml_config(parser)
 
     train(args)

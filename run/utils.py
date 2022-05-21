@@ -13,7 +13,7 @@ from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler
 from moge.model.utils import preprocess_input
 
 
-def parse_yaml(parser: ArgumentParser) -> Namespace:
+def parse_yaml_config(parser: ArgumentParser) -> Namespace:
     parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
     args = parser.parse_args()
     # yaml priority is higher than args
@@ -73,12 +73,14 @@ def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
 
 def adjust_batch_size(hparams):
     batch_size = hparams.batch_size
+    if batch_size < 0: return batch_size
+
     if hparams.n_neighbors > 256:
-        batch_size = batch_size // (hparams.n_neighbors // 256)
-    if hparams.embedding_dim > 256:
-        batch_size = batch_size // (hparams.embedding_dim / 256)
+        batch_size = batch_size // (hparams.n_neighbors / 256)
+    if hparams.embedding_dim > 128:
+        batch_size = batch_size // (hparams.embedding_dim / 128)
     if hparams.n_layers > 2:
-        batch_size = batch_size // 2
+        batch_size = batch_size // (hparams.n_layers - 1)
 
     print(f"Adjusted batch_size to", batch_size)
 

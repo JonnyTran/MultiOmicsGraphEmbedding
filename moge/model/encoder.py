@@ -127,9 +127,10 @@ class HeteroSequenceEncoder(nn.Module):
                         classifier_dropout=hparams.dropout, )
 
                     # Freeze BERT layers due to
-                    for name, param in seq_encoders[ntype].named_parameters():
-                        if 'classifier' not in name:  # classifier layer
-                            param.requires_grad = False
+                    if "trainable" not in hparams.bert_config or not hparams.bert_config["trainable"]:
+                        for name, param in seq_encoders[ntype].named_parameters():
+                            if 'classifier' not in name:  # classifier layer
+                                param.requires_grad = False
 
                     print("BertForSequenceClassification pretrained from:", hparams.bert_config[ntype])
             else:
@@ -146,17 +147,21 @@ class HeteroSequenceEncoder(nn.Module):
                 seq_encoders[ntype] = BertForSequenceClassification(bert_config)
                 print("BertForSequenceClassification default BertConfig", ntype)
 
+        if "minibatching" in hparams.bert_config:
+            self.minibatching = hparams.bert_config["minibatching"]
+
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
     def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: int = None) -> Dict[str, Tensor]:
         h_out = {}
-        if minibatch != None:
+        if minibatch != None and self.minibatching:
             minibatch = max(int(minibatch), 1)
+        else:
+            minibatch = None
 
         for ntype, encoding in sequences.items():
-            batch_output = []
-
             if minibatch:
+                batch_output = []
                 for input_ids, attention_mask, token_type_ids in \
                         zip(torch.split(encoding["input_ids"], minibatch),
                             torch.split(encoding["attention_mask"], minibatch),

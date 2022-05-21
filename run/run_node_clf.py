@@ -3,7 +3,7 @@ import random
 import sys
 from argparse import ArgumentParser, Namespace
 
-from run.utils import parse_yaml
+from run.utils import parse_yaml_config
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -309,5 +309,5 @@ if __name__ == "__main__":
 
 
     # add all the available options to the trainer
-    args = parse_yaml(parser)
+    args = parse_yaml_config(parser)
     train(args)

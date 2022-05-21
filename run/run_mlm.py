@@ -4,13 +4,14 @@ import os.path
 import traceback
 from argparse import Namespace
 
-from moge.dataset.sequences import MaskedLMDataset
-from moge.model.transformers.mlm import BertMLM
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
-from run.load_data import load_link_dataset
-from run.utils import parse_yaml
 from transformers import BertConfig
+
+from moge.dataset.sequences import MaskedLMDataset
+from moge.model.transformers.mlm import BertMLM
+from run.load_data import load_link_dataset
+from run.utils import parse_yaml_config
 
 
 def train_mlm(hparams: Namespace):
@@ -99,7 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--hours', type=float, default=None)
 
     parser.add_argument('-y', '--config', help="configuration file *.yml", type=str, required=False)
-    args = parse_yaml(parser)
+    args = parse_yaml_config(parser)
 
     train_mlm(hparams=args)
     print()

@@ -2,7 +2,7 @@ dataset: "rna_ppi_go"
 root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 
 #load_path: "models/latte2go.ckpt"
-save_path: "models/latte2go_2nd_e512.ckpt"
+save_path: "models/latte2go_2nd_e256.ckpt"
 
 bert_config:
   MicroRNA: "models/bert_mlm_MicroRNA/"
@@ -10,6 +10,8 @@ bert_config:
   MessengerRNA: "models/bert_mlm_MessengerRNA/"
   Protein: "models/bert_mlm_Protein/"
   GO_term: "models/bert_mlm_GO_term/"
+  trainable: false
+  minibatching: true
 
 max_length:
   MicroRNA: 600
@@ -22,7 +24,7 @@ head_node_type: "MessengerRNA"
 n_neighbors: 128
 n_layers: 2
 t_order: 2
-embedding_dim: 512
+embedding_dim: 256
 layer_pooling: "last"
 
 attn_heads: 4

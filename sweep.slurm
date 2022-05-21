@@ -6,6 +6,7 @@
 #SBATCH -N 1                             # Total number of nodes requested (56 cores/node)
 #SBATCH -n 1                             # Total number of mpi tasks requested
 #SBATCH --cpus-per-task 32              # Number of CPUs each task
+#SBATCH --mem 128000                    # Request memory allocation in MB
 #SBATCH -t 05:10:00                      # Run time (hh:mm:ss)
 
 cd ~/Projects/MultiOmicsGraphEmbedding

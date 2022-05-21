@@ -14,7 +14,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 from moge.model.dgl.graph_clf import LATTEGraphClassifier
 from pytorch_lightning.loggers import WandbLogger
 
-from run.utils import load_graph_dataset, parse_yaml
+from run.utils import load_graph_dataset, parse_yaml_config
 
 
 def train(hparams):
@@ -103,5 +103,5 @@ if __name__ == "__main__":
     parser.add_argument('--num_gpus', type=int, default=1)
 
     # add all the available options to the trainer
-    args = parse_yaml(parser)
+    args = parse_yaml_config(parser)
     train(args)

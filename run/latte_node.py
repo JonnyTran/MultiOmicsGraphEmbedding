@@ -4,7 +4,7 @@ from argparse import ArgumentParser, Namespace
 
 # logger = logging.getLogger("wandb")
 # logger.setLevel(logging.INFO)
-from run.utils import parse_yaml
+from run.utils import parse_yaml_config
 
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
 
@@ -140,5 +140,5 @@ if __name__ == "__main__":
     # add all the available options to the trainer
     # parser = pl.Trainer.add_argparse_args(parser)
 
-    args = parse_yaml(parser)
+    args = parse_yaml_config(parser)
     train(args)
