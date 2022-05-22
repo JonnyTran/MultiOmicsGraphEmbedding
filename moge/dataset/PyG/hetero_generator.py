@@ -233,12 +233,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     go_terms = batch_to_global[tail_type][edge_index[1]]
                 else:
                     go_terms = edge_index[1]
-
                 go_namespaces = self.go_namespace[go_terms]
 
                 for namespace in np.unique(go_namespaces):
                     mask = go_namespaces == namespace
-                    out_edge_index_dict[metapath[:-1] + (namespace,)] = edge_index[:, mask]
+                    new_metapath = metapath[:-1] + (namespace,)
+
+                    if not isinstance(mask, bool):
+                        out_edge_index_dict[new_metapath] = edge_index[:, mask]
+                    else:
+                        out_edge_index_dict[new_metapath] = edge_index
 
             elif mode == "head_batch":
                 if batch_to_global is not None:
@@ -250,7 +254,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
                 for namespace in np.unique(go_namespaces):
                     mask = go_namespaces == namespace
-                    out_edge_index_dict[metapath[:-1] + (namespace,)] = edge_index[mask]
+                    new_metapath = metapath[:-1] + (namespace,)
+
+                    if not isinstance(mask, bool):
+                        out_edge_index_dict[new_metapath] = edge_index[mask]
+                    else:
+                        out_edge_index_dict[new_metapath] = edge_index
 
         return out_edge_index_dict
 
@@ -258,7 +267,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def __init__(self, dataset: HeteroData,
                  pred_metapaths: List[Tuple[str, str, str]] = [],
-                 negative_sampling_size=10,
+                 negative_sampling_size=1000,
                  seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
@@ -348,6 +357,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             neg_train_valid_test_sizes.append(edge_index.size(1))
         print("pos_train_valid_test_sizes", pos_train_valid_test_sizes)
         print("neg_train_valid_test_sizes", neg_train_valid_test_sizes)
+
         self.pred_metapaths.append(metapath)
         self.triples_pos = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_pos.items()}

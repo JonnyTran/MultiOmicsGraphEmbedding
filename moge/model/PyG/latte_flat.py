@@ -564,7 +564,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             h_dict = {ntype: self.dropout(h_dict[ntype]) for ntype in h_dict}
 
         if batchnorms:
-            h_dict = {ntype: batchnorms[ntype](h_dict[ntype]) for ntype in h_dict}
+            h_dict = {ntype: batchnorms[ntype].forward(h_dict[ntype]) if h_dict[ntype].size(0) > 1 else h_dict[ntype] \
+                      for ntype in h_dict}
 
         h_dict = {ntype: h_dict[ntype].view(feats[ntype].size(0), self.attn_heads, self.out_channels) \
                   for ntype in h_dict}

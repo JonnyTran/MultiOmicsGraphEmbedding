@@ -102,8 +102,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       sizes: Union[Dict[str, int], List[Dict[str, Tuple[int]]]],
                       layer: Optional[int] = None,
                       metapaths: List[Tuple[str, str, str]] = None,
-                      edge_threshold: Optional[float] = None,
-                      edge_sampling: bool = False) -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
+                      edge_threshold: Optional[float] = None) -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
     """
     Return a cartesian product from two set of adjacency matrices, such that the output adjacency matrices are
     relation-matching.
@@ -144,46 +143,44 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 k = sizes[middle]
                 n = sizes[tail]
 
-            # try:
-            if values_a is None or values_b is None:
-                # if values_a.dim() > 1 and values_a.size(1) > 1:
-                # new_values = []
-                # for d in range(values_a.size(1)):
-                #     new_edge_index, values = spspmm(indexA=edge_index_a, valueA=values_a[:, d],
-                #                                     indexB=edge_index_b, valueB=values_b[:, d],
-                #                                     m=m, k=k, n=n,
-                #                                     # sampling=edge_sampling,
-                #                                     coalesced=True)
-                #     new_values.append(values)
-                # new_values = torch.stack(new_values, dim=1)
+            try:
+                if values_a is None or values_b is None:
+                    # if values_a.dim() > 1 and values_a.size(1) > 1:
+                    # new_values = []
+                    # for d in range(values_a.size(1)):
+                    #     new_edge_index, values = spspmm(indexA=edge_index_a, valueA=values_a[:, d],
+                    #                                     indexB=edge_index_b, valueB=values_b[:, d],
+                    #                                     m=m, k=k, n=n,
+                    #                                     coalesced=True)
+                    #     new_values.append(values)
+                    # new_values = torch.stack(new_values, dim=1)
 
-                new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=None,
-                                                    indexB=edge_index_b, valueB=None,
-                                                    m=m, k=k, n=n,
-                                                    # sampling=edge_sampling,
-                                                    coalesced=True)
+                    new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=None,
+                                                        indexB=edge_index_b, valueB=None,
+                                                        m=m, k=k, n=n,
+                                                        coalesced=True)
 
-            else:
-                if values_a.dim() > 1 and values_a.size(1) == 1:
-                    values_a = values_a.squeeze(-1)
-                if values_b.dim() > 1 and values_b.size(1) == 1:
-                    values_b = values_b.squeeze(-1)
+                else:
+                    if values_a.dim() > 1 and values_a.size(1) == 1:
+                        values_a = values_a.squeeze(-1)
+                    if values_b.dim() > 1 and values_b.size(1) == 1:
+                        values_b = values_b.squeeze(-1)
 
-                new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=values_a,
-                                                    indexB=edge_index_b, valueB=values_b,
-                                                    m=m, k=k, n=n,
-                                                    # sampling=edge_sampling,
-                                                    coalesced=True)
+                    new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=values_a,
+                                                        indexB=edge_index_b, valueB=values_b,
+                                                        m=m, k=k, n=n,
+                                                        coalesced=True)
 
-            if new_edge_index.size(1) == 0: continue
-            output_edge_index[new_metapath] = (new_edge_index, new_values)
+                if new_edge_index.size(1) == 0: continue
+                output_edge_index[new_metapath] = (new_edge_index, new_values)
 
-            # except Exception as e:
-            #     print(f"{e} \n {metapath_a}: {edge_index_a.max(1).values, values_a.shape if values_a is not None else values_a}, "
-            #           f"{metapath_b}: {edge_index_b.max(1).values, values_b.shape if values_b is not None else values_a}")
-            #     print("sizes: ", {"m": m, "k": k, "n": n, })
-            #     # raise e
-            #     continue
+            except Exception as e:
+                print(
+                    f"{e} \n {metapath_a}: {edge_index_a.max(1).values, values_a.shape if values_a is not None else values_a}, "
+                    f"{metapath_b}: {edge_index_b.max(1).values, values_b.shape if values_b is not None else values_a}")
+                print("sizes: ", {"m": m, "k": k, "n": n, })
+                # raise e
+                continue
 
     return output_edge_index
 

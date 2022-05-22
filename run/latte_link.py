@@ -36,13 +36,11 @@ def train(hparams):
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
                    "MFO": ["ogbl-biokg", 'precision', 'recall'], }
-        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=75, mode="max", strict=False)]
+        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=50, mode="max", strict=False)]
 
-        if hasattr(hparams, "sweep") and hparams.sweep:
-            callbacks.append(EarlyStopping(monitor='val_loss', patience=100, strict=False))
     else:
         metrics = [hparams.dataset]
-        callbacks = [EarlyStopping(monitor='val_loss', patience=20, min_delta=0.01, strict=False)]
+        callbacks = [EarlyStopping(monitor='val_loss', patience=50, min_delta=0.01, strict=False)]
 
     # Resume from model checkpoint
     if hasattr(hparams, "load_path") and hparams.load_path:
@@ -66,7 +64,7 @@ def train(hparams):
     else:
         GPUS = hparams.num_gpus
 
-    auto_scale_batch_size = True if hparams.batch_size < 0 else False
+    auto_scale_batch_size = 'binsearch' if hparams.batch_size < 0 else False
 
     trainer = Trainer(
         gpus=GPUS,
