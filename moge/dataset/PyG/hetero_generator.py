@@ -185,7 +185,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             if y_dict.dim() == 2 and y_dict.size(1) == 1:
                 y_dict = y_dict.squeeze(-1)
             elif y_dict.dim() == 1:
-
                 weights = (y_dict >= 0).to(torch.float)
 
         elif len(y_dict) > 1:
@@ -225,6 +224,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                          batch_to_global: Dict[str, Tensor] = None,
                                          edge_pos: Dict[Tuple[str, str, str], Tensor] = None,
                                          mode=None) -> Dict[Tuple[str, str, str], Tensor]:
+        if not hasattr(self, "go_namespace"):
+            return edge_index_dict
+
         out_edge_index_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
@@ -278,6 +280,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         super().__init__(dataset, seq_tokenizer, neighbor_loader, neighbor_sizes, node_types, metapaths, head_node_type,
                          edge_dir, reshuffle_train, add_reverse_metapaths, inductive, **kwargs)
         self.negative_sampling_size = negative_sampling_size
+        self.eval_negative_sampling_size = 1000
+
         self.pred_metapaths = pred_metapaths
         self.neighbor_sizes = neighbor_sizes
         self.multilabel = False
@@ -329,12 +333,13 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                        go_ntype=go_ntype)
 
             # Add the training pos edges to hetero graph
-            for metapath, edge_index in self.triples_pos.items():
-                self.G[metapath].edge_index = edge_index[:, self.training_idx]
-                print(metapath, self.G[metapath].edge_index.max(1))
-                rev_metapath = tuple(["rev_" + type if i % 2 == 1 else type for i, type in enumerate(metapath)])
-                self.G[rev_metapath].edge_index = edge_index[:, self.training_idx][[1, 0], :]
-                print(rev_metapath, self.G[rev_metapath].edge_index.max(1))
+            # for metapath, edge_index in self.triples_pos.items():
+            #     self.G[metapath].edge_index = edge_index[:, self.training_idx]
+            #     print(metapath, self.G[metapath].edge_index.max(1))
+            #     rev_metapath = tuple(reversed(["rev_" + type if i % 2 == 1 else type \
+            #                                    for i, type in enumerate(metapath)]))
+            #     self.G[rev_metapath].edge_index = edge_index[:, self.training_idx][[1, 0], :]
+            #     print(rev_metapath, self.G[rev_metapath].edge_index.max(1))
 
         # Reinstantiate graph sampler since hetero graph was modified
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
@@ -452,12 +457,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         if mode == "train":
             edge_neg = {metapath: self.triples_neg[metapath][:, self.training_idx_neg] \
                         for metapath in self.triples_neg}
+            max_negative_sampling_size = self.negative_sampling_size
         elif mode == "valid":
             edge_neg = {metapath: self.triples_neg[metapath][:, self.validation_idx_neg] \
                         for metapath in self.triples_neg}
+            max_negative_sampling_size = self.eval_negative_sampling_size
         elif mode == "test":
             edge_neg = {metapath: self.triples_neg[metapath][:, self.testing_idx_neg] \
                         for metapath in self.triples_neg}
+            max_negative_sampling_size = self.eval_negative_sampling_size
 
         # If ensures same number of true neg edges to true pos edges
         if num_edges(edge_neg) > edge_idx.numel():
@@ -480,7 +488,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Edge_pos must be global index, not batch index
         edge_pos_split = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=None)
         head_batch, tail_batch = self.generate_negative_sampling(edge_pos_split,
-                                                                 global_node_index=X["global_node_index"], mode=mode)
+                                                                 global_node_index=X["global_node_index"],
+                                                                 max_negative_sampling_size=max_negative_sampling_size,
+                                                                 mode=mode)
 
         # Rename node index from global to batch
         local2batch = {
@@ -506,12 +516,13 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return X, y, edge_weights
 
     def generate_negative_sampling(self, edge_pos: Dict[Tuple[str, str, str], Tensor],
-                                   global_node_index: Dict[str, Tensor], mode: str = None) -> \
+                                   global_node_index: Dict[str, Tensor], max_negative_sampling_size: int,
+                                   mode: str = None) -> \
             Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         head_batch = {}
         tail_batch = {}
 
-        sampling_size = self.choose_neg_sampling_size(edge_pos, global_node_index, mode)
+        sampling_size = self.choose_neg_sampling_size(edge_pos, global_node_index, max_negative_sampling_size, mode)
 
         # Perform negative sampling
         for metapath, edge_index in edge_pos.items():
@@ -520,12 +531,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 if metapath in self.triples_pos_adj \
                 else self.triples_pos_adj[metapath[:-1] + (self.go_ntype,)]
 
+            # head noise distribution
             head_neg_nodes = global_node_index[head_type]
             head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
 
             head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=sampling_size,
                                                      replacement=True)
 
+            # Tail noise distribution
             tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype]
             tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
 
@@ -543,7 +556,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return head_batch, tail_batch
 
     def choose_neg_sampling_size(self, edge_pos: Dict[Tuple[str, str, str], Tensor],
-                                 global_node_index: Dict[str, Tensor], mode: str) -> int:
+                                 global_node_index: Dict[str, Tensor],
+                                 max_negative_sampling_size: int, mode: str) -> int:
         # Choose neg sampling size by twice (minimum) the count of head or tail nodes, if it's less than self.negative_sampling_size
         if mode == "train":
             head_tail_ntypes = [ntype for metapath in edge_pos for ntype in [metapath[0], metapath[-1]]]
@@ -551,12 +565,12 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 global_node_index[ntype if ntype in global_node_index else self.ntype_mapping[ntype]].size(0) \
                 for ntype in head_tail_ntypes)
 
-            sampling_size = min(min_num_node, self.negative_sampling_size // 2)
+            sampling_size = min(min_num_node, max_negative_sampling_size // 2)
 
         else:
-            sampling_size = self.negative_sampling_size // 2
+            sampling_size = max_negative_sampling_size // 2
 
-        sampling_size = max(sampling_size, 1)
+        sampling_size = int(max(sampling_size, 1))
 
         return sampling_size
 
@@ -570,7 +584,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return nodes
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=15, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = DataLoader(self.training_idx, batch_size=batch_size,
                              collate_fn=self.transform,
                              shuffle=True,

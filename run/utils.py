@@ -30,6 +30,31 @@ def parse_yaml_config(parser: ArgumentParser) -> Namespace:
     return args
 
 
+def adjust_batch_size(hparams):
+    batch_size = hparams.batch_size
+    if batch_size < 0: return batch_size
+
+    if hparams.n_neighbors > 256:
+        batch_size = batch_size // (hparams.n_neighbors // 128)
+    if hparams.embedding_dim > 128:
+        batch_size = batch_size // (hparams.embedding_dim // 128)
+    if hparams.n_layers > 2:
+        batch_size = batch_size // (hparams.n_layers - 1)
+    if hparams.neg_sampling_ratio != 1000:
+        batch_size = batch_size // (hparams.neg_sampling_ratio / 1000)
+
+    print(f"Adjusted batch_size to", batch_size)
+
+    return int(batch_size)
+
+
+def select_empty_gpu():
+    gpu_mem_free = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
+    best_gpu = max(gpu_mem_free, key=gpu_mem_free.get)
+    print("gpu_mem_free", gpu_mem_free, "selected GPU", best_gpu)
+    return best_gpu
+
+
 def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler], path: str, skip_ntype: str = None,
                         args: Namespace = None):
     node_emb = {}
@@ -69,26 +94,3 @@ def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler],
             raise Exception(f"Cannot recognize type of {dataset.G}")
 
         print(f"Loaded embeddings for {ntype}: {ndata.shape}")
-
-
-def adjust_batch_size(hparams):
-    batch_size = hparams.batch_size
-    if batch_size < 0: return batch_size
-
-    if hparams.n_neighbors > 256:
-        batch_size = batch_size // (hparams.n_neighbors // 128)
-    if hparams.embedding_dim > 128:
-        batch_size = batch_size // (hparams.embedding_dim // 128)
-    if hparams.n_layers > 2:
-        batch_size = batch_size // (hparams.n_layers - 1)
-
-    print(f"Adjusted batch_size to", batch_size)
-
-    return int(batch_size)
-
-
-def select_empty_gpu():
-    gpu_mem_free = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
-    best_gpu = max(gpu_mem_free, key=gpu_mem_free.get)
-    print("gpu_mem_free", gpu_mem_free, "selected GPU", best_gpu)
-    return best_gpu

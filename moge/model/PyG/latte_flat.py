@@ -199,7 +199,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             {'params': [p for name, p in param_optimizer \
                         if not any(key in name for key in no_decay) \
                         and "embeddings" not in name],
-             'weight_decay': self.hparams.weight_decay},
+             'weight_decay': self.hparams.weight_decay if isinstance(self.hparams.weight_decay, float) else 0.0},
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
              'weight_decay': 0.0},
         ]

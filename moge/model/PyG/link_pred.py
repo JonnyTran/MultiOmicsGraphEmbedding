@@ -31,8 +31,8 @@ class DistMult(torch.nn.Module):
         if ntype_mapping:
             self.ntype_mapping = {**self.ntype_mapping, **ntype_mapping}
 
-        self.rel_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
-        nn.init.uniform_(tensor=self.rel_embedding, a=-1, b=1)
+        self.rel_embedding = nn.Parameter(torch.rand((len(metapaths), embedding_dim)), requires_grad=True)
+        nn.init.uniform_(tensor=self.rel_embedding)
 
     def forward(self, edges_input: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
@@ -309,7 +309,7 @@ class LATTELinkPred(LinkPredTrainer):
             {'params': [p for name, p in param_optimizer \
                         if not any(key in name for key in no_decay) \
                         and "embeddings" not in name],
-             'weight_decay': self.hparams.weight_decay},
+             'weight_decay': self.hparams.weight_decay if isinstance(self.hparams.weight_decay, float) else 0.0},
             {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
              'weight_decay': 0.0},
         ]

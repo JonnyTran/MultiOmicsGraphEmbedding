@@ -202,7 +202,7 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
                                                             seq_tokenizer=sequence_tokenizers)
 
         train_date = hparams.train_date
-        valid_date = pd.to_datetime(train_date) + pd.to_timedelta(26, "W")
+        valid_date = pd.to_datetime(train_date) + pd.to_timedelta(52, "W")
         geneontology = GeneOntology(
             file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"} \
                 if "mlm" in name else None)

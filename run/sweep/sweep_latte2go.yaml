@@ -1,8 +1,8 @@
 program: run/latte_link.py
 method: bayes
 metric:
-  goal: minimize
-  name: "val_loss"
+  goal: maximize
+  name: "val_BPO_mrr"
 parameters:
   embedding_dim:
     values: [ 128, 256, 512, 768 ]
@@ -11,11 +11,13 @@ parameters:
   n_layers:
     values: [ 1,2,3 ]
   n_neighbors:
-    values: [ 128, 512, 1024 ]
+    values: [ 128, 256, 512 ]
   attn_heads:
     values: [ 1, 2, 4, 8 ]
   attn_dropout:
-    values: [ 0.0, 0.1, 0.2, 0.3, 0.4 ]
+    min: 0.0
+    max: 0.4
+    distribution: uniform
   attn_activation:
     values: [ "LeakyReLU" ]
   batchnorm:
@@ -23,8 +25,12 @@ parameters:
   layernorm:
     values: [ True, False ]
   dropout:
-    max: 0.7
     min: 0.0
+    max: 0.4
+    distribution: uniform
+  neg_sampling_ratio:
+    min: 1
+    max: 2000
     distribution: uniform
   weight_decay:
     values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
