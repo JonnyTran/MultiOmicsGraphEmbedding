@@ -520,8 +520,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                     edge_index_dict_B=edge_pred_dict,
                                                     sizes=sizes, layer=self.layer,
                                                     metapaths=higher_relations,
-                                                    edge_threshold=self.edge_threshold,
-                                                    edge_sampling=False)
+                                                    edge_threshold=self.edge_threshold)
         # print("remaining_orders", list(remaining_orders), node_type,
         #       self.get_head_relations(node_type, order=remaining_orders), "edge_index", higher_order_edge_index.keys())
 

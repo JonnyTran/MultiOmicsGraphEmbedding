@@ -680,8 +680,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_index_dict,
                                                     edge_index_dict_B=edge_pred_dict,
                                                     sizes=sizes,
-                                                    metapaths=higher_relations,
-                                                    edge_sampling=False)
+                                                    metapaths=higher_relations)
         # print("higher_order_edge_index")
         # pprint(tensor_sizes(higher_order_edge_index), width=250)
 

@@ -271,8 +271,7 @@ class HeteroNeighborGenerator(HeteroGraphDataset):
         # Get higher-order relations
         next_edge_index_dict = edge_index_dict
         for t in range(len(self.neighbor_sizes) - 1):
-            next_edge_index_dict = join_edge_indexes(next_edge_index_dict, edge_index_dict, sampled_local_nodes, None,
-                                                     edge_sampling=True)
+            next_edge_index_dict = join_edge_indexes(next_edge_index_dict, edge_index_dict, sampled_local_nodes, None)
 
             X["edge_index_dict"].update(next_edge_index_dict)
 
