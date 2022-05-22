@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--n_neighbors', type=int, default=50)
     parser.add_argument('--use_proximity', type=bool, default=False)
-    parser.add_argument('--neg_sampling_ratio', type=float, default=1000)
+    parser.add_argument('--negative_sampling_size', type=float, default=1000)
 
     parser.add_argument('--head_node_type', type=str, default=None)  # Ignore but needed
 

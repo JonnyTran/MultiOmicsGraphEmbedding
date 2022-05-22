@@ -2,7 +2,7 @@ program: run/latte_link.py
 method: bayes
 metric:
   name: val_mrr
-  goal: minimize
+  goal: maximize
 early_terminate:
   type: hyperband
   max_iter: 27

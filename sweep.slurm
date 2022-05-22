@@ -13,5 +13,5 @@ cd ~/Projects/MultiOmicsGraphEmbedding
 ln -s ../Multiplex-Graph-Embedding/models models
 ln -s ../Multiplex-Graph-Embedding/data data
 
-wandb agent jonnytran/latte-link-pred/v65wqgz5 && sleep 120 & wandb agent jonnytran/latte-link-pred/v65wqgz5 && echo "done"
+wandb agent jonnytran/latte-link-pred/xtna6f08 && sleep 120 & wandb agent jonnytran/latte-link-pred/xtna6f08 && echo "done"
 exit

@@ -28,7 +28,7 @@ parameters:
     min: 0.0
     max: 0.4
     distribution: uniform
-  neg_sampling_ratio:
+  negative_sampling_size:
     min: 1
     max: 2000
     distribution: uniform
