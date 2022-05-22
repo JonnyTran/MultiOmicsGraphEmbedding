@@ -37,6 +37,7 @@ activation: "relu"
 dropout: 0.2
 neg_sampling_ratio: 1000
 
+loss_type: "CONTRASTIVE_LOSS"
 batch_size: 16384
 lr: 0.001
 weight_decay: 0
