@@ -1,4 +1,3 @@
-import traceback
 from pprint import pprint
 from typing import List, Tuple, Union, Dict
 
@@ -18,7 +17,6 @@ from moge.dataset.sequences import SequenceTokenizers
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index, edge_index_to_adj
 from moge.model.PyG.utils import num_edges
-from moge.model.utils import tensor_sizes
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -57,7 +55,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.metapaths = hetero.edge_types
         self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
 
-    def add_ontology_edges(self, ontology, train_date='2017-06-15', valid_date='2017-11-15', go_ntype="GO_term"):
+    def add_ontology_edges(self, ontology: GeneOntology, train_date='2017-06-15', valid_date='2017-11-15',
+                           go_ntype="GO_term"):
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
 
         # Order nodes with classes nodes first
@@ -359,11 +358,17 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         print("neg_train_valid_test_sizes", neg_train_valid_test_sizes)
 
         self.pred_metapaths.append(metapath)
+
+        # Collect all edges
         self.triples_pos = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_pos.items()}
         self.triples_neg = {metapath: torch.cat(li_edge_index, dim=1) \
                             for metapath, li_edge_index in self.triples_neg.items()}
-        self.triples_pos_adj = edge_index_to_adj(self.triples_pos, nodes=self.nodes)
+
+        # Adjacency of pos edges (for neg sampling)
+        self.triples_pos_adj: Dict[Tuple[str, str, str], SparseTensor] = edge_index_to_adj(self.triples_pos,
+                                                                                           nodes=self.nodes)
+
         # Train/valid/test positive edges
         self.training_idx = torch.arange(0, pos_train_valid_test_sizes[0])
         self.validation_idx = torch.arange(pos_train_valid_test_sizes[0],
@@ -492,6 +497,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         head_batch = {}
         tail_batch = {}
+
+        # Choose neg sampling size by twice (minimum) the count of head or tail nodes, if it's less than self.negative_sampling_size
         if mode == "train":
             head_tail_ntypes = [ntype for metapath in edge_pos for ntype in [metapath[0], metapath[-1]]]
             sampling_size = min(
@@ -501,39 +508,30 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         else:
             sampling_size = self.negative_sampling_size // 2
 
+        # Perform negative sampling
         for metapath, edge_index in edge_pos.items():
             head_type, tail_type = metapath[0], metapath[-1]
-            adj: SparseTensor = self.triples_pos_adj[metapath] if metapath in self.triples_pos_adj \
+            adj: SparseTensor = self.triples_pos_adj[metapath] \
+                if metapath in self.triples_pos_adj \
                 else self.triples_pos_adj[metapath[:-1] + (self.go_ntype,)]
 
             head_neg_nodes = global_node_index[head_type]
-            try:
-                head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
-            except Exception as e:
-                print(metapath, "edge_index", edge_index.shape)
-                print(tensor_sizes({"head_neg_nodes": head_neg_nodes, f"edge_index[{tail_type}]": edge_index[1]}))
-                print("edge_index", edge_index.max(1).values)
-                traceback.print_exc()
+            head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
 
             head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=sampling_size,
                                                      replacement=True)
 
             tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype]
-            try:
-                tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
-                for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
-                    # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
-                    if go_type != tail_type: continue
-                    go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
-                    tail_prob_dist[:, go_terms_mask] = 0
+            tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
 
-            except Exception as e:
-                print(metapath, "edge_index", edge_index.shape)
-                print(tensor_sizes({f"edge_index[{head_type}]": edge_index[0], "tail_neg_nodes": tail_neg_nodes}))
-                print("edge_index", edge_index.max(1).values)
-                traceback.print_exc()
+            # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
+            for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
+                if go_type != tail_type: continue
 
+                go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
+                tail_prob_dist[:, go_terms_mask] = 0
 
+            # print(tail_prob_dist.sum(1), "num_samples", sampling_size, "tail_neg_nodes", tail_neg_nodes.shape)
             tail_batch[metapath] = torch.multinomial(tail_prob_dist, num_samples=sampling_size,
                                                      replacement=True)
 
@@ -549,23 +547,23 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return nodes
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=15, **kwargs):
         dataset = DataLoader(self.training_idx, batch_size=batch_size,
                              collate_fn=self.transform,
                              shuffle=True,
-                             num_workers=num_workers)
+                             num_workers=num_workers, **kwargs)
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = DataLoader(self.validation_idx, batch_size=batch_size,
                              collate_fn=self.transform,
                              shuffle=False,
-                             num_workers=num_workers)
+                             num_workers=num_workers, **kwargs)
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = DataLoader(self.testing_idx, batch_size=batch_size,
                              collate_fn=self.transform,
                              shuffle=False,
-                             num_workers=num_workers)
+                             num_workers=num_workers, **kwargs)
         return dataset

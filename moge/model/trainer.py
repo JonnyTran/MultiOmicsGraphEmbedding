@@ -235,7 +235,7 @@ class NodeClfTrainer(ClusteringEvaluator):
     def predict(self, dataloader, node_names=None, filter_nan_labels=True):
         raise NotImplementedError()
 
-    def train_dataloader(self):
+    def train_dataloader(self, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.training_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
@@ -243,10 +243,11 @@ class NodeClfTrainer(ClusteringEvaluator):
             train_sampler = None
 
         dataset = self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size, batch_sampler=train_sampler)
+                                                batch_size=self.hparams.batch_size, batch_sampler=train_sampler,
+                                                **kwargs)
         return dataset
 
-    def val_dataloader(self):
+    def val_dataloader(self, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.validation_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
@@ -254,16 +255,17 @@ class NodeClfTrainer(ClusteringEvaluator):
             train_sampler = None
 
         dataset = self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=self.hparams.batch_size, batch_sampler=train_sampler)
+                                                batch_size=self.hparams.batch_size, batch_sampler=train_sampler,
+                                                **kwargs)
 
         return dataset
 
-    def valtrain_dataloader(self):
+    def valtrain_dataloader(self, **kwargs):
         dataset = self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                   batch_size=self.hparams.batch_size)
+                                                   batch_size=self.hparams.batch_size, **kwargs)
         return dataset
 
-    def test_dataloader(self):
+    def test_dataloader(self, **kwargs):
         if hasattr(self.hparams, "num_gpus") and self.hparams.num_gpus > 1:
             train_sampler = DistributedSampler(self.dataset.testing_idx, num_replicas=self.hparams.num_gpus,
                                                rank=self.local_rank)
@@ -271,7 +273,8 @@ class NodeClfTrainer(ClusteringEvaluator):
             train_sampler = None
 
         dataset = self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                               batch_size=self.hparams.batch_size, batch_sampler=train_sampler)
+                                               batch_size=self.hparams.batch_size, batch_sampler=train_sampler,
+                                               **kwargs)
         return dataset
 
     def get_n_params(self):
@@ -395,29 +398,29 @@ class LinkPredTrainer(NodeClfTrainer):
 
         return e_pos, e_neg, e_weights
 
-    def train_dataloader(self):
+    def train_dataloader(self, **kwargs):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=max(self.hparams.batch_size, 4))
+                                             batch_size=self.hparams.batch_size, **kwargs)
 
-    def valtrain_dataloader(self):
+    def valtrain_dataloader(self, **kwargs):
         return self.dataset.valtrain_dataloader(collate_fn=self.collate_fn,
-                                                batch_size=max(self.hparams.batch_size, 4))
+                                                batch_size=self.hparams.batch_size, **kwargs)
 
-    def val_dataloader(self):
+    def val_dataloader(self, **kwargs):
         if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
             batch_size = self.test_batch_size
         else:
             batch_size = self.hparams.batch_size
         return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
-                                             batch_size=max(batch_size, 4))
+                                             batch_size=batch_size, **kwargs)
 
-    def test_dataloader(self):
+    def test_dataloader(self, **kwargs):
         if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
             batch_size = self.test_batch_size
         else:
             batch_size = self.hparams.batch_size
         return self.dataset.test_dataloader(collate_fn=self.collate_fn,
-                                            batch_size=max(batch_size, 4))
+                                            batch_size=batch_size, **kwargs)
 
 
 class GraphClfTrainer(LightningModule):

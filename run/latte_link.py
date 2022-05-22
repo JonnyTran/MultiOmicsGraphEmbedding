@@ -2,8 +2,7 @@ import datetime
 import logging
 import sys
 import traceback
-from argparse import ArgumentParser
-
+from argparse import ArgumentParser, Namespace
 
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
@@ -19,14 +18,9 @@ from run.load_data import load_link_dataset
 from run.utils import parse_yaml_config, adjust_batch_size, select_empty_gpu
 
 
-def train(hparams):
-
-
+def train(hparams: Namespace):
     # Load dataset
     dataset = load_link_dataset(hparams.dataset, hparams=hparams, path=hparams.root_path)
-    hparams.n_classes = dataset.n_classes
-
-    hparams.batch_size = adjust_batch_size(hparams)
 
     # Metrics and callbacks
     if hparams.dataset == 'rna_ppi_go':
@@ -36,7 +30,7 @@ def train(hparams):
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
                    "MFO": ["ogbl-biokg", 'precision', 'recall'], }
-        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=50, mode="max", strict=False)]
+        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=100, mode="max", strict=False)]
 
     else:
         metrics = [hparams.dataset]
@@ -64,6 +58,8 @@ def train(hparams):
     else:
         GPUS = hparams.num_gpus
 
+    # Batch size
+    hparams.batch_size = adjust_batch_size(hparams)
     auto_scale_batch_size = 'binsearch' if hparams.batch_size < 0 else False
 
     trainer = Trainer(
@@ -90,8 +86,9 @@ def train(hparams):
         trainer.test(model)
 
     except Exception as e:
-        print(e)
+        print("\n\n>>> ", e)
         traceback.print_exc()
+        print()
 
     finally:
         if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 1 and \

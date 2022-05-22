@@ -147,6 +147,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
 
 def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_ExternalData/OGB/") -> \
         Union[PygLinkPropPredDataset, HeteroLinkPredDataset]:
+
     if "ogbl" in name:
         ogbl = PygLinkPropPredDataset(name=name, root=path)
 
@@ -217,6 +218,8 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
 
     else:
         raise Exception(f"dataset {name} not found")
+
+    hparams.n_classes = dataset.n_classes
 
     return dataset
 
