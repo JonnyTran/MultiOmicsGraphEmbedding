@@ -192,7 +192,7 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
                                                            sequence=use_sequence, add_reverse=hparams.use_reverse, )
 
         dataset = HeteroLinkPredDataset.from_pyg_heterodata(hetero, classes, nodes,
-                                                            negative_sampling_size=100,
+                                                            negative_sampling_size=1000,
                                                             pred_metapaths=[],
                                                             head_node_type=hparams.head_node_type,
                                                             # neighbor_loader="NeighborLoader", neighbor_sizes=[32, 32],

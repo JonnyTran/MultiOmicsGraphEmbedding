@@ -20,6 +20,15 @@ from run.utils import parse_yaml_config, adjust_batch_size, select_empty_gpu
 
 
 def train(hparams):
+
+
+    # Load dataset
+    dataset = load_link_dataset(hparams.dataset, hparams=hparams, path=hparams.root_path)
+    hparams.n_classes = dataset.n_classes
+
+    hparams.batch_size = adjust_batch_size(hparams)
+
+    # Metrics and callbacks
     if hparams.dataset == 'rna_ppi_go':
         if hasattr(hparams, "sequence") and hparams.sequence:
             assert hasattr(hparams, "max_length") and hasattr(hparams, "bert_config")
@@ -27,19 +36,13 @@ def train(hparams):
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
                    "MFO": ["ogbl-biokg", 'precision', 'recall'], }
-        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=50, mode="max", strict=False)]
+        callbacks = [EarlyStopping(monitor='val_BPO_mrr', patience=75, mode="max", strict=False)]
 
         if hasattr(hparams, "sweep") and hparams.sweep:
-            callbacks.append(EarlyStopping(monitor='val_loss', patience=50, strict=False))
+            callbacks.append(EarlyStopping(monitor='val_loss', patience=100, strict=False))
     else:
         metrics = [hparams.dataset]
-        callbacks = [EarlyStopping(monitor='val_loss', patience=5, min_delta=0.01, strict=False)]
-
-    # Load dataset
-    dataset = load_link_dataset(hparams.dataset, hparams=hparams, path=hparams.root_path)
-    hparams.n_classes = dataset.n_classes
-
-    hparams.batch_size = adjust_batch_size(hparams)
+        callbacks = [EarlyStopping(monitor='val_loss', patience=20, min_delta=0.01, strict=False)]
 
     # Resume from model checkpoint
     if hasattr(hparams, "load_path") and hparams.load_path:
@@ -124,7 +127,7 @@ if __name__ == "__main__":
 
     parser.add_argument('--n_neighbors', type=int, default=50)
     parser.add_argument('--use_proximity', type=bool, default=False)
-    parser.add_argument('--neg_sampling_ratio', type=float, default=64.0)
+    parser.add_argument('--neg_sampling_ratio', type=float, default=1000)
 
     parser.add_argument('--head_node_type', type=str, default=None)  # Ignore but needed
 

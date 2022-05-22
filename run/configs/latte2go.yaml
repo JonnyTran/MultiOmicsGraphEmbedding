@@ -35,7 +35,7 @@ batchnorm: true
 layernorm: false
 activation: "relu"
 dropout: 0.2
-input_dropout: false
+neg_sampling_ratio: 1000
 
 batch_size: 16384
 lr: 0.001
