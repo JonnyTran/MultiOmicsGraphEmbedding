@@ -175,7 +175,7 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
         with open(path, "rb") as file:
             network = pickle.load(file)
 
-        if hasattr(hparams, 'max_length'):
+        if hasattr(hparams, 'sequence') and hparams.sequence:
             sequence_tokenizers = SequenceTokenizers(
                 vocabularies={"MicroRNA": "armheb/DNA_bert_3",
                               "LncRNA": "armheb/DNA_bert_6",

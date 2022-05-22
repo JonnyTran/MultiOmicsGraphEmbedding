@@ -1,6 +1,7 @@
 dataset: "rna_ppi_go"
 root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 train_date: '2018-01-01'
+sequence: false
 
 bert_config:
   MicroRNA: "models/bert_mlm_MicroRNA/"
@@ -24,7 +25,7 @@ attn_activation: "LeakyReLU"
 activation: "relu"
 
 input_dropout: false
-batch_size: 16384
+batch_size: 10000
 max_epochs: 300
 sweep: true
 hours: 1

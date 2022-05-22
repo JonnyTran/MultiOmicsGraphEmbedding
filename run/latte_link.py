@@ -21,7 +21,8 @@ from run.utils import parse_yaml_config, adjust_batch_size, select_empty_gpu
 
 def train(hparams):
     if hparams.dataset == 'rna_ppi_go':
-        assert hasattr(hparams, "max_length") and hasattr(hparams, "bert_config")
+        if hasattr(hparams, "sequence") and hparams.sequence:
+            assert hasattr(hparams, "max_length") and hasattr(hparams, "bert_config")
 
         metrics = {"BPO": ["ogbl-biokg", 'precision', 'recall'],
                    "CCO": ["ogbl-biokg", 'precision', 'recall'],
@@ -105,7 +106,9 @@ if __name__ == "__main__":
 
     # parametrize the network
     parser.add_argument('--dataset', type=str, default="ogbl-biokg")
+    parser.add_argument('--sequence', type=bool, default=True)
     parser.add_argument('-p', '--root_path', type=str, default="data/gtex_rna_ppi_multiplex_network.pickle")
+
     parser.add_argument('-d', '--embedding_dim', type=int, default=128)
     parser.add_argument('-t', '--n_layers', type=int, default=1)
     parser.add_argument('--t_order', type=int, default=1)

@@ -5,7 +5,7 @@ metric:
   name: "val_loss"
 parameters:
   embedding_dim:
-    values: [ 128, 256, 512 ]
+    values: [ 128, 256, 512, 768 ]
   t_order:
     values: [ 1, 2 ]
   n_layers:
@@ -19,9 +19,9 @@ parameters:
   attn_activation:
     values: [ "LeakyReLU" ]
   batchnorm:
-    values: [ True ]
+    values: [ True, False ]
   layernorm:
-    values: [ False ]
+    values: [ True, False ]
   dropout:
     max: 0.7
     min: 0.0

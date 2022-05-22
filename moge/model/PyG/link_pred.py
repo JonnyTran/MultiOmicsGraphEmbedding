@@ -14,7 +14,7 @@ from ..trainer import LinkPredTrainer
 from ...dataset import HeteroLinkPredDataset
 
 
-class DistMulti(torch.nn.Module):
+class DistMult(torch.nn.Module):
     def __init__(self, embedding_dim: int, metapaths: List[Tuple[str, str, str]], ntype_mapping: Dict[str, str] = None):
         """
 
@@ -22,7 +22,7 @@ class DistMulti(torch.nn.Module):
             embedding_dim ():
             metapaths (): List of metapaths to predict
         """
-        super(DistMulti, self).__init__()
+        super(DistMult, self).__init__()
         self.metapaths = metapaths
         print("DistMulti", self.metapaths)
         self.embedding_dim = embedding_dim
@@ -31,7 +31,7 @@ class DistMulti(torch.nn.Module):
         if ntype_mapping:
             self.ntype_mapping = {**self.ntype_mapping, **ntype_mapping}
 
-        self.rel_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim), requires_grad=True)
+        self.rel_embedding = nn.Parameter(torch.zeros(len(metapaths), embedding_dim, embedding_dim), requires_grad=True)
         nn.init.uniform_(tensor=self.rel_embedding, a=-1, b=1)
 
     def forward(self, edges_input: Dict[str, Dict[Tuple[str, str, str], Tensor]],
@@ -73,19 +73,20 @@ class DistMulti(torch.nn.Module):
 
         for metapath, edge_index in edge_index_dict.items():
             metapath_idx = self.metapaths.index(metapath)
-            kernel = self.rel_embedding[metapath_idx]  # (emb_dim)
+            kernel = self.rel_embedding[metapath_idx].squeeze(0)  # (emb_dim,emb_dim)
 
             head_type, edge_type, tail_type = metapath
             head_type = self.ntype_mapping[head_type] if head_type not in embeddings else head_type
             tail_type = self.ntype_mapping[tail_type] if tail_type not in embeddings else tail_type
 
             if mode == "tail_batch":
-                side_A = (embeddings[head_type] * kernel)[edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
+                side_A = (embeddings[head_type] @ kernel)[edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
                 emb_B = embeddings[tail_type][edge_index[1]].unsqueeze(2)  # (n_edges, emb_dim, 1)
                 scores = torch.bmm(side_A, emb_B).squeeze(-1)
             else:
                 emb_A = embeddings[head_type][edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
-                side_B = (kernel * embeddings[tail_type])[edge_index[1]].unsqueeze(2)  # (n_edges, emb_dim, 1)
+                side_B = (kernel @ embeddings[tail_type].T)[:, edge_index[1]].T.unsqueeze(2)  # (n_edges, emb_dim, 1)
+                # print(tensor_sizes({"emb_A":emb_A, "side_B":side_B, "kernel":kernel, "embeddings[tail_type].T": embeddings[tail_type].T}))
                 scores = torch.bmm(emb_A, side_B).squeeze(-1)
 
             # scores = (embeddings[head_type][edge_index[0]] * kernel * embeddings[tail_type][edge_index[1]])
@@ -93,6 +94,7 @@ class DistMulti(torch.nn.Module):
 
             if neg_sampling_batch_size:
                 scores = scores.view(-1, neg_sampling_batch_size)
+
             edge_pred_dict[metapath] = scores
 
         # print("\n", mode)
@@ -161,9 +163,9 @@ class LATTELinkPred(LinkPredTrainer):
         if "negative_sampling_size" in hparams:
             self.dataset.negative_sampling_size = hparams.negative_sampling_size
 
-        self.classifier = DistMulti(embedding_dim=hparams.embedding_dim,
-                                    metapaths=dataset.pred_metapaths,
-                                    ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
+        self.classifier = DistMult(embedding_dim=hparams.embedding_dim,
+                                   metapaths=dataset.pred_metapaths,
+                                   ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
 
         self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
 
