@@ -47,7 +47,9 @@ class Metrics(torch.nn.Module):
                                                                    output_transform=None)
             elif "macro_f1" in metric:
                 self.metrics[metric] = F1Score(num_classes=n_classes, average="macro",
-                                               top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
+                                               top_k=int(metric.split("@")[-1]) if "@" in metric else None,
+                                               # MacroF1@TopK
+                                               )
             elif "micro_f1" in metric:
                 self.metrics[metric] = F1Score(num_classes=n_classes, average="micro",
                                                top_k=int(metric.split("@")[-1]) if "@" in metric else None, )

@@ -34,7 +34,7 @@ def train(hparams: Namespace):
 
     else:
         metrics = [hparams.dataset]
-        callbacks = [EarlyStopping(monitor='val_loss', patience=50, min_delta=0.01, strict=False)]
+        callbacks = [EarlyStopping(monitor='val_loss', patience=50, strict=False)]
 
     # Resume from model checkpoint
     if hasattr(hparams, "load_path") and hparams.load_path:
@@ -60,7 +60,7 @@ def train(hparams: Namespace):
 
     # Batch size
     hparams.batch_size = adjust_batch_size(hparams)
-    auto_scale_batch_size = 'binsearch' if hparams.batch_size < 0 else False
+    auto_scale_batch_size = True if hparams.batch_size < 0 else False
 
     trainer = Trainer(
         gpus=GPUS,
@@ -69,7 +69,6 @@ def train(hparams: Namespace):
         # auto_lr_find=False,
         auto_scale_batch_size=auto_scale_batch_size,
         log_every_n_steps=1 if auto_scale_batch_size else len(dataset.training_idx) // hparams.batch_size,
-        # log_every_n_steps=len(dataset.training_idx) // hparams.batch_size,
         max_epochs=hparams.max_epochs,
         callbacks=callbacks,
         logger=logger,
