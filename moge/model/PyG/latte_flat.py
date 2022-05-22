@@ -26,8 +26,7 @@ from moge.model.utils import filter_samples_weights, process_tensor_dicts, selec
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"],
-                 collate_fn=None) -> None:
+    def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"], collate_fn=None) -> None:
         super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
@@ -556,17 +555,19 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    def projection(self, feats, linear_projs: Dict[str, nn.Linear], batch_norms: Dict[str, nn.BatchNorm1d]):
+    def projection(self, feats: Dict[str, Tensor], linear_projs: Dict[str, nn.Linear],
+                   batchnorms: Dict[str, nn.BatchNorm1d]):
+
         h_dict = {ntype: linear_projs[ntype].forward(x) for ntype, x in feats.items()}
 
         if hasattr(self, "dropout"):
             h_dict = {ntype: self.dropout(h_dict[ntype]) for ntype in h_dict}
 
-        if batch_norms:
-            h_dict = {ntype: batch_norms[ntype](h_dict[ntype]) for ntype in h_dict}
+        if batchnorms:
+            h_dict = {ntype: batchnorms[ntype](h_dict[ntype]) for ntype in h_dict}
 
-        h_dict = {ntype: h_dict[ntype].view(feats[ntype].size(0), self.attn_heads, self.out_channels) for ntype in
-                  h_dict}
+        h_dict = {ntype: h_dict[ntype].view(feats[ntype].size(0), self.attn_heads, self.out_channels) \
+                  for ntype in h_dict}
 
         return h_dict
 
@@ -585,9 +586,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
              output_emb, loss:
         """
         l_dict = self.projection(feats, linear_projs=self.linear_l,
-                                 batch_norms=self.batchnorm_l if hasattr(self, "batchnorm_l") else None)
+                                 batchnorms=self.batchnorm_l if hasattr(self, "batchnorm_l") else None)
         r_dict = self.projection(feats, linear_projs=self.linear_r,
-                                 batch_norms=self.batchnorm_r if hasattr(self, "batchnorm_r") else None)
+                                 batchnorms=self.batchnorm_r if hasattr(self, "batchnorm_r") else None)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}

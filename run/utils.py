@@ -76,9 +76,9 @@ def adjust_batch_size(hparams):
     if batch_size < 0: return batch_size
 
     if hparams.n_neighbors > 256:
-        batch_size = batch_size // (hparams.n_neighbors / 256)
+        batch_size = batch_size // (hparams.n_neighbors // 128)
     if hparams.embedding_dim > 128:
-        batch_size = batch_size // (hparams.embedding_dim / 128)
+        batch_size = batch_size // (hparams.embedding_dim // 128)
     if hparams.n_layers > 2:
         batch_size = batch_size // (hparams.n_layers - 1)
 

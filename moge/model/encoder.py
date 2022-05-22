@@ -127,34 +127,26 @@ class HeteroSequenceEncoder(nn.Module):
                         classifier_dropout=hparams.dropout, )
 
                     # Freeze BERT layers due to
-                    if "trainable" not in hparams.bert_config or not hparams.bert_config["trainable"]:
-                        for name, param in seq_encoders[ntype].named_parameters():
-                            if 'classifier' not in name:  # classifier layer
-                                param.requires_grad = False
+                    for name, param in seq_encoders[ntype].named_parameters():
+                        if 'classifier' not in name:  # classifier layer
+                            param.requires_grad = False
 
                     print("BertForSequenceClassification pretrained from:", hparams.bert_config[ntype])
             else:
-                bert_config = BertConfig(vocab_size=tokenizer.vocab_size, hidden_size=128,
-                                         max_position_embeddings=max_position_embeddings,
-                                         num_hidden_layers=2, num_attention_heads=4, intermediate_size=40,
-                                         hidden_dropout_prob=0.1,
-                                         pad_token_id=tokenizer.vocab["[PAD]"],
-                                         num_labels=hparams.embedding_dim,
-                                         position_embedding_type=None,  # "relative_key",
-                                         use_cache=False,
-                                         classifier_dropout=0.1)
+                bert_config = BertConfig(
+                    vocab_size=tokenizer.vocab_size, hidden_size=128, max_position_embeddings=max_position_embeddings,
+                    num_hidden_layers=2, num_attention_heads=4, intermediate_size=40, hidden_dropout_prob=0.1,
+                    pad_token_id=tokenizer.vocab["[PAD]"], num_labels=hparams.embedding_dim,
+                    position_embedding_type=None, use_cache=False, classifier_dropout=0.1)
 
                 seq_encoders[ntype] = BertForSequenceClassification(bert_config)
                 print("BertForSequenceClassification default BertConfig", ntype)
-
-        if "minibatching" in hparams.bert_config:
-            self.minibatching = hparams.bert_config["minibatching"]
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
     def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: int = None) -> Dict[str, Tensor]:
         h_out = {}
-        if minibatch != None and self.minibatching:
+        if minibatch != None:
             minibatch = max(int(minibatch), 1)
         else:
             minibatch = None

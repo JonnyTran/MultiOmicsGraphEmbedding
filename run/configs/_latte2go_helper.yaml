@@ -8,6 +8,7 @@ bert_config:
   MessengerRNA: "models/bert_mlm_MessengerRNA/"
   Protein: "models/bert_mlm_Protein/"
   GO_term: "models/bert_mlm_GO_term/"
+  trainable: false
 
 max_length:
   MicroRNA: 600
@@ -23,7 +24,7 @@ attn_activation: "LeakyReLU"
 activation: "relu"
 
 input_dropout: false
-batch_size: 32768
+batch_size: 16384
 max_epochs: 300
 sweep: true
 hours: 1
