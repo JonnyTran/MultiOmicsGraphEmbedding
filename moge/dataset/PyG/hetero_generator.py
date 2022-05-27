@@ -162,7 +162,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                    **kwargs)
         return dataset
 
-    def transform(self, batch: HeteroData):
+    def transform_heterograph(self, batch: HeteroData):
         X = {}
         X["x_dict"] = {ntype: x for ntype, x in batch.x_dict.items() if x.size(0)}
         X["edge_index_dict"] = {metapath: edge_index for metapath, edge_index in batch.edge_index_dict.items() \
@@ -202,21 +202,52 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return X, y_dict, weights
 
+    def get_full_graph(self):
+        return self.transform_heterograph(self.G)
+
+    def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
+                    metapaths=[], ) -> nx.MultiDiGraph:
+        G = nx.MultiDiGraph()
+
+        for ntype, node_list in self.nodes.items():
+            if nodes and ntype not in nodes:
+                continue
+            elif nodes and ntype in nodes and isinstance(nodes, (list, pd.Index)):
+                if all(isinstance(node, str) for node in nodes[ntype]):
+                    G.add_nodes_from(ntype + "-" + nodes[ntype], ntype=ntype)
+                elif all(isinstance(node, int) for node in nodes[ntype]):
+                    G.add_nodes_from(ntype + "-" + node_list[nodes[ntype]], ntype=ntype)
+            else:
+                G.add_nodes_from(ntype + "-" + node_list, ntype=ntype)
+
+        for metapath, edge_index in self.G.edge_index_dict.items():
+            if "rev_" in metapath or (metapaths and metapath not in metapaths):
+                continue
+
+            head_type, etype, tail_type = metapath
+            head_nodes = head_type + "-" + self.nodes[head_type][edge_index[0]]
+            tail_nodes = tail_type + "-" + self.nodes[tail_type][edge_index[1]]
+            G.add_edges_from([(u, v) for u, v in zip(head_nodes, tail_nodes)], etype=etype)
+
+        G.remove_nodes_from(list(nx.isolates(G)))
+
+        return G
+
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,
-                                            transform_fn=self.transform, num_workers=num_workers)
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
 
         return dataset
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].valid_mask,
-                                            transform_fn=self.transform, num_workers=num_workers)
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
 
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].test_mask,
-                                            transform_fn=self.transform, num_workers=num_workers)
+                                            transform_fn=self.transform_heterograph, num_workers=num_workers)
 
         return dataset
 
@@ -288,7 +319,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
-                                                       transform_fn=super().transform,
+                                                       transform_fn=super().transform_heterograph,
                                                        num_workers=0)
 
     def add_ontology_edges(self, ontology: GeneOntology, train_date='2017-06-15', valid_date='2017-11-15',
@@ -344,7 +375,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Reinstantiate graph sampler since hetero graph was modified
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
-                                                       transform_fn=super().transform,
+                                                       transform_fn=super().transform_heterograph,
                                                        num_workers=0)
 
     def load_annotation_edges(self, ontology, go_nodes, train_date, valid_date, go_ntype):
@@ -583,6 +614,29 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         nodes = {ntype: torch.unique(torch.cat(nids, dim=0)) for ntype, nids in nodes.items()}
 
         return nodes
+
+    def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
+                    metapaths: List[Tuple[str, str, str]] = [],
+                    pos_edges: Dict[Tuple[str, str, str], Tensor] = None) -> nx.MultiDiGraph:
+        G = super().to_networkx(nodes, metapaths)
+
+        if pos_edges is None:
+            pos_edges = self.triples_pos
+
+        for pred_metapath, edge_index in pos_edges.items():
+            if "rev_" in pred_metapath:
+                continue
+
+            head_type, etype, tail_type = pred_metapath
+            if tail_type not in self.nodes and hasattr(self, "ntype_mapping"):
+                tail_type = self.ntype_mapping[tail_type]
+
+            head_nodes = head_type + "-" + self.nodes[head_type][edge_index[0]]
+            tail_nodes = tail_type + "-" + self.nodes[tail_type][edge_index[1]]
+            G.add_edges_from([(u, v) for u, v in zip(head_nodes,
+                                                     tail_nodes)], etype=etype)
+
+        return G
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = DataLoader(self.training_idx, batch_size=batch_size,

@@ -198,7 +198,7 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
                                                             head_node_type=hparams.head_node_type,
                                                             # neighbor_loader="NeighborLoader", neighbor_sizes=[32, 32],
                                                             neighbor_loader="HGTLoader",
-                                                            neighbor_sizes=[hparams.n_neighbors] * hparams.n_layers,
+                                                            neighbor_sizes=[hparams.n_neighbors] * hparams.t_order,
                                                             seq_tokenizer=sequence_tokenizers)
 
         train_date = hparams.train_date

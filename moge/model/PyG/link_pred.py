@@ -36,8 +36,10 @@ class DistMult(torch.nn.Module):
 
     def forward(self, edges_input: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
-        output = {}
+        if edges_input is None or len(edges_input) == 0:
+            return {}
 
+        output = {}
         # True positive edges
         output["edge_pos"] = self.score(edges_input["edge_pos"], embeddings=embeddings, mode="single_pos")
 

@@ -151,7 +151,8 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
                 else:
                     labels_vector = self.annotations[modality].loc[sampled_nodes, variable]
                     labels_vector = self.process_label(labels_vector)
-                    X["_".join([modality, variable])] = self.network.feature_transformer[variable].transform(
+                    X["_".join([modality, variable])] = self.network.feature_transformer[
+                        variable].transform_heterograph(
                         labels_vector)
 
         for layer, network_layer in self.network.networks.items():
@@ -164,7 +165,7 @@ class MultiplexGenerator(SubgraphGenerator, MultiSequenceTokenizer):
         target_labels = self.network.all_annotations.loc[sampled_nodes, self.targets[0]]
         target_labels = self.process_label(target_labels)
 
-        y = self.network.feature_transformer[self.targets[0]].transform(target_labels)
+        y = self.network.feature_transformer[self.targets[0]].transform_heterograph(target_labels)
         if self.sparse_target is 1 and training:
             y = self.label_sparsify(y)[[0]]  # Select only a single label
         elif self.sparse_target is True and training:

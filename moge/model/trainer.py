@@ -336,7 +336,7 @@ class LinkPredTrainer(NodeClfTrainer):
             y_pred.append(edge_neg_batch_pred.view(-1))
             y_true.append(torch.zeros_like(edge_neg_batch_pred.view(-1)))
 
-        for metapath, edge_neg_batch_pred in edge_pred_dict["head_batch"].items():
+        for metapath, edge_neg_batch_pred in edge_pred_dict["head_b atch"].items():
             y_pred.append(edge_neg_batch_pred.view(-1))
             if self.hparams.loss_type == "PU_LOSS_WITH_LOGITS":
                 y_true.append(-torch.ones_like(edge_neg_batch_pred.view(-1)))

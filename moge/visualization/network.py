@@ -48,11 +48,11 @@ def force_layout(g, nodelist, iterations=100, init_pos=None):
 
 
 def graph_viz(g: nx.Graph,
-              nodelist: List, node_symbol: pd.Series = None, node_color: pd.Series = None,
-              edge_label: str = None, max_edges=10000,
-              title=None, width=1000, height=800, showlegend=True,
+              nodelist: List[str], node_symbol: pd.Series = None, node_color: pd.Series = None,
+              edge_label: str = None, max_edges: int = 10000,
+              title: str = None, width=1000, height=800, showlegend: bool = True,
               pos: Dict[str, np.ndarray] = None, iterations=100,
-              **kwargs):
+              **kwargs) -> go.Figure:
     if pos is None:
         pos = force_layout(g, nodelist, iterations)
 

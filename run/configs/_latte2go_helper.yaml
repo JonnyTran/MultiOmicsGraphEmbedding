@@ -32,4 +32,4 @@ loss_type: "CONTRASTIVE_LOSS"
 max_epochs: 300
 sweep: true
 lr: 0.01
-hours: 1
+hours: 1.5

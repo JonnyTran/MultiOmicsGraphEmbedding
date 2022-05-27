@@ -7,16 +7,17 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_geometric.transforms as T
-from moge.dataset.utils import get_edge_index
-from moge.network.attributed import AttributedNetwork, MODALITY_COL
-from moge.network.base import SEQUENCE_COL
-from moge.network.train_test_split import TrainTestSplit, stratify_train_test
-from moge.network.utils import filter_multilabel
 from openomics import MultiOmics
 from openomics.utils.df import concat_uniques
 from pandas import Series
 from torch import Tensor
 from torch_geometric.data import HeteroData
+
+from moge.dataset.utils import get_edge_index
+from moge.network.attributed import AttributedNetwork, MODALITY_COL
+from moge.network.base import SEQUENCE_COL
+from moge.network.train_test_split import TrainTestSplit, stratify_train_test
+from moge.network.utils import filter_multilabel
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -195,6 +196,23 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
             self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
 
+    def merge_annotations(self, node_manifest: pd.DataFrame, ):
+        assert "index" in node_manifest.columns and "ntype" in node_manifest.columns
+
+        node_types = node_manifest["ntype"].unique()
+
+        for ntype in node_types:
+            if ntype not in self.annotations.keys():
+                print(f"No {ntype} in annotations")
+                continue
+
+            node_mask = node_manifest["ntype"] == ntype
+            annotations = self.annotations[ntype].loc[node_manifest.loc[node_mask, "index"]]
+            print(annotations)
+            node_manifest.loc[node_mask] = annotations
+
+        return node_manifest
+
     def to_dgl_heterograph(self, label_col="go_id", min_count=10, label_subset=None, sequence=False) -> \
             Tuple[dgl.DGLHeteroGraph, Dict[str, Tensor], int, Tensor, Tensor, Tensor]:
         # Filter node that doesn't have a sequence
@@ -221,7 +239,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     feat_filtered = filter_multilabel(annotations[col], min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
 
-                    feat = self.feature_transformer[col].transform(feat_filtered)
+                    feat = self.feature_transformer[col].transform_heterograph(feat_filtered)
                     G.nodes[ntype].data[col] = torch.from_numpy(feat)
 
             # DNA/RNA sequence
@@ -245,7 +263,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype].label_col],
                                         min_count=min_count,
                                         label_subset=label_subset, dropna=False, delimiter=self.delimiter)
-            labels[ntype] = self.feature_transformer[label_col].transform(y_label)
+            labels[ntype] = self.feature_transformer[label_col].transform_heterograph(y_label)
             labels[ntype] = torch.tensor(labels[ntype])
 
             G.nodes[ntype].data["label"] = labels[ntype]
@@ -286,7 +304,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 if col in self.feature_transformer:
                     feat_filtered = filter_multilabel(annotations[col], min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
-                    feat: np.ndarray = self.feature_transformer[col].transform(feat_filtered)
+                    feat: np.ndarray = self.feature_transformer[col].transform_heterograph(feat_filtered)
                     # data[ntype][col] = feat
                     print(ntype, col)
                     node_feats.append(torch.tensor(feat, dtype=torch.float))
@@ -324,7 +342,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 y_label = filter_multilabel(self.multiomics[ntype].annotations.loc[self.nodes[ntype], target],
                                             min_count=None, label_subset=classes, dropna=False,
                                             delimiter=self.delimiter)
-                y_dict[ntype] = self.feature_transformer[target].transform(y_label)
+                y_dict[ntype] = self.feature_transformer[target].transform_heterograph(y_label)
                 y_dict[ntype] = torch.tensor(y_dict[ntype])
 
                 hetero[ntype]["y"] = y_dict[ntype]
