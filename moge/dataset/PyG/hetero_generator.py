@@ -5,18 +5,17 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from openomics.database.ontology import GeneOntology
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index, edge_index_to_adj
-from moge.model.PyG.utils import num_edges
+from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
+from openomics.database.ontology import GeneOntology
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -206,32 +205,53 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return self.transform_heterograph(self.G)
 
     def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
-                    metapaths=[], ) -> nx.MultiDiGraph:
+                    edge_index_dict: Dict[Tuple[str, str, str], Tensor] = [],
+                    global_node_idx: Dict[str, Tensor] = None) -> nx.MultiDiGraph:
         G = nx.MultiDiGraph()
 
-        for ntype, node_list in self.nodes.items():
-            if nodes and ntype not in nodes:
-                continue
-            elif nodes and ntype in nodes and isinstance(nodes, (list, pd.Index)):
-                if all(isinstance(node, str) for node in nodes[ntype]):
-                    G.add_nodes_from(ntype + "-" + nodes[ntype], ntype=ntype)
-                elif all(isinstance(node, int) for node in nodes[ntype]):
-                    G.add_nodes_from(ntype + "-" + node_list[nodes[ntype]], ntype=ntype)
-            else:
-                G.add_nodes_from(ntype + "-" + node_list, ntype=ntype)
+        if not edge_index_dict:
+            edge_index_dict = self.G.edge_index_dict
+        elif isinstance(edge_index_dict, list):
+            edge_index_dict = {m: eidx for m, eidx in self.G.edge_index_dict if
+                               m in edge_index_dict or m[1] in edge_index_dict}
 
-        for metapath, edge_index in self.G.edge_index_dict.items():
-            if "rev_" in metapath or (metapaths and metapath not in metapaths):
-                continue
+        edge_list = convert_to_nx_edgelist(nodes=self.nodes, edge_index_dict=edge_index_dict,
+                                           global_node_idx=global_node_idx)
+        for etype, edges in edge_list.items():
+            G.add_edges_from(edges, etype=etype)
 
-            head_type, etype, tail_type = metapath
-            head_nodes = head_type + "-" + self.nodes[head_type][edge_index[0]]
-            tail_nodes = tail_type + "-" + self.nodes[tail_type][edge_index[1]]
-            G.add_edges_from([(u, v) for u, v in zip(head_nodes, tail_nodes)], etype=etype)
+        if nodes:
+            filter_nodes = []
 
-        G.remove_nodes_from(list(nx.isolates(G)))
+            for ntype, node_list in nodes.items():
+                if isinstance(node_list, Tensor):
+                    node_list = node_list.detach().numpy().tolist()
 
-        return G
+                if all(isinstance(node, str) for node in node_list):
+                    select_nodes = ntype + "-" + pd.Index(node_list)
+                elif all(isinstance(node, int) for node in node_list):
+                    select_nodes = ntype + "-" + self.nodes[ntype][nodes[ntype]]
+                else:
+                    print([type(node) for node in node_list])
+                    select_nodes = []
+
+                if G.number_of_nodes() > 0 and set(select_nodes).issubset(set(G.nodes())):
+                    filter_nodes.extend(select_nodes)
+                else:
+                    G.add_nodes_from(select_nodes)
+
+            if len(filter_nodes):
+                H = G.copy()
+                H = G.subgraph(filter_nodes)
+
+        else:
+            print("got here3")
+            H = G.copy()
+            H.remove_nodes_from(list(nx.isolates(H)))
+
+        return H
+
+
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,
@@ -616,25 +636,19 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return nodes
 
     def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
-                    metapaths: List[Tuple[str, str, str]] = [],
-                    pos_edges: Dict[Tuple[str, str, str], Tensor] = None) -> nx.MultiDiGraph:
-        G = super().to_networkx(nodes, metapaths)
+                    metapaths: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = [],
+                    global_node_idx: Dict[str, Tensor] = None,
+                    pos_edges: Dict[Tuple[str, str, str], Tensor] = None, ) -> nx.MultiDiGraph:
+        G = super().to_networkx(nodes, metapaths, global_node_idx)
 
-        if pos_edges is None:
-            pos_edges = self.triples_pos
+        if pos_edges is not None:
+            edge_list = convert_to_nx_edgelist(nodes=self.nodes, edge_index_dict=pos_edges,
+                                               global_node_idx=global_node_idx)
+        else:
+            edge_list = {}
 
-        for pred_metapath, edge_index in pos_edges.items():
-            if "rev_" in pred_metapath:
-                continue
-
-            head_type, etype, tail_type = pred_metapath
-            if tail_type not in self.nodes and hasattr(self, "ntype_mapping"):
-                tail_type = self.ntype_mapping[tail_type]
-
-            head_nodes = head_type + "-" + self.nodes[head_type][edge_index[0]]
-            tail_nodes = tail_type + "-" + self.nodes[tail_type][edge_index[1]]
-            G.add_edges_from([(u, v) for u, v in zip(head_nodes,
-                                                     tail_nodes)], etype=etype)
+        for etype, edges in edge_list.items():
+            G.add_edges_from(edges, etype=etype)
 
         return G
 
@@ -657,4 +671,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                              collate_fn=self.transform,
                              shuffle=False,
                              num_workers=num_workers, **kwargs)
+        return dataset
+
+    def dataloader(self, edge_idx, batch_size=128, num_workers=0):
+        dataset = DataLoader(edge_idx, batch_size=batch_size,
+                             collate_fn=self.transform,
+                             shuffle=False,
+                             num_workers=num_workers)
         return dataset

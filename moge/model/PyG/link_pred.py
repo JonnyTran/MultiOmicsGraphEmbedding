@@ -4,10 +4,10 @@ from typing import List, Tuple, Dict, Any, Union
 
 import torch
 from fairscale.nn import auto_wrap
-from torch import nn, Tensor
-
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn, Tensor
+
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -246,6 +246,15 @@ class LATTELinkPred(LinkPredTrainer):
 
         return loss
 
+    def on_test_end(self) -> None:
+        super().on_test_end()
+        if self.num_training_steps < 100: return
+
+        X, y, _ = self.dataset.get_full_graph()
+        embs, _, _ = self.forward(X, y, save_betas=False)
+
+        self.predict_umap(X, embs, log_table=True)
+
     def test_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
         embeddings, _, edge_pred_dict = self.forward(X, edge_true)
@@ -263,7 +272,8 @@ class LATTELinkPred(LinkPredTrainer):
         return loss
 
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                 edge_pred_dict, e_pos: Tensor, e_neg: Tensor):
+                                 edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+                                 e_pos: Tensor, e_neg: Tensor):
         if isinstance(metrics, dict):
             for metapath in edge_pred_dict["edge_pos"]:
                 go_type = "BPO" if metapath[-1] == 'biological_process' else \

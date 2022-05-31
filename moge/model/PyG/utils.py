@@ -38,6 +38,29 @@ def is_negative(metapath):
         return False
 
 
+def convert_to_nx_edgelist(nodes: Dict[str, pd.Index], edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+                           global_node_idx: Dict[str, Tensor] = None) -> Dict[str, List[Tuple[str, str]]]:
+    edge_list = {}
+    for metapath, edge_index in edge_index_dict.items():
+        head_type, etype, tail_type = metapath
+        if "rev_" in metapath:
+            continue
+
+        head_nodes = edge_index[0] if not global_node_idx else global_node_idx[head_type][edge_index[0]]
+        tail_nodes = edge_index[1] if not global_node_idx else global_node_idx[tail_type][edge_index[1]]
+
+        if isinstance(head_nodes, Tensor):
+            head_nodes = head_nodes.detach().numpy()
+        if isinstance(tail_nodes, Tensor):
+            tail_nodes = tail_nodes.detach().numpy()
+
+        head_nodes = head_type + "-" + nodes[head_type][head_nodes]
+        tail_nodes = tail_type + "-" + nodes[tail_type][tail_nodes]
+        edge_list[etype] = [(u, v) for u, v in zip(head_nodes, tail_nodes)]
+
+    return edge_list
+
+
 def join_metapaths(metapath_A, metapath_B):
     output_metapaths = []
 

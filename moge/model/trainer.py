@@ -1,19 +1,20 @@
 import itertools
 import logging
-from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable
+from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable, Any
 
 import numpy as np
 import pandas as pd
 import torch
-from pytorch_lightning import LightningModule
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.utils.data.distributed import DistributedSampler
-
+import wandb
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
+from pytorch_lightning import LightningModule
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.utils.data.distributed import DistributedSampler
+from umap import UMAP
 
 
 class ClusteringEvaluator(LightningModule):
@@ -138,7 +139,40 @@ class ClusteringEvaluator(LightningModule):
         return y_pred
 
 
-class NodeClfTrainer(ClusteringEvaluator):
+class NodeEmbeddingEvaluator(LightningModule):
+    def predict_umap(self, X: Dict[str, Any], embs: Dict[str, Tensor], log_table=False):
+        global_node_index = {k: v.numpy() for k, v in X["global_node_index"].items()}
+
+        node_list = pd.concat([pd.Series(self.dataset.nodes[ntype][global_node_index[ntype]]) \
+                               for ntype in global_node_index])
+        node_types = pd.concat([pd.Series([ntype] * global_node_index[ntype].shape[0]) for ntype in global_node_index])
+
+        nodes_emb = {ntype: embs[ntype].detach().numpy() for ntype in embs}
+        nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
+
+        df = pd.DataFrame({"ntype": node_types.values}, index=node_list.values)
+        if hasattr(self.dataset, "go_namespace"):
+            go_namespace = {k: v for k, v in zip(self.dataset.nodes[self.dataset.go_ntype], self.dataset.go_namespace)}
+            rename_ntype = pd.Series(df.index.map(go_namespace), index=df.index).dropna()
+            df["ntype"].update(rename_ntype)
+            df["ntype"] = df["ntype"].replace(
+                {"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", })
+
+        nodes_umap = UMAP(n_components=2, n_jobs=10).fit_transform(nodes_emb)
+        nodes_pos = {node_name: pos for node_name, pos in zip(node_list, nodes_umap)}
+
+        df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
+        df = df.sample(1000)
+
+        # Log_table
+        if log_table:
+            table = wandb.Table(data=df.drop(columns=["pos"], errors="ignore").sample(1000))
+            wandb.log({"node_emb_umap_plot": table})
+
+        return df
+
+
+class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(*args, **kwargs)
 
