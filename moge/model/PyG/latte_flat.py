@@ -381,7 +381,7 @@ class LATTE(nn.Module):
         else:
             raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
 
-        return out, proximity_loss, edge_pred_dict
+        return out
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))

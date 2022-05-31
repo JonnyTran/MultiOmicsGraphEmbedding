@@ -6,15 +6,16 @@ import numpy as np
 import pandas as pd
 import torch
 import wandb
-from moge.criterion.clustering import clustering_metrics
-from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
-from moge.model.metrics import Metrics
-from moge.model.utils import tensor_sizes, preprocess_input
 from pytorch_lightning import LightningModule
 from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
 from umap import UMAP
+
+from moge.criterion.clustering import clustering_metrics
+from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
+from moge.model.metrics import Metrics
+from moge.model.utils import tensor_sizes, preprocess_input
 
 
 class ClusteringEvaluator(LightningModule):
@@ -151,6 +152,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
 
         df = pd.DataFrame({"ntype": node_types.values}, index=node_list.values)
+        df.index.name = "nid"
         if hasattr(self.dataset, "go_namespace"):
             go_namespace = {k: v for k, v in zip(self.dataset.nodes[self.dataset.go_ntype], self.dataset.go_namespace)}
             rename_ntype = pd.Series(df.index.map(go_namespace), index=df.index).dropna()
@@ -166,7 +168,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log_table
         if log_table:
-            table = wandb.Table(data=df.drop(columns=["pos"], errors="ignore").sample(1000))
+            table = wandb.Table(data=df.reset_index().drop(columns=["pos"], errors="ignore").sample(1000))
             wandb.log({"node_emb_umap_plot": table})
 
         return df

@@ -4,10 +4,11 @@ from typing import List, Tuple, Dict, Any, Union
 
 import torch
 from fairscale.nn import auto_wrap
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import ClassificationLoss
 from torch import nn, Tensor
 
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.losses import ClassificationLoss
+from .conv import HGT
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -202,22 +203,22 @@ class LATTELinkPred(LinkPredTrainer):
             embs = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        embeddings, aux_loss, _ = self.embedder.forward(h_out,
-                                                        edge_index_dict=inputs["edge_index_dict"],
-                                                        global_node_idx=inputs["global_node_index"],
-                                                        sizes=inputs["sizes"],
-                                                        **kwargs)
+        embeddings = self.embedder.forward(h_out,
+                                           edge_index_dict=inputs["edge_index_dict"],
+                                           global_node_idx=inputs["global_node_index"],
+                                           sizes=inputs["sizes"],
+                                           **kwargs)
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
         if return_score:
             edges_pred = {pos_neg: {metapath: torch.sigmoid(edge_logits) for metapath, edge_logits in edge_dict.items()} \
                           for pos_neg, edge_dict in edges_pred.items()}
 
-        return embeddings, aux_loss, edges_pred
+        return embeddings, edges_pred
 
     def training_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
-        embeddings, _, edge_pred_dict = self.forward(X, edge_true)
+        embeddings, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
@@ -234,7 +235,7 @@ class LATTELinkPred(LinkPredTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
-        embeddings, _, edge_pred_dict = self.forward(X, edge_true)
+        embeddings, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
@@ -247,17 +248,21 @@ class LATTELinkPred(LinkPredTrainer):
         return loss
 
     def on_test_end(self) -> None:
-        super().on_test_end()
-        if self.num_training_steps < 100: return
+        try:
+            X, y, _ = self.dataset.get_full_graph()
+            embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=False)
 
-        X, y, _ = self.dataset.get_full_graph()
-        embs, _, _ = self.forward(X, y, save_betas=False)
+            df = self.predict_umap(X, embs, log_table=True)
 
-        self.predict_umap(X, embs, log_table=True)
+        except Exception as e:
+            print(e)
+
+        finally:
+            super().on_test_end()
 
     def test_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
-        embeddings, _, edge_pred_dict = self.forward(X, edge_true)
+        embeddings, edge_pred_dict = self.forward(X, edge_true)
 
         e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
@@ -345,3 +350,34 @@ class LATTELinkPred(LinkPredTrainer):
             print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
 
         return {"optimizer": optimizer, **extra}
+
+
+class HGTLinkPred(LATTELinkPred):
+    def __init__(self, hparams, dataset: HeteroLinkPredDataset, metrics=["obgl-biokg"],
+                 collate_fn=None) -> None:
+        super().__init__(hparams, dataset, metrics)
+        self.head_node_type = dataset.head_node_type
+        self.dataset = dataset
+        self.multilabel = dataset.multilabel
+        self._name = f"HGT-{hparams.n_layers}_Link"
+        self.collate_fn = collate_fn
+
+        # Node attr input
+        if hasattr(dataset, 'seq_tokenizer'):
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
+
+        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(dataset.node_types):
+            self.encoder = HeteroNodeEncoder(hparams, dataset)
+
+        self.embedder = HGT(embedding_dim=hparams.embedding_dim, num_layers=hparams.n_layers,
+                            num_heads=hparams.attn_heads,
+                            node_types=dataset.G.node_types, metadata=dataset.G.metadata())
+
+        self.classifier = DistMult(embedding_dim=hparams.embedding_dim,
+                                   metapaths=dataset.pred_metapaths,
+                                   ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
+
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
+
+        self.hparams.n_params = self.get_n_params()
+        self.lr = self.hparams.lr
