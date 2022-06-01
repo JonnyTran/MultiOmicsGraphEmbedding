@@ -182,7 +182,7 @@ def graph_viz3d(g: nx.Graph,
     return fig
 
 
-def configure_layout(fig, height, showlegend, title, width):
+def configure_layout(fig, showlegend=True, **kwargs):
     # Figure
     axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
                 zeroline=False,
@@ -191,13 +191,11 @@ def configure_layout(fig, height, showlegend, title, width):
                 title=''
                 )
     fig.update_layout(
-        title=title,
+        **kwargs,
         showlegend=showlegend,
         # legend=dict(autosize=True, width=100),
         legend_orientation="v",
         autosize=True,
-        width=width,
-        height=height,
         margin=dict(
             l=5,
             r=5,

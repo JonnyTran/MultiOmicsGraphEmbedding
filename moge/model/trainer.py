@@ -1,5 +1,6 @@
 import itertools
 import logging
+import random
 from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable, Any
 
 import numpy as np
@@ -7,6 +8,7 @@ import pandas as pd
 import torch
 import wandb
 from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
 from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
@@ -16,6 +18,7 @@ from moge.criterion.clustering import clustering_metrics
 from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
+from moge.visualization.attention import sankey_plot
 
 
 class ClusteringEvaluator(LightningModule):
@@ -164,7 +167,6 @@ class NodeEmbeddingEvaluator(LightningModule):
         nodes_pos = {node_name: pos for node_name, pos in zip(node_list, nodes_umap)}
 
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
-        df = df.sample(1000)
 
         # Log_table
         if log_table:
@@ -172,6 +174,26 @@ class NodeEmbeddingEvaluator(LightningModule):
             wandb.log({"node_emb_umap_plot": table})
 
         return df
+
+    def plot_sankey_flow(self, ):
+        if isinstance(self.logger, WandbLogger):
+            run_id = self.logger.experiment.id
+        else:
+            run_id = str(random.randint(0, 100))
+
+        # wandb.
+        for ntype in self.embedder.node_types:
+            nodes, links = self.embedder.get_sankey_flow(layer=-1, node_type=ntype, self_loop=True)
+            fig = sankey_plot(nodes, links)
+
+            path_to_plotly_html = f"./wandb_figure_run_{run_id}_{ntype}.html"
+            fig.write_html(path_to_plotly_html, auto_play=False)
+
+            # Add Plotly figure as HTML file into Table
+            table = wandb.Table(columns=[f"{ntype}_attn"])
+            table.add_data(wandb.Html(path_to_plotly_html))
+            # Log Table
+            wandb.log({"node_emb_umap_plot": table})
 
 
 class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):

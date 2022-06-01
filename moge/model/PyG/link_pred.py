@@ -1,5 +1,6 @@
 import logging
 import math
+import traceback
 from typing import List, Tuple, Dict, Any, Union
 
 import torch
@@ -247,19 +248,6 @@ class LATTELinkPred(LinkPredTrainer):
 
         return loss
 
-    def on_test_end(self) -> None:
-        try:
-            X, y, _ = self.dataset.get_full_graph()
-            embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=False)
-
-            df = self.predict_umap(X, embs, log_table=True)
-
-        except Exception as e:
-            print(e)
-
-        finally:
-            super().on_test_end()
-
     def test_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
         embeddings, edge_pred_dict = self.forward(X, edge_true)
@@ -275,6 +263,19 @@ class LATTELinkPred(LinkPredTrainer):
 
         self.log("test_loss", loss)
         return loss
+
+    def on_test_end(self) -> None:
+        try:
+            X, y, _ = self.dataset.get_full_graph()
+            embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=True)
+
+            df = self.predict_umap(X, embs, log_table=True)
+
+        except Exception as e:
+            traceback.print_exc()
+
+        finally:
+            super().on_test_end()
 
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
                                  edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
