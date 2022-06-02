@@ -5,10 +5,10 @@ from typing import List, Tuple, Dict, Any, Union
 
 import torch
 from fairscale.nn import auto_wrap
-from torch import nn, Tensor
-
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn, Tensor
+
 from .conv import HGT
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
@@ -270,6 +270,8 @@ class LATTELinkPred(LinkPredTrainer):
             embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=True)
 
             df = self.predict_umap(X, embs, log_table=True)
+
+            self.plot_sankey_flow(layer=-1)
 
         except Exception as e:
             traceback.print_exc()

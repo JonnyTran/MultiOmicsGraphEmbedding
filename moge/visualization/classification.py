@@ -1,9 +1,9 @@
 from itertools import cycle
 
 import numpy as np
+from moge.criterion.classification import *
 from plotly import graph_objects as go
 
-from moge.evaluation.classification import *
 from .utils import colors
 
 

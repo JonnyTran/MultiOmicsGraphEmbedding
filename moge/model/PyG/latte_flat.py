@@ -11,10 +11,6 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
-from torch import nn as nn, Tensor
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-
 from moge.dataset import HeteroNodeClfDataset
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
@@ -23,6 +19,10 @@ from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
+from pandas import DataFrame
+from torch import nn as nn, Tensor
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
 
 
 class LATTEFlatNodeClf(NodeClfTrainer):
@@ -395,7 +395,8 @@ class LATTE(nn.Module):
             df = df[df.notnull().sum(1) >= min_order]
         return df
 
-    def get_sankey_flow(self, layer: int, node_type: str, self_loop: bool = False, agg="mean"):
+    def get_sankey_flow(self, layer: int, node_type: str, self_loop: bool = False, agg="mean") -> Tuple[
+        DataFrame, DataFrame]:
         rel_attn: pd.DataFrame = self.layers[layer]._betas[node_type]
         if agg == "sum":
             rel_attn = rel_attn.sum(axis=0)

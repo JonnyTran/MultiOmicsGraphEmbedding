@@ -1,11 +1,14 @@
+import copy
 from typing import List, Union, Dict, Tuple
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from moge.model.PyG import is_negative
 from torch import Tensor
-from torch_sparse import SparseTensor
+from torch_geometric.utils import is_undirected
+from torch_sparse import SparseTensor, transpose
 
 
 def one_hot_encoder(x, embed_dim=None):
@@ -96,3 +99,54 @@ def get_edge_index(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
                               torch.tensor(biadj.col, dtype=torch.long)])
 
     return edge_index
+
+
+def add_reverse_edge_index(edge_index_dict: Dict[Tuple[str], Tensor], num_nodes_dict) -> None:
+    reverse_edge_index_dict = {}
+    for metapath, edge_index in edge_index_dict.items():
+        if is_negative(metapath) or edge_index_dict[metapath] == None: continue
+
+        reverse_metapath = reverse_metapath_name(metapath)
+
+        if metapath[0] == metapath[-1] and isinstance(edge_index, Tensor) and is_undirected(edge_index):
+            print(f"skipping reverse {metapath} because edges are symmetrical")
+            continue
+
+        print("Reversing", metapath, "to", reverse_metapath)
+        reverse_edge_index_dict[reverse_metapath] = transpose(index=edge_index_dict[metapath], value=None,
+                                                              m=num_nodes_dict[metapath[0]],
+                                                              n=num_nodes_dict[metapath[-1]])[0]
+    edge_index_dict.update(reverse_edge_index_dict)
+
+
+def get_reverse_metapaths(metapaths) -> List[Tuple[str]]:
+    reverse_metapaths = []
+    for metapath in metapaths:
+        reverse = reverse_metapath_name(metapath)
+        reverse_metapaths.append(reverse)
+    return reverse_metapaths
+
+
+def reverse_metapath_name(metapath: Tuple[str]) -> Tuple[str]:
+    if isinstance(metapath, tuple):
+        tokens = []
+        for i, token in enumerate(reversed(copy.deepcopy(metapath))):
+            if i == 1:
+                if len(token) == 2:
+                    reverse_etype = token[::-1]
+                else:
+                    reverse_etype = token + "_"
+                tokens.append(reverse_etype)
+            else:
+                tokens.append(token)
+
+        reverse_metapath = tuple(tokens)
+
+    elif isinstance(metapath, str):
+        reverse_metapath = "".join(reversed(metapath))
+
+    elif isinstance(metapath, (int, np.int)):
+        reverse_metapath = str(metapath) + "_"
+    else:
+        raise NotImplementedError(f"{metapath} not supported")
+    return reverse_metapath

@@ -7,18 +7,17 @@ import numpy as np
 import pandas as pd
 import torch
 import wandb
+from moge.criterion.clustering import clustering_metrics
+from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
+from moge.model.metrics import Metrics
+from moge.model.utils import tensor_sizes, preprocess_input
+from moge.visualization.attention import plot_sankey_flow
 from pytorch_lightning import LightningModule
 from pytorch_lightning.loggers import WandbLogger
 from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
 from umap import UMAP
-
-from moge.criterion.clustering import clustering_metrics
-from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
-from moge.model.metrics import Metrics
-from moge.model.utils import tensor_sizes, preprocess_input
-from moge.visualization.attention import sankey_plot
 
 
 class ClusteringEvaluator(LightningModule):
@@ -175,26 +174,35 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         return df
 
-    def plot_sankey_flow(self, ):
+    def plot_sankey_flow(self, layer: int = -1):
         if isinstance(self.logger, WandbLogger):
             run_id = self.logger.experiment.id
         else:
             run_id = str(random.randint(0, 100))
 
-        # wandb.
-        for ntype in self.embedder.node_types:
-            nodes, links = self.embedder.get_sankey_flow(layer=-1, node_type=ntype, self_loop=True)
-            fig = sankey_plot(nodes, links)
+        t_order = self.embedder.layers[layer].t_order
+        node_types = list(self.embedder.layers[layer]._betas.keys())
+        table = wandb.Table(columns=[f"Layer{layer + 1 if layer >= 0 else len(self.embedder.layers)}_{ntype}" \
+                                     for ntype in node_types])
+        plotly_htmls = []
+
+        # Log plotly HTMLs as a wandb.Table
+        for ntype in node_types:
+            nodes, links = self.embedder.get_sankey_flow(layer=layer, node_type=ntype, self_loop=True)
+            fig = plot_sankey_flow(nodes, links, width=200 * t_order, height=200)
 
             path_to_plotly_html = f"./wandb_figure_run_{run_id}_{ntype}.html"
-            fig.write_html(path_to_plotly_html, auto_play=False)
+            fig.write_html(path_to_plotly_html, auto_play=False,
+                           include_plotlyjs=True, full_html=True,
+                           config=dict(displayModeBar=False))
+            plotly_htmls.append(wandb.Html(path_to_plotly_html))
 
-            # Add Plotly figure as HTML file into Table
-            table = wandb.Table(columns=[f"{ntype}_attn"])
-            table.add_data(wandb.Html(path_to_plotly_html))
-            # Log Table
-            wandb.log({"node_emb_umap_plot": table})
+        # Add Plotly figure as HTML file into Table
+        table.add_data(*plotly_htmls)
 
+        # Log Table
+        wandb.log({"sankey_flow": table})
+        # os.system(f"rm -f ./wandb_figure_run_{run_id}*.html")
 
 class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):

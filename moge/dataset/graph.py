@@ -1,14 +1,16 @@
-import copy
-import logging
 from abc import abstractmethod
-from typing import Union, List, Tuple, Dict
+from abc import abstractmethod
+from typing import Union, List, Tuple
 
 import dgl
+import moge.model.PyG.utils
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
+from moge.dataset.utils import get_reverse_metapaths
+from moge.model.PyG.utils import get_edge_index_values
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -17,10 +19,6 @@ from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_geometric.utils import is_undirected
-from torch_sparse import transpose
-
-import moge.model.PyG.utils
-from moge.model.PyG.utils import is_negative, get_edge_index_values
 
 
 class Graph:
@@ -291,7 +289,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         """
         metapaths = self.metapaths
         if self.use_reverse:
-            metapaths = metapaths + self.get_reverse_metapaths(self.metapaths, self.edge_index_dict)
+            metapaths = metapaths + get_reverse_metapaths(self.metapaths)
 
         if khop:
             t_order_metapaths = metapaths
@@ -327,56 +325,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
 
         return node_ids_dict
 
-    def add_reverse_edge_index(self, edge_index_dict: Dict[Tuple[str], Tensor]) -> None:
-        reverse_edge_index_dict = {}
-        for metapath, edge_index in edge_index_dict.items():
-            if is_negative(metapath) or edge_index_dict[metapath] == None: continue
 
-            reverse_metapath = self.reverse_metapath_name(metapath)
-
-            if metapath[0] == metapath[-1] and isinstance(edge_index, Tensor) and is_undirected(edge_index):
-                print(f"skipping reverse {metapath} because edges are symmetrical")
-                continue
-
-            print("Reversing", metapath, "to", reverse_metapath)
-            reverse_edge_index_dict[reverse_metapath] = transpose(index=edge_index_dict[metapath], value=None,
-                                                                  m=self.num_nodes_dict[metapath[0]],
-                                                                  n=self.num_nodes_dict[metapath[-1]])[0]
-        edge_index_dict.update(reverse_edge_index_dict)
-
-    def get_reverse_metapaths(self, metapaths) -> List[Tuple[str]]:
-        reverse_metapaths = []
-        for metapath in metapaths:
-            reverse = self.reverse_metapath_name(metapath)
-            reverse_metapaths.append(reverse)
-        return reverse_metapaths
-
-    def reverse_metapath_name(self, metapath: Tuple[str]) -> Tuple[str]:
-        if isinstance(metapath, tuple):
-            tokens = []
-            for i, token in enumerate(reversed(copy.deepcopy(metapath))):
-                if i == 1:
-                    if len(token) == 2:
-                        reverse_etype = token[::-1]
-                    else:
-                        reverse_etype = token + "_"
-                    tokens.append(reverse_etype)
-                else:
-                    tokens.append(token)
-
-            reverse_metapath = tuple(tokens)
-
-        elif isinstance(metapath, str):
-            reverse_metapath = "".join(reversed(metapath))
-            if reverse_metapath in self.edge_index_dict:
-                logging.info(f"Reversed metapath {reverse_metapath} already exists in {self.edge_index_dict.keys()}")
-                # reverse_metapath = reverse_metapath[:1] + "_" + reverse_metapath[1:]
-
-        elif isinstance(metapath, (int, np.int)):
-            reverse_metapath = str(metapath) + "_"
-        else:
-            raise NotImplementedError(f"{metapath} not supported")
-        return reverse_metapath
 
 
     def process_inmemorydataset(self, dataset: PyGInMemoryDataset, train_ratio):

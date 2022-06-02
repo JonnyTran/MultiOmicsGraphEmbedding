@@ -42,6 +42,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.nodes = nodes
         self._name = ""
 
+        self.use_reverse = True if any("rev_" in metapath[1] for metapath in hetero.edge_types) else False
+
         return self
 
     def process_pyg_heterodata(self, hetero: HeteroData):
@@ -319,6 +321,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return out_edge_index_dict
 
 
+def reverse_metapath_name(metapath):
+    rev_metapath = tuple(reversed(["rev_" + type if i % 2 == 1 else type \
+                                   for i, type in enumerate(metapath)]))
+    return rev_metapath
+
+
 class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def __init__(self, dataset: HeteroData,
                  pred_metapaths: List[Tuple[str, str, str]] = [],
@@ -356,12 +364,16 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_types = {e for u, v, e in ontology.network.edges}
 
         edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
-                                                      reverse=True,
+                                                      # reverse=True,
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 100: continue
             self.G[metapath].edge_index = edge_index
             self.metapaths.append(metapath)
+
+            if self.use_reverse:
+                rev_metapath = reverse_metapath_name(metapath)
+                self.G[rev_metapath].edge_index = edge_index[[1, 0], :]
 
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():

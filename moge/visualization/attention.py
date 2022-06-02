@@ -1,15 +1,18 @@
 import plotly.graph_objects as go
-
+from matplotlib.colors import to_rgb
 from moge.visualization.graph import configure_layout
+from pandas import DataFrame
 
 
-def sankey_plot(nodes, links, **kwargs):
-    # override gray link colors with 'source' colors
-    opacity = 0.4
+def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=8, orientation="h", **kwargs):
     # change 'magenta' to its 'rgba' value to add opacity
+    rgba_color = [f"rgba{tuple(int(val * 255) for val in to_rgb(color)) + (opacity,)}" \
+                  for color in links['color']]
 
     fig = go.Figure(data=[go.Sankey(
         valueformat=".2f",
+        orientation=orientation,
+        hoverinfo="skip",
         # Define nodes
         node=dict(
             pad=15,
@@ -24,11 +27,11 @@ def sankey_plot(nodes, links, **kwargs):
             target=links['target'],
             value=links['value'],
             label=links['label'],
-            color=links['color'],
+            color=rgba_color,
         ),
 
     )], )
 
     configure_layout(fig, **kwargs)
-    fig.update_layout(font_size=10)
+    fig.update_layout(font_size=font_size)
     return fig
