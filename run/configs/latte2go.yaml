@@ -22,24 +22,24 @@ max_length:
 
 head_node_type: "MessengerRNA"
 use_reverse: true
-neighbor_loader: NeighborLoader
-n_neighbors: 32
+neighbor_loader: "NeighborLoader"
+n_neighbors: 512
 n_layers: 2
 t_order: 2
-embedding_dim: 256
+embedding_dim: 128
 layer_pooling: "last"
 
-attn_heads: 4
+attn_heads: 2
 attn_activation: "LeakyReLU"
-attn_dropout: 0.0
+attn_dropout: 0.10
 
 batchnorm: false
 layernorm: true
 activation: "relu"
-dropout: 0.1
-neg_sampling_ratio: 1000
+dropout: 0.2
+neg_sampling_ratio: 600
 
 loss_type: "CONTRASTIVE_LOSS"
-batch_size: 4096
+batch_size: 2048
 lr: 0.001
-weight_decay: 0.0001
+weight_decay: 0.001

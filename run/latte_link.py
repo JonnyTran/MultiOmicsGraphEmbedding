@@ -46,7 +46,7 @@ def train(hparams: Namespace):
 
     # Logger
     logger = None if hasattr(hparams, "no_wandb") and hparams.no_wandb else \
-        WandbLogger(name=model.name(), tags=[dataset.name()], project="multiplex-comparison")
+        WandbLogger(name=model.name(), tags=[dataset.name()], project="latte-link-pred")
     logger.log_hyperparams(hparams)
 
     # Trainer

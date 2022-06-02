@@ -5,17 +5,18 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from openomics.database.ontology import GeneOntology
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index, edge_index_to_adj
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
-from openomics.database.ontology import GeneOntology
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -69,7 +70,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
         edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
-                                                      reverse=True,
+                                                      reverse=not self.use_reverse,
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 200: continue
@@ -135,13 +136,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if self.neighbor_loader == "NeighborLoader":
             self.num_neighbors = {
                 etype: self.neighbor_sizes \
-                    if etype[1] != 'associated' else [-1, ] * len(self.neighbor_sizes)
                 for etype in self.metapaths}
 
         elif self.neighbor_loader == "HGTLoader":
             self.num_neighbors = {
                 ntype: self.neighbor_sizes \
-                    if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
+                # if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
                 for ntype in self.node_types}
 
         print(f"{self.neighbor_loader} neighbor_sizes:")
@@ -321,7 +321,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return out_edge_index_dict
 
 
-def reverse_metapath_name(metapath):
+def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
     rev_metapath = tuple(reversed(["rev_" + type if i % 2 == 1 else type \
                                    for i, type in enumerate(metapath)]))
     return rev_metapath
@@ -364,10 +364,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_types = {e for u, v, e in ontology.network.edges}
 
         edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
-                                                      # reverse=True,
+                                                      reverse=not self.use_reverse,
                                                       format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
-            if edge_index.size(1) < 100: continue
+            if edge_index.size(1) < 100 or (
+                    metapaths and metapath not in metapaths and metapath[1] not in metapaths): continue
             self.G[metapath].edge_index = edge_index
             self.metapaths.append(metapath)
 
@@ -396,13 +397,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                        go_ntype=go_ntype)
 
             # Add the training pos edges to hetero graph
-            # for metapath, edge_index in self.triples_pos.items():
-            #     self.G[metapath].edge_index = edge_index[:, self.training_idx]
-            #     print(metapath, self.G[metapath].edge_index.max(1))
-            #     rev_metapath = tuple(reversed(["rev_" + type if i % 2 == 1 else type \
-            #                                    for i, type in enumerate(metapath)]))
-            #     self.G[rev_metapath].edge_index = edge_index[:, self.training_idx][[1, 0], :]
-            #     print(rev_metapath, self.G[rev_metapath].edge_index.max(1))
+            for metapath, edge_index in self.triples_pos.items():
+                self.G[metapath].edge_index = edge_index[:, self.training_idx]
+                print(metapath, self.G[metapath].edge_index.max(1).values)
+
+                rev_metapath = reverse_metapath_name(metapath)
+                self.G[rev_metapath].edge_index = edge_index[:, self.training_idx][[1, 0], :]
+
+                print(rev_metapath, self.G[rev_metapath].edge_index.max(1).values)
 
         # Reinstantiate graph sampler since hetero graph was modified
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,

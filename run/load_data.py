@@ -5,21 +5,22 @@ from argparse import Namespace
 from typing import Union
 
 import dgl
-import moge
-import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
 from cogdl.datasets.gtn_data import GTNDataset
-from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
-from moge.dataset.dgl.graph_generator import DGLGraphSampler
-from moge.dataset.sequences import SequenceTokenizers
-from moge.model.dgl.NARS.data import load_acm, load_mag
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
 from openomics.database.ontology import GeneOntology
-from run.utils import add_node_embeddings
 from torch_geometric.datasets import AMiner
+
+import moge
+import moge.dataset.PyG.triplet_generator
+from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
+from moge.dataset.dgl.graph_generator import DGLGraphSampler
+from moge.dataset.sequences import SequenceTokenizers
+from moge.model.dgl.NARS.data import load_acm, load_mag
+from run.utils import add_node_embeddings
 
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
@@ -205,7 +206,9 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
         geneontology = GeneOntology(
             file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"} \
                 if "mlm" in name else None)
-        dataset.add_ontology_edges(geneontology, train_date=train_date, valid_date=valid_date)
+
+        dataset.add_ontology_edges(geneontology, metapaths=["is_a", "part_of"], train_date=train_date,
+                                   valid_date=valid_date)
         dataset._name = "_".join([name, train_date])
 
         dataset.pred_metapaths = [(hparams.head_node_type, 'associated', 'biological_process'),

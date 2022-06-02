@@ -7,17 +7,18 @@ import numpy as np
 import pandas as pd
 import torch
 import wandb
-from moge.criterion.clustering import clustering_metrics
-from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
-from moge.model.metrics import Metrics
-from moge.model.utils import tensor_sizes, preprocess_input
-from moge.visualization.attention import plot_sankey_flow
 from pytorch_lightning import LightningModule
 from pytorch_lightning.loggers import WandbLogger
 from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
 from umap import UMAP
+
+from moge.criterion.clustering import clustering_metrics
+from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
+from moge.model.metrics import Metrics
+from moge.model.utils import tensor_sizes, preprocess_input
+from moge.visualization.attention import plot_sankey_flow
 
 
 class ClusteringEvaluator(LightningModule):
@@ -202,7 +203,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log Table
         wandb.log({"sankey_flow": table})
-        # os.system(f"rm -f ./wandb_figure_run_{run_id}*.html")
+        os.system(f"rm -f ./wandb_figure_run_{run_id}*.html")
 
 class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):

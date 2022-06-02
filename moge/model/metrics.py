@@ -200,7 +200,7 @@ class Metrics(torch.nn.Module):
 class OGBNodeClfMetrics(torchmetrics.Metric):
     def __init__(self, evaluator, compute_on_step: bool = True, dist_sync_on_step: bool = False,
                  process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
-        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
+        super().__init__()
         self.evaluator = evaluator
         self.y_pred = []
         self.y_true = []
@@ -251,14 +251,14 @@ class OGBNodeClfMetrics(torchmetrics.Metric):
 
 class OGBLinkPredMetrics(torchmetrics.Metric):
     def __init__(self, evaluator: LinkEvaluator, compute_on_step: bool = True):
-        super().__init__(compute_on_step, )
+        super().__init__()
         self.evaluator = evaluator
         self.outputs = {}
 
     def reset(self):
         self.outputs = {}
 
-    def update(self, e_pred_pos, e_pred_neg):
+    def update(self, e_pred_pos: Tensor, e_pred_neg: Tensor):
         if e_pred_pos.dim() > 1:
             e_pred_pos = e_pred_pos.squeeze(-1)
 
@@ -288,7 +288,7 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
     """
 
     def __init__(self, k_s=[5, 10, 50, 100, 200], compute_on_step: bool = True, **kwargs):
-        super().__init__(compute_on_step, **kwargs)
+        super().__init__()
         self.k_s = k_s
 
     def reset(self):
