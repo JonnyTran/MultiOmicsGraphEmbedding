@@ -39,7 +39,7 @@ class ClassificationLoss(nn.Module):
         elif loss_type == "KL_DIVERGENCE":
             self.criterion = torch.nn.KLDivLoss(reduction=reduction)
         elif loss_type == "PU_LOSS_WITH_LOGITS":
-            self.criterion = PULoss(prior=torch.tensor(0.9))
+            self.criterion = PULoss(prior=torch.tensor(1 / 1000))
         elif loss_type == "LINK_PRED_WITH_LOGITS":
             self.criterion = LinkPredLoss()
         elif "CONTRASTIVE" in loss_type:

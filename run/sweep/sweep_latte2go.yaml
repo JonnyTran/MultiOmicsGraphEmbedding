@@ -3,6 +3,10 @@ method: bayes
 metric:
   goal: maximize
   name: "val_BPO_mrr"
+early_terminate:
+  type: hyperband
+  max_iter: 27
+  s: 2
 parameters:
   embedding_dim:
     values: [ 128, 256, 512, 768 ]
@@ -10,6 +14,8 @@ parameters:
     values: [ 1, 2 ]
   n_layers:
     values: [ 1,2,3 ]
+  neighbor_loader:
+    values: [ "NeighborLoader", "HGTLoader" ]
   n_neighbors:
     values: [ 128, 256, 512 ]
   attn_heads:
@@ -32,6 +38,8 @@ parameters:
     min: 1
     max: 2000
     distribution: uniform
+  loss_type:
+    values: [ "CONTRASTIVE_LOSS","LINK_PRED_WITH_LOGITS", "PU_LOSS_WITH_LOGITS" ]
   weight_decay:
     values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
   config:

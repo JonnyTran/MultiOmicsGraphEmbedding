@@ -119,6 +119,7 @@ if __name__ == "__main__":
     parser.add_argument('--layernorm', type=bool, default=False)
     parser.add_argument('--dropout', type=float, default=0.5)
 
+    parser.add_argument('--neighbor_loader', type=str, default="HGTLoader")
     parser.add_argument('--n_neighbors', type=int, default=50)
     parser.add_argument('--use_proximity', type=bool, default=False)
     parser.add_argument('--negative_sampling_size', type=float, default=1000)

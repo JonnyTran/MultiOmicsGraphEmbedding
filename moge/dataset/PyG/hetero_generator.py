@@ -466,10 +466,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                             neg_train_valid_test_sizes[2])
 
     def get_prior(self) -> Tensor:
-        pos_count = num_edges(self.triples_pos)
-        neg_count = num_edges(self.triples_neg)
-
-        return torch.tensor(pos_count) / (pos_count + neg_count)
+        return torch.tensor(1) / (1 + self.negative_sampling_size)
 
     @staticmethod
     def get_relabled_edge_index(edge_index_dict: Dict[Tuple[str, str, str], Tensor],
