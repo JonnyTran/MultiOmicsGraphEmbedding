@@ -1,5 +1,6 @@
 import itertools
 import logging
+import os
 import random
 from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable, Any
 
@@ -190,9 +191,9 @@ class NodeEmbeddingEvaluator(LightningModule):
         # Log plotly HTMLs as a wandb.Table
         for ntype in node_types:
             nodes, links = self.embedder.get_sankey_flow(layer=layer, node_type=ntype, self_loop=True)
-            fig = plot_sankey_flow(nodes, links, width=200 * t_order, height=200)
+            fig = plot_sankey_flow(nodes, links, width=200 * t_order, height=500)
 
-            path_to_plotly_html = f"./wandb_figure_run_{run_id}_{ntype}.html"
+            path_to_plotly_html = f"./wandb_fig_run_{run_id}_{ntype}.html"
             fig.write_html(path_to_plotly_html, auto_play=False,
                            include_plotlyjs=True, full_html=True,
                            config=dict(displayModeBar=False))
@@ -203,7 +204,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log Table
         wandb.log({"sankey_flow": table})
-        os.system(f"rm -f ./wandb_figure_run_{run_id}*.html")
+        os.system(f"rm -f ./wandb_fig_run_{run_id}*.html")
 
 class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
