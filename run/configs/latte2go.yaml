@@ -42,4 +42,4 @@ neg_sampling_ratio: 600
 loss_type: "CONTRASTIVE_LOSS"
 batch_size: 2048
 lr: 0.001
-weight_decay: 0.001
+weight_decay: 0.01

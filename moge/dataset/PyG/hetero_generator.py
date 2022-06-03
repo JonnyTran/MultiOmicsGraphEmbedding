@@ -374,6 +374,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
             if self.use_reverse:
                 rev_metapath = reverse_metapath_name(metapath)
+                self.metapaths.append(rev_metapath)
                 self.G[rev_metapath].edge_index = edge_index[[1, 0], :]
 
         # Cls node attrs
@@ -397,16 +398,21 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                        go_ntype=go_ntype)
 
             # Add the training pos edges to hetero graph
-            # for metapath, edge_index in self.triples_pos.items():
-            #     self.G[metapath].edge_index = edge_index[:, self.training_idx]
-            #     print(metapath, self.G[metapath].edge_index.max(1).values)
-            #
-            #     rev_metapath = reverse_metapath_name(metapath)
-            #     self.G[rev_metapath].edge_index = edge_index[:, self.training_idx][[1, 0], :]
-            #
-            #     print(rev_metapath, self.G[rev_metapath].edge_index.max(1).values)
+            for metapath, edge_index in self.triples_pos.items():
+                train_edge_index = edge_index[:, self.training_idx]
+
+                self.G[metapath].edge_index = train_edge_index
+                self.metapaths.append(metapath)
+                print(metapath, self.G[metapath].edge_index.max(1).values)
+
+                if self.use_reverse:
+                    rev_metapath = reverse_metapath_name(metapath)
+                    self.metapaths.append(rev_metapath)
+                    self.G[rev_metapath].edge_index = train_edge_index[[1, 0], :]
+                    print(rev_metapath, self.G[rev_metapath].edge_index.max(1).values)
 
         # Reinstantiate graph sampler since hetero graph was modified
+        print(self.G.edge_types)
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
                                                        transform_fn=super().transform_heterograph,
