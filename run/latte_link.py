@@ -90,6 +90,7 @@ def train(hparams: Namespace):
         if trainer.current_epoch <= 1:
             model.hparams.batch_size = model.hparams.batch_size // 2
             trainer.fit(model)
+            trainer.test(model)
 
     finally:
         if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 1 and \
