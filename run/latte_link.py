@@ -19,6 +19,10 @@ from run.utils import parse_yaml_config, adjust_batch_size, select_empty_gpu
 
 
 def train(hparams: Namespace):
+    # Batch size
+    hparams.batch_size = adjust_batch_size(hparams)
+    auto_scale_batch_size = True if hparams.batch_size < 0 else False
+
     # Load dataset
     dataset = load_link_dataset(hparams.dataset, hparams=hparams, path=hparams.root_path)
 
@@ -58,10 +62,6 @@ def train(hparams: Namespace):
     else:
         GPUS = hparams.num_gpus
 
-    # Batch size
-    hparams.batch_size = adjust_batch_size(hparams)
-    auto_scale_batch_size = True if hparams.batch_size < 0 else False
-
     trainer = Trainer(
         gpus=GPUS,
         strategy="fsdp" if isinstance(hparams.num_gpus, int) and hparams.num_gpus > 1 else None,
@@ -83,6 +83,12 @@ def train(hparams: Namespace):
     try:
         trainer.fit(model)
         trainer.test(model)
+
+    except RuntimeError as re:
+        traceback.print_exc()
+        if trainer.current_epoch <= 1:
+            model.hparams.batch_size = model.hparams.batch_size // 2
+            trainer.fit(model)
 
     except Exception as e:
         print("\n\n>>> ", e)
