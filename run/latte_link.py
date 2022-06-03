@@ -84,16 +84,12 @@ def train(hparams: Namespace):
         trainer.fit(model)
         trainer.test(model)
 
-    except RuntimeError as re:
+    except Exception as e:
+        print("\n\n>>> ", e)
         traceback.print_exc()
         if trainer.current_epoch <= 1:
             model.hparams.batch_size = model.hparams.batch_size // 2
             trainer.fit(model)
-
-    except Exception as e:
-        print("\n\n>>> ", e)
-        traceback.print_exc()
-        print()
 
     finally:
         if trainer.node_rank == 0 and trainer.local_rank == 0 and trainer.current_epoch > 1 and \
