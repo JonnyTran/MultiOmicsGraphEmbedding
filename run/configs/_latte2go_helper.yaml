@@ -26,10 +26,10 @@ activation: "relu"
 
 input_dropout: false
 neg_sampling_ratio: 1000
-batch_size: 15000
+batch_size: 12000
 
 loss_type: "CONTRASTIVE_LOSS"
 max_epochs: 300
 sweep: true
-lr: 0.01
+lr: 0.001
 hours: 1.5
