@@ -173,6 +173,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         if log_table:
             table = wandb.Table(data=df.reset_index().drop(columns=["pos"], errors="ignore").sample(1000))
             wandb.log({"node_emb_umap_plot": table})
+            print("Logging node_emb_umap_plot")
 
         return df
 
@@ -186,12 +187,12 @@ class NodeEmbeddingEvaluator(LightningModule):
         node_types = list(self.embedder.layers[layer]._betas.keys())
         table = wandb.Table(columns=[f"Layer{layer + 1 if layer >= 0 else len(self.embedder.layers)}_{ntype}" \
                                      for ntype in node_types])
-        plotly_htmls = []
 
         # Log plotly HTMLs as a wandb.Table
+        plotly_htmls = []
         for ntype in node_types:
             nodes, links = self.embedder.get_sankey_flow(layer=layer, node_type=ntype, self_loop=True)
-            fig = plot_sankey_flow(nodes, links, width=200 * t_order, height=500)
+            fig = plot_sankey_flow(nodes, links, width=200 * t_order, height=300)
 
             path_to_plotly_html = f"./wandb_fig_run_{run_id}_{ntype}.html"
             fig.write_html(path_to_plotly_html, auto_play=False,
@@ -204,6 +205,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log Table
         wandb.log({"sankey_flow": table})
+        print("Logging sankey_flow")
         os.system(f"rm -f ./wandb_fig_run_{run_id}*.html")
 
 class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):

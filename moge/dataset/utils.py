@@ -5,10 +5,11 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from moge.model.PyG import is_negative
 from torch import Tensor
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
+
+from moge.model.PyG import is_negative
 
 
 def one_hot_encoder(x, embed_dim=None):
@@ -61,7 +62,7 @@ def nonduplicate_indices(edge_index):
     return ~edge_df.duplicated(subset=[0, 1])
 
 
-def edge_index_to_adj(edge_index_dict: Dict[Tuple[str, str, str], Tensor], nodes=Dict[str, List[str]]) \
+def edge_index_to_adjs(edge_index_dict: Dict[Tuple[str, str, str], Tensor], nodes=Dict[str, List[str]]) \
         -> Dict[Tuple[str, str, str], SparseTensor]:
     adj_dict = {}
 

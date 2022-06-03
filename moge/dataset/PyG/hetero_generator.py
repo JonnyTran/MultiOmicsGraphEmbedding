@@ -15,7 +15,7 @@ from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 # from torch_geometric.loader import HGTLoader, NeighborLoader
-from moge.dataset.utils import get_edge_index, edge_index_to_adj
+from moge.dataset.utils import get_edge_index, edge_index_to_adjs
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 
 
@@ -397,14 +397,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                        go_ntype=go_ntype)
 
             # Add the training pos edges to hetero graph
-            for metapath, edge_index in self.triples_pos.items():
-                self.G[metapath].edge_index = edge_index[:, self.training_idx]
-                print(metapath, self.G[metapath].edge_index.max(1).values)
-
-                rev_metapath = reverse_metapath_name(metapath)
-                self.G[rev_metapath].edge_index = edge_index[:, self.training_idx][[1, 0], :]
-
-                print(rev_metapath, self.G[rev_metapath].edge_index.max(1).values)
+            # for metapath, edge_index in self.triples_pos.items():
+            #     self.G[metapath].edge_index = edge_index[:, self.training_idx]
+            #     print(metapath, self.G[metapath].edge_index.max(1).values)
+            #
+            #     rev_metapath = reverse_metapath_name(metapath)
+            #     self.G[rev_metapath].edge_index = edge_index[:, self.training_idx][[1, 0], :]
+            #
+            #     print(rev_metapath, self.G[rev_metapath].edge_index.max(1).values)
 
         # Reinstantiate graph sampler since hetero graph was modified
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
@@ -449,8 +449,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                             for metapath, li_edge_index in self.triples_neg.items()}
 
         # Adjacency of pos edges (for neg sampling)
-        self.triples_pos_adj: Dict[Tuple[str, str, str], SparseTensor] = edge_index_to_adj(self.triples_pos,
-                                                                                           nodes=self.nodes)
+        self.triples_pos_adj: Dict[Tuple[str, str, str], SparseTensor] = edge_index_to_adjs(self.triples_pos,
+                                                                                            nodes=self.nodes)
 
         # Train/valid/test positive edges
         self.training_idx = torch.arange(0, pos_train_valid_test_sizes[0])

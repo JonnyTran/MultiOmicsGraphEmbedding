@@ -1,6 +1,4 @@
 import copy
-import logging
-import math
 from pprint import pprint
 from typing import List, Dict, Tuple, Union, Optional, Any
 
@@ -11,235 +9,13 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
-from moge.dataset import HeteroNodeClfDataset
-from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
-from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
-from moge.model.encoder import HeteroNodeEncoder, HeteroSequenceEncoder
-from moge.model.losses import ClassificationLoss
-from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, process_tensor_dicts, select_batch
 from pandas import DataFrame
-from torch import nn as nn, Tensor
+from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-
-class LATTEFlatNodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"], collate_fn=None) -> None:
-        super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
-        self.head_node_type = dataset.head_node_type
-        self.node_types = dataset.node_types
-        self.dataset = dataset
-        self.multilabel = dataset.multilabel
-        self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.n_layers}-{hparams.t_order}th_Link"
-        self.collate_fn = collate_fn
-
-        # Node attr input
-        if hasattr(dataset, 'seq_tokenizer'):
-            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
-
-        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.node_types):
-            self.encoder = HeteroNodeEncoder(hparams, dataset)
-
-        # Graph embedding
-        self.embedder = LATTE(n_layers=hparams.n_layers,
-                              t_order=min(hparams.t_order, hparams.n_layers),
-                              embedding_dim=hparams.embedding_dim,
-                              num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(khop=None),
-                              layer_pooling=hparams.layer_pooling,
-                              activation=hparams.activation,
-                              attn_heads=hparams.attn_heads,
-                              attn_activation=hparams.attn_activation,
-                              attn_dropout=hparams.attn_dropout,
-                              use_proximity=hparams.use_proximity if hasattr(hparams, "use_proximity") else False,
-                              neg_sampling_ratio=hparams.neg_sampling_ratio \
-                                  if hasattr(hparams, "neg_sampling_ratio") else None,
-                              edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
-                              hparams=hparams)
-
-        # Output layer
-        if "cls_graph" in hparams and hparams.cls_graph is not None:
-            self.classifier = LabelGraphNodeClassifier(hparams)
-
-        elif hparams.nb_cls_dense_size >= 0:
-            if hparams.layer_pooling == "concat":
-                hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
-                logging.info("embedding_dim {}".format(hparams.embedding_dim))
-
-            self.classifier = DenseClassification(hparams)
-        else:
-            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
-
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
-                                            loss_type=hparams.loss_type,
-                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
-                                                                                 hparams.use_class_weights else None,
-                                            multilabel=dataset.multilabel,
-                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
-
-        self.hparams.n_params = self.get_n_params()
-        self.lr = self.hparams.lr
-
-        self.val_moving_loss = torch.tensor([3.0, ] * 5, dtype=torch.float)
-
-    def configure_sharded_model(self):
-        # modules are sharded across processes
-        # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
-        # During the forward/backward passes, weights get synced across processes
-        # and de-allocated once computation is complete, saving memory.
-
-        # Wraps the layer in a Fully Sharded Wrapper automatically
-        if hasattr(self, "seq_encoder"):
-            self.seq_encoder = auto_wrap(self.seq_encoder)
-        if hasattr(self, "encoder"):
-            self.encoder = auto_wrap(self.encoder)
-
-    def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]], **kwargs):
-        if not self.training:
-            self._node_ids = inputs["global_node_index"]
-
-        h_out = {}
-        if 'sequences' in inputs and hasattr(self, "seq_encoder"):
-            h_out.update(self.seq_encoder.forward(inputs['sequences'],
-                                                  minibatch=math.sqrt(self.hparams.batch_size // 4)))
-
-        if len(h_out) < len(inputs["global_node_index"].keys()):
-            embs = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
-            h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
-
-        embeddings, proximity_loss, edge_index_dict = self.embedder.forward(h_dict=h_out,
-                                                                            edge_index_dict=inputs["edge_index_dict"],
-                                                                            global_node_idx=inputs["global_node_index"],
-                                                                            sizes=inputs["sizes"],
-                                                                            **kwargs)
-
-        if hasattr(self, "classifier"):
-            y_hat = self.classifier.forward(embeddings[self.head_node_type])
-        else:
-            y_hat = embeddings[self.head_node_type]
-
-        return y_hat, proximity_loss, edge_index_dict
-
-    def training_step(self, batch, batch_nb):
-        X, y_true, weights = batch
-        y_pred, proximity_loss, edge_pred_dict = self.forward(X)
-
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
-
-        loss = self.criterion.forward(y_pred, y_true, weights=weights)
-
-        self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
-
-        if batch_nb % 100 == 0:
-            logs = self.train_metrics.compute_metrics()
-            self.log("loss", loss, logger=True, on_step=True)
-        else:
-            logs = {}
-
-        if proximity_loss is not None:
-            loss = loss + proximity_loss
-            logs.update({"proximity_loss": proximity_loss})
-
-        self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
-
-        return loss
-
-    def validation_step(self, batch, batch_nb):
-        X, y_true, weights = batch
-        y_pred, proximity_loss, edge_pred_dict = self.forward(X)
-
-        y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
-
-        val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        self.valid_metrics.update_metrics(y_pred, y_true)
-
-        if proximity_loss is not None:
-            val_loss = val_loss + proximity_loss
-
-        self.log("val_loss", val_loss)
-
-        return val_loss
-
-    def test_step(self, batch, batch_nb):
-        X, y_true, weights = batch
-        y_pred, proximity_loss, edge_pred_dict = self.forward(X, save_betas=False)
-
-        y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
-
-        test_loss = self.criterion(y_pred, y_true, weights=weights)
-
-        if batch_nb == 0:
-            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
-
-        self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
-
-        if proximity_loss is not None:
-            test_loss = test_loss + proximity_loss
-
-        self.log("test_loss", test_loss)
-
-        return test_loss
-
-    def configure_optimizers(self):
-        param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embeddings",
-                    'LayerNorm.bias', 'LayerNorm.weight',
-                    'BatchNorm.bias', 'BatchNorm.weight']
-
-        optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer \
-                        if not any(key in name for key in no_decay) \
-                        and "embeddings" not in name],
-             'weight_decay': self.hparams.weight_decay if isinstance(self.hparams.weight_decay, float) else 0.0},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
-             'weight_decay': 0.0},
-        ]
-
-        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
-
-        extra = {}
-        if "lr_annealing" in self.hparams and self.hparams.lr_annealing == "cosine":
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                                   T_max=self.num_training_steps,
-                                                                   eta_min=self.lr / 100
-                                                                   )
-            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
-            print("Using CosineAnnealingLR", scheduler.state_dict())
-
-        elif "lr_annealing" in self.hparams and self.hparams.lr_annealing == "restart":
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                             T_0=50, T_mult=1,
-                                                                             eta_min=self.lr / 100)
-            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
-            print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
-
-        return {"optimizer": optimizer, **extra}
-
-    @property
-    def num_training_steps(self) -> int:
-        """Total training steps inferred from datamodule and devices."""
-        if self.trainer.max_steps:
-            return self.trainer.max_steps
-
-        limit_batches = self.trainer.limit_train_batches
-        batches = len(self.train_dataloader())
-        batches = min(batches, limit_batches) if isinstance(limit_batches, int) else int(limit_batches * batches)
-
-        num_devices = max(1, self.trainer.num_gpus, self.trainer.num_processes)
-        if self.trainer.tpu_cores:
-            num_devices = max(num_devices, self.trainer.tpu_cores)
-
-        effective_accum = self.trainer.accumulate_grad_batches * num_devices
-        return (batches // effective_accum) * self.trainer.max_epochs
+from moge.model.PyG import filter_metapaths
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 
 
 class LATTE(nn.Module):
@@ -326,7 +102,7 @@ class LATTE(nn.Module):
         self.layers = auto_wrap(self.layers)
 
     def forward(self, h_dict: Dict[str, Tensor],
-                edge_index_dict: Dict[Tuple[str], Tensor],
+                edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                 global_node_idx: Dict[str, Tensor],
                 sizes: Dict[str, int],
                 save_betas=False):
@@ -337,43 +113,20 @@ class LATTE(nn.Module):
             edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
             save_betas: whether to save _beta values for batch
         Returns:
-            embedding_output, proximity_loss, edge_pred_dict
+            embedding_output
         """
-        proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
-
         h_layers = {ntype: [] for ntype in global_node_idx}
         for l in range(self.n_layers):
-            if l == 0:
-                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(feats=h_dict,
-                                                                        edge_index_dict=edge_index_dict,
-                                                                        global_node_idx=global_node_idx,
-                                                                        sizes=sizes,
-                                                                        save_betas=save_betas)
-            else:
-                h_dict, t_loss, edge_pred_dict = self.layers[l].forward(feats=h_dict,
-                                                                        edge_index_dict=edge_index_dict,
-                                                                        global_node_idx=global_node_idx,
-                                                                        sizes=sizes,
-                                                                        save_betas=save_betas)
+            h_dict = self.layers[l].forward(h_dict, edge_index_dict,
+                                            global_node_idx=global_node_idx,
+                                            sizes=sizes,
+                                            save_betas=save_betas)
 
             for ntype in global_node_idx:
                 h_layers[ntype].append(h_dict[ntype])
 
-            if self.use_proximity:
-                proximity_loss += t_loss
-
-        if self.layer_pooling in ["last", "order_concat"] or self.n_layers == 1:
+        if self.layer_pooling is None or self.layer_pooling in ["last"] or self.n_layers == 1:
             out = h_dict
-
-        elif self.layer_pooling == "max":
-            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                   if len(h_list)}
-            out = {ntype: h_s.max(1).values for ntype, h_s in out.items()}
-
-        elif self.layer_pooling == "mean":
-            out = {node_type: torch.stack(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                   if len(h_list)}
-            out = {ntype: torch.mean(h_s, dim=1) for ntype, h_s in out.items()}
 
         elif self.layer_pooling == "concat":
             out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
@@ -382,18 +135,6 @@ class LATTE(nn.Module):
             raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
 
         return out
-
-    def get_attn_activation_weights(self, t):
-        return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
-
-    def get_relation_weights(self, t):
-        return self.layers[t].get_relation_weights()
-
-    def get_top_relations(self, t, node_type, min_order=None):
-        df = self.layers[t].get_top_relations(ntype=node_type)
-        if min_order:
-            df = df[df.notnull().sum(1) >= min_order]
-        return df
 
     def get_sankey_flow(self, layer: int, node_type: str, self_loop: bool = False, agg="mean") -> Tuple[
         DataFrame, DataFrame]:
@@ -549,25 +290,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta = alpha_l[:, None, :] + alpha_r
         beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = F.softmax(beta, dim=1)
-        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
-
-    def projection(self, feats: Dict[str, Tensor], linear_projs: Dict[str, nn.Linear],
-                   batchnorms: Dict[str, nn.BatchNorm1d]):
-
-        h_dict = {ntype: linear_projs[ntype].forward(x) for ntype, x in feats.items()}
-
-        if hasattr(self, "dropout"):
-            h_dict = {ntype: self.dropout(h_dict[ntype]) for ntype in h_dict}
-
-        if batchnorms:
-            h_dict = {ntype: batchnorms[ntype].forward(h_dict[ntype]) if h_dict[ntype].size(0) > 1 else h_dict[ntype] \
-                      for ntype in h_dict}
-
-        h_dict = {ntype: h_dict[ntype].view(feats[ntype].size(0), self.attn_heads, self.out_channels) \
-                  for ntype in h_dict}
-
-        return h_dict
 
     def forward(self, feats: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
@@ -583,24 +307,20 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         Returns:
              output_emb, loss:
         """
-        l_dict = self.projection(feats, linear_projs=self.linear_l,
+        l_dict = self.projection(feats, linears=self.linear_l,
                                  batchnorms=self.batchnorm_l if hasattr(self, "batchnorm_l") else None)
-        r_dict = self.projection(feats, linear_projs=self.linear_r,
+        r_dict = self.projection(feats, linears=self.linear_r,
                                  batchnorms=self.batchnorm_r if hasattr(self, "batchnorm_r") else None)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
         betas = {}
-        # print("> Layer", self.layer + 1)
-
         for ntype in global_node_idx:
             if global_node_idx[ntype].size(0) == 0: continue
-            h_out[ntype], edge_pred_dict = self.agg_relation_neighbors(ntype=ntype, l_dict=l_dict,
-                                                                       r_dict=r_dict,
-                                                                       edge_index_dict=edge_index_dict,
-                                                                       sizes=sizes)
+            h_out[ntype], edge_pred_dict = self.agg_relation_neighbors(
+                ntype=ntype, l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict, sizes=sizes)
 
-            h_out[ntype][:, -1] = r_dict[ntype]
+            h_out[ntype][:, -1] = l_dict[ntype]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
@@ -613,22 +333,34 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
 
-            # if hasattr(self, "dropout"):
-            #     h_out[ntype] = self.dropout(h_out[ntype])
+            if hasattr(self, "dropout"):
+                h_out[ntype] = self.dropout(h_out[ntype])
 
         if not self.training and save_betas:
             self.save_relation_weights(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
                                        # mean on attn_heads dim
                                        global_node_idx=global_node_idx)
 
-        proximity_loss = None
+        return h_out
 
-        return h_out, proximity_loss, edge_pred_dict
+    def projection(self, feats: Dict[str, Tensor], linears: ModuleDict,
+                   batchnorms: Optional[Dict[str, nn.BatchNorm1d]]):
+
+        h_dict = {ntype: linears[ntype].forward(x).relu_() for ntype, x in feats.items()}
+
+        if batchnorms:
+            h_dict = {ntype: batchnorms[ntype].forward(h_dict[ntype]) if h_dict[ntype].size(0) > 1 else h_dict[ntype] \
+                      for ntype in h_dict}
+
+        h_dict = {ntype: h_dict[ntype].view(feats[ntype].size(0), self.attn_heads, self.out_channels) \
+                  for ntype in h_dict}
+
+        return h_dict
 
     def agg_relation_neighbors(self, ntype: str,
                                l_dict: Dict[str, Tensor],
                                r_dict: Dict[str, Tensor],
-                               edge_index_dict: Dict[Tuple[str], Tensor],
+                               edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                                sizes: Dict[str, int]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
