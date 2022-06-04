@@ -23,7 +23,7 @@ max_length:
 head_node_type: "MessengerRNA"
 use_reverse: true
 neighbor_loader: "NeighborLoader"
-n_neighbors: 512
+n_neighbors: 128
 n_layers: 2
 t_order: 2
 embedding_dim: 128
@@ -42,4 +42,4 @@ neg_sampling_ratio: 600
 loss_type: "CONTRASTIVE_LOSS"
 batch_size: 2048
 lr: 0.001
-weight_decay: 0.01
+weight_decay: 0.001
