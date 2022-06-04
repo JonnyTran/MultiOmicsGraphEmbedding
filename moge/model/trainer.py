@@ -208,6 +208,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         print("Logging sankey_flow")
         os.system(f"rm -f ./wandb_fig_run_{run_id}*.html")
 
+
 class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(*args, **kwargs)

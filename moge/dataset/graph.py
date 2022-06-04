@@ -1,16 +1,12 @@
 from abc import abstractmethod
-from abc import abstractmethod
 from typing import Union, List, Tuple
 
 import dgl
-import moge.model.PyG.utils
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
-from moge.dataset.utils import get_reverse_metapaths
-from moge.model.PyG.utils import get_edge_index_values
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -19,6 +15,10 @@ from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
 from torch_geometric.utils import is_undirected
+
+import moge.model.PyG.utils
+from moge.dataset.utils import get_reverse_metapaths
+from moge.model.PyG.utils import get_edge_index_values
 
 
 class Graph:
@@ -288,7 +288,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
         :return:
         """
         metapaths = self.metapaths
-        if self.use_reverse:
+        if self.use_reverse and not any("rev_" in metapath[1] for metapath in self.metapaths):
             metapaths = metapaths + get_reverse_metapaths(self.metapaths)
 
         if khop:

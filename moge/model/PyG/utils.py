@@ -72,17 +72,19 @@ def join_metapaths(metapath_A, metapath_B):
     return output_metapaths
 
 
-def filter_metapaths(metapaths: List[Tuple[str]],
+def filter_metapaths(metapaths: List[Tuple[str, str, str]],
                      order: Union[int, List[int]] = None,
                      head_type: Union[str, List[str]] = None,
                      tail_type: Union[str, List[str]] = None):
     def filter_func(metapath: Tuple[str]):
         condition = True
 
+        num_hops = len(metapath[1::2])
+
         if order is not None and isinstance(order, int):
-            condition = condition & (len(metapath[1::2]) == order)
+            condition = condition & (num_hops == order)
         elif order is not None and isinstance(order, Iterable):
-            condition = condition & (len(metapath[1::2]) in order)
+            condition = condition & (num_hops in order)
 
         if head_type:
             condition = condition & (metapath[0] in head_type)

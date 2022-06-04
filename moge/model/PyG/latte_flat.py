@@ -136,9 +136,11 @@ class LATTE(nn.Module):
 
         return out
 
-    def get_sankey_flow(self, layer: int, node_type: str, self_loop: bool = False, agg="mean") -> Tuple[
-        DataFrame, DataFrame]:
+    def get_sankey_flow(self, layer: int, node_type: str, self_loop: bool = False, agg="mean") \
+            -> Tuple[DataFrame, DataFrame]:
+
         rel_attn: pd.DataFrame = self.layers[layer]._betas[node_type]
+
         if agg == "sum":
             rel_attn = rel_attn.sum(axis=0)
         elif agg == "median":
@@ -195,10 +197,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  layer: int = 0, t_order: int = 1,
                  activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
                  layernorm=False, batchnorm=False, dropout=0.2,
-                 edge_threshold=0.0, use_proximity=False, neg_sampling_ratio=1.0, verbose=False) -> None:
+                 edge_threshold=0.0, use_proximity=False, neg_sampling_ratio=1.0, verbose=True) -> None:
         super().__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.t_order = t_order
+        self.verbose = verbose
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
         print(f"LATTE {self.layer + 1} layer") if verbose else None
@@ -250,6 +253,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
 
+        # self.rel_attn = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(attn_heads, self.out_channels, self.out_channels)) \
+        #     for ntype in self.node_types})
+
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(Tensor(len(self.metapaths)).fill_(1.0))
         elif attn_activation == "PReLU":
@@ -284,10 +291,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             nn.init.xavier_normal_(rel_attn, gain=gain)
 
     def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
-        alpha_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
-        alpha_r = (key * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
+        beta_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
+        beta_r = (key * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
 
-        beta = alpha_l[:, None, :] + alpha_r
+        beta = beta_l[:, None, :] + beta_r
         beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = F.softmax(beta, dim=1)
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
@@ -315,6 +322,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
         betas = {}
+
+        print("\nLayer", self.layer + 1, ) if self.verbose else None
+
         for ntype in global_node_idx:
             if global_node_idx[ntype].size(0) == 0: continue
             h_out[ntype], edge_pred_dict = self.agg_relation_neighbors(
@@ -324,6 +334,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
+
+            if self.verbose:
+                print("  >", ntype, global_node_idx[ntype].shape)
+                for i, (metapath, beta) in enumerate(
+                        zip(self.get_tail_relations(ntype) + [ntype], betas[ntype].mean(-1).mean(0))):
+                    print(f"  - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
+                          f"\tedge_index: {list(edge_pred_dict[metapath][0].shape) if metapath in edge_pred_dict else None}, "
+                          f"\tbeta: {beta.item():.2f}, "
+                          f"\tnorm: {torch.norm(h_out[ntype][:, i]).item():.2f}")
+
             h_out[ntype] = h_out[ntype] * betas[ntype].unsqueeze(-1)
             h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
 
@@ -447,8 +467,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     def message(self, x_j, x_i, index, ptr, size_i, metapath_idx, metapath, values=None):
         if values is None:
             x = torch.cat([x_i, x_j], dim=2)
+
+            # Sharpening alpha values
             if isinstance(self.alpha_activation, Tensor):
                 x = self.alpha_activation[metapath_idx] * F.leaky_relu(x, negative_slope=0.2)
+            # Non-linear activation
             elif isinstance(self.alpha_activation, nn.Module):
                 x = self.alpha_activation(x)
 
@@ -524,29 +547,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 self._beta_avg[ntype] = {metapath: _beta_avg[i] for i, metapath in enumerate(relations)}
                 self._beta_std[ntype] = {metapath: _beta_std[i] for i, metapath in enumerate(relations)}
 
-    def save_attn_weights(self, node_type: str, attn_weights: Tensor, node_idx: Tensor):
-        if not hasattr(self, "_betas"):
-            self._betas = {}
-        if not hasattr(self, "_beta_avg"):
-            self._beta_avg = {}
-        if not hasattr(self, "_beta_std"):
-            self._beta_std = {}
-
-        betas = attn_weights.sum(1)
-
-        relations = self.get_tail_relations(node_type, str_form=True) + [node_type, ]
-
-        with torch.no_grad():
-            self._betas[node_type] = pd.DataFrame(betas.cpu().numpy(),
-                                                  columns=relations,
-                                                  index=node_idx.cpu().numpy())
-
-            _beta_avg = np.around(betas.mean(dim=0).cpu().numpy(), decimals=3)
-            _beta_std = np.around(betas.std(dim=0).cpu().numpy(), decimals=2)
-            self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                         enumerate(relations)}
-            self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                         enumerate(relations)}
 
     def get_relation_weights(self):
         """
@@ -554,6 +554,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         :return:
         """
         return {(metapath if "." in metapath or len(metapath) > 1 else node_type): (avg, std) \
-                for node_type in self._beta_avg for (metapath, avg), (relation_b, std) in
+                for node_type in self._beta_avg \
+                for (metapath, avg), (relation_b, std) in
                 zip(self._beta_avg[node_type].items(), self._beta_std[node_type].items())}
-

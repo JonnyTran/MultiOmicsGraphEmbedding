@@ -5,10 +5,10 @@ from typing import List, Tuple, Dict, Any, Union
 
 import torch
 from fairscale.nn import auto_wrap
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import ClassificationLoss
 from torch import nn, Tensor
 
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.losses import ClassificationLoss
 from .conv import HGT
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
@@ -266,7 +266,9 @@ class LATTELinkPred(LinkPredTrainer):
 
     def on_test_end(self) -> None:
         try:
-            X, y, _ = self.dataset.get_full_graph()
+            # X, y, _ = self.dataset.get_full_graph()
+            X, y, _ = self.dataset.transform(
+                edge_idx=torch.cat([self.dataset.training_idx, self.dataset.validation_idx, self.dataset.testing_idx]))
             embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=True)
 
             df = self.predict_umap(X, embs, log_table=True)
