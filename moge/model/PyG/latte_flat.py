@@ -12,6 +12,7 @@ from fairscale.nn import auto_wrap
 from pandas import DataFrame
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
+from torch_geometric.nn.inits import reset
 from torch_geometric.utils import softmax
 
 from moge.model.PyG import filter_metapaths
@@ -197,7 +198,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                  layer: int = 0, t_order: int = 1,
                  activation: str = "relu", attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2,
                  layernorm=False, batchnorm=False, dropout=0.2,
-                 edge_threshold=0.0, use_proximity=False, neg_sampling_ratio=1.0, verbose=True) -> None:
+                 edge_threshold=0.0, use_proximity=False, neg_sampling_ratio=1.0, verbose=False) -> None:
         super().__init__(aggr="add", flow="source_to_target", node_dim=0)
         self.layer = layer
         self.t_order = t_order
@@ -250,7 +251,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
             for ntype in self.node_types})
         self.rel_attn_r = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
+            ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
             for ntype in self.node_types})
 
         # self.rel_attn = nn.ParameterDict({
@@ -285,20 +286,51 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
 
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
-        for ntype, rel_attn in self.rel_attn_l.items():
-            nn.init.xavier_normal_(rel_attn, gain=gain)
-        for ntype, rel_attn in self.rel_attn_r.items():
-            nn.init.xavier_normal_(rel_attn, gain=gain)
+        if hasattr(self, "rel_attn_l"):
+            for ntype, rel_attn in self.rel_attn_l.items():
+                nn.init.xavier_normal_(rel_attn, gain=gain)
+            for ntype, rel_attn in self.rel_attn_r.items():
+                nn.init.xavier_normal_(rel_attn, gain=gain)
+
+        elif hasattr(self, "rel_attn"):
+            for ntype, rel_attn in self.rel_attn.items():
+                reset(rel_attn)
+
+    # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
+    #     beta_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
+    #     beta_r = (key * self.rel_attn_r[ntype]).sum(dim=-1)
+    #
+    #     beta = beta_l[:, None, :] * beta_r
+    #     beta = F.leaky_relu(beta, negative_slope=0.2)
+    #     beta = F.softmax(beta, dim=1)
+    #     # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+    #     return beta
 
     def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
-        beta_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
-        beta_r = (key * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
+        beta_l = query * self.rel_attn_l[ntype]
+        beta_r = key * self.rel_attn_r[ntype]
 
-        beta = beta_l[:, None, :] + beta_r
-        beta = F.leaky_relu(beta, negative_slope=0.2)
-        beta = F.softmax(beta, dim=1)
+        beta = (beta_l[:, None, :] * beta_r).sum(-1)
+        # beta = F.leaky_relu(beta, negative_slope=0.2)
+        # beta = F.softmax(beta, dim=1)
+        # beta = torch.relu(beta)
+        beta = torch.relu(beta / beta.sum(1, keepdim=True))
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
+
+    # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
+    #     kernel = self.rel_attn[ntype]
+    #     print(ntype, tensor_sizes({"query":query, "kernel":kernel, "key":key,}))
+    #     beta_l = (query.transpose(0, 1) @ kernel).transpose(1, 0)[:, None, :]
+    #     beta_r = key
+    #     print("beta_l", beta_l.shape, "beta_r", beta_r.shape, torch.isnan(beta_l).any(), torch.isnan(beta_r).any())
+    #
+    #     beta = (beta_l * beta_r).sum(-1)
+    #     print("beta", beta.shape, torch.isinf(beta).sum(-1).sum(0) + torch.isnan(beta).sum(-1).sum(0))
+    #     beta = F.leaky_relu(beta, negative_slope=0.2)
+    #     beta = F.softmax(beta, dim=1)
+    #     # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+    #     return beta
 
     def forward(self, feats: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
@@ -339,10 +371,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 print("  >", ntype, global_node_idx[ntype].shape)
                 for i, (metapath, beta) in enumerate(
                         zip(self.get_tail_relations(ntype) + [ntype], betas[ntype].mean(-1).mean(0))):
-                    print(f"  - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
+                    print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
                           f"\tedge_index: {list(edge_pred_dict[metapath][0].shape) if metapath in edge_pred_dict else None}, "
                           f"\tbeta: {beta.item():.2f}, "
                           f"\tnorm: {torch.norm(h_out[ntype][:, i]).item():.2f}")
+
+                print(h_out[ntype].shape)
 
             h_out[ntype] = h_out[ntype] * betas[ntype].unsqueeze(-1)
             h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
@@ -356,7 +390,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             if hasattr(self, "dropout"):
                 h_out[ntype] = self.dropout(h_out[ntype])
 
-        if not self.training and save_betas:
+        if save_betas:
             self.save_relation_weights(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
                                        # mean on attn_heads dim
                                        global_node_idx=global_node_idx)
@@ -541,9 +575,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                   columns=relations,
                                                   index=global_node_idx[ntype].cpu().numpy())
 
+                # Compute mean and std of beta scores across all nodes
                 _beta_avg = np.around(betas[ntype].mean(dim=0).squeeze(-1).cpu().numpy(), decimals=3)
                 _beta_std = np.around(betas[ntype].std(dim=0).squeeze(-1).cpu().numpy(), decimals=2)
-
                 self._beta_avg[ntype] = {metapath: _beta_avg[i] for i, metapath in enumerate(relations)}
                 self._beta_std[ntype] = {metapath: _beta_std[i] for i, metapath in enumerate(relations)}
 

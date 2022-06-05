@@ -236,7 +236,7 @@ class LATTELinkPred(LinkPredTrainer):
 
     def validation_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
-        embeddings, edge_pred_dict = self.forward(X, edge_true)
+        embeddings, edge_pred_dict = self.forward(X, edge_true, save_betas=True)
 
         e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
@@ -247,6 +247,11 @@ class LATTELinkPred(LinkPredTrainer):
         self.log("val_loss", loss, prog_bar=True)
 
         return loss
+
+    def on_validation_end(self) -> None:
+        super().on_validation_end()
+        if self.current_epoch % 2 == 1:
+            self.plot_sankey_flow(layer=-1)
 
     def test_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
@@ -264,7 +269,7 @@ class LATTELinkPred(LinkPredTrainer):
         self.log("test_loss", loss)
         return loss
 
-    def on_test_end(self) -> None:
+    def on_test_end(self):
         try:
             # X, y, _ = self.dataset.get_full_graph()
             X, y, _ = self.dataset.transform(
