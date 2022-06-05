@@ -192,7 +192,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         plotly_htmls = []
         for ntype in node_types:
             nodes, links = self.embedder.get_sankey_flow(layer=layer, node_type=ntype, self_loop=True)
-            fig = plot_sankey_flow(nodes, links, width=200 * t_order, height=300)
+            fig = plot_sankey_flow(nodes, links, width=250 * t_order, height=300)
 
             path_to_plotly_html = f"./wandb_fig_run_{run_id}_{ntype}.html"
             fig.write_html(path_to_plotly_html, auto_play=False,

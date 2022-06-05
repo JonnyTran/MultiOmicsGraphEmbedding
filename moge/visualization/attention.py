@@ -13,6 +13,7 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
     fig = go.Figure(data=[go.Sankey(
         valueformat=".2f",
         orientation=orientation,
+        arrangement="snap",
         hoverinfo="skip",
         # Define nodes
         node=dict(

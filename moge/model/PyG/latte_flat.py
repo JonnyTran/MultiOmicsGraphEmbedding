@@ -12,7 +12,6 @@ from fairscale.nn import auto_wrap
 from pandas import DataFrame
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
-from torch_geometric.nn.inits import reset
 from torch_geometric.utils import softmax
 
 from moge.model.PyG import filter_metapaths
@@ -80,7 +79,8 @@ class LATTE(nn.Module):
                               attn_dropout=attn_dropout,
                               edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
                               use_proximity=use_proximity,
-                              neg_sampling_ratio=neg_sampling_ratio, )
+                              neg_sampling_ratio=neg_sampling_ratio,
+                              verbose=hparams.verbose if "verbose" in hparams else False)
             if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
                 higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
@@ -294,13 +294,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         elif hasattr(self, "rel_attn"):
             for ntype, rel_attn in self.rel_attn.items():
-                reset(rel_attn)
+                nn.init.xavier_normal_(rel_attn)
 
     # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
     #     beta_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
     #     beta_r = (key * self.rel_attn_r[ntype]).sum(dim=-1)
     #
-    #     beta = beta_l[:, None, :] * beta_r
+    #     beta = beta_l[:, None, :] + beta_r
     #     beta = F.leaky_relu(beta, negative_slope=0.2)
     #     beta = F.softmax(beta, dim=1)
     #     # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
@@ -311,25 +311,26 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta_r = key * self.rel_attn_r[ntype]
 
         beta = (beta_l[:, None, :] * beta_r).sum(-1)
-        # beta = F.leaky_relu(beta, negative_slope=0.2)
-        # beta = F.softmax(beta, dim=1)
-        # beta = torch.relu(beta)
+        beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = torch.relu(beta / beta.sum(1, keepdim=True))
-        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
     # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
     #     kernel = self.rel_attn[ntype]
-    #     print(ntype, tensor_sizes({"query":query, "kernel":kernel, "key":key,}))
+    #     print(ntype, tensor_sizes({"query":query, "kernel":kernel, "key":key,}),
+    #           torch.isnan(query).any().item(),torch.isnan(kernel).any().item(),torch.isnan(key).any().item()) if self.verbose else None
+    #
     #     beta_l = (query.transpose(0, 1) @ kernel).transpose(1, 0)[:, None, :]
     #     beta_r = key
-    #     print("beta_l", beta_l.shape, "beta_r", beta_r.shape, torch.isnan(beta_l).any(), torch.isnan(beta_r).any())
+    #     print("beta_l", beta_l.shape, "beta_r", beta_r.shape, torch.isnan(beta_l).any(), torch.isnan(beta_r).any()) if self.verbose else None
     #
     #     beta = (beta_l * beta_r).sum(-1)
-    #     print("beta", beta.shape, torch.isinf(beta).sum(-1).sum(0) + torch.isnan(beta).sum(-1).sum(0))
-    #     beta = F.leaky_relu(beta, negative_slope=0.2)
-    #     beta = F.softmax(beta, dim=1)
-    #     # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+    #     print("beta", beta.shape, torch.isinf(beta).sum(-1).sum(0) + torch.isnan(beta).sum(-1).sum(0)) if self.verbose else None
+    #     # beta = F.relu(beta)
+    #     beta = F.relu(beta / beta.sum(1, keepdim=True))
+    #     # beta = F.softmax(beta, dim=1)
+    #     beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
     #     return beta
 
     def forward(self, feats: Dict[str, Tensor],
@@ -346,10 +347,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         Returns:
              output_emb, loss:
         """
-        l_dict = self.projection(feats, linears=self.linear_l,
-                                 batchnorms=self.batchnorm_l if hasattr(self, "batchnorm_l") else None)
-        r_dict = self.projection(feats, linears=self.linear_r,
-                                 batchnorms=self.batchnorm_r if hasattr(self, "batchnorm_r") else None)
+        l_dict = self.projection(feats, linears=self.linear_l)
+        r_dict = self.projection(feats, linears=self.linear_r)
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
@@ -397,14 +396,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         return h_out
 
-    def projection(self, feats: Dict[str, Tensor], linears: ModuleDict,
-                   batchnorms: Optional[Dict[str, nn.BatchNorm1d]]):
+    def projection(self, feats: Dict[str, Tensor], linears: ModuleDict):
 
         h_dict = {ntype: linears[ntype].forward(x).relu_() for ntype, x in feats.items()}
 
-        if batchnorms:
-            h_dict = {ntype: batchnorms[ntype].forward(h_dict[ntype]) if h_dict[ntype].size(0) > 1 else h_dict[ntype] \
-                      for ntype in h_dict}
+        # if batchnorms:
+        #     h_dict = {ntype: batchnorms[ntype].forward(h_dict[ntype]) if h_dict[ntype].size(0) > 1 else h_dict[ntype] \
+        #               for ntype in h_dict}
 
         h_dict = {ntype: h_dict[ntype].view(feats[ntype].size(0), self.attn_heads, self.out_channels) \
                   for ntype in h_dict}
