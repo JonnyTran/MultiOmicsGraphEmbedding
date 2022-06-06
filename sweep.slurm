@@ -14,4 +14,5 @@ ln -s ../Multiplex-Graph-Embedding/models models
 ln -s ../Multiplex-Graph-Embedding/data data
 
 wandb agent jonnytran/latte-link-pred/9mxnr1ag & sleep 120 && wandb agent jonnytran/latte-link-pred/9mxnr1ag && echo "done"
+wandb artifact cache cleanup 3000000
 exit
