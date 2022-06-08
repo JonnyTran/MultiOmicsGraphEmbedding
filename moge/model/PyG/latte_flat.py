@@ -9,12 +9,13 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
-from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 from pandas import DataFrame
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG import filter_metapaths
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 
 
 class LATTE(nn.Module):
@@ -152,16 +153,19 @@ class LATTE(nn.Module):
         else:
             rel_attn = rel_attn.mean(axis=0)
 
-        new_index = rel_attn.index.str.split(".").map(lambda tup: [str(len(tup) - i) + n for i, n in enumerate(tup)])
-        all_nodes = {node for nodes in new_index for node in nodes}
+        indexed_metapaths = rel_attn.index.str.split(".").map(lambda tup: [str(len(tup) - i) + name \
+                                                                           for i, name in enumerate(tup)])
+        all_nodes = {node for nodes in indexed_metapaths for node in nodes}
         all_nodes = {node: i for i, node in enumerate(all_nodes)}
 
         # Links
         links = pd.DataFrame(columns=["source", "target", "value", "label", "color"])
         for i, (metapath, value) in enumerate(rel_attn.to_dict().items()):
+            indexed_metapath = indexed_metapaths[i]
+
             if len(metapath.split(".")) > 1:
-                sources = [all_nodes[new_index[i][j]] for j, _ in enumerate(new_index[i][:-1])]
-                targets = [all_nodes[new_index[i][j + 1]] for j, _ in enumerate(new_index[i][:-1])]
+                sources = [all_nodes[indexed_metapath[j]] for j, _ in enumerate(indexed_metapath[:-1])]
+                targets = [all_nodes[indexed_metapath[j + 1]] for j, _ in enumerate(indexed_metapath[:-1])]
 
                 path_links = pd.DataFrame({"source": sources, "target": targets,
                                            "value": [value, ] * len(targets), "label": [metapath, ] * len(targets)})
@@ -169,7 +173,7 @@ class LATTE(nn.Module):
 
 
             elif self_loop:
-                source = all_nodes[new_index[i][0]]
+                source = all_nodes[indexed_metapath[0]]
                 links = links.append({"source": source, "target": source,
                                       "value": value, "label": metapath}, ignore_index=True)
 
@@ -177,15 +181,15 @@ class LATTE(nn.Module):
         links = links.iloc[::-1]
 
         # Nodes
-        node_group = [int(node[0]) for node, nid in all_nodes.items()]
-        groups = [[nid for nid, node in enumerate(node_group) if node == group] for group in np.unique(node_group)]
+        # node_group = [int(node[0]) for node, nid in all_nodes.items()]
+        # groups = [[nid for nid, node in enumerate(node_group) if node == group] for group in np.unique(node_group)]
 
         nodes = pd.DataFrame(columns=["label", "level", "color"])
         nodes["label"] = [node[1:] for node in all_nodes.keys()]
         nodes["level"] = [int(node[0]) for node in all_nodes.keys()]
 
         nodes["color"] = nodes[["label", "level"]].apply(
-            lambda x: ColorHash(x["label"] + str(x["level"])).hex \
+            lambda x: ColorHash(x["label"].strip("rev_")).hex \
                 if x["level"] % 2 == 0 \
                 else ColorHash(x["label"]).hex, axis=1)
 

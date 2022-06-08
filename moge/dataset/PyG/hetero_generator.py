@@ -58,6 +58,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
 
     def add_ontology_edges(self, ontology: GeneOntology, train_date='2017-06-15', valid_date='2017-11-15',
+                           test_date='2021-12-31',
                            go_ntype="GO_term"):
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
 
@@ -90,7 +91,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
-            train_date=train_date, valid_date=valid_date, groupby=["gene_name"])
+            train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"])
         go_ann = pd.concat([train_go_ann, valid_go_ann, test_go_ann], axis=0)
         nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].explode().to_frame().reset_index(),
                                            source="gene_name", target="go_id", create_using=nx.DiGraph)
@@ -351,6 +352,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        num_workers=0)
 
     def add_ontology_edges(self, ontology: GeneOntology, train_date='2017-06-15', valid_date='2017-11-15',
+                           test_date='2021-12-31',
                            go_ntype="GO_term", metapaths: List[Tuple[str, str, str]] = None):
         self._name = f"{self.head_node_type}-{go_ntype}-{train_date}"
         if ontology.data.index.name != "go_id":
@@ -395,7 +397,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Edges between RNA nodes and GO terms
         if hasattr(ontology, "gaf_annotations"):
             self.load_annotation_edges(ontology, go_nodes=go_nodes, train_date=train_date, valid_date=valid_date,
-                                       go_ntype=go_ntype)
+                                       test_date=test_date, go_ntype=go_ntype)
 
             # Add the training pos edges to hetero graph
             for metapath, edge_index in self.triples_pos.items():
@@ -418,9 +420,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        transform_fn=super().transform_heterograph,
                                                        num_workers=0)
 
-    def load_annotation_edges(self, ontology, go_nodes, train_date, valid_date, go_ntype):
+    def load_annotation_edges(self, ontology, go_nodes, train_date, valid_date, test_date, go_ntype):
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
-            train_date=train_date, valid_date=valid_date, groupby=["gene_name"])
+            train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"])
         self.triples_pos = {}
         self.triples_neg = {}
         pos_train_valid_test_sizes = []
@@ -479,29 +481,27 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
     @staticmethod
     def get_relabled_edge_index(edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                                 global_node_index: Dict[str, Tensor],
-                                local2batch: Dict[str, Tensor] = None,
+                                global2batch: Dict[str, Tensor] = None,
                                 mode=None) -> Dict[Tuple[str, str, str], Tensor]:
-        if local2batch is None:
-            local2batch = {
-                node_type: dict(zip(
-                    global_node_index[node_type].numpy(),
-                    range(len(global_node_index[node_type])))
-                ) for node_type in global_node_index}
+        if global2batch is None:
+            global2batch = {
+                node_type: dict(zip(global_node_index[node_type].numpy(), range(len(global_node_index[node_type])))) \
+                for node_type in global_node_index}
 
         renamed_edge_index_dict = {}
         for metapath, edge_index in edge_index_dict.items():
             head_type, edge_type, tail_type = metapath
 
             if edge_index.size(0) == 2 and mode is None:
-                sources = edge_index[0].apply_(local2batch[head_type].get)
-                targets = edge_index[-1].apply_(local2batch[tail_type].get)
+                sources = edge_index[0].apply_(global2batch[head_type].get)
+                targets = edge_index[-1].apply_(global2batch[tail_type].get)
 
                 renamed_edge_index_dict[metapath] = torch.stack([sources, targets], dim=1).t()
 
             elif mode == "head_batch":
-                renamed_edge_index_dict[metapath] = edge_index.apply_(local2batch[head_type].get)
+                renamed_edge_index_dict[metapath] = edge_index.apply_(global2batch[head_type].get)
             elif mode == "tail_batch":
-                renamed_edge_index_dict[metapath] = edge_index.apply_(local2batch[tail_type].get)
+                renamed_edge_index_dict[metapath] = edge_index.apply_(global2batch[tail_type].get)
             else:
                 raise Exception("Must provide an edge_index with shape (2, N) or pass 'head_batch' or 'tail_batch' "
                                 "in `mode`.")
@@ -561,20 +561,20 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                                  mode=mode)
 
         # Rename node index from global to batch
-        local2batch = {
+        global2batch = {
             ntype: dict(zip(
                 X["global_node_index"][ntype].numpy(),
                 range(len(X["global_node_index"][ntype])))
             ) for ntype in X["global_node_index"]}
 
         edge_pos = self.get_relabled_edge_index(edge_pos, global_node_index=X["global_node_index"],
-                                                local2batch=local2batch)
+                                                global2batch=global2batch)
         edge_pos = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=X["global_node_index"])
 
         y = {"edge_pos": edge_pos, }
         if num_edges(edge_neg):
             edge_neg = self.get_relabled_edge_index(edge_neg, global_node_index=X["global_node_index"],
-                                                    local2batch=local2batch, )
+                                                    global2batch=global2batch, )
             y['edge_neg'] = self.split_edge_index_by_go_namespace(edge_neg, batch_to_global=X["global_node_index"])
 
         # Negative sampling

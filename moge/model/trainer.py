@@ -1,7 +1,6 @@
 import itertools
 import logging
 import os
-import random
 from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable, Any
 
 import numpy as np
@@ -145,6 +144,12 @@ class ClusteringEvaluator(LightningModule):
 
 
 class NodeEmbeddingEvaluator(LightningModule):
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.sankey_flow_table = "sankey_flow"
+        self.node_emb_umap = "node_emb_umap_plot"
+
     def predict_umap(self, X: Dict[str, Any], embs: Dict[str, Tensor], log_table=False):
         global_node_index = {k: v.numpy() for k, v in X["global_node_index"].items()}
 
@@ -172,16 +177,16 @@ class NodeEmbeddingEvaluator(LightningModule):
         # Log_table
         if log_table:
             table = wandb.Table(data=df.reset_index().drop(columns=["pos"], errors="ignore").sample(1000))
-            wandb.log({"node_emb_umap_plot": table})
+            wandb.log({self.node_emb_umap: table})
             print("Logging node_emb_umap_plot")
 
         return df
 
     def plot_sankey_flow(self, layer: int = -1):
-        if isinstance(self.logger, WandbLogger):
-            run_id = self.logger.experiment.id
-        else:
-            run_id = str(random.randint(0, 100))
+        if self.wandb_experiment is None:
+            return
+
+        run_id = self.wandb_experiment.id
 
         t_order = self.embedder.layers[layer].t_order
         node_types = list(self.embedder.layers[layer]._betas.keys())
@@ -204,9 +209,30 @@ class NodeEmbeddingEvaluator(LightningModule):
         table.add_data(*plotly_htmls)
 
         # Log Table
-        wandb.log({"sankey_flow": table})
+        wandb.log({self.sankey_flow_table: table})
         print("Logging sankey_flow")
         os.system(f"rm -f ./wandb_fig_run_{run_id}*.html")
+
+    @property
+    def wandb_experiment(self):
+        if isinstance(self.logger, WandbLogger):
+            return self.logger.experiment
+        else:
+            return None
+
+    def cleanup_artifacts(self):
+        experiment = self.wandb_experiment
+        if experiment is None:
+            return
+
+        api = wandb.Api(overrides={"project": experiment.project, "entity": experiment.entity})
+
+        artifact_type, artifact_name = "run_table", f"run-{experiment.id}-{self.sankey_flow_table}"
+        for version in api.artifact_versions(artifact_type, artifact_name):
+            # Clean up all versions that don't have an alias such as 'latest'.
+            # NOTE: You can put whatever deletion logic you want here.
+            if len(version.aliases) == 0:
+                version.delete()
 
 
 class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
