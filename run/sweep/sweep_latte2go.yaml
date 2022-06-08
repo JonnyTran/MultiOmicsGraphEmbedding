@@ -8,6 +8,8 @@ early_terminate:
   max_iter: 27
   s: 2
 parameters:
+  head_node_type:
+    values: [ "Protein", "MessengerRNA" ]
   embedding_dim:
     values: [ 128, 256, 512, 768 ]
   t_order:
@@ -30,6 +32,8 @@ parameters:
     values: [ True, False ]
   layernorm:
     values: [ True, False ]
+  sequence:
+    values: [ True, False ]
   dropout:
     min: 0.0
     max: 0.4
@@ -39,7 +43,7 @@ parameters:
     max: 2000
     distribution: uniform
   loss_type:
-    values: [ "CONTRASTIVE_LOSS","LINK_PRED_WITH_LOGITS", "PU_LOSS_WITH_LOGITS" ]
+    values: [ "CONTRASTIVE_LOSS" ]
   weight_decay:
     values: [ 0, 0.00001, 0.0001, 0.001, 0.01 ]
   config:

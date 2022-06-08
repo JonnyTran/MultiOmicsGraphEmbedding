@@ -1,4 +1,3 @@
-from pprint import pprint
 from typing import List, Tuple, Union, Dict
 
 import networkx as nx
@@ -145,8 +144,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 # if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
                 for ntype in self.node_types}
 
-        print(f"{self.neighbor_loader} neighbor_sizes:")
-        pprint(self.num_neighbors, width=300)
+        # print(f"{self.neighbor_loader} neighbor_sizes:")
+        # pprint(self.num_neighbors, width=300)
 
         if self.neighbor_loader == "NeighborLoader":
             graph_loader_cls = NeighborLoader

@@ -1,7 +1,7 @@
 dataset: "rna_ppi_go"
 root_path: "data/gtex_rna_ppi_multiplex_network.pickle"
 train_date: '2018-01-01'
-sequence: false
+sequence: true
 
 bert_config:
   MicroRNA: "models/bert_mlm_MicroRNA/"

@@ -310,11 +310,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     #     return beta
 
     def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
-        beta_l = query * self.rel_attn_l[ntype]
-        beta_r = key * self.rel_attn_r[ntype]
+        beta_l = F.leaky_relu(query * self.rel_attn_l[ntype], negative_slope=0.2)
+        beta_r = F.leaky_relu(key * self.rel_attn_r[ntype], negative_slope=0.2)
 
         beta = (beta_l[:, None, :] * beta_r).sum(-1)
-        beta = F.leaky_relu(beta, negative_slope=0.2)
         beta = F.softmax(beta, dim=1)
         # beta = torch.relu(beta / beta.sum(1, keepdim=True))
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
