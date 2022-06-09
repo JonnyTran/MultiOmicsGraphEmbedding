@@ -169,15 +169,9 @@ class DenseClassification(nn.Module):
                 ("linear", nn.Linear(hparams.nb_cls_dense_size, hparams.n_classes))
             ]))
         else:
-            if hparams.nb_cls_dropout > 0.0:
-                self.fc_classifier = nn.Sequential(OrderedDict([
-                    ("dropout", nn.Dropout(p=hparams.nb_cls_dropout)),
-                    ("linear", nn.Linear(hparams.embedding_dim, hparams.n_classes))
-                ]))
-            else:
-                self.fc_classifier = nn.Sequential(OrderedDict([
-                    ("linear", nn.Linear(hparams.embedding_dim, hparams.n_classes))
-                ]))
+            self.fc_classifier = nn.Sequential(OrderedDict([
+                ("linear", nn.Linear(hparams.embedding_dim, hparams.n_classes))
+            ]))
 
         # Activation
         if "LOGITS" in hparams.loss_type or "FOCAL" in hparams.loss_type:

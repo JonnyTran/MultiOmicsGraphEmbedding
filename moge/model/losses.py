@@ -69,7 +69,10 @@ class ClassificationLoss(nn.Module):
 
         loss = self.criterion.forward(logits, targets)
 
-        if (self.reduction == None or self.reduction == "none") and weights is not None:
+        if weights is not None and isinstance(weights, Tensor) and weights.numel():
+            assert self.reduction == None or self.reduction == "none", "Must have reduction='none' when using sample `weights`"
+            if loss.dim() > 1 and loss.size(1) > 1:
+                loss = loss.sum(dim=1)
             loss = (weights * loss).sum() / weights.sum()
 
         return loss

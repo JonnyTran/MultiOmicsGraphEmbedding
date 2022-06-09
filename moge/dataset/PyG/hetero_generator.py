@@ -255,7 +255,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     @property
     def training_idx(self):
-        return
+        return torch.arange(self.G[self.head_node_type].num_nodes)[self.G[self.head_node_type].train_mask]
+
+    @property
+    def validation_idx(self):
+        return torch.arange(self.G[self.head_node_type].num_nodes)[self.G[self.head_node_type].valid_mask]
+
+    @property
+    def testing_idx(self):
+        return torch.arange(self.G[self.head_node_type].num_nodes)[self.G[self.head_node_type].train_mask]
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,
@@ -270,10 +278,26 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
-        dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].test_mask,
+        dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,
                                             transform_fn=self.transform_heterograph, num_workers=num_workers)
 
         return dataset
+
+    def split_labels_by_go_namespace(self, y: Union[Tensor, Dict[str, Tensor]]):
+        assert hasattr(self, 'go_namespace')
+        go_namespaces = self.go_namespace[self.classes]
+
+        y_dict = {}
+        for namespace in np.unique(go_namespaces):
+            mask = go_namespaces == namespace
+
+            if isinstance(y, Tensor):
+                y_dict[namespace] = y[:, mask]
+            elif isinstance(y, dict):
+                for ntype, labels in y.items():
+                    y_dict.setdefault(ntype, {})[namespace] = labels[:, mask]
+
+        return y_dict
 
     def split_edge_index_by_go_namespace(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                                          batch_to_global: Dict[str, Tensor] = None,

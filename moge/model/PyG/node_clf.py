@@ -24,6 +24,7 @@ from moge.model.PyG.latte_flat import LATTE
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
 from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, HeteroNodeEncoder
 from moge.model.losses import ClassificationLoss
+from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, select_batch
 
@@ -743,15 +744,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
-        self.train_metrics.update_metrics(y_pred, y_true, weights=weights)
-
-        if batch_nb % 100 == 0:
-            logs = self.train_metrics.compute_metrics()
-            self.log("loss", loss, logger=True, on_step=True)
-        else:
-            logs = {}
-
-        self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
+        self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights)
 
         return loss
 
@@ -761,18 +754,35 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+        if y_true.size(0) == 0:
+            return torch.tensor(0.0, requires_grad=False)
 
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
-        self.valid_metrics.update_metrics(y_pred, y_true)
+        self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
 
         self.log("val_loss", val_loss)
 
         return val_loss
 
+    def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
+                                y_pred: Tensor, y_true: Tensor, weights: Tensor):
+        if isinstance(metrics, dict):
+            y_pred_dict = self.dataset.split_labels_by_go_namespace(y_pred)
+            y_true_dict = self.dataset.split_labels_by_go_namespace(y_true)
+
+            for namespace in y_true_dict.keys():
+                go_type = "BPO" if namespace == 'biological_process' else \
+                    "CCO" if namespace == 'cellular_component' else \
+                        "MFO" if namespace == 'molecular_function' else None
+
+                metrics[go_type].update_metrics(y_pred_dict[namespace], y_true_dict[namespace], weights=weights)
+
+        else:
+            metrics.update_metrics(y_pred, y_true, weights=weights)
+
     def on_validation_end(self) -> None:
         super().on_validation_end()
-        if self.current_epoch % 5 == 1:
+        if self.current_epoch % 20 == 1:
             self.plot_sankey_flow(layer=-1)
 
     def test_step(self, batch, batch_nb):
@@ -788,7 +798,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         if batch_nb == 0:
             print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
-        self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
+        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
 
         self.log("test_loss", test_loss)
 

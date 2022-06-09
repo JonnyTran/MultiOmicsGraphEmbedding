@@ -10,7 +10,7 @@ from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from sklearn.metrics import average_precision_score
 from torch import Tensor
-from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, Metric
+from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, Metric, AveragePrecision
 
 from .utils import filter_samples, tensor_sizes, activation
 
@@ -53,6 +53,9 @@ class Metrics(torch.nn.Module):
             elif "micro_f1" in metric:
                 self.metrics[metric] = F1Score(num_classes=n_classes, average="micro",
                                                top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
+            elif "fmax" in metric:
+                pass
+
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
@@ -317,8 +320,7 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
 
 
 class AveragePrecision(torchmetrics.Metric):
-    def __init__(self, average="macro", compute_on_step: bool = False, dist_sync_on_step: bool = False,
-                 process_group: Optional[Any] = None, dist_sync_fn: Callable = None):
+    def __init__(self, average="macro", ):
         """
 
         Args:
@@ -338,7 +340,7 @@ class AveragePrecision(torchmetrics.Metric):
                 ``'samples'``:
                     Calculate metrics for each instance, and find their average.
         """
-        super().__init__(compute_on_step, dist_sync_on_step, process_group, dist_sync_fn)
+        super().__init__()
         self.average = average
 
     def reset(self):

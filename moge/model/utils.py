@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from collections.abc import MutableMapping
 from typing import Dict, Any
 
@@ -70,7 +71,7 @@ def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights, return_index=False
 
 def select_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights=None):
     # Filter node types which have no data
-    batch_size = {ntype: size for ntype, size in batch_size.items() if y_true[ntype].sum() > 0}
+    batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items() if y_true[ntype].sum() > 0})
 
     if isinstance(y_true, dict):
         y_true = torch.cat([y_true[ntype][:size] for ntype, size in batch_size.items()], dim=0)
