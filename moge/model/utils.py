@@ -69,7 +69,7 @@ def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights, return_index=False
     return Y_hat, Y, weights[idx]
 
 
-def select_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights=None):
+def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights=None):
     # Filter node types which have no data
     batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items() if y_true[ntype].sum() > 0})
 

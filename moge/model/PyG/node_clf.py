@@ -26,7 +26,7 @@ from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, Heter
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, select_batch
+from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, concat_dict_batch
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -746,13 +746,15 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights)
 
+        self.log("loss", loss, logger=True, on_step=True)
+
         return loss
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
         y_pred = self.forward(X)
 
-        y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
@@ -773,7 +775,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             for namespace in y_true_dict.keys():
                 go_type = "BPO" if namespace == 'biological_process' else \
                     "CCO" if namespace == 'cellular_component' else \
-                        "MFO" if namespace == 'molecular_function' else None
+                        "MFO" if namespace == 'molecular_function' else namespace
 
                 metrics[go_type].update_metrics(y_pred_dict[namespace], y_true_dict[namespace], weights=weights)
 
@@ -789,7 +791,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred = self.forward(X, save_betas=False)
 
-        y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
 

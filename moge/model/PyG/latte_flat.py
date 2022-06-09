@@ -230,10 +230,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
         if batchnorm:
-            self.batchnorm_l = torch.nn.ModuleDict({
-                node_type: nn.BatchNorm1d(output_dim) \
-                for node_type in self.node_types})
-            self.batchnorm_r = torch.nn.ModuleDict({
+            self.batchnorm = torch.nn.ModuleDict({
                 node_type: nn.BatchNorm1d(output_dim) \
                 for node_type in self.node_types})
 
@@ -388,6 +385,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+            elif hasattr(self, "batchnorm"):
+                h_out[ntype] = self.batchnorm[ntype](h_out[ntype])
 
             if hasattr(self, "dropout"):
                 h_out[ntype] = self.dropout(h_out[ntype])
