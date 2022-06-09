@@ -253,7 +253,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return H
 
-
+    @property
+    def training_idx(self):
+        return
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,

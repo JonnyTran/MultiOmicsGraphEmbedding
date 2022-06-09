@@ -129,9 +129,9 @@ class Metrics(torch.nn.Module):
 
             # Torch ignite metrics
             elif metric == "top_k":
-                self.metrics[metric].update((y_pred_act, y_true))
+                self.metrics[metric].update(y_pred_act, y_true)
             elif metric == "avg_precision":
-                self.metrics[metric].update((y_pred_act, y_true))
+                self.metrics[metric].update(y_pred_act, y_true)
 
             # OGB metrics
             elif "ogbn" in metric:

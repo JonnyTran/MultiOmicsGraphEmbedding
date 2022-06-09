@@ -21,7 +21,7 @@ def activation(y_pred: Tensor, loss_type: str):
 
 
 def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
-    if weights is None or weights.shape == None or weights.numel() == 0:
+    if weights is None or not hasattr(weights, 'shape') or weights.shape == None or weights.numel() == 0:
         return Y_hat, Y
 
     if not isinstance(weights, Tensor):

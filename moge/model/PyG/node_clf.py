@@ -1,5 +1,6 @@
 import logging
 import math
+import traceback
 from typing import Dict, Iterable, Union, Tuple
 
 import pandas as pd
@@ -205,10 +206,10 @@ class LATTENodeClf(NodeClfTrainer):
             h_out = {ntype: self.sequence_encoders[ntype](inputs["sequence"][ntype], inputs["seq_len"][ntype]) \
                      for ntype in inputs["sequence"]}
 
-        embeddings, _, edge_index_dict = self.embedder(h_out,
-                                                       inputs["edge_index"],
-                                                       inputs["sizes"],
-                                                       inputs["global_node_index"], **kwargs)
+        embeddings = self.embedder(h_out,
+                                   inputs["edge_index"],
+                                   inputs["sizes"],
+                                   inputs["global_node_index"], **kwargs)
 
         if isinstance(self.head_node_type, str):
             y_hat = self.classifier(embeddings[self.head_node_type]) \
@@ -220,7 +221,7 @@ class LATTENodeClf(NodeClfTrainer):
             else:
                 y_hat = embeddings
 
-        return y_hat, _, edge_index_dict
+        return y_hat
 
     def on_test_epoch_start(self) -> None:
         for l in range(self.embedder.n_layers):
@@ -245,7 +246,7 @@ class LATTENodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss, _ = self.forward(X)
+        y_pred = self.forward(X)
 
         y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
@@ -260,17 +261,13 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             logs = {}
 
-        if proximity_loss is not None:
-            loss = loss + proximity_loss
-            logs.update({"proximity_loss": proximity_loss})
-
         self.log_dict(logs, prog_bar=True, logger=True)
 
         return loss
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss, _ = self.forward(X, save_betas=False)
+        y_pred = self.forward(X, save_betas=False)
 
         y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
@@ -279,16 +276,13 @@ class LATTENodeClf(NodeClfTrainer):
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.valid_metrics.update_metrics(y_pred, y_true, weights=weights)
 
-        if proximity_loss is not None:
-            val_loss = val_loss + proximity_loss
-
         self.log("val_loss", val_loss)
 
         return val_loss
 
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss, _ = self.forward(X, save_betas=True)
+        y_pred = self.forward(X, save_betas=True)
 
         y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
@@ -301,22 +295,16 @@ class LATTENodeClf(NodeClfTrainer):
 
         self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
 
-        if proximity_loss is not None:
-            test_loss = test_loss + proximity_loss
-
         self.log("test_loss", test_loss)
 
         return test_loss
 
     def predict_step(self, batch, batch_idx: int, dataloader_idx=None):
         X, y_true, weights = batch
-        y_pred, proximity_loss = self.forward(X, save_betas=True)
+        y_pred = self.forward(X, save_betas=True)
 
         predict_loss = self.criterion(y_pred, y_true)
         self.test_metrics.update_metrics(y_pred, y_true)
-
-        if self.hparams.use_proximity:
-            predict_loss = predict_loss + proximity_loss
 
         self.log("predict_loss", predict_loss)
 
@@ -655,7 +643,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         self.dataset = dataset
         self.multilabel = dataset.multilabel
         self.y_types = list(dataset.y_dict.keys())
-        self._name = f"LATTE-{hparams.n_layers}-{hparams.t_order}th_Link"
+        self._name = f"LATTE-{hparams.n_layers}-{hparams.t_order}"
         self.collate_fn = collate_fn
 
         # Node attr input
@@ -732,22 +720,22 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             embs = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        embeddings, proximity_loss, edge_index_dict = self.embedder.forward(h_dict=h_out,
-                                                                            edge_index_dict=inputs["edge_index_dict"],
-                                                                            global_node_idx=inputs["global_node_index"],
-                                                                            sizes=inputs["sizes"],
-                                                                            **kwargs)
+        embeddings = self.embedder.forward(h_dict=h_out,
+                                           edge_index_dict=inputs["edge_index_dict"],
+                                           global_node_idx=inputs["global_node_index"],
+                                           sizes=inputs["sizes"],
+                                           **kwargs)
 
         if hasattr(self, "classifier"):
             y_hat = self.classifier.forward(embeddings[self.head_node_type])
         else:
             y_hat = embeddings[self.head_node_type]
 
-        return y_hat, proximity_loss, edge_index_dict
+        return y_hat
 
     def training_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss, edge_pred_dict = self.forward(X)
+        y_pred = self.forward(X)
 
         y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
@@ -763,17 +751,13 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         else:
             logs = {}
 
-        if proximity_loss is not None:
-            loss = loss + proximity_loss
-            logs.update({"proximity_loss": proximity_loss})
-
         self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
         return loss
 
     def validation_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss, edge_pred_dict = self.forward(X)
+        y_pred = self.forward(X)
 
         y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
@@ -782,16 +766,18 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.valid_metrics.update_metrics(y_pred, y_true)
 
-        if proximity_loss is not None:
-            val_loss = val_loss + proximity_loss
-
         self.log("val_loss", val_loss)
 
         return val_loss
 
+    def on_validation_end(self) -> None:
+        super().on_validation_end()
+        if self.current_epoch % 5 == 1:
+            self.plot_sankey_flow(layer=-1)
+
     def test_step(self, batch, batch_nb):
         X, y_true, weights = batch
-        y_pred, proximity_loss, edge_pred_dict = self.forward(X, save_betas=False)
+        y_pred = self.forward(X, save_betas=False)
 
         y_pred, y_true, weights = select_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
@@ -804,12 +790,25 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         self.test_metrics.update_metrics(y_pred, y_true, weights=weights)
 
-        if proximity_loss is not None:
-            test_loss = test_loss + proximity_loss
-
         self.log("test_loss", test_loss)
 
         return test_loss
+
+    def on_test_end(self):
+        try:
+            if self.wandb_experiment is not None:
+                X, y, _ = self.dataset.get_full_graph()
+                embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=True)
+
+                self.predict_umap(X, embs, log_table=True)
+                self.plot_sankey_flow(layer=-1)
+                self.cleanup_artifacts()
+
+        except Exception as e:
+            traceback.print_exc()
+
+        finally:
+            super().on_test_end()
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())

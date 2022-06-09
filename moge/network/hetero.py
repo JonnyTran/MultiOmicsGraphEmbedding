@@ -342,7 +342,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 y_label = filter_multilabel(self.multiomics[ntype].annotations.loc[self.nodes[ntype], target],
                                             min_count=None, label_subset=classes, dropna=False,
                                             delimiter=self.delimiter)
-                y_dict[ntype] = self.feature_transformer[target].transform_heterograph(y_label)
+                y_dict[ntype] = self.feature_transformer[target].transform(y_label)
                 y_dict[ntype] = torch.tensor(y_dict[ntype])
 
                 hetero[ntype]["y"] = y_dict[ntype]
