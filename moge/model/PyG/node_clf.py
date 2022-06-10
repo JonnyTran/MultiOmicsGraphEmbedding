@@ -761,7 +761,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
 
-        self.log("val_loss", val_loss, prog_bar=True, on_step=True)
+        self.log("val_loss", val_loss, )
 
         return val_loss
 
@@ -780,7 +780,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
 
-        self.log("test_loss", test_loss, on_step=True)
+        self.log("test_loss", test_loss)
 
         return test_loss
 
