@@ -9,14 +9,6 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
 from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.latte import LATTE
@@ -27,6 +19,13 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, concat_dict_batch
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -762,9 +761,28 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
 
-        self.log("val_loss", val_loss)
+        self.log("val_loss", val_loss, prog_bar=True, on_step=True)
 
         return val_loss
+
+    def test_step(self, batch, batch_nb):
+        X, y_true, weights = batch
+        y_pred = self.forward(X, save_betas=False)
+
+        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
+        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
+        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+
+        test_loss = self.criterion(y_pred, y_true, weights=weights)
+
+        if batch_nb == 0:
+            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+
+        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
+
+        self.log("test_loss", test_loss, on_step=True)
+
+        return test_loss
 
     def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
                                 y_pred: Tensor, y_true: Tensor, weights: Tensor):
@@ -786,25 +804,6 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         super().on_validation_end()
         if self.current_epoch % 20 == 1:
             self.plot_sankey_flow(layer=-1)
-
-    def test_step(self, batch, batch_nb):
-        X, y_true, weights = batch
-        y_pred = self.forward(X, save_betas=False)
-
-        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
-        y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
-
-        test_loss = self.criterion(y_pred, y_true, weights=weights)
-
-        if batch_nb == 0:
-            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
-
-        self.update_node_clf_metrics(self.test_metrics, y_pred, y_true, weights)
-
-        self.log("test_loss", test_loss)
-
-        return test_loss
 
     def on_test_end(self):
         try:

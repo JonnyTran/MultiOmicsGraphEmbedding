@@ -4,13 +4,12 @@ from typing import Dict
 
 import torch
 import torch.nn.functional as F
-from torch import nn, Tensor
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from transformers import BertConfig, BertForSequenceClassification
-
 from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.utils import tensor_sizes
+from torch import nn, Tensor
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from transformers import BertConfig, BertForSequenceClassification
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -65,7 +64,7 @@ class HeteroNodeEncoder(nn.Module):
                     print("Initialized trainable embeddings: ", ntype)
                     module_dict[ntype] = nn.Embedding(num_embeddings=num_nodes_dict[ntype],
                                                       embedding_dim=embedding_dim,
-                                                      # max_norm=2, norm_type=2,
+                                                      max_norm=2, norm_type=2,
                                                       scale_grad_by_freq=False,
                                                       sparse=False)
                 else:

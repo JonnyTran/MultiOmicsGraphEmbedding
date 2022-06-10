@@ -4,18 +4,18 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from openomics.database.ontology import GeneOntology
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 # from torch_geometric.loader import HGTLoader, NeighborLoader
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
+from openomics.database.ontology import GeneOntology
+from pandas import DataFrame
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -283,7 +283,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return dataset
 
-    def split_labels_by_go_namespace(self, y: Union[Tensor, Dict[str, Tensor]]):
+    def split_labels_by_go_namespace(self, y: Union[Tensor, Dict[str, Tensor], np.ndarray]):
         assert hasattr(self, 'go_namespace')
         go_namespaces = self.go_namespace[self.classes]
 
@@ -291,7 +291,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         for namespace in np.unique(go_namespaces):
             mask = go_namespaces == namespace
 
-            if isinstance(y, Tensor):
+            if isinstance(y, (Tensor, np.ndarray, DataFrame)):
                 y_dict[namespace] = y[:, mask]
             elif isinstance(y, dict):
                 for ntype, labels in y.items():

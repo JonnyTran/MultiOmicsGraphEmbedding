@@ -5,22 +5,21 @@ from argparse import Namespace
 from typing import Union
 
 import dgl
+import moge
+import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
 from cogdl.datasets.gtn_data import GTNDataset
+from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset, HeteroNodeClfDataset
+from moge.dataset.dgl.graph_generator import DGLGraphSampler
+from moge.dataset.sequences import SequenceTokenizers
+from moge.model.dgl.NARS.data import load_acm, load_mag
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
 from openomics.database.ontology import GeneOntology
-from torch_geometric.datasets import AMiner
-
-import moge
-import moge.dataset.PyG.triplet_generator
-from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset
-from moge.dataset.dgl.graph_generator import DGLGraphSampler
-from moge.dataset.sequences import SequenceTokenizers
-from moge.model.dgl.NARS.data import load_acm, load_mag
 from run.utils import add_node_embeddings
+from torch_geometric.datasets import AMiner
 
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
@@ -139,6 +138,44 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         dataset = HeteroNeighborGenerator("datasets/blogcatalog6k.mat", args.neighbor_sizes, node_types=["user", "tag"],
                                           head_node_type="user", resample_train=train_ratio,
                                           inductive=args.inductive)
+
+    elif ".pickle" in dataset_path:
+        with open(dataset_path, "rb") as file:
+            network = pickle.load(file)
+
+        if hasattr(args, 'sequence') and args.sequence:
+            sequence_tokenizers = SequenceTokenizers(
+                vocabularies={"MicroRNA": "armheb/DNA_bert_3",
+                              "LncRNA": "armheb/DNA_bert_6",
+                              "MessengerRNA": "armheb/DNA_bert_6",
+                              'Protein': 'zjukg/OntoProtein',
+                              'GO_term': "dmis-lab/biobert-base-cased-v1.2", },
+                max_length=args.max_length)
+            use_sequence = True
+        else:
+            sequence_tokenizers = None
+            use_sequence = False
+
+        hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, expression=False,
+                                                           sequence=use_sequence, add_reverse=args.use_reverse, )
+
+        n_neighbors = args.n_neighbors if args.neighbor_loader == "HGTLoader" else args.n_neighbors // 8
+
+        dataset = HeteroNodeClfDataset.from_pyg_heterodata(hetero, classes, nodes,
+                                                           head_node_type=args.head_node_type,
+                                                           neighbor_loader=args.neighbor_loader,
+                                                           neighbor_sizes=[n_neighbors] * args.t_order,
+                                                           seq_tokenizer=sequence_tokenizers)
+
+        geneontology = GeneOntology(
+            file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"})
+        dataset.go_namespace = geneontology.data.loc[dataset.classes, "namespace"]
+        dataset._name = name
+
+        dataset.ntype_mapping = {'biological_process': "GO_term",
+                                 'cellular_component': "GO_term",
+                                 'molecular_function': "GO_term"}
+
     else:
         raise Exception(f"dataset {name} not found")
 
