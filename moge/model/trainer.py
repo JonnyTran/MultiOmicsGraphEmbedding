@@ -150,7 +150,8 @@ class NodeEmbeddingEvaluator(LightningModule):
         self.sankey_flow_table = "sankey_flow"
         self.node_emb_umap = "node_emb_umap_plot"
 
-    def predict_umap(self, X: Dict[str, Any], embs: Dict[str, Tensor], log_table=False):
+    def predict_umap(self, X: Dict[str, Any], embs: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
+                     log_table=False):
         global_node_index = {k: v.numpy() for k, v in X["global_node_index"].items()}
 
         node_list = pd.concat([pd.Series(self.dataset.nodes[ntype][global_node_index[ntype]]) \
@@ -160,9 +161,17 @@ class NodeEmbeddingEvaluator(LightningModule):
         nodes_emb = {ntype: embs[ntype].detach().numpy() for ntype in embs}
         nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
 
+        if weights is not None:
+            nodes_weight = {ntype: weights[ntype].detach().numpy() \
+                if isinstance(weights[ntype], Tensor) else weights[ntype] for ntype in weights}
+            nodes_weight = np.concatenate([nodes_weight[ntype] for ntype in global_node_index]).astype(bool)
+        else:
+            nodes_weight = None
+
         df = pd.DataFrame({"ntype": node_types.values}, index=node_list.values)
         df.index.name = "nid"
-        if hasattr(self.dataset, "go_namespace"):
+        if hasattr(self.dataset, "go_namespace") and hasattr(self.dataset, "go_ntype") \
+                and self.dataset.go_ntype in self.dataset.nodes:
             go_namespace = {k: v for k, v in zip(self.dataset.nodes[self.dataset.go_ntype], self.dataset.go_namespace)}
             rename_ntype = pd.Series(df.index.map(go_namespace), index=df.index).dropna()
             df["ntype"].update(rename_ntype)
@@ -176,19 +185,24 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log_table
         if log_table:
-            table = wandb.Table(data=df.reset_index().drop(columns=["pos"], errors="ignore").sample(1000))
+            df_filter = df.reset_index().drop(columns=["pos"], errors="ignore")
+            if nodes_weight:
+                df_filter = df_filter.loc[nodes_weight].sample(1000)
+            else:
+                df_filter = df_filter.sample(1000)
+
+            table = wandb.Table(data=df_filter)
             wandb.log({self.node_emb_umap: table})
             print("Logging node_emb_umap_plot")
 
         return df
 
-    def plot_sankey_flow(self, layer: int = -1):
+    def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
         if self.wandb_experiment is None:
             return
 
         run_id = self.wandb_experiment.id
 
-        t_order = self.embedder.layers[layer].t_order
         node_types = list(self.embedder.layers[layer]._betas.keys())
         table = wandb.Table(columns=[f"Layer{layer + 1 if layer >= 0 else len(self.embedder.layers)}_{ntype}" \
                                      for ntype in node_types])
@@ -197,7 +211,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         plotly_htmls = []
         for ntype in node_types:
             nodes, links = self.embedder.get_sankey_flow(layer=layer, node_type=ntype, self_loop=True)
-            fig = plot_sankey_flow(nodes, links, width=250 * t_order, height=300)
+            fig = plot_sankey_flow(nodes, links, width=width, height=height)
 
             path_to_plotly_html = f"./wandb_fig_run_{run_id}_{ntype}.html"
             fig.write_html(path_to_plotly_html, auto_play=False,

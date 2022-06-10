@@ -9,8 +9,17 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
+
 from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
+from moge.model.PyG.conv import HGT
 from moge.model.PyG.latte import LATTE
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
@@ -19,13 +28,6 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, concat_dict_batch
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -693,8 +695,6 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
 
-        self.val_moving_loss = torch.tensor([3.0, ] * 5, dtype=torch.float)
-
     def configure_sharded_model(self):
         # modules are sharded across processes
         # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
@@ -707,7 +707,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         if hasattr(self, "encoder"):
             self.encoder = auto_wrap(self.encoder)
 
-    def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]], **kwargs):
+    def forward(self, inputs: Dict[str, Union[Tensor, Dict[Union[str, Tuple[str]], Union[Tensor, int]]]],
+                return_embs=False, **kwargs):
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
@@ -720,11 +721,14 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             embs = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        embeddings = self.embedder.forward(h_dict=h_out,
+        embeddings = self.embedder.forward(h_out,
                                            edge_index_dict=inputs["edge_index_dict"],
                                            global_node_idx=inputs["global_node_index"],
                                            sizes=inputs["sizes"],
                                            **kwargs)
+
+        if return_embs:
+            return embeddings
 
         if hasattr(self, "classifier"):
             y_hat = self.classifier.forward(embeddings[self.head_node_type])
@@ -808,10 +812,10 @@ class LATTEFlatNodeClf(NodeClfTrainer):
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
-                X, y, _ = self.dataset.get_full_graph()
-                embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=True)
+                X, y, weights = self.dataset.get_full_graph()
+                embs = self.cpu().forward(X, return_embs=True, save_betas=True)
 
-                self.predict_umap(X, embs, log_table=True)
+                self.predict_umap(X, embs, weights=weights, log_table=True)
                 self.plot_sankey_flow(layer=-1)
                 self.cleanup_artifacts()
 
@@ -872,3 +876,48 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         effective_accum = self.trainer.accumulate_grad_batches * num_devices
         return (batches // effective_accum) * self.trainer.max_epochs
+
+
+class HGTNodeClf(LATTEFlatNodeClf):
+    def __init__(self, hparams, dataset: HeteroNodeClfDataset, metrics=["accuracy"],
+                 collate_fn=None) -> None:
+        super().__init__(hparams, dataset, metrics)
+        self.head_node_type = dataset.head_node_type
+        self.dataset = dataset
+        self.multilabel = dataset.multilabel
+        self._name = f"HGT-{hparams.n_layers}_Link"
+        self.collate_fn = collate_fn
+
+        # Node attr input
+        if hasattr(dataset, 'seq_tokenizer'):
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
+
+        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(dataset.node_types):
+            self.encoder = HeteroNodeEncoder(hparams, dataset)
+
+        self.embedder = HGT(embedding_dim=hparams.embedding_dim, num_layers=hparams.n_layers,
+                            num_heads=hparams.attn_heads,
+                            node_types=dataset.G.node_types, metadata=dataset.G.metadata())
+
+        # Output layer
+        if "cls_graph" in hparams and hparams.cls_graph is not None:
+            self.classifier = LabelGraphNodeClassifier(hparams)
+
+        elif hparams.nb_cls_dense_size >= 0:
+            if hparams.layer_pooling == "concat":
+                hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+                logging.info("embedding_dim {}".format(hparams.embedding_dim))
+
+            self.classifier = DenseClassification(hparams)
+        else:
+            assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
+
+        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
+                                            loss_type=hparams.loss_type,
+                                            class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
+                                                                                 hparams.use_class_weights else None,
+                                            multilabel=dataset.multilabel,
+                                            reduction="mean" if "reduction" not in hparams else hparams.reduction)
+
+        self.hparams.n_params = self.get_n_params()
+        self.lr = self.hparams.lr

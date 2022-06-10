@@ -311,8 +311,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta_r = F.leaky_relu(key * self.rel_attn_r[ntype], negative_slope=0.2)
 
         beta = (beta_l[:, None, :] * beta_r).sum(-1)
-        beta = F.softmax(beta, dim=1)
-        # beta = torch.relu(beta / beta.sum(1, keepdim=True))
+        # beta = F.softmax(beta, dim=1)
+        beta = torch.relu(beta / beta.sum(1, keepdim=True))
+        beta = torch.nan_to_num(beta, nan=0, posinf=1.0)
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 

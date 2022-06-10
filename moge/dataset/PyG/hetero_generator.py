@@ -4,18 +4,19 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizers
-# from torch_geometric.loader import HGTLoader, NeighborLoader
-from moge.dataset.utils import get_edge_index, edge_index_to_adjs
-from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from openomics.database.ontology import GeneOntology
 from pandas import DataFrame
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
 from torch_sparse.tensor import SparseTensor
+
+from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.sequences import SequenceTokenizers
+# from torch_geometric.loader import HGTLoader, NeighborLoader
+from moge.dataset.utils import get_edge_index, edge_index_to_adjs
+from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -265,19 +266,19 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def testing_idx(self):
         return torch.arange(self.G[self.head_node_type].num_nodes)[self.G[self.head_node_type].train_mask]
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=10, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,
                                             transform_fn=self.transform_heterograph, num_workers=num_workers)
 
         return dataset
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].valid_mask,
                                             transform_fn=self.transform_heterograph, num_workers=num_workers)
 
         return dataset
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=5, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
         dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,
                                             transform_fn=self.transform_heterograph, num_workers=num_workers)
 
