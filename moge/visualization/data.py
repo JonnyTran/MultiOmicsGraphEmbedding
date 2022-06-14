@@ -1,18 +1,17 @@
+import datashader as ds
+import holoviews as hv
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
+import xarray as xr
+from datashader import reductions as rd
+from holoviews.operation.datashader import rasterize
 from plotly.subplots import make_subplots
 from scipy.sparse import coo_matrix
 from scipy.sparse import issparse
 from sklearn.metrics import classification_report
-
-import plotly.express as px
-import datashader as ds
-from datashader import reductions as rd
-import holoviews as hv
-from holoviews.operation.datashader import datashade, shade, dynspread, rasterize
-import xarray as xr
 
 hv.extension('plotly')
 
@@ -101,17 +100,19 @@ def heatmap_compare(y_true, y_pred, file_output=None, title=None, autosize=True,
 
     fig = make_subplots(rows=1, cols=2, subplot_titles=("True Labels", "Predicted"))
 
-    fig.append_trace(go.Heatmap(
+    fig.add_trace(go.Heatmap(
         z=y_true,
         x=columns,
         y=y_true.index if hasattr(y_true, "index") else None,
+        coloraxis="coloraxis1",
         hoverongaps=False),
         row=1, col=1)
 
-    fig.append_trace(go.Heatmap(
+    fig.add_trace(go.Heatmap(
         z=y_pred,
         x=columns,
         y=y_pred.index if hasattr(y_pred, "index") else None,
+        coloraxis="coloraxis1",
         hoverongaps=False),
         row=1, col=2)
 
@@ -132,19 +133,6 @@ def heatmap_compare(y_true, y_pred, file_output=None, title=None, autosize=True,
 
     return fig
 
-
-def plot_training_history(history, title=""):
-    fig = go.Figure()
-    for metric in history.history.keys():
-        fig.add_trace(go.Scatter(x=np.arange(len(history.history["loss"])),
-                                 y=history.history[metric], name=metric,
-                                 mode='lines+markers'))
-    fig.update_layout(
-        title=title,
-        xaxis_title="Iteration",
-        yaxis_title="Percentage",
-    )
-    fig.show()
 
 
 def bar_chart(results: dict, measures, title=None, bar_width=0.08, loc="best"):

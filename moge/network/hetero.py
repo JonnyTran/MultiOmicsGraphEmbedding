@@ -7,17 +7,16 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_geometric.transforms as T
-from openomics import MultiOmics
-from openomics.utils.df import concat_uniques
-from pandas import Series
-from torch import Tensor
-from torch_geometric.data import HeteroData
-
 from moge.dataset.utils import get_edge_index
 from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 from moge.network.utils import filter_multilabel
+from openomics import MultiOmics
+from openomics.utils.df import concat_uniques
+from pandas import Series
+from torch import Tensor
+from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -239,7 +238,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     feat_filtered = filter_multilabel(annotations[col], min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
 
-                    feat = self.feature_transformer[col].transform_heterograph(feat_filtered)
+                    feat = self.feature_transformer[col].transform(feat_filtered)
                     G.nodes[ntype].data[col] = torch.from_numpy(feat)
 
             # DNA/RNA sequence
@@ -263,7 +262,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype].label_col],
                                         min_count=min_count,
                                         label_subset=label_subset, dropna=False, delimiter=self.delimiter)
-            labels[ntype] = self.feature_transformer[label_col].transform_heterograph(y_label)
+            labels[ntype] = self.feature_transformer[label_col].transform(y_label)
             labels[ntype] = torch.tensor(labels[ntype])
 
             G.nodes[ntype].data["label"] = labels[ntype]
@@ -304,7 +303,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 if col in self.feature_transformer:
                     feat_filtered = filter_multilabel(annotations[col], min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
-                    feat: np.ndarray = self.feature_transformer[col].transform_heterograph(feat_filtered)
+                    feat: np.ndarray = self.feature_transformer[col].transform(feat_filtered)
                     # data[ntype][col] = feat
                     print(ntype, col)
                     node_feats.append(torch.tensor(feat, dtype=torch.float))

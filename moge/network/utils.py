@@ -3,10 +3,13 @@ from typing import Union
 import numpy as np
 import pandas as pd
 import tqdm
+from numpy import ndarray
+from pandas import Index
 
 
-def filter_multilabel(y_str: pd.Series, min_count=None, max_count=None, label_subset: pd.Index = None,
-                      dropna=False, delimiter="|", verbose=False) -> pd.Series:
+def filter_multilabel(y_str: pd.Series, min_count: int = None, max_count: int = None,
+                      label_subset: Union[Index, ndarray] = None,
+                      dropna: bool = False, delimiter: str = "|", verbose=False) -> pd.Series:
     if dropna:
         index = y_str.dropna().index
     else:

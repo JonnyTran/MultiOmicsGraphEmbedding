@@ -3,22 +3,22 @@ import logging
 import os
 from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable, Any
 
+import MulticoreTSNE
 import numpy as np
 import pandas as pd
 import torch
 import wandb
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.utils.data.distributed import DistributedSampler
-from umap import UMAP
-
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.utils.data.distributed import DistributedSampler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -98,9 +98,10 @@ class ClusteringEvaluator(LightningModule):
         metrics = res_df.mean(0).to_dict()
         return metrics
 
-    def get_embeddings_labels(self, h_dict: dict, global_node_index: dict, cache=True):
-        if hasattr(self, "embeddings") and hasattr(self, "node_types") and hasattr(self, "labels") and cache:
-            return self.embeddings, self.node_types, self.labels
+    def get_embeddings_labels(self, h_dict: Dict[str, Tensor], global_node_index: Dict[str, Tensor], cache: bool = True) \
+            -> Tuple[DataFrame, Series, Series]:
+        if cache and hasattr(self, "_embeddings") and hasattr(self, "_node_types") and hasattr(self, "_labels"):
+            return self._embeddings, self._node_types, self._labels
 
         # Building a dataframe of embeddings, indexed by "{node_type}{node_id}"
         emb_df_list = []
@@ -128,7 +129,7 @@ class ClusteringEvaluator(LightningModule):
             labels = None
 
         # Save results
-        self.embeddings, self.node_types, self.labels = embeddings, node_types, labels
+        self._embeddings, self._node_types, self._labels = embeddings, node_types, labels
 
         return embeddings, node_types, labels
 
@@ -178,7 +179,8 @@ class NodeEmbeddingEvaluator(LightningModule):
             df["ntype"] = df["ntype"].replace(
                 {"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", })
 
-        nodes_umap = UMAP(n_components=2, n_jobs=10).fit_transform(nodes_emb)
+        # nodes_umap = UMAP(n_components=2, n_jobs=10).fit_transform(nodes_emb)
+        nodes_umap = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1).fit_transform(nodes_emb)
         nodes_pos = {node_name: pos for node_name, pos in zip(node_list, nodes_umap)}
 
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
@@ -198,7 +200,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         return df
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
-        if self.wandb_experiment is None:
+        if self.wandb_experiment is None or not hasattr(self.embedder, "layers"):
             return
 
         run_id = self.wandb_experiment.id
