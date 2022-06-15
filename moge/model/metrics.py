@@ -115,53 +115,48 @@ class Metrics(torch.nn.Module):
 
         if subset is None:
             metrics = self.metrics.keys()
-        elif not any(metric in subset for metric in self.metrics):
-            # print(f"Argument `subset`={subset} did not match any metrics in {self.metrics.keys()}")
-            return
         else:
-            metrics = subset
+            metrics = [name for name in subset if name in self.metrics]
 
-        for metric in metrics:
+        for name in metrics:
             # Torch ignite metrics
-            if "precision" in metric or "recall" in metric or "accuracy" in metric:
+            if "precision" in name or "recall" in name or "accuracy" in name:
                 if not self.multilabel and y_true.dim() == 1:
-                    self.metrics[metric].update((self.hot_encode(y_pred_act.argmax(1, keepdim=False), type_as=y_true),
-                                                 self.hot_encode(y_true, type_as=y_pred)))
-                else:
-                    self.metrics[metric].update(((y_pred_act > self.threshold).type_as(y_true), y_true))
+                    self.metrics[name].update((self.hot_encode(y_pred_act.argmax(1, keepdim=False), type_as=y_true),
+                                               self.hot_encode(y_true, type_as=y_pred)))
+                elif name in self.metrics:
+                    self.metrics[name].update(((y_pred_act > self.threshold).type_as(y_true), y_true))
 
             # Torch ignite metrics
-            elif metric == "top_k":
-                self.metrics[metric].update(y_pred_act, y_true)
-            elif metric == "avg_precision":
-                self.metrics[metric].update(y_pred_act, y_true)
+            elif name == "top_k":
+                self.metrics[name].update(y_pred_act, y_true)
+            elif name == "avg_precision":
+                self.metrics[name].update(y_pred_act, y_true)
 
             # OGB metrics
-            elif "ogbn" in metric:
-                if metric in ["ogbl-ddi", "ogbl-collab"]:
+            elif "ogbn" in name:
+                if name in ["ogbl-ddi", "ogbl-collab"]:
                     y_true = y_true[:, 0]
-                elif "ogbg-mol" in metric:
+                elif "ogbg-mol" in name:
                     # print(tensor_sizes({"y_pred": y_pred, "y_true": y_true}))
                     pass
 
-                self.metrics[metric].update((y_pred_act, y_true))
+                self.metrics[name].update((y_pred_act, y_true))
 
-            elif "ogbl" in metric:
+            elif "ogbl" in name:
                 # Both y_pred, y_true must have activation func applied, not with `y_pred_act`
                 edge_pos = y_pred
                 edge_neg = y_true
-                self.metrics[metric].update(edge_pos, edge_neg)
+                self.metrics[name].update(edge_pos, edge_neg)
 
             # torchmetrics metrics
-            elif isinstance(self.metrics[metric], torchmetrics.metric.Metric):
+            elif isinstance(self.metrics[name], torchmetrics.metric.Metric):
                 try:
-                    self.metrics[metric].update(y_pred_act, y_true)
+                    self.metrics[name].update(y_pred_act, y_true)
                 except Exception as e:
-                    print(e, "\n", metric, tensor_sizes({"y_pred": y_pred_act, "y_true": y_true}))
+                    print(e, "\n", name, tensor_sizes({"y_pred": y_pred_act, "y_true": y_true}))
                     # self.metrics[metric].update(y_pred_full, y_true_full)
 
-            else:
-                raise Exception(f"Metric {metric} has problem at .update()")
 
     def compute_metrics(self) -> Dict[str, Tensor]:
         logs = {}

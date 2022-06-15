@@ -4,18 +4,25 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
-from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
-from moge.network.hetero import HeteroNetwork
 from openomics.database.ontology import GeneOntology
 from pandas import DataFrame
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
 from torch_sparse.tensor import SparseTensor
+
+from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.sequences import SequenceTokenizers
+from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
+from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
+from moge.network.hetero import HeteroNetwork
+
+
+def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
+    rev_metapath = tuple(reversed(["rev_" + type if i % 2 == 1 else type \
+                                   for i, type in enumerate(metapath)]))
+    return rev_metapath
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
@@ -355,10 +362,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return out_edge_index_dict
 
 
-def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
-    rev_metapath = tuple(reversed(["rev_" + type if i % 2 == 1 else type \
-                                   for i, type in enumerate(metapath)]))
-    return rev_metapath
+
 
 
 class HeteroLinkPredDataset(HeteroNodeClfDataset):
@@ -456,6 +460,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 nx_graph = nx.from_pandas_edgelist(annotations.explode().to_frame().reset_index(),
                                                    source=source_ntype, target="go_id", create_using=nx.Graph)
                 metapath = (ntype, "associated", go_ntype)
+                self.metapaths.append(metapath)
+
                 edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
                 self.G[metapath].edge_index = edge_index
                 print(metapath, edge_index.max(1).values)
@@ -463,11 +469,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 if self.use_reverse:
                     rev_metapath = reverse_metapath_name(metapath)
                     self.metapaths.append(rev_metapath)
+
                     self.G[rev_metapath].edge_index = edge_index[[1, 0], :]
                     print(rev_metapath, edge_index[[1, 0], :].max(1).values)
 
         # Reinstantiate graph sampler since hetero graph was modified
-        print(self.G.edge_types)
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
                                                        transform_fn=super().transform_heterograph,

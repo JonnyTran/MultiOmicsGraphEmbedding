@@ -3,6 +3,7 @@ import math
 import traceback
 from typing import List, Tuple, Dict, Any, Union
 
+import numpy as np
 import torch
 from fairscale.nn import auto_wrap
 from torch import nn, Tensor
@@ -306,22 +307,24 @@ class LATTELinkPred(LinkPredTrainer):
                 if metapath in edge_pred_dict["edge_pos"] and metapath in edge_pred_dict["edge_neg"]:
                     self.update_pr_metrics(e_pos=edge_pred_dict["edge_pos"][metapath],
                                            edge_pred=edge_pred_dict["edge_neg"][metapath],
-                                           metrics=metrics[go_type], subset=["precision", "recall"])
+                                           metrics=metrics[go_type])
 
         else:
             metrics.update_metrics(torch.sigmoid(e_pos.detach()), torch.sigmoid(e_neg.detach()),
                                    weights=None, subset=["ogbl-biokg"])
             self.update_pr_metrics(e_pos=e_pos, edge_pred=edge_pred_dict["edge_neg"],
-                                   metrics=metrics, subset=["precision", "recall"])
+                                   metrics=metrics)
 
     def update_pr_metrics(self, e_pos: Tensor, edge_pred: Union[Tensor, Dict[Tuple[str, str, str], Tensor]],
-                          metrics: Metrics, subset=["precision", "recall"]):
+                          metrics: Metrics, subset=["precision", "recall", "aupr"]):
         if isinstance(edge_pred, dict):
             edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred.items()])
         else:
             edge_neg_score = edge_pred
 
-        e_pos = e_pos[torch.randint(high=e_pos.size(0), size=edge_neg_score.shape)]  # randomly select |e_neg| edges
+        # randomly select |e_neg| positive edges to balance precision/recall scores
+        e_pos = e_pos[np.random.choice(e_pos.size(0), size=edge_neg_score.shape,
+                                       replace=False if e_pos.size(0) > edge_neg_score.size(0) else True)]
 
         y_pred = torch.sigmoid(torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach())
         y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
