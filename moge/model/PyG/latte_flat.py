@@ -9,12 +9,13 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
-from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 from pandas import DataFrame
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG import filter_metapaths
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 
 
 class LATTE(nn.Module):
@@ -309,7 +310,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta_l = F.leaky_relu(query * self.rel_attn_l[ntype], negative_slope=0.2)
         beta_r = F.leaky_relu(key * self.rel_attn_r[ntype], negative_slope=0.2)
 
-        beta = (beta_l[:, None, :] * beta_r).sum(-1)
+        beta = (beta_l[:, None, :] + beta_r).sum(-1)
         beta = F.softmax(beta, dim=1)
         # beta = torch.relu(beta / beta.sum(1, keepdim=True))
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
