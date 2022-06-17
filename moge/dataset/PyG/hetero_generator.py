@@ -4,19 +4,18 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from openomics.database.ontology import GeneOntology
-from pandas import DataFrame
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.network.hetero import HeteroNetwork
+from openomics.database.ontology import GeneOntology
+from pandas import DataFrame
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -462,6 +461,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 metapath = (ntype, "associated", go_ntype)
                 self.metapaths.append(metapath)
 
+                print(ntype, nx_graph)
                 edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
                 self.G[metapath].edge_index = edge_index
                 print(metapath, edge_index.max(1).values)

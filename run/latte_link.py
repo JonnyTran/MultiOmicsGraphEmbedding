@@ -128,6 +128,7 @@ if __name__ == "__main__":
     parser.add_argument('--negative_sampling_size', type=float, default=1000)
 
     parser.add_argument('--head_node_type', type=str, default=None)  # Ignore but needed
+    parser.add_argument('--scoring', type=str, default="DistMult")
 
     parser.add_argument('--use_reverse', type=bool, default=True)
     parser.add_argument('--no_wandb', action='store_true')

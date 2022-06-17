@@ -34,6 +34,8 @@ parameters:
     values: [ True, False ]
   sequence:
     values: [ True, False ]
+  scoring:
+    values: [ "DistMult", "TransE" ]
   dropout:
     min: 0.0
     max: 0.4

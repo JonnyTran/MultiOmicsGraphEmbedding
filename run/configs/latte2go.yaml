@@ -29,6 +29,7 @@ t_order: 2
 embedding_dim: 128
 layer_pooling: "last"
 
+scoring: "DistMult"
 attn_heads: 2
 attn_activation: "LeakyReLU"
 attn_dropout: 0.10
