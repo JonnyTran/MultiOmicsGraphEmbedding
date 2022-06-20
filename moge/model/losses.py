@@ -88,10 +88,10 @@ class ContrastiveLoss(nn.Module):
         pos_logits = torch.div(e_pos, self.temperature)
         neg_logits = torch.div(e_neg, self.temperature)
 
-        # logits_max, _ = torch.max(torch.cat([pos_logits.unsqueeze(1), neg_logits], dim=1),
-        #                           dim=1, keepdim=False)
-        # pos_logits = pos_logits - logits_max.detach()
-        # neg_logits = neg_logits - logits_max.unsqueeze(1).detach()
+        logits_max, _ = torch.max(torch.cat([pos_logits.unsqueeze(1), neg_logits], dim=1),
+                                  dim=1, keepdim=False)
+        pos_logits = pos_logits - logits_max.detach()
+        neg_logits = neg_logits - logits_max.unsqueeze(1).detach()
 
         mean_log_prob_pos = pos_logits - torch.log(torch.exp(neg_logits).sum(1))
 

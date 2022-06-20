@@ -6,10 +6,10 @@ from typing import List, Tuple, Dict, Any, Union
 import numpy as np
 import torch
 from fairscale.nn import auto_wrap
-from torch import nn, Tensor
-
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn, Tensor
+
 from .conv import HGT
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
@@ -29,7 +29,9 @@ class LinkPred(torch.nn.Module):
         super(LinkPred, self).__init__()
         self.pred_metapaths = pred_metapaths
         self.embedding_dim = embedding_dim
-        print("LinkPred", self.pred_metapaths)
+        self.head_batch = "head_batch"
+        self.tail_batch = "tail_batch"
+        print("LinkPred", scoring, self.pred_metapaths)
 
         self.ntype_mapping = {ntype: ntype for m in pred_metapaths for ntype in [m[0], m[-1]]}
         if ntype_mapping:
@@ -71,22 +73,22 @@ class LinkPred(torch.nn.Module):
             output["edge_neg"] = self.score_func(edges_input["edge_neg"], embeddings=embeddings, mode="single_neg")
 
         # Sampled head or tail negative sampling
-        if "head_batch" in edges_input or "tail_batch" in edges_input:
+        if self.head_batch in edges_input or self.tail_batch in edges_input:
             # Head batch
             edge_head_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_input["edge_pos"],
-                                                                                neg_edges=edges_input["head_batch"],
-                                                                                mode="head_batch")
-            output["head_batch"] = self.score_func(edge_head_batch, embeddings=embeddings, mode="tail_batch",
-                                                   neg_sampling_batch_size=neg_samp_size)
+                                                                                neg_edges=edges_input[self.head_batch],
+                                                                                mode=self.head_batch)
+            output[self.head_batch] = self.score_func(edge_head_batch, embeddings=embeddings, mode=self.tail_batch,
+                                                      neg_sampling_batch_size=neg_samp_size)
 
             # Tail batch
             edge_tail_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_input["edge_pos"],
-                                                                                neg_edges=edges_input["tail_batch"],
-                                                                                mode="tail_batch")
-            output["tail_batch"] = self.score_func(edge_tail_batch, embeddings=embeddings, mode="tail_batch",
-                                                   neg_sampling_batch_size=neg_samp_size)
+                                                                                neg_edges=edges_input[self.tail_batch],
+                                                                                mode=self.tail_batch)
+            output[self.tail_batch] = self.score_func(edge_tail_batch, embeddings=embeddings, mode=self.tail_batch,
+                                                      neg_sampling_batch_size=neg_samp_size)
 
-        assert "edge_neg" in output or "head_batch" in output, f"No negative edges in inputs {edges_input.keys()}"
+        assert "edge_neg" in output or self.head_batch in output, f"No negative edges in inputs {edges_input.keys()}"
 
         return output
 
@@ -104,14 +106,14 @@ class LinkPred(torch.nn.Module):
             head_type = self.ntype_mapping[head_type] if head_type not in embeddings else head_type
             tail_type = self.ntype_mapping[tail_type] if tail_type not in embeddings else tail_type
 
-            if mode == "tail_batch":
-                side_A = (embeddings[head_type] * kernel)[edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
-                emb_B = embeddings[tail_type][edge_index[1]].unsqueeze(2)  # (n_edges, emb_dim, 1)
-                scores = torch.bmm(side_A, emb_B).squeeze(-1)
-            else:
-                emb_A = embeddings[head_type][edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
-                side_B = (kernel * embeddings[tail_type])[edge_index[1]].unsqueeze(2)  # (n_edges, emb_dim, 1)
-                scores = torch.bmm(emb_A, side_B).squeeze(-1)
+            # if mode == "tail_batch":
+            side_A = (embeddings[head_type] * kernel)[edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
+            emb_B = embeddings[tail_type][edge_index[1]].unsqueeze(2)  # (n_edges, emb_dim, 1)
+            scores = torch.bmm(side_A, emb_B).squeeze(-1)
+            # else:
+            #     emb_A = embeddings[head_type][edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
+            #     side_B = (kernel * embeddings[tail_type])[edge_index[1]].unsqueeze(2)  # (n_edges, emb_dim, 1)
+            #     scores = torch.bmm(emb_A, side_B).squeeze(-1)
 
             # scores = (embeddings[head_type][edge_index[0]] * kernel * embeddings[tail_type][edge_index[1]])
             scores = scores.sum(dim=1)
@@ -142,14 +144,14 @@ class LinkPred(torch.nn.Module):
             head_type = self.ntype_mapping[head_type] if head_type not in embeddings else head_type
             tail_type = self.ntype_mapping[tail_type] if tail_type not in embeddings else tail_type
 
-            if mode == "tail_batch":
-                side_A = (embeddings[head_type] + kernel)[edge_index[0]]  # (n_edges, emb_dim)
-                emb_B = embeddings[tail_type][edge_index[1]]  # (n_edges, emb_dim)
-                scores = side_A - emb_B
-            else:
-                emb_A = embeddings[head_type][edge_index[0]]  # (n_edges, emb_dim)
-                side_B = (kernel - embeddings[tail_type])[edge_index[1]]  # (n_edges, emb_dim)
-                scores: Tensor = emb_A + side_B
+            # if mode == "tail_batch":
+            side_A = (embeddings[head_type] + kernel)[edge_index[0]]  # (n_edges, emb_dim)
+            emb_B = embeddings[tail_type][edge_index[1]]  # (n_edges, emb_dim)
+            scores = side_A - emb_B
+            # else:
+            #     emb_A = embeddings[head_type][edge_index[0]]  # (n_edges, emb_dim)
+            #     side_B = (kernel - embeddings[tail_type])[edge_index[1]]  # (n_edges, emb_dim)
+            #     scores = emb_A + side_B
 
             scores = torch.exp(-scores.norm(p=2, dim=1))
 

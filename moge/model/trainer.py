@@ -148,8 +148,8 @@ class NodeEmbeddingEvaluator(LightningModule):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.sankey_flow_table = "sankey_flow"
-        self.node_emb_umap = "node_emb_umap_plot"
+        self.attn_plot_name = "sankey_flow"
+        self.embedding_plot_name = "node_emb_umap_plot"
 
     def predict_umap(self, X: Dict[str, Any], embs: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
                      log_table=False):
@@ -179,7 +179,7 @@ class NodeEmbeddingEvaluator(LightningModule):
             df["ntype"] = df["ntype"].replace(
                 {"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", })
 
-        # nodes_umap = UMAP(n_components=2, n_jobs=10).fit_transform(nodes_emb)
+        # nodes_umap = AlignedUMAP(n_components=2, n_jobs=10).fit_transform(nodes_emb)
         nodes_umap = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1).fit_transform(nodes_emb)
         nodes_pos = {node_name: pos for node_name, pos in zip(node_list, nodes_umap)}
 
@@ -194,7 +194,7 @@ class NodeEmbeddingEvaluator(LightningModule):
                 df_filter = df_filter.sample(1000)
 
             table = wandb.Table(data=df_filter)
-            wandb.log({self.node_emb_umap: table})
+            wandb.log({self.embedding_plot_name: table})
             print("Logging node_emb_umap_plot")
 
         return df
@@ -225,7 +225,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         table.add_data(*plotly_htmls)
 
         # Log Table
-        wandb.log({self.sankey_flow_table: table})
+        wandb.log({self.attn_plot_name: table})
         print("Logging sankey_flow")
         os.system(f"rm -f ./wandb_fig_run_{run_id}*.html")
 
@@ -243,7 +243,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         api = wandb.Api(overrides={"project": experiment.project, "entity": experiment.entity})
 
-        artifact_type, artifact_name = "run_table", f"run-{experiment.id}-{self.sankey_flow_table}"
+        artifact_type, artifact_name = "run_table", f"run-{experiment.id}-{self.attn_plot_name}"
         for version in api.artifact_versions(artifact_type, artifact_name):
             # Clean up all versions that don't have an alias such as 'latest'.
             # NOTE: You can put whatever deletion logic you want here.

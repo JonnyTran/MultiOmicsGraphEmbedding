@@ -4,6 +4,8 @@ import sys
 import traceback
 from argparse import ArgumentParser, Namespace
 
+import wandb
+
 logger = logging.getLogger("wandb")
 logger.setLevel(logging.ERROR)
 sys.path.insert(0, "../MultiOmicsGraphEmbedding/")
@@ -97,6 +99,7 @@ def train(hparams: Namespace):
                 hasattr(hparams, "save_path") and hparams.save_path is not None:
             trainer.save_checkpoint(hparams.save_path)
             print(f"Saved model checkpoint to {hparams.save_path}")
+        wandb.finish()
 
     print()
 
