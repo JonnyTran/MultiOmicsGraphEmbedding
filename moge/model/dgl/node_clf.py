@@ -6,6 +6,9 @@ from typing import Dict, List, Iterable
 
 import dgl
 import torch
+from torch import nn
+from torch.utils.data import DataLoader
+
 from moge.dataset import DGLNodeSampler
 from moge.dataset.dgl.node_generator import HANSampler
 from moge.model.classifier import DenseClassification
@@ -14,9 +17,6 @@ from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subset
 from moge.model.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
-from torch import nn
-from torch.utils.data import DataLoader
-
 from .HGConv.model.HGConv import HGConv as Hgconv
 from .HGT import Hgt
 from .conv import HAN as Han

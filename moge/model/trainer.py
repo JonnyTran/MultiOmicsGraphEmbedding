@@ -8,17 +8,18 @@ import numpy as np
 import pandas as pd
 import torch
 import wandb
-from moge.criterion.clustering import clustering_metrics
-from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
-from moge.model.metrics import Metrics
-from moge.model.utils import tensor_sizes, preprocess_input
-from moge.visualization.attention import plot_sankey_flow
 from pandas import DataFrame, Series
 from pytorch_lightning import LightningModule
 from pytorch_lightning.loggers import WandbLogger
 from sklearn.cluster import KMeans
 from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
+
+from moge.criterion.clustering import clustering_metrics
+from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
+from moge.model.metrics import Metrics
+from moge.model.utils import tensor_sizes, preprocess_input
+from moge.visualization.attention import plot_sankey_flow
 
 
 class ClusteringEvaluator(LightningModule):
@@ -150,9 +151,10 @@ class NodeEmbeddingEvaluator(LightningModule):
         super().__init__(*args, **kwargs)
         self.attn_plot_name = "sankey_flow"
         self.embedding_plot_name = "node_emb_umap_plot"
+        self.score_avg_table_name = "score_avgs"
 
     def predict_umap(self, X: Dict[str, Any], embs: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
-                     log_table=False):
+                     log_table=False) -> Tensor:
         global_node_index = {k: v.numpy() for k, v in X["global_node_index"].items()}
 
         node_list = pd.concat([pd.Series(self.dataset.nodes[ntype][global_node_index[ntype]]) \
@@ -228,6 +230,16 @@ class NodeEmbeddingEvaluator(LightningModule):
         wandb.log({self.attn_plot_name: table})
         print("Logging sankey_flow")
         os.system(f"rm -f ./wandb_fig_run_{run_id}*.html")
+
+    def log_score_averages(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> Tensor:
+        score_avgs = pd.DataFrame({pos: {m: f"{edges.mean().item():.4f} ± {edges.std().item():.2f}" \
+                                         for m, edges in eid.items()} \
+                                   for pos, eid in edge_pred_dict.items()})
+        score_avgs.index.names = ("head", "relation", "tail")
+        table = wandb.Table(dataframe=score_avgs.reset_index())
+
+        wandb.log({self.score_avg_table_name: table})
+        return score_avgs
 
     @property
     def wandb_experiment(self):
@@ -318,7 +330,6 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             print("got here")
 
         self.log_dict(metrics_dict, prog_bar=True)
-
 
         return None
 

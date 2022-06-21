@@ -1,15 +1,16 @@
 import numpy as np
 import torch
 from cogdl.models.emb.hin2vec import Hin2vec, RWgraph, Hin2vec_layer
-from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.hgt import HGTModel
+from torch.nn import functional as F
+from tqdm import tqdm
+
+from moge.dataset.graph import HeteroGraphDataset
 from moge.model.classifier import DenseClassification
 from moge.model.cogdl.conv import GTN as Gtn, HAN as Han
 from moge.model.losses import ClassificationLoss
 from moge.model.trainer import NodeClfTrainer
 from moge.model.utils import filter_samples
-from torch.nn import functional as F
-from tqdm import tqdm
 
 
 class HGT(HGTModel, NodeClfTrainer):

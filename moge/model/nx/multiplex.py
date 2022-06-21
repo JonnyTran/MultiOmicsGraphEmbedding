@@ -2,14 +2,15 @@ import copy
 
 import pandas as pd
 import torch
-from moge.model.classifier import DenseClassification, HierarchicalAWX
-from moge.model.losses import ClassificationLoss, get_hierar_relations
 from moge.model.networkx.embedder import GAT, GCN, GraphSAGE, MultiplexLayerAttention, MultiplexNodeAttention, \
     ExpandedMultiplexGAT
 from moge.model.networkx.enc_emb_cls import EncoderEmbedderClassifier, remove_self_loops
 from moge.model.networkx.encoder import ConvLSTM, AlbertEncoder, NodeIDEmbedding
-from moge.model.utils import filter_samples
 from transformers import AlbertConfig
+
+from moge.model.classifier import DenseClassification, HierarchicalAWX
+from moge.model.losses import ClassificationLoss, get_hierar_relations
+from moge.model.utils import filter_samples
 
 
 class MultiplexEmbedder(EncoderEmbedderClassifier):

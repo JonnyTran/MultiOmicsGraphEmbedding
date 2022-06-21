@@ -6,10 +6,10 @@ from typing import List, Tuple, Dict, Any, Union
 import numpy as np
 import torch
 from fairscale.nn import auto_wrap
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import ClassificationLoss
 from torch import nn, Tensor
 
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.losses import ClassificationLoss
 from .conv import HGT
 from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
 from ..metrics import Metrics
@@ -338,6 +338,7 @@ class LATTELinkPred(LinkPredTrainer):
 
                 self.predict_umap(X, embs, log_table=True)
                 self.plot_sankey_flow(layer=-1)
+                self.log_score_averages(edge_pred_dict=edge_pred_dict)
                 self.cleanup_artifacts()
 
         except Exception as e:
