@@ -1,21 +1,24 @@
+from pprint import pprint
 from typing import List, Tuple, Union, Dict
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
-from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
-from moge.network.hetero import HeteroNetwork
+import torch.nn.functional as F
 from openomics.database.ontology import GeneOntology
 from pandas import DataFrame
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
 from torch_sparse.tensor import SparseTensor
+
+from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.sequences import SequenceTokenizers
+from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
+from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
+from moge.network.hetero import HeteroNetwork
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -74,6 +77,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            test_date='2021-12-31',
                            go_ntype="GO_term"):
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
+        self.go_ntype = go_ntype
 
         # Order nodes with classes nodes first
         if self.classes is not None:
@@ -146,20 +150,27 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 self.G[ntype].test_mask = mask
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
-                             node_mask: Tensor, transform_fn=None, num_workers=10, **kwargs):
+                             node_mask: Tensor, transform_fn=None, num_workers=10, verbose=False, **kwargs):
+        min_expansion_size = min(self.neighbor_sizes)
+        # max_expansion_size = self.num_nodes_dict[self.go_ntype]
+        max_expansion_size = 100
+
         if self.neighbor_loader == "NeighborLoader":
             self.num_neighbors = {
-                etype: self.neighbor_sizes \
-                for etype in self.metapaths}
+                metapath: self.neighbor_sizes \
+                # if hasattr(self, "go_ntype") and metapath[0] != self.go_ntype and metapath[-1] != self.go_ntype \
+                #     else [max_expansion_size, ] * len(self.neighbor_sizes)
+                for metapath in self.metapaths}
 
         elif self.neighbor_loader == "HGTLoader":
             self.num_neighbors = {
                 ntype: self.neighbor_sizes \
-                # if ntype != 'GO_term' else [self.num_nodes_dict["GO_term"], ] * len(self.neighbor_sizes)
+                # if hasattr(self, "go_ntype") and ntype != self.go_ntype \
+                #     else [max_expansion_size, ] * len(self.neighbor_sizes)
                 for ntype in self.node_types}
 
-        # print(f"{self.neighbor_loader} neighbor_sizes:")
-        # pprint(self.num_neighbors, width=300)
+        print(f"{self.neighbor_loader} neighbor_sizes:") if verbose else None
+        pprint(self.num_neighbors, width=300) if verbose else None
 
         if self.neighbor_loader == "NeighborLoader":
             graph_loader_cls = NeighborLoader
@@ -477,7 +488,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
                                                        node_mask=torch.ones(self.G[self.head_node_type].num_nodes),
                                                        transform_fn=super().transform_heterograph,
-                                                       num_workers=0)
+                                                       num_workers=0, verbose=True)
 
     def load_annotation_edges(self, ontology, go_nodes, train_date, valid_date, test_date, go_ntype):
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
@@ -607,7 +618,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                            for metapath in edge_pos}
         else:
             query_edges = edge_pos
+
         query_nodes = self.gather_node_set(query_edges)
+
+        # Add random GO term nodes for negative sampling
+        if mode == "train":
+            go_nodes_proba = 1 - F.one_hot(query_nodes[self.go_ntype], num_classes=self.num_nodes_dict[self.go_ntype]) \
+                .sum(axis=0).to(torch.float)
+            go_nids = torch.multinomial(go_nodes_proba, num_samples=edge_idx.numel() * 2, replacement=False)
+            query_nodes[self.go_ntype] = torch.cat([query_nodes[self.go_ntype], go_nids])
 
         # Get subgraph induced by neighborhood hopping from the query nodes
         X, _, _ = self.graph_sampler.transform_fn(self.graph_sampler.collate_fn(query_nodes))
@@ -649,7 +668,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         head_batch = {}
         tail_batch = {}
 
-        sampling_size = self.choose_neg_sampling_size(edge_pos, global_node_index, max_negative_sampling_size, mode)
+        sampling_size = self.get_neg_sampling_size(edge_pos, global_node_index=global_node_index,
+                                                   max_samples=max_negative_sampling_size, mode=mode)
 
         # Perform negative sampling
         for metapath, edge_index in edge_pos.items():
@@ -682,20 +702,20 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return head_batch, tail_batch
 
-    def choose_neg_sampling_size(self, edge_pos: Dict[Tuple[str, str, str], Tensor],
-                                 global_node_index: Dict[str, Tensor],
-                                 max_negative_sampling_size: int, mode: str) -> int:
+    def get_neg_sampling_size(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+                              global_node_index: Dict[str, Tensor],
+                              max_samples: int, mode: str) -> int:
         # Choose neg sampling size by twice (minimum) the count of head or tail nodes, if it's less than self.negative_sampling_size
         if mode == "train":
-            head_tail_ntypes = [ntype for metapath in edge_pos for ntype in [metapath[0], metapath[-1]]]
+            head_tail_ntypes = [ntype for metapath in edge_index_dict for ntype in [metapath[0], metapath[-1]]]
             min_num_node = min(
                 global_node_index[ntype if ntype in global_node_index else self.ntype_mapping[ntype]].size(0) \
                 for ntype in head_tail_ntypes)
 
-            sampling_size = min(min_num_node, max_negative_sampling_size // 2)
+            sampling_size = min(min_num_node, max_samples // 2)
 
         else:
-            sampling_size = max_negative_sampling_size // 2
+            sampling_size = max_samples // 2
 
         sampling_size = int(max(sampling_size, 1))
 

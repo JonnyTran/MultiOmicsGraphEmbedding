@@ -1,15 +1,16 @@
 import logging
 from argparse import Namespace
-from typing import Dict
+from typing import Dict, Union
 
 import torch
 import torch.nn.functional as F
-from moge.dataset import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
+
+from moge.dataset import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -125,9 +126,9 @@ class HeteroSequenceEncoder(nn.Module):
                         num_labels=hparams.embedding_dim,
                         classifier_dropout=hparams.dropout, )
 
-                    # Freeze BERT layers due to
+                    # Freeze BERT pretrained layers
                     for name, param in seq_encoders[ntype].named_parameters():
-                        if 'classifier' not in name:  # classifier layer
+                        if 'classifier' not in name:  # BERT emebedding/encoder/decoder layers
                             param.requires_grad = False
 
                     print("BertForSequenceClassification pretrained from:", hparams.bert_config[ntype])
@@ -143,9 +144,10 @@ class HeteroSequenceEncoder(nn.Module):
 
         self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
 
-    def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: int = None) -> Dict[str, Tensor]:
+    def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: Union[float, int] = None) -> Dict[
+        str, Tensor]:
         h_out = {}
-        if minibatch != None:
+        if minibatch != None and isinstance(minibatch, (int, float)):
             minibatch = max(int(minibatch), 1)
         else:
             minibatch = None
