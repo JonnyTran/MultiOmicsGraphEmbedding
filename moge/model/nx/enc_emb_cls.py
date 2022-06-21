@@ -1,12 +1,11 @@
 import pandas as pd
 import torch
-from moge.model.networkx.embedder import GAT
-from moge.model.networkx.encoder import ConvLSTM, AlbertEncoder
-from transformers import AlbertConfig
-
 from moge.model.classifier import DenseClassification, HierarchicalAWX
 from moge.model.losses import ClassificationLoss, get_hierar_relations
+from moge.model.networkx.embedder import GAT
+from moge.model.networkx.encoder import ConvLSTM, AlbertEncoder
 from moge.model.utils import filter_samples
+from transformers import AlbertConfig
 
 
 class EncoderEmbedderClassifier(torch.nn.Module):
@@ -102,7 +101,7 @@ class MonoplexEmbedder(EncoderEmbedderClassifier):
             hierar_relations = get_hierar_relations(hparams.hierar_taxonomy_file,
                                                     label_map=label_map)
 
-        self.criterion = ClassificationLoss(n_classes=hparams.n_classes, loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=hparams.n_classes,
                                             hierar_penalty=hparams.hierar_penalty if hparams.use_hierar else None,
                                             hierar_relations=hierar_relations if hparams.use_hierar else None)
         self.hparams = hparams

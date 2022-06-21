@@ -462,7 +462,7 @@ class LinkPredTrainer(NodeClfTrainer):
 
     def stack_pos_head_tail_batch(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                                   edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None,
-                                  activation: Callable = None) -> \
+                                  activation: Optional[Callable] = None) -> \
             Tuple[Tensor, Tensor, Optional[Tensor]]:
         e_pos = []
         e_neg = []

@@ -9,14 +9,6 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
 from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -28,6 +20,13 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, concat_dict_batch
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -115,8 +114,7 @@ class LATTENodeClf(NodeClfTrainer):
         else:
             assert "concat" not in hparams.layer_pooling, "Layer pooling cannot be `concat` or `rel_concat` when output of network is a GNN"
 
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
-                                            loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel,
@@ -685,8 +683,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         else:
             assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
 
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
-                                            loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel,
@@ -912,8 +909,7 @@ class HGTNodeClf(LATTEFlatNodeClf):
         else:
             assert hparams.layer_pooling != "concat", "Layer pooling cannot be concat when output of network is a GNN"
 
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
-                                            loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel,

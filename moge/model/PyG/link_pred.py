@@ -279,7 +279,7 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
         loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
@@ -296,7 +296,7 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, edge_pred_dict = self.forward(X, edge_true, save_betas=True)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
         loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
@@ -315,7 +315,7 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights, activation=torch.sigmoid)
+        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
         loss = self.criterion.forward(e_pos, e_neg, e_weights)
 

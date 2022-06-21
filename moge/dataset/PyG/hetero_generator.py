@@ -728,24 +728,24 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return G
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, shuffle=True, **kwargs):
         dataset = DataLoader(self.training_idx, batch_size=batch_size,
                              collate_fn=self.transform,
-                             shuffle=True,
+                             shuffle=shuffle,
                              num_workers=num_workers, **kwargs)
         return dataset
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, shuffle=False, **kwargs):
         dataset = DataLoader(self.validation_idx, batch_size=batch_size,
                              collate_fn=self.transform,
-                             shuffle=False,
+                             shuffle=shuffle,
                              num_workers=num_workers, **kwargs)
         return dataset
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, shuffle=False, **kwargs):
         dataset = DataLoader(self.testing_idx, batch_size=batch_size,
                              collate_fn=self.transform,
-                             shuffle=False,
+                             shuffle=shuffle,
                              num_workers=num_workers, **kwargs)
         return dataset
 

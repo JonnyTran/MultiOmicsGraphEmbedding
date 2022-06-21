@@ -7,15 +7,12 @@ from torch import Tensor
 
 
 class ClassificationLoss(nn.Module):
-    def __init__(self, n_classes: int = None, loss_type="SOFTMAX_CROSS_ENTROPY", class_weight: torch.Tensor = None,
-                 multilabel=False, reduction="mean", use_hierar=False, hierar_penalty=1e-6, hierar_relations=None):
+    def __init__(self, loss_type: str, n_classes: int = None, class_weight: Tensor = None, multilabel: bool = False,
+                 reduction: str = "mean"):
         super().__init__()
         self.n_classes = n_classes
         self.loss_type = loss_type
-        self.hierar_penalty = hierar_penalty
-        self.hierar_relations = hierar_relations
         self.multilabel = multilabel
-        self.use_hierar = use_hierar
 
         self.reduction = reduction
 
@@ -43,6 +40,7 @@ class ClassificationLoss(nn.Module):
         elif loss_type == "LINK_PRED_WITH_LOGITS":
             self.criterion = LinkPredLoss()
         elif "CONTRASTIVE" in loss_type:
+            assert "LOGITS" not in loss_type
             self.criterion = ContrastiveLoss()
         else:
             raise TypeError(f"Unsupported loss type:{loss_type}")
@@ -88,10 +86,11 @@ class ContrastiveLoss(nn.Module):
         pos_logits = torch.div(e_pos, self.temperature)
         neg_logits = torch.div(e_neg, self.temperature)
 
-        logits_max, _ = torch.max(torch.cat([pos_logits.unsqueeze(1), neg_logits], dim=1),
-                                  dim=1, keepdim=False)
-        pos_logits = pos_logits - logits_max.detach()
-        neg_logits = neg_logits - logits_max.unsqueeze(1).detach()
+        # For numerical stability
+        # logits_max, _ = torch.max(torch.cat([pos_logits.unsqueeze(1), neg_logits], dim=1),
+        #                           dim=1, keepdim=False)
+        # pos_logits = pos_logits - logits_max.detach()
+        # neg_logits = neg_logits - logits_max.unsqueeze(1).detach()
 
         mean_log_prob_pos = pos_logits - torch.log(torch.exp(neg_logits).sum(1))
 

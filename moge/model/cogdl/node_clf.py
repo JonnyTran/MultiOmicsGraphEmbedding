@@ -1,9 +1,6 @@
 import numpy as np
 import torch
 from cogdl.models.emb.hin2vec import Hin2vec, RWgraph, Hin2vec_layer
-from torch.nn import functional as F
-from tqdm import tqdm
-
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.hgt import HGTModel
 from moge.model.classifier import DenseClassification
@@ -11,6 +8,8 @@ from moge.model.cogdl.conv import GTN as Gtn, HAN as Han
 from moge.model.losses import ClassificationLoss
 from moge.model.trainer import NodeClfTrainer
 from moge.model.utils import filter_samples
+from torch.nn import functional as F
+from tqdm import tqdm
 
 
 class HGT(HGTModel, NodeClfTrainer):
@@ -28,7 +27,7 @@ class HGT(HGTModel, NodeClfTrainer):
             use_RTE=False, hparams=hparams, dataset=dataset, metrics=metrics)
 
         self.classifier = DenseClassification(hparams)
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel)

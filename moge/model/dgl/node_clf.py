@@ -6,9 +6,6 @@ from typing import Dict, List, Iterable
 
 import dgl
 import torch
-from torch import nn
-from torch.utils.data import DataLoader
-
 from moge.dataset import DGLNodeSampler
 from moge.dataset.dgl.node_generator import HANSampler
 from moge.model.classifier import DenseClassification
@@ -17,6 +14,9 @@ from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subset
 from moge.model.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn
+from torch.utils.data import DataLoader
+
 from .HGConv.model.HGConv import HGConv as Hgconv
 from .HGT import Hgt
 from .conv import HAN as Han
@@ -63,7 +63,7 @@ class LATTENodeClassifier(NodeClfTrainer):
 
         self.classifier = DenseClassification(hparams)
 
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel,
@@ -690,7 +690,7 @@ class HAN(NodeClfTrainer):
                          num_heads=args['num_heads'],
                          dropout=args['dropout'])
 
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=args["loss_type"],
+        self.criterion = ClassificationLoss(loss_type=args["loss_type"], n_classes=dataset.n_classes,
                                             multilabel=dataset.multilabel)
 
         args["n_params"] = self.get_n_params()
@@ -816,7 +816,7 @@ class HGT(NodeClfTrainer):
 
         self.classifier = DenseClassification(hparams)
 
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes, loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel)

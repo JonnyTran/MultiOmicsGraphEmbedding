@@ -4,11 +4,11 @@ import dgl
 import dgl.nn.pytorch as dglnn
 import torch
 from dgl.heterograph import DGLHeteroGraph
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from .pooling import SAGPool
 from ..trainer import GraphClfTrainer, print_pred_class_counts
 
@@ -49,8 +49,7 @@ class LATTEGraphClassifier(GraphClfTrainer):
             self.batchnorm = torch.nn.BatchNorm1d(hparams.embedding_dim)
 
         self.classifier = DenseClassification(hparams)
-        self.criterion = ClassificationLoss(n_classes=dataset.n_classes,
-                                            loss_type=hparams.loss_type,
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                             class_weight=dataset.class_weight if hasattr(dataset, "class_weight") and \
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel)
