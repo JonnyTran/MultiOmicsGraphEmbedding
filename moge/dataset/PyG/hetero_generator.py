@@ -6,19 +6,18 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from openomics.database.ontology import GeneOntology
-from pandas import DataFrame
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.network.hetero import HeteroNetwork
+from openomics.database.ontology import GeneOntology
+from pandas import DataFrame
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -472,17 +471,16 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 metapath = (ntype, "associated", go_ntype)
                 self.metapaths.append(metapath)
 
-                print(ntype, nx_graph)
                 edge_index = get_edge_index(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
                 self.G[metapath].edge_index = edge_index
-                print(metapath, edge_index.max(1).values)
+                print(metapath, nx_graph.number_of_edges())
 
                 if self.use_reverse:
                     rev_metapath = reverse_metapath_name(metapath)
                     self.metapaths.append(rev_metapath)
 
                     self.G[rev_metapath].edge_index = edge_index[[1, 0], :]
-                    print(rev_metapath, edge_index[[1, 0], :].max(1).values)
+                    print(rev_metapath, nx_graph.number_of_edges())
 
         # Reinstantiate graph sampler since hetero graph was modified
         self.graph_sampler = self.create_graph_sampler(self.G, batch_size=1,
@@ -622,11 +620,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         query_nodes = self.gather_node_set(query_edges)
 
         # Add random GO term nodes for negative sampling
-        if mode == "train":
-            go_nodes_proba = 1 - F.one_hot(query_nodes[self.go_ntype], num_classes=self.num_nodes_dict[self.go_ntype]) \
-                .sum(axis=0).to(torch.float)
-            go_nids = torch.multinomial(go_nodes_proba, num_samples=edge_idx.numel() * 2, replacement=False)
-            query_nodes[self.go_ntype] = torch.cat([query_nodes[self.go_ntype], go_nids])
+        # torch.where()
+        go_nodes_proba = 1 - F.one_hot(query_nodes[self.go_ntype], num_classes=self.num_nodes_dict[self.go_ntype]) \
+            .sum(axis=0).to(torch.float)
+        go_nids = torch.multinomial(go_nodes_proba, num_samples=self.negative_sampling_size, replacement=False)
+        query_nodes[self.go_ntype] = torch.cat([query_nodes[self.go_ntype], go_nids])
 
         # Get subgraph induced by neighborhood hopping from the query nodes
         X, _, _ = self.graph_sampler.transform_fn(self.graph_sampler.collate_fn(query_nodes))

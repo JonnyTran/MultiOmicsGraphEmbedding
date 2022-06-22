@@ -4,18 +4,17 @@ from typing import Dict, Union
 
 import torch
 import torch.nn.functional as F
+from moge.dataset import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
 
-from moge.dataset import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
-
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 
-class HeteroNodeEncoder(nn.Module):
+class HeteroNodeFeatureEncoder(nn.Module):
     def __init__(self, hparams: Namespace, dataset: HeteroGraphDataset) -> None:
         super().__init__()
         self.embeddings = self.initialize_embeddings(embedding_dim=hparams.embedding_dim,
@@ -107,7 +106,7 @@ class HeteroNodeEncoder(nn.Module):
 class HeteroSequenceEncoder(nn.Module):
     def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset) -> None:
         super().__init__()
-        seq_encoders: Dict[str, BertForSequenceClassification] = {}
+        seq_encoders = {}
         print(dataset.seq_tokenizer.tokenizers.keys())
 
         for ntype, tokenizer in dataset.seq_tokenizer.items():
@@ -132,6 +131,12 @@ class HeteroSequenceEncoder(nn.Module):
                             param.requires_grad = False
 
                     print("BertForSequenceClassification pretrained from:", hparams.bert_config[ntype])
+            elif hasattr(hparams, "lstm_config") and ntype in hparams.lstm_config:
+                maxlen = dataset.seq_tokenizer.max_length[ntype]
+                seq_encoders[ntype] = LSTMSequenceEncoder(vocab_size=tokenizer.vocab_size,
+                                                          embedding_dim=hparams.embedding_dim,
+                                                          hidden_dim=hparams.lstm_config["hidden_dim"],
+                                                          kernel_size=hparams.lstm_config["kernel_size"])
             else:
                 bert_config = BertConfig(
                     vocab_size=tokenizer.vocab_size, hidden_size=128, max_position_embeddings=max_position_embeddings,
@@ -142,7 +147,8 @@ class HeteroSequenceEncoder(nn.Module):
                 seq_encoders[ntype] = BertForSequenceClassification(bert_config)
                 print("BertForSequenceClassification default BertConfig", ntype)
 
-        self.seq_encoders: Dict[str, BertForSequenceClassification] = nn.ModuleDict(seq_encoders)
+        self.seq_encoders: Dict[str, Union[BertForSequenceClassification, LSTMSequenceEncoder]] = \
+            nn.ModuleDict(seq_encoders)
 
     def forward(self, sequences: Dict[str, Dict[str, Tensor]], minibatch: Union[float, int] = None) -> Dict[
         str, Tensor]:
@@ -176,7 +182,8 @@ class HeteroSequenceEncoder(nn.Module):
 
 
 class LSTMSequenceEncoder(nn.Module):
-    def __init__(self, vocab_size: int, embedding_dim: int, hidden_dim: int = 32, kernel_size: int = 13):
+    def __init__(self, vocab_size: int, embedding_dim: int, hidden_dim: int = 32, kernel_size: int = 13, num_layers=1,
+                 dropout=0.3):
         super().__init__()
         self.vocab_size, self.embedding_dim, self.hidden_dim = vocab_size, embedding_dim, hidden_dim
 
@@ -186,9 +193,10 @@ class LSTMSequenceEncoder(nn.Module):
         self.conv = nn.Conv1d(in_channels=hidden_dim, out_channels=hidden_dim, kernel_size=self.kernel_size)
         self.maxpool = nn.MaxPool1d(kernel_size=self.kernel_size // 2)
 
-        self.rnn = nn.LSTM(hidden_dim, embedding_dim, num_layers=1, batch_first=True, dropout=0.3, bidirectional=True)
+        self.rnn = nn.LSTM(hidden_dim, embedding_dim, num_layers=num_layers,
+                           batch_first=True, dropout=dropout, bidirectional=True)
 
-        self.dropout = nn.Dropout(0.5)
+        self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(embedding_dim * 2, embedding_dim)
 
         self.reset_parameters()

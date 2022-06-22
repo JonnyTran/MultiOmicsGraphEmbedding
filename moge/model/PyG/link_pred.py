@@ -6,12 +6,12 @@ from typing import List, Tuple, Dict, Any, Union
 import numpy as np
 import torch
 from fairscale.nn import auto_wrap
-from torch import nn, Tensor
-
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn, Tensor
+
 from .conv import HGT
-from ..encoder import HeteroSequenceEncoder, HeteroNodeEncoder
+from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
 from ...dataset import HeteroLinkPredDataset
@@ -198,7 +198,7 @@ class LATTELinkPred(LinkPredTrainer):
             self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
         if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.dataset.node_types):
-            self.encoder = HeteroNodeEncoder(hparams, dataset)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
                               t_order=min(hparams.t_order, hparams.n_layers),
@@ -440,7 +440,7 @@ class HGTLinkPred(LATTELinkPred):
             self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
         if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(dataset.node_types):
-            self.encoder = HeteroNodeEncoder(hparams, dataset)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.embedder = HGT(embedding_dim=hparams.embedding_dim, num_layers=hparams.n_layers,
                             num_heads=hparams.attn_heads,

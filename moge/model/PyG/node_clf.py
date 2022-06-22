@@ -9,6 +9,17 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
+from moge.dataset import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.PyG.conv import HGT
+from moge.model.PyG.latte import LATTE
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
+from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, HeteroNodeFeatureEncoder
+from moge.model.losses import ClassificationLoss
+from moge.model.metrics import Metrics
+from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
+from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, concat_dict_batch
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.multiclass import OneVsRestClassifier
@@ -16,18 +27,6 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
-from moge.dataset import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.PyG.conv import HGT
-from moge.model.PyG.latte import LATTE
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
-from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, HeteroNodeEncoder
-from moge.model.losses import ClassificationLoss
-from moge.model.metrics import Metrics
-from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, concat_dict_batch
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -652,7 +651,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
         if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.node_types):
-            self.encoder = HeteroNodeEncoder(hparams, dataset)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         # Graph embedding
         self.embedder = LATTE(n_layers=hparams.n_layers,
@@ -891,7 +890,7 @@ class HGTNodeClf(LATTEFlatNodeClf):
             self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
         if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(dataset.node_types):
-            self.encoder = HeteroNodeEncoder(hparams, dataset)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         self.embedder = HGT(embedding_dim=hparams.embedding_dim, num_layers=hparams.n_layers,
                             num_heads=hparams.attn_heads,
