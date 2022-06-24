@@ -139,12 +139,13 @@ class HeteroSequenceEncoder(nn.Module):
                     print("BertForSequenceClassification pretrained from:", hparams.bert_config[ntype])
 
             elif hasattr(hparams, "lstm_config"):
+                lstm_config = hparams.lstm_config[ntype] if ntype in hparams.lstm_config else hparams.lstm_config
                 seq_encoders[ntype] = LSTMSequenceEncoder(vocab_size=tokenizer.vocab_size,
                                                           embedding_dim=hparams.embedding_dim,
-                                                          hidden_dim=hparams.lstm_config["hidden_dim"],
-                                                          kernel_size=hparams.lstm_config["kernel_size"],
-                                                          num_layers=hparams.lstm_config["num_layers"],
-                                                          dropout=hparams.lstm_config["dropout"], )
+                                                          hidden_dim=lstm_config["hidden_dim"],
+                                                          kernel_size=lstm_config["kernel_size"],
+                                                          num_layers=lstm_config["num_layers"],
+                                                          dropout=lstm_config["dropout"], )
             else:
                 bert_config = BertConfig(
                     vocab_size=tokenizer.vocab_size, hidden_size=128, max_position_embeddings=max_position_embeddings,

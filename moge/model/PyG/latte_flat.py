@@ -15,7 +15,7 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
 from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values
 
 
 class LATTE(nn.Module):
@@ -117,11 +117,13 @@ class LATTE(nn.Module):
             embedding_output
         """
         h_layers = {ntype: [] for ntype in global_node_idx}
+        edge_pred_dict = None
         for l in range(self.n_layers):
-            h_dict = self.layers[l].forward(h_dict, edge_index_dict,
-                                            global_node_idx=global_node_idx,
-                                            sizes=sizes,
-                                            save_betas=save_betas)
+            h_dict, edge_pred_dict = self.layers[l].forward(h_dict, edge_index_dict,
+                                                            global_node_idx=global_node_idx,
+                                                            sizes=sizes,
+                                                            edge_pred_dict=edge_pred_dict,
+                                                            save_betas=save_betas)
 
             for ntype in global_node_idx:
                 h_layers[ntype].append(h_dict[ntype])
@@ -310,7 +312,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta_l = F.leaky_relu(query * self.rel_attn_l[ntype], negative_slope=0.2)
         beta_r = F.leaky_relu(key * self.rel_attn_r[ntype], negative_slope=0.2)
 
-        beta = (beta_l[:, None, :] + beta_r).sum(-1)
+        beta = (beta_l[:, None, :] * beta_r).sum(-1)
         beta = F.softmax(beta, dim=1)
         # beta = torch.relu(beta / beta.sum(1, keepdim=True))
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
@@ -337,6 +339,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                 global_node_idx: Dict[str, Tensor],
                 sizes: Dict[str, int],
+                edge_pred_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                 save_betas=False) -> \
             Tuple[Dict[str, Tensor], Optional[Any], Dict[Tuple[str, str, str], Tensor]]:
         """
@@ -356,10 +359,13 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
         print("\nLayer", self.layer + 1, ) if self.verbose else None
 
+        edge_pred_dicts = {}
         for ntype in global_node_idx:
             if global_node_idx[ntype].size(0) == 0: continue
             embeddings, edge_pred_dict = self.agg_relation_neighbors(
-                ntype=ntype, l_dict=l_dict, r_dict=r_dict, edge_index_dict=edge_index_dict, sizes=sizes)
+                ntype=ntype, l_dict=l_dict, r_dict=r_dict,
+                edge_index_dict=edge_index_dict, edge_pred_dict=edge_pred_dict, sizes=sizes)
+            edge_pred_dicts.update(edge_pred_dict)
 
             embeddings[:, -1] = l_dict[ntype]
 
@@ -398,10 +404,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                        # mean on attn_heads dim
                                        global_node_idx=global_node_idx)
 
-        return h_out
+        return h_out, edge_pred_dicts
 
     def projection(self, feats: Dict[str, Tensor], linears: ModuleDict):
-
         h_dict = {ntype: linears[ntype].forward(x).relu_() for ntype, x in feats.items()}
 
         # if batchnorms:
@@ -417,6 +422,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                l_dict: Dict[str, Tensor],
                                r_dict: Dict[str, Tensor],
                                edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+                               edge_pred_dict: Dict[Tuple[str, str, str], Tensor],
                                sizes: Dict[str, int]):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         emb_relations = torch.zeros(
@@ -426,8 +432,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                   self.out_channels)).type_as(self.attn)
         relations = self.get_tail_relations(ntype)
 
+        if edge_pred_dict is None:
+            edge_pred_dict = {}
+
         # First order
-        edge_pred_dict = {}
         for metapath in self.get_tail_relations(ntype, order=1):
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None \
                     or edge_index_dict[metapath].size(1) == 0: continue
@@ -464,10 +472,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # print("\t t-order", self.t_order, "remaining_orders", remaining_orders, "higher_relations", higher_relations)
 
         # Create high-order edge index for next layer (but may not be used for aggregation)
-        higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_index_dict,
-                                                    edge_index_dict_B=edge_pred_dict,
-                                                    sizes=sizes,
-                                                    metapaths=higher_relations)
+        # print(self.layer, ntype, sizes)
+        # print("> edge_index_dict", )
+        # pprint(edge_index_sizes(edge_index_dict), indent=3, width=300)
+        # print("> edge_pred_dict", )
+        # pprint(edge_index_sizes(edge_pred_dict), indent=3, width=300)
+        # higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
+        #                                             edge_index_dict_B=edge_index_dict,
+        #                                             sizes=sizes,
+        #                                             metapaths=higher_relations)
         # print("higher_order_edge_index")
         # pprint(tensor_sizes(higher_order_edge_index), width=250)
 

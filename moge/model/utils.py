@@ -127,6 +127,26 @@ def tensor_sizes(input: Any) -> Any:
             return input
 
 
+def edge_index_sizes(edge_index_dict):
+    output = {}
+    for m, edge_index in edge_index_dict.items():
+        if isinstance(edge_index, tuple):
+            edge_index, values_a = edge_index
+        else:
+            values_a = None
+
+        if edge_index.size(1) == 0:
+            output[m] = None
+        else:
+            sizes = edge_index.max(1).values.data.tolist()
+            if values_a is not None:
+                output[m] = (sizes, values_a.shape)
+            else:
+                output[m] = sizes
+
+    return output
+
+
 def preprocess_input(input, device, dtype=None, half=False):
     if isinstance(input, dict):
         input = {k: preprocess_input(v, device, dtype, half) for k, v in input.items()}
