@@ -1,27 +1,29 @@
 import logging
 from argparse import Namespace
-from typing import Dict, Union
+from typing import Dict, Union, List
 
 import torch
 import torch.nn.functional as F
-from moge.dataset import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
+
+from moge.dataset import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
 
 class HeteroNodeFeatureEncoder(nn.Module):
-    def __init__(self, hparams: Namespace, dataset: HeteroGraphDataset) -> None:
+    def __init__(self, hparams: Namespace, dataset: HeteroGraphDataset, select_ntypes: List[str] = None) -> None:
         super().__init__()
         self.embeddings = self.initialize_embeddings(embedding_dim=hparams.embedding_dim,
                                                      num_nodes_dict=dataset.num_nodes_dict,
                                                      in_channels_dict=dataset.node_attr_shape,
                                                      pretrain_embeddings=hparams.node_emb_init if "node_emb_init" in hparams else None,
-                                                     freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True)
+                                                     freeze=hparams.freeze_embeddings if "freeze_embeddings" in hparams else True,
+                                                     select_ntypes=select_ntypes, )
         print("model.encoder.embeddings: ", tensor_sizes(self.embeddings))
 
         # node types that needs a projection to align to the embedding_dim
@@ -47,14 +49,18 @@ class HeteroNodeFeatureEncoder(nn.Module):
         else:
             self.dropout = None
 
-    def initialize_embeddings(self, embedding_dim, num_nodes_dict, in_channels_dict,
-                              pretrain_embeddings: Dict[str, Tensor],
+    def initialize_embeddings(self, embedding_dim: int, num_nodes_dict: Dict[str, int],
+                              in_channels_dict: Dict[str, int],
+                              pretrain_embeddings: Dict[str, Tensor], select_ntypes: List[str] = None,
                               freeze=True):
         # If some node type are not attributed, instantiate nn.Embedding for them
         if isinstance(in_channels_dict, dict):
             non_attr_node_types = (num_nodes_dict.keys() - in_channels_dict.keys())
         else:
             non_attr_node_types = []
+
+        if select_ntypes:
+            non_attr_node_types = set(ntype for ntype in non_attr_node_types if ntype in select_ntypes)
 
         if non_attr_node_types:
             module_dict = {}
@@ -87,7 +93,7 @@ class HeteroNodeFeatureEncoder(nn.Module):
         for ntype in global_node_idx:
             if global_node_idx[ntype].numel() == 0: continue
 
-            if ntype not in h_dict:
+            if ntype not in h_dict and ntype in self.embeddings:
                 h_dict[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(global_node_idx[ntype].device)
 
             # project to embedding_dim if node features are not same same dimension
@@ -107,7 +113,7 @@ class HeteroSequenceEncoder(nn.Module):
     def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset) -> None:
         super().__init__()
         seq_encoders = {}
-        print(dataset.seq_tokenizer.tokenizers.keys())
+        print("HeteroSequenceEncoder", list(dataset.seq_tokenizer.tokenizers.keys()))
 
         for ntype, tokenizer in dataset.seq_tokenizer.items():
             max_position_embeddings = dataset.seq_tokenizer.max_length[ntype]
@@ -131,12 +137,14 @@ class HeteroSequenceEncoder(nn.Module):
                             param.requires_grad = False
 
                     print("BertForSequenceClassification pretrained from:", hparams.bert_config[ntype])
-            elif hasattr(hparams, "lstm_config") and ntype in hparams.lstm_config:
-                maxlen = dataset.seq_tokenizer.max_length[ntype]
+
+            elif hasattr(hparams, "lstm_config"):
                 seq_encoders[ntype] = LSTMSequenceEncoder(vocab_size=tokenizer.vocab_size,
                                                           embedding_dim=hparams.embedding_dim,
                                                           hidden_dim=hparams.lstm_config["hidden_dim"],
-                                                          kernel_size=hparams.lstm_config["kernel_size"])
+                                                          kernel_size=hparams.lstm_config["kernel_size"],
+                                                          num_layers=hparams.lstm_config["num_layers"],
+                                                          dropout=hparams.lstm_config["dropout"], )
             else:
                 bert_config = BertConfig(
                     vocab_size=tokenizer.vocab_size, hidden_size=128, max_position_embeddings=max_position_embeddings,
@@ -159,7 +167,11 @@ class HeteroSequenceEncoder(nn.Module):
             minibatch = None
 
         for ntype, encoding in sequences.items():
-            if minibatch:
+            if isinstance(self.seq_encoders[ntype], LSTMSequenceEncoder):
+                lengths = encoding["input_ids"].ne(0).sum(1)
+                h_out[ntype] = self.seq_encoders[ntype].forward(seqs=encoding["input_ids"], lengths=lengths)
+
+            elif minibatch:
                 batch_output = []
                 for input_ids, attention_mask, token_type_ids in \
                         zip(torch.split(encoding["input_ids"], minibatch),

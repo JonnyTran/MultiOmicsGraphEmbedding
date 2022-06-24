@@ -196,16 +196,29 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                                                         m=m, k=k, n=n,
                                                         coalesced=True)
 
-                if new_edge_index.size(1) == 0: continue
-                output_edge_index[new_metapath] = (new_edge_index, new_values)
+                if new_edge_index.size(1):
+                    output_edge_index[new_metapath] = (new_edge_index, new_values)
+
+            except RuntimeError as re:
+                # CUDA out of memory, perform spspmm in cpu
+                new_edge_index, new_values = spspmm(indexA=edge_index_a.cpu(),
+                                                    valueA=values_a.cpu() if isinstance(values_a, Tensor) else None,
+                                                    indexB=edge_index_b.cpu(),
+                                                    valueB=values_b.cpu() if isinstance(values_b, Tensor) else None,
+                                                    m=m, k=k, n=n,
+                                                    coalesced=True)
+
+                if new_edge_index.size(1):
+                    output_edge_index[new_metapath] = (
+                        new_edge_index.to(edge_index_a.device),
+                        new_values.to(edge_index_a.device) if isinstance(new_values, Tensor) else None)
 
             except Exception as e:
-                print(
-                    f"{e} \n {metapath_a}: {edge_index_a.max(1).values, values_a.shape if values_a is not None else values_a}, "
-                    f"{metapath_b}: {edge_index_b.max(1).values, values_b.shape if values_b is not None else values_a}")
+                print(f"{e} \n {metapath_a}: "
+                      f"{edge_index_a.max(1).values.data, values_a.shape if values_a is not None else values_a}, "
+                      f"{metapath_b}: "
+                      f"{edge_index_b.max(1).values.data, values_b.shape if values_b is not None else values_a}")
                 print("sizes: ", {"m": m, "k": k, "n": n, })
-                # raise e
-                continue
 
     return output_edge_index
 

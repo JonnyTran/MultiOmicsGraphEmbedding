@@ -1,15 +1,16 @@
 import logging
 import math
 import traceback
+from argparse import Namespace
 from typing import List, Tuple, Dict, Any, Union
 
 import numpy as np
 import torch
 from fairscale.nn import auto_wrap
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import ClassificationLoss
 from torch import nn, Tensor
 
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.losses import ClassificationLoss
 from .conv import HGT
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..metrics import Metrics
@@ -184,7 +185,8 @@ class LinkPred(torch.nn.Module):
 
 
 class LATTELinkPred(LinkPredTrainer):
-    def __init__(self, hparams, dataset: HeteroLinkPredDataset, metrics=["obgl-biokg"],
+    def __init__(self, hparams: Namespace, dataset: HeteroLinkPredDataset,
+                 metrics: Dict[str, List[str]] = ["obgl-biokg"],
                  collate_fn=None) -> None:
         super().__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type
@@ -193,12 +195,19 @@ class LATTELinkPred(LinkPredTrainer):
         self._name = f"LATTE-{hparams.n_layers}-{hparams.t_order}th_Link"
         self.collate_fn = collate_fn
 
+        if hasattr(hparams, "neighbor_sizes"):
+            self.dataset.neighbor_sizes = hparams.neighbor_sizes
+        else:
+            hparams.neighbor_sizes = self.dataset.neighbor_sizes
+
         # Node attr input
         if hasattr(dataset, 'seq_tokenizer'):
             self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
 
-        if not hasattr(self, "seq_encoder") or len(self.seq_encoder.seq_encoders.keys()) < len(self.dataset.node_types):
-            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
+        non_seq_ntypes = list(set(self.dataset.node_types).difference(
+            set(self.seq_encoder.seq_encoders.keys())) if hasattr(dataset, 'seq_tokenizer') else set())
+        if not hasattr(self, "seq_encoder") or len(non_seq_ntypes):
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
         self.embedder = LATTE(n_layers=hparams.n_layers,
                               t_order=min(hparams.t_order, hparams.n_layers),
@@ -309,7 +318,7 @@ class LATTELinkPred(LinkPredTrainer):
     def on_validation_end(self) -> None:
         super().on_validation_end()
         if self.current_epoch % 5 == 1:
-            self.plot_sankey_flow(layer=-1)
+            self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
 
     def test_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
@@ -337,7 +346,7 @@ class LATTELinkPred(LinkPredTrainer):
                 embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=True)
 
                 self.predict_umap(X, embs, log_table=True)
-                self.plot_sankey_flow(layer=-1)
+                self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
                 self.log_score_averages(edge_pred_dict=edge_pred_dict)
                 self.cleanup_artifacts()
 
