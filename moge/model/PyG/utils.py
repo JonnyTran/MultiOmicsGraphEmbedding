@@ -101,7 +101,7 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[Tensor, Tensor], Tensor],
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
 
-        if filter_edge and threshold > 0.0:
+        if filter_edge and isinstance(edge_values, Tensor) and threshold > 0.0:
             mask = edge_values >= threshold
             if mask.dim() > 1:
                 mask = mask.any(dim=1)
@@ -126,11 +126,11 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       edge_index_dict_B: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                       sizes: Union[Dict[str, int], List[Dict[str, Tuple[int]]]],
                       layer: Optional[int] = None,
-                      metapaths: List[Tuple[str, str, str]] = None,
+                      filter_metapaths: List[Tuple[str, str, str]] = None,
                       edge_threshold: Optional[float] = None) -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
     """
-    Return a cartesian product from two set of adjacency matrices, such that the output adjacency matrices are
-    relation-matching.
+    Return a cartesian product from two set of adjacency matrices, such that each metapath_A have same tail node type
+     as metapath_B's head node type.
     """
     output_edge_index = {}
     if not edge_index_dict_A or not edge_index_dict_B:
@@ -141,14 +141,14 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
         if edge_index_b is None or edge_index_b.size(1) < 1: continue
 
         # In the current LATTE layer that calls this method, a metapath is not higher-order
-        if metapaths is not None and metapath_b in metapaths:
+        if filter_metapaths is not None and metapath_b in filter_metapaths:
             output_edge_index[metapath_b] = (edge_index_b, values_b)
 
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if metapath_a[-1] != metapath_b[0]: continue
 
             new_metapath = metapath_a + metapath_b[1:]
-            if metapaths is not None and new_metapath not in metapaths:
+            if filter_metapaths is not None and new_metapath not in filter_metapaths:
                 continue
 
             edge_index_a, values_a = get_edge_index_values(edge_index_a,

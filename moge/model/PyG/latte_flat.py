@@ -15,7 +15,7 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
 from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 
 
 class LATTE(nn.Module):
@@ -477,10 +477,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # pprint(edge_index_sizes(edge_index_dict), indent=3, width=300)
         # print("> edge_pred_dict", )
         # pprint(edge_index_sizes(edge_pred_dict), indent=3, width=300)
-        # higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
-        #                                             edge_index_dict_B=edge_index_dict,
-        #                                             sizes=sizes,
-        #                                             metapaths=higher_relations)
+        higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
+                                                    edge_index_dict_B=edge_index_dict,
+                                                    sizes=sizes,
+                                                    filter_metapaths=higher_relations,
+                                                    edge_threshold=0.2)
         # print("higher_order_edge_index")
         # pprint(tensor_sizes(higher_order_edge_index), width=250)
 

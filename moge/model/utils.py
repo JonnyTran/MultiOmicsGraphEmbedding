@@ -126,7 +126,6 @@ def tensor_sizes(input: Any) -> Any:
         else:
             return input
 
-
 def edge_index_sizes(edge_index_dict):
     output = {}
     for m, edge_index in edge_index_dict.items():

@@ -519,7 +519,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
                                                     edge_index_dict_B=edge_pred_dict,
                                                     sizes=sizes, layer=self.layer,
-                                                    metapaths=higher_relations,
+                                                    filter_metapaths=higher_relations,
                                                     edge_threshold=self.edge_threshold)
         # print("remaining_orders", list(remaining_orders), node_type,
         #       self.get_head_relations(node_type, order=remaining_orders), "edge_index", higher_order_edge_index.keys())
