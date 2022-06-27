@@ -347,7 +347,8 @@ class LATTELinkPred(LinkPredTrainer):
 
                 self.predict_umap(X, embs, log_table=True)
                 self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-                self.log_score_averages(edge_pred_dict=edge_pred_dict)
+                test_pred_dict = edge_pred_dict
+                self.log_score_averages(edge_pred_dict=test_pred_dict)
                 self.cleanup_artifacts()
 
         except Exception as e:
