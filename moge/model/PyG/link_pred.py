@@ -374,7 +374,8 @@ class LATTELinkPred(LinkPredTrainer):
                                                 neg_batch.detach(),
                                                 weights=None, subset=["ogbl-biokg"])
 
-                if metapath in edge_pred_dict["edge_pos"] and metapath in edge_pred_dict["edge_neg"]:
+                if metapath in edge_pred_dict["edge_pos"] and "edge_neg" in edge_pred_dict and metapath in \
+                        edge_pred_dict["edge_neg"]:
                     self.update_pr_metrics(e_pos=edge_pred_dict["edge_pos"][metapath],
                                            edge_pred=edge_pred_dict["edge_neg"][metapath],
                                            metrics=metrics[go_type])

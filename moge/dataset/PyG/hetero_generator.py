@@ -511,9 +511,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                source="gene_name", target="go_id", edge_attr=True,
                                                edge_key="Qualifier", create_using=nx.MultiGraph)
 
+            metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
             edge_index_dict = to_scipy_adjacency(nx_graph, nodes=self.nodes,
-                                                 edge_types={(self.head_node_type, e, self.go_ntype) \
-                                                             for u, v, e in nx_graph.edges},
+                                                 edge_types=metapaths.intersection(self.pred_metapaths),
                                                  reverse=None, format="pyg")
             for metapath, edge_index in edge_index_dict.items():
                 if metapath not in self.pred_metapaths:
@@ -531,9 +531,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             nx_graph = nx.from_pandas_edgelist(go_ann["neg_go_id"].dropna().explode().to_frame().reset_index(),
                                                source="gene_name", target="neg_go_id", edge_attr=True,
                                                edge_key="Qualifier", create_using=nx.MultiGraph)
+            metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
             neg_edge_index_dict = to_scipy_adjacency(nx_graph, nodes=self.nodes,
-                                                     edge_types={(self.head_node_type, e, self.go_ntype) \
-                                                                 for u, v, e in nx_graph.edges},
+                                                     edge_types=metapaths.intersection(self.pred_metapaths),
                                                      reverse=None, format="pyg")
             for metapath, edge_index in neg_edge_index_dict.items():
                 if metapath not in self.pred_metapaths:
@@ -640,10 +640,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # If ensures same number of true neg edges to true pos edges
         if num_edges(edge_neg) > edge_idx.numel() and edge_idx.numel() > 0:
             edge_neg = {metapath: edge_index[:, torch.multinomial(torch.ones(edge_index.size(1)),
-                                                                  num_samples=min(edge_idx.numel() // len(edge_neg),
-                                                                                  edge_index.size(1)),
+                                                                  num_samples=min(
+                                                                      max(edge_idx.numel() // len(edge_neg), 1),
+                                                                      edge_index.size(1)),
                                                                   replacement=False)] \
-                        for metapath, edge_index in edge_neg.items()}
+                        for metapath, edge_index in edge_neg.items() if edge_index.size(1)}
 
         # Get all nodes induced by sampled edges
         if num_edges(edge_neg):
