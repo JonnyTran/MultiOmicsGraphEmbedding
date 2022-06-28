@@ -46,11 +46,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     @classmethod
     def from_pyg_heterodata(cls, network: HeteroNetwork, target: str = None, min_count: int = None,
                             attr_cols: List[str] = None,
-                            expression=False, sequence=False, add_reverse=True, **kwargs):
+                            expression=False, sequence=False, add_reverse=True, label_subset=None, **kwargs):
         hetero, classes, nodes = \
             network.to_pyg_heterodata(target=target, min_count=min_count,
                                       attr_cols=attr_cols, expression=expression, sequence=sequence,
-                                      add_reverse=add_reverse, )
+                                      add_reverse=add_reverse, label_subset=label_subset)
 
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False,
                    edge_dir="in", **kwargs)
@@ -516,9 +516,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                  edge_types=metapaths.intersection(self.pred_metapaths),
                                                  reverse=None, format="pyg")
             for metapath, edge_index in edge_index_dict.items():
-                if metapath not in self.pred_metapaths:
-                    edge_index_dict.pop(metapath)
-                    continue
+                if metapath not in self.pred_metapaths: continue
                 relation_ids = torch.tensor([self.pred_metapaths.index(metapath)] * edge_index.size(1))
 
                 self.triples.setdefault("head", []).append(edge_index[0])
@@ -536,9 +534,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                      edge_types=metapaths.intersection(self.pred_metapaths),
                                                      reverse=None, format="pyg")
             for metapath, edge_index in neg_edge_index_dict.items():
-                if metapath not in self.pred_metapaths:
-                    neg_edge_index_dict.pop(metapath)
-                    continue
+                if metapath not in self.pred_metapaths: continue
                 relation_ids = torch.tensor([self.pred_metapaths.index(metapath)] * edge_index.size(1))
 
                 self.triples.setdefault("head_neg", []).append(edge_index[0])
