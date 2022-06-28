@@ -1,5 +1,5 @@
 import copy
-from typing import List, Union, Dict, Tuple
+from typing import List, Union, Dict, Tuple, Set
 
 import networkx as nx
 import numpy as np
@@ -11,28 +11,30 @@ from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
 
 
-def to_scipy_adjacency(g: nx.DiGraph, nodes: Union[List[str], Dict[str, List[str]]],
-                       edge_types: Union[List[str], Tuple[str, str, str]] = None,
+def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
+                       edge_types: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
                        reverse=False,
-                       format="coo", d_ntype="_N"):
+                       format="coo", d_ntype="_N") -> Dict[Tuple[str, str, str], Tensor]:
     if reverse:
         g = g.reverse(copy=True)
 
     if not isinstance(g, nx.MultiGraph):
         raise NotImplementedError
 
-    if not isinstance(edge_types, (list, tuple)):
+    elif not isinstance(edge_types, (list, tuple, set)) and isinstance(g, nx.Graph):
         edge_types = ["_E"]
 
     edge_index_dict = {}
     for etype in edge_types:
         if isinstance(g, nx.MultiGraph) and isinstance(etype, str):
+            assert not isinstance(nodes, dict)
             edge_subgraph = g.edge_subgraph([(u, v, e) for u, v, e in g.edges if e == etype])
             nodes_A = nodes
             nodes_B = nodes
             metapath = (d_ntype, etype, d_ntype)
 
-        elif isinstance(g, nx.MultiGraph) and isinstance(etype, tuple) and isinstance(nodes, dict):
+        elif isinstance(g, nx.MultiGraph) and isinstance(etype, tuple):
+            assert isinstance(nodes, dict)
             metapath: Tuple[str, str, str] = etype
             head, etype, tail = metapath
             edge_subgraph = g.edge_subgraph([(u, v, e) for u, v, e in g.edges if e == etype])
@@ -41,14 +43,15 @@ def to_scipy_adjacency(g: nx.DiGraph, nodes: Union[List[str], Dict[str, List[str
             nodes_B = nodes[tail]
 
         elif etype == "_E":
+            assert not isinstance(nodes, dict)
             edge_subgraph = g.edges
             nodes_A = nodes
             nodes_B = nodes
             metapath = (d_ntype, etype, d_ntype)
         else:
-            raise Exception(f"Edge types `{edge_types}` is ill formed.")
+            raise Exception(f"Edge types `{edge_types}` are ill formed.")
 
-        biadj = nx.bipartite.biadjacency_matrix(edge_subgraph, row_order=nodes_A, column_order=nodes_B,
+        biadj = nx.bipartite.biadjacency_matrix(edge_subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
                                                 format="coo")
 
         if format == "coo":
