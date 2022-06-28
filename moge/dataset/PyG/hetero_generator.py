@@ -6,6 +6,12 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from pandas import DataFrame
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.PyG.triplet_generator import TripletDataset
 from moge.dataset.graph import HeteroGraphDataset
@@ -13,11 +19,6 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -271,7 +272,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 H = G.subgraph(filter_nodes)
 
         else:
-            print("got here3")
             H = G.copy()
             H.remove_nodes_from(list(nx.isolates(H)))
 
@@ -335,6 +335,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         for metapath, edge_index in edge_index_dict.items():
             tail_type = metapath[-1]
 
+            # Pos or neg edges
             if edge_index.size(0) == 2:
                 if batch_to_global is not None:
                     go_terms = batch_to_global[tail_type][edge_index[1]]
@@ -351,6 +352,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     else:
                         out_edge_index_dict[new_metapath] = edge_index
 
+            # Sampled head_batch or tail_batch
             elif mode == "head_batch":
                 if batch_to_global is not None:
                     go_terms = batch_to_global[tail_type][edge_pos[metapath][1]]
@@ -514,7 +516,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                              for u, v, e in nx_graph.edges},
                                                  reverse=None, format="pyg")
             for metapath, edge_index in edge_index_dict.items():
-                if metapath not in self.pred_metapaths: continue
+                if metapath not in self.pred_metapaths:
+                    edge_index_dict.pop(metapath)
+                    continue
                 relation_ids = torch.tensor([self.pred_metapaths.index(metapath)] * edge_index.size(1))
 
                 self.triples.setdefault("head", []).append(edge_index[0])
@@ -532,7 +536,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                                  for u, v, e in nx_graph.edges},
                                                      reverse=None, format="pyg")
             for metapath, edge_index in neg_edge_index_dict.items():
-                if metapath not in self.pred_metapaths: continue
+                if metapath not in self.pred_metapaths:
+                    neg_edge_index_dict.pop(metapath)
+                    continue
                 relation_ids = torch.tensor([self.pred_metapaths.index(metapath)] * edge_index.size(1))
 
                 self.triples.setdefault("head_neg", []).append(edge_index[0])
@@ -611,11 +617,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             edge_idx = torch.LongTensor(edge_idx)
 
         # True pos edges
-        triples_pos = {k: v[edge_idx] for k, v in self.triples.items() if not is_negative(k)}
-        edge_pos, _ = TripletDataset.get_relabled_edge_index(triples=triples_pos,
-                                                             global_node_index=self.global_node_index,
-                                                             metapaths=self.pred_metapaths)
-
+        triples = {k: v[edge_idx] for k, v in self.triples.items() if not is_negative(k)}
         # True negative edges
         if edge_idx[0] in self.training_idx:
             mode = "train"
@@ -629,12 +631,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             mode = "test"
             max_negative_sampling_size = self.eval_negative_sampling_size
             triples_neg = {k: v[self.testing_idx_neg] for k, v in self.triples.items() if is_negative(k)}
-        _, edge_neg = TripletDataset.get_relabled_edge_index(triples=triples_neg,
-                                                             global_node_index=self.global_node_index,
-                                                             metapaths=self.pred_metapaths)
+
+        triples.update(triples_neg)
+        edge_pos, edge_neg = TripletDataset.get_relabled_edge_index(triples=triples,
+                                                                    global_node_index=self.global_node_index,
+                                                                    metapaths=self.pred_metapaths)
 
         # If ensures same number of true neg edges to true pos edges
-        if num_edges(edge_neg) > edge_idx.numel():
+        if num_edges(edge_neg) > edge_idx.numel() and edge_idx.numel() > 0:
             edge_neg = {metapath: edge_index[:, torch.multinomial(torch.ones(edge_index.size(1)),
                                                                   num_samples=min(edge_idx.numel() // len(edge_neg),
                                                                                   edge_index.size(1)),
@@ -643,9 +647,12 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Get all nodes induced by sampled edges
         if num_edges(edge_neg):
-            query_edges = {metapath: torch.cat([edge_pos[metapath] if metapath in edge_pos else [],
-                                                edge_neg[metapath] if metapath in edge_neg else []], dim=1) \
-                           for metapath in edge_pos}
+            query_edges = {
+                metapath: torch.cat([edge_pos[metapath] if metapath in edge_pos else torch.tensor([], dtype=torch.long),
+                                     edge_neg[metapath] if metapath in edge_neg else torch.tensor([],
+                                                                                                  dtype=torch.long)],
+                                    dim=1) \
+                for metapath in set(edge_pos).union(set(edge_neg))}
         else:
             query_edges = edge_pos
 
@@ -669,11 +676,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                                  mode=mode)
 
         # Rename node index from global to batch
-        global2batch = {
-            ntype: dict(zip(
-                X["global_node_index"][ntype].numpy(),
-                range(len(X["global_node_index"][ntype])))
-            ) for ntype in X["global_node_index"]}
+        global2batch = {ntype: dict(zip(
+            X["global_node_index"][ntype].numpy(),
+            range(len(X["global_node_index"][ntype])))
+        ) for ntype in X["global_node_index"]}
 
         edge_pos = self.get_relabled_edge_index(edge_pos, global_node_index=X["global_node_index"],
                                                 global2batch=global2batch)

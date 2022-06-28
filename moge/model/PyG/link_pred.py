@@ -100,12 +100,13 @@ class LinkPred(torch.nn.Module):
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
-            metapath_idx = self.pred_metapaths.index(metapath)
-            kernel = self.rel_embedding[metapath_idx]  # (emb_dim,emb_dim)
-
             head_type, edge_type, tail_type = metapath
             head_type = self.ntype_mapping[head_type] if head_type not in embeddings else head_type
             tail_type = self.ntype_mapping[tail_type] if tail_type not in embeddings else tail_type
+
+            metapath_idx = self.pred_metapaths.index(metapath) if metapath in self.pred_metapaths \
+                else self.pred_metapaths.index((head_type, edge_type, tail_type))
+            kernel = self.rel_embedding[metapath_idx]  # (emb_dim,emb_dim)
 
             # if mode == "tail_batch":
             side_A = (embeddings[head_type] * kernel)[edge_index[0]].unsqueeze(1)  # (n_edges, 1, emb_dim)
@@ -138,12 +139,13 @@ class LinkPred(torch.nn.Module):
         edge_pred_dict = {}
 
         for metapath, edge_index in edge_index_dict.items():
-            metapath_idx = self.pred_metapaths.index(metapath)
-            kernel = self.rel_embedding[metapath_idx]  # (emb_dim,emb_dim)
-
             head_type, edge_type, tail_type = metapath
             head_type = self.ntype_mapping[head_type] if head_type not in embeddings else head_type
             tail_type = self.ntype_mapping[tail_type] if tail_type not in embeddings else tail_type
+
+            metapath_idx = self.pred_metapaths.index(metapath) if metapath in self.pred_metapaths \
+                else self.pred_metapaths.index((head_type, edge_type, tail_type))
+            kernel = self.rel_embedding[metapath_idx]  # (emb_dim,emb_dim)
 
             # if mode == "tail_batch":
             side_A = (embeddings[head_type] + kernel)[edge_index[0]]  # (n_edges, emb_dim)
