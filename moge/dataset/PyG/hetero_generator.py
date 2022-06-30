@@ -618,15 +618,21 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         if edge_idx[0] in self.training_idx:
             mode = "train"
             max_negative_sampling_size = self.negative_sampling_size
-            triples_neg = {k: v[self.training_idx_neg] for k, v in self.triples.items() if is_negative(k)}
+            neg_edge_idx = np.random.choice(self.training_idx_neg,
+                                            size=min(edge_idx.numel(), self.training_idx_neg.numel()), replace=False)
+            triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
         elif edge_idx[0] in self.validation_idx:
             mode = "valid"
             max_negative_sampling_size = self.eval_negative_sampling_size
-            triples_neg = {k: v[self.validation_idx_neg] for k, v in self.triples.items() if is_negative(k)}
+            neg_edge_idx = np.random.choice(self.validation_idx_neg,
+                                            size=min(edge_idx.numel(), self.validation_idx_neg.numel()), replace=False)
+            triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
         elif edge_idx[0] in self.testing_idx:
             mode = "test"
             max_negative_sampling_size = self.eval_negative_sampling_size
-            triples_neg = {k: v[self.testing_idx_neg] for k, v in self.triples.items() if is_negative(k)}
+            neg_edge_idx = np.random.choice(self.testing_idx_neg,
+                                            size=min(edge_idx.numel(), self.testing_idx_neg.numel()), replace=False)
+            triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
 
         triples.update(triples_neg)
         edge_pos, edge_neg = TripletDataset.get_relabled_edge_index(triples=triples,
@@ -634,13 +640,13 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                                     metapaths=self.pred_metapaths)
 
         # If ensures same number of true neg edges to true pos edges
-        if num_edges(edge_neg) > edge_idx.numel() and edge_idx.numel() > 0:
-            edge_neg = {metapath: edge_index[:, torch.multinomial(torch.ones(edge_index.size(1)),
-                                                                  num_samples=min(
-                                                                      max(edge_idx.numel() // len(edge_neg), 1),
-                                                                      edge_index.size(1)),
-                                                                  replacement=False)] \
-                        for metapath, edge_index in edge_neg.items() if edge_index.size(1)}
+        # if num_edges(edge_neg) > edge_idx.numel() and edge_idx.numel() > 0:
+        #     edge_neg = {metapath: edge_index[:, torch.multinomial(torch.ones(edge_index.size(1)),
+        #                                                           num_samples=min(
+        #                                                               max(edge_idx.numel() // len(edge_neg), 1),
+        #                                                               edge_index.size(1)),
+        #                                                           replacement=False)] \
+        #                 for metapath, edge_index in edge_neg.items() if edge_index.size(1)}
 
         # Get all nodes induced by sampled edges
         if num_edges(edge_neg):
