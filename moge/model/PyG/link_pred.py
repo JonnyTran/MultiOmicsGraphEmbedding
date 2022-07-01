@@ -256,8 +256,7 @@ class LATTELinkPred(LinkPredTrainer):
             self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                return_score=False,
-                **kwargs) \
+                return_score=False, **kwargs) \
             -> Tuple[Dict[str, Tensor], Any, Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]
@@ -271,11 +270,8 @@ class LATTELinkPred(LinkPredTrainer):
             embs = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
-        embeddings = self.embedder.forward(h_out,
-                                           edge_index_dict=inputs["edge_index_dict"],
-                                           global_node_idx=inputs["global_node_index"],
-                                           sizes=inputs["sizes"],
-                                           **kwargs)
+        embeddings = self.embedder.forward(h_out, edge_index_dict=inputs["edge_index_dict"],
+                                           global_node_idx=inputs["global_node_index"], sizes=inputs["sizes"], **kwargs)
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
         if return_score:

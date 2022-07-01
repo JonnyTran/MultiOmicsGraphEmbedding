@@ -457,13 +457,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             for metapath, edge_index in edge_index_dict.items():
                 self.G[metapath].edge_index = edge_index
                 self.metapaths.append(metapath)
-                print(metapath, self.G[metapath].edge_index.max(1).values)
 
                 if self.use_reverse:
                     rev_metapath = reverse_metapath_name(metapath)
                     self.metapaths.append(rev_metapath)
                     self.G[rev_metapath].edge_index = edge_index[[1, 0], :]
-                    print(rev_metapath, self.G[rev_metapath].edge_index.max(1).values)
 
         if add_annotation_as_edges and hasattr(self, "network"):
             for ntype in self.network.annotations.index.drop(["MessengerRNA", "Protein"], errors="ignore"):
@@ -618,42 +616,35 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         if edge_idx[0] in self.training_idx:
             mode = "train"
             max_negative_sampling_size = self.negative_sampling_size
-            neg_edge_idx = np.random.choice(self.training_idx_neg,
-                                            size=min(edge_idx.numel(), self.training_idx_neg.numel()), replace=False)
-            triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
+            all_neg_edge_idx = self.training_idx_neg
+
         elif edge_idx[0] in self.validation_idx:
             mode = "valid"
             max_negative_sampling_size = self.eval_negative_sampling_size
-            neg_edge_idx = np.random.choice(self.validation_idx_neg,
-                                            size=min(edge_idx.numel(), self.validation_idx_neg.numel()), replace=False)
-            triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
+            all_neg_edge_idx = self.validation_idx_neg
+
         elif edge_idx[0] in self.testing_idx:
             mode = "test"
             max_negative_sampling_size = self.eval_negative_sampling_size
-            neg_edge_idx = np.random.choice(self.testing_idx_neg,
-                                            size=min(edge_idx.numel(), self.testing_idx_neg.numel()), replace=False)
-            triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
+            all_neg_edge_idx = self.testing_idx_neg
 
+        # If ensures same number of true neg edges to true pos edges
+        neg_edge_idx = np.random.choice(all_neg_edge_idx,
+                                        size=min(edge_idx.numel(), all_neg_edge_idx.numel()), replace=False)
+        triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
         triples.update(triples_neg)
+
+        # Get edge_index_dict from triplets
         edge_pos, edge_neg = TripletDataset.get_relabled_edge_index(triples=triples,
                                                                     global_node_index=self.global_node_index,
                                                                     metapaths=self.pred_metapaths)
-
-        # If ensures same number of true neg edges to true pos edges
-        # if num_edges(edge_neg) > edge_idx.numel() and edge_idx.numel() > 0:
-        #     edge_neg = {metapath: edge_index[:, torch.multinomial(torch.ones(edge_index.size(1)),
-        #                                                           num_samples=min(
-        #                                                               max(edge_idx.numel() // len(edge_neg), 1),
-        #                                                               edge_index.size(1)),
-        #                                                           replacement=False)] \
-        #                 for metapath, edge_index in edge_neg.items() if edge_index.size(1)}
 
         # Get all nodes induced by sampled edges
         if num_edges(edge_neg):
             query_edges = {
                 metapath: torch.cat([edge_pos[metapath] if metapath in edge_pos else torch.tensor([], dtype=torch.long),
-                                     edge_neg[metapath] if metapath in edge_neg else torch.tensor([],
-                                                                                                  dtype=torch.long)],
+                                     edge_neg[metapath] if metapath in edge_neg else torch.tensor([], dtype=torch.long)
+                                     ],
                                     dim=1) \
                 for metapath in set(edge_pos).union(set(edge_neg))}
         else:
@@ -662,7 +653,6 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         query_nodes = self.gather_node_set(query_edges)
 
         # Add random GO term nodes for negative sampling
-        # torch.where()
         go_nodes_proba = 1 - F.one_hot(query_nodes[self.go_ntype], num_classes=self.num_nodes_dict[self.go_ntype]) \
             .sum(axis=0).to(torch.float)
         go_nids = torch.multinomial(go_nodes_proba, num_samples=self.negative_sampling_size, replacement=False)
