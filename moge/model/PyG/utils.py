@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Union, Tuple, Iterable, List, Dict, Optional
+from typing import Union, Tuple, List, Dict, Optional, Set, Mapping
 
 import pandas as pd
 import torch
@@ -83,7 +83,7 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]],
 
         if order is not None and isinstance(order, int):
             condition = condition & (num_hops == order)
-        elif order is not None and isinstance(order, Iterable):
+        elif order is not None and isinstance(order, (list, set, tuple)):
             condition = condition & (num_hops in order)
 
         if head_type:
@@ -126,8 +126,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       edge_index_dict_B: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                       sizes: Union[Dict[str, int], List[Dict[str, Tuple[int]]]],
                       layer: Optional[int] = None,
-                      filter_metapaths: List[Tuple[str, str, str]] = None,
-                      edge_threshold: Optional[float] = None) -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
+                      filter_metapaths: Union[List[Tuple[str, str, str]], Set[Tuple[str, str, str]]] = None,
+                      edge_threshold: Optional[float] = None) -> Mapping[Tuple[str, str, str], Tensor]:
     """
     Return a cartesian product from two set of adjacency matrices, such that each metapath_A have same tail node type
      as metapath_B's head node type.
@@ -148,8 +148,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
             if metapath_a[-1] != metapath_b[0]: continue
 
             new_metapath = metapath_a + metapath_b[1:]
-            if filter_metapaths is not None and new_metapath not in filter_metapaths:
-                continue
+            if filter_metapaths is not None and new_metapath not in filter_metapaths: continue
 
             edge_index_a, values_a = get_edge_index_values(edge_index_a,
                                                            filter_edge=True if edge_threshold else False,
@@ -198,6 +197,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
 
                 if new_edge_index.size(1):
                     output_edge_index[new_metapath] = (new_edge_index, new_values)
+                else:
+                    output_edge_index[new_metapath] = None
 
             except RuntimeError as re:
                 # CUDA out of memory, perform spspmm in cpu
@@ -212,6 +213,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                     output_edge_index[new_metapath] = (
                         new_edge_index.to(edge_index_a.device),
                         new_values.to(edge_index_a.device) if isinstance(new_values, Tensor) else None)
+                else:
+                    output_edge_index[new_metapath] = None
 
             except Exception as e:
                 print(f"{e} \n {metapath_a}: "
@@ -219,6 +222,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       f"{metapath_b}: "
                       f"{edge_index_b.max(1).values.data, values_b.shape if values_b is not None else values_a}")
                 print("sizes: ", {"m": m, "k": k, "n": n, })
+                output_edge_index[new_metapath] = None
 
     return output_edge_index
 
