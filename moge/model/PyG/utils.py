@@ -127,7 +127,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       sizes: Union[Dict[str, int], List[Dict[str, Tuple[int]]]],
                       layer: Optional[int] = None,
                       filter_metapaths: Union[List[Tuple[str, str, str]], Set[Tuple[str, str, str]]] = None,
-                      edge_threshold: Optional[float] = None) -> Mapping[Tuple[str, str, str], Tensor]:
+                      edge_threshold: Optional[float] = None,
+                      device="cpu") -> Mapping[Tuple[str, str, str], Tensor]:
     """
     Return a cartesian product from two set of adjacency matrices, such that each metapath_A have same tail node type
      as metapath_B's head node type.
@@ -169,8 +170,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
 
             try:
                 if values_a is None or values_b is None:
-                    new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=None,
-                                                        indexB=edge_index_b, valueB=None,
+                    new_edge_index, new_values = spspmm(indexA=edge_index_a.to(device), valueA=None,
+                                                        indexB=edge_index_b.to(device), valueB=None,
                                                         m=m, k=k, n=n,
                                                         coalesced=True)
 
@@ -190,13 +191,15 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                     if values_b.dim() > 1 and values_b.size(1) == 1:
                         values_b = values_b.squeeze(-1)
 
-                    new_edge_index, new_values = spspmm(indexA=edge_index_a, valueA=values_a,
-                                                        indexB=edge_index_b, valueB=values_b,
+                    new_edge_index, new_values = spspmm(indexA=edge_index_a.to(device), valueA=values_a.to(device),
+                                                        indexB=edge_index_b.to(device), valueB=values_b.to(device),
                                                         m=m, k=k, n=n,
                                                         coalesced=True)
 
                 if new_edge_index.size(1):
-                    output_edge_index[new_metapath] = (new_edge_index, new_values)
+                    output_edge_index[new_metapath] = (
+                        new_edge_index.to(edge_index_a.device),
+                        new_values.to(edge_index_a.device) if isinstance(new_values, Tensor) else None)
                 else:
                     output_edge_index[new_metapath] = None
 

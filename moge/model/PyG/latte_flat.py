@@ -16,6 +16,7 @@ from torch_geometric.utils import softmax
 
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
+from run.utils import select_empty_gpu
 
 
 class LATTE(nn.Module):
@@ -352,6 +353,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         Returns:
              output_emb, loss:
         """
+        self.empty_gpu_device = select_empty_gpu()
+
         l_dict = self.projection(feats, linears=self.linear_l)
         r_dict = self.projection(feats, linears=self.linear_r)
 
@@ -471,7 +474,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                         edge_index_dict_B=edge_index_dict,
                                                         sizes=sizes,
                                                         filter_metapaths=higher_relations,
-                                                        edge_threshold=0.2)
+                                                        edge_threshold=0.2,
+                                                        device=self.empty_gpu_device)
         else:
             higher_order_edge_index = edge_pred_dict
         # print("higher_order_edge_index")
