@@ -5,10 +5,11 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-from moge.model.PyG import is_negative
 from torch import Tensor
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
+
+from moge.model.PyG import is_negative
 
 
 def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
@@ -21,8 +22,12 @@ def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[st
     if not isinstance(g, nx.MultiGraph):
         raise NotImplementedError
 
-    elif not isinstance(edge_types, (list, tuple, set)) and isinstance(g, nx.Graph):
+    if edge_types is None:
+        edge_types = {e for u, v, e in g.edges}
+    if not isinstance(edge_types, (list, tuple, set)) and isinstance(g, nx.Graph):
         edge_types = ["_E"]
+
+    print("edge_types:", edge_types)
 
     edge_index_dict = {}
     for etype in edge_types:
@@ -51,8 +56,12 @@ def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[st
         else:
             raise Exception(f"Edge types `{edge_types}` are ill formed.")
 
-        biadj = nx.bipartite.biadjacency_matrix(edge_subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
-                                                format="coo")
+        try:
+            biadj = nx.bipartite.biadjacency_matrix(edge_subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
+                                                    format="coo")
+        except Exception as e:
+            print(etype, e)
+            continue
 
         if format == "coo":
             edge_index_dict[metapath] = (biadj.row, biadj.col)
@@ -61,6 +70,10 @@ def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[st
             edge_index_dict[metapath] = torch.stack(
                 [torch.tensor(biadj.row, dtype=torch.long),
                  torch.tensor(biadj.col, dtype=torch.long)])
+        elif format == "dgl":
+            import torch
+            edge_index_dict[metapath] = (torch.tensor(biadj.row, dtype=torch.long),
+                                         torch.tensor(biadj.col, dtype=torch.long))
         else:
             edge_index_dict[metapath] = biadj
 

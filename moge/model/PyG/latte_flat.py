@@ -107,7 +107,7 @@ class LATTE(nn.Module):
                 edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                 global_node_idx: Dict[str, Tensor],
                 sizes: Dict[str, int],
-                save_betas=False):
+                save_betas=False, verbose=False):
         """
         Args:
             h_dict: Dict of <ntype>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
@@ -124,7 +124,7 @@ class LATTE(nn.Module):
                                                             global_node_idx=global_node_idx,
                                                             sizes=sizes,
                                                             edge_pred_dict=edge_pred_dict,
-                                                            save_betas=save_betas)
+                                                            save_betas=save_betas, verbose=verbose)
 
             for ntype in h_dict:
                 h_layers[ntype].append(h_dict[ntype])
@@ -264,14 +264,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self.alpha_activation = None
 
         if layernorm:
-            self.layernorm = torch.nn.ModuleDict({
-                node_type: nn.LayerNorm(output_dim) \
-                for node_type in self.node_types})
+            self.layernorm = nn.LayerNorm(output_dim)
 
         if batchnorm:
-            self.batchnorm = torch.nn.ModuleDict({
-                node_type: nn.BatchNorm1d(output_dim) \
-                for node_type in self.node_types})
+            self.batchnorm = nn.LayerNorm(output_dim)
 
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
@@ -310,10 +306,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
     #     return beta
 
     def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
-        beta_l = F.leaky_relu(query * self.rel_attn_l[ntype], negative_slope=0.2)
-        beta_r = F.leaky_relu(key * self.rel_attn_r[ntype], negative_slope=0.2)
+        beta_l = F.relu(query * self.rel_attn_l[ntype], )
+        beta_r = F.relu(key * self.rel_attn_r[ntype], )
 
-        beta = (beta_l[:, None, :] * beta_r).sum(-1)
+        beta = (beta_l[:, None, :] + beta_r).sum(-1)
         beta = F.softmax(beta, dim=1)
         # beta = torch.relu(beta / beta.sum(1, keepdim=True))
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
@@ -341,7 +337,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 global_node_idx: Dict[str, Tensor],
                 sizes: Dict[str, int],
                 edge_pred_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
-                save_betas=False) -> \
+                save_betas=False, verbose=False) -> \
             Tuple[Dict[str, Tensor], Optional[Any], Dict[Tuple[str, str, str], Tensor]]:
         """
         Args:
@@ -358,7 +354,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         l_dict = self.projection(feats, linears=self.linear_l)
         r_dict = self.projection(feats, linears=self.linear_r)
 
-        print("\nLayer", self.layer + 1, ) if self.verbose else None
+        print("\nLayer", self.layer + 1, ) if verbose else None
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         h_out = {}
@@ -376,7 +372,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embeddings, ntype=ntype)
 
-            if self.verbose:
+            if verbose:
                 print("  >", ntype, global_node_idx[ntype].shape)
                 for i, (metapath, beta) in enumerate(
                         zip(self.get_tail_relations(ntype) + [ntype], betas[ntype].mean(-1).mean(0))):
@@ -394,9 +390,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 embeddings = self.activation(embeddings)
 
             if hasattr(self, "layernorm"):
-                embeddings = self.layernorm[ntype](embeddings)
+                embeddings = self.layernorm(embeddings)
             elif hasattr(self, "batchnorm"):
-                embeddings = self.batchnorm[ntype](embeddings)
+                embeddings = self.batchnorm(embeddings)
 
             if hasattr(self, "dropout"):
                 embeddings = self.dropout(embeddings)

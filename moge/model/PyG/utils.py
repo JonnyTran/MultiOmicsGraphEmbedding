@@ -128,12 +128,12 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       layer: Optional[int] = None,
                       filter_metapaths: Union[List[Tuple[str, str, str]], Set[Tuple[str, str, str]]] = None,
                       edge_threshold: Optional[float] = None,
-                      device="cpu") -> Mapping[Tuple[str, str, str], Tensor]:
+                      device=None) -> Mapping[Tuple[str, str, str], Tensor]:
     """
     Return a cartesian product from two set of adjacency matrices, such that each metapath_A have same tail node type
      as metapath_B's head node type.
     """
-    output_edge_index = {}
+    joined_edge_index = {}
     if not edge_index_dict_A or not edge_index_dict_B:
         return {}
 
@@ -143,7 +143,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
 
         # In the current LATTE layer that calls this method, a metapath is not higher-order
         if filter_metapaths is not None and metapath_b in filter_metapaths:
-            output_edge_index[metapath_b] = (edge_index_b, values_b)
+            joined_edge_index[metapath_b] = (edge_index_b, values_b)
 
         for metapath_a, edge_index_a in edge_index_dict_A.items():
             if metapath_a[-1] != metapath_b[0]: continue
@@ -167,6 +167,10 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 m = sizes[head]
                 k = sizes[middle]
                 n = sizes[tail]
+
+            orig_device = edge_index_a.device
+            if device is None:
+                device = orig_device
 
             try:
                 if values_a is None or values_b is None:
@@ -197,14 +201,14 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                                                         coalesced=True)
 
                 if new_edge_index.size(1):
-                    output_edge_index[new_metapath] = (
-                        new_edge_index.to(edge_index_a.device),
-                        new_values.to(edge_index_a.device) if isinstance(new_values, Tensor) else None)
+                    joined_edge_index[new_metapath] = (
+                        new_edge_index.to(orig_device),
+                        new_values.to(orig_device) if isinstance(new_values, Tensor) else None)
                 else:
-                    output_edge_index[new_metapath] = None
+                    joined_edge_index[new_metapath] = None
 
             except RuntimeError as re:
-                # CUDA out of memory, perform spspmm in cpu
+                # When CUDA out of memory, perform spspmm in cpu
                 new_edge_index, new_values = spspmm(indexA=edge_index_a.cpu(),
                                                     valueA=values_a.cpu() if isinstance(values_a, Tensor) else None,
                                                     indexB=edge_index_b.cpu(),
@@ -213,11 +217,11 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                                                     coalesced=True)
 
                 if new_edge_index.size(1):
-                    output_edge_index[new_metapath] = (
-                        new_edge_index.to(edge_index_a.device),
-                        new_values.to(edge_index_a.device) if isinstance(new_values, Tensor) else None)
+                    joined_edge_index[new_metapath] = (
+                        new_edge_index.to(orig_device),
+                        new_values.to(orig_device) if isinstance(new_values, Tensor) else None)
                 else:
-                    output_edge_index[new_metapath] = None
+                    joined_edge_index[new_metapath] = None
 
             except Exception as e:
                 print(f"{e} \n {metapath_a}: "
@@ -225,9 +229,9 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       f"{metapath_b}: "
                       f"{edge_index_b.max(1).values.data, values_b.shape if values_b is not None else values_a}")
                 print("sizes: ", {"m": m, "k": k, "n": n, })
-                output_edge_index[new_metapath] = None
+                joined_edge_index[new_metapath] = None
 
-    return output_edge_index
+    return joined_edge_index
 
 
 def adamic_adar(indexA, valueA, indexB, valueB, m, k, n, coalesced=True, sampling=False):
