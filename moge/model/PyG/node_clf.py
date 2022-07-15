@@ -729,7 +729,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             return embeddings
 
         if hasattr(self, "classifier"):
-            y_hat = self.classifier.forward(embeddings[self.head_node_type])
+            y_hat = self.classifier.forward(embeddings[self.head_node_type][:inputs["batch_size"][self.head_node_type]])
         else:
             y_hat = embeddings[self.head_node_type]
 
@@ -739,7 +739,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred = self.forward(X)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
+        # y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
 
@@ -803,7 +804,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
     def on_validation_end(self) -> None:
         super().on_validation_end()
-        if self.current_epoch % 20 == 1:
+        if self.current_epoch % 50 == 1:
             self.plot_sankey_flow(layer=-1)
 
     def on_test_end(self):
@@ -825,6 +826,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
         no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embeddings",
+                    "attn_kernels",
                     'LayerNorm.bias', 'LayerNorm.weight',
                     'BatchNorm.bias', 'BatchNorm.weight']
 

@@ -60,8 +60,8 @@ class HeteroRGCN(nn.Module):
             self.embeddings = nn.ParameterDict(embed_dict)
 
         # create layers
-        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes, agg="max")
-        self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes, agg="max")
+        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes, agg="sum")
+        self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes, agg="sum")
 
     def forward(self, G: dgl.DGLHeteroGraph):
         if hasattr(self, "embeddings"):
@@ -96,8 +96,7 @@ class LabelGraphNodeClassifier(nn.Module):
         self.out_channels = hparams.embedding_dim // self.n_heads
 
         self.dropout = nn.Dropout(p=hparams.nb_cls_dropout)
-        self.attn_kernels = nn.Parameter(torch.Tensor(self.n_heads, self.out_channels, self.out_channels))
-        # self.attn_bias = nn.Parameter(torch.ones(self.n_heads))
+        self.attn_kernels = nn.Parameter(torch.rand((hparams.embedding_dim)), requires_grad=True)
 
         if isinstance(hparams.cls_graph, dgl.DGLGraph):
             self.g: dgl.DGLHeteroGraph = hparams.cls_graph
@@ -114,7 +113,25 @@ class LabelGraphNodeClassifier(nn.Module):
                                            embedding_dim=hparams.embedding_dim)
             nn.init.xavier_uniform_(self.embeddings.weight)
 
-        torch.nn.init.xavier_normal_(self.attn_kernels)
+    def forward(self, embeddings: Tensor, classes=None) -> Tensor:
+        if self.g.device != embeddings.device:
+            self.g = self.g.to(embeddings.device)
+
+        cls_emb = self.embedder(self.g)["_N"]
+        cls_emb = self.dropout(cls_emb)
+
+        if classes is None:
+            cls_emb = cls_emb[:self.n_classes]
+        else:
+            mask = np.isin(self.embedder.cls_graph_nodes, classes, )
+            cls_emb = cls_emb[mask]
+
+        side_A = (embeddings * self.attn_kernels).unsqueeze(1)  # (n_edges, 1, emb_dim)
+        emb_B = cls_emb.unsqueeze(2)  # (n_edges, emb_dim, 1)
+        logits = side_A[:, None, :] @ emb_B[None, :, :]
+        logits = logits.squeeze(-1).squeeze(-1)
+
+        return logits
 
     def create_encoder(self, hparams):
         if isinstance(hparams.cls_encoder, str):
@@ -129,32 +146,6 @@ class LabelGraphNodeClassifier(nn.Module):
             go_encoder = hparams.cls_encoder
 
         return go_encoder
-
-
-    def forward(self, embeddings: Tensor, classes=None) -> Tensor:
-        nodes = embeddings.view(-1, self.n_heads, self.out_channels).transpose(1, 0)
-
-        if self.g.device != self.attn_kernels.device:
-            self.g = self.g.to(self.attn_kernels.device)
-
-        cls_emb = self.embedder(self.g)["_N"]
-        cls_emb = self.dropout(cls_emb)
-
-        if classes is None:
-            cls_emb = cls_emb[:self.n_classes]
-        else:
-            mask = np.isin(self.embedder.cls_graph_nodes, classes, )
-            cls_emb = cls_emb[mask]
-
-        cls_emb = cls_emb.view(-1, self.n_heads, self.out_channels)
-
-        cls_emb = torch.bmm(cls_emb.transpose(1, 0), self.attn_kernels).transpose(2, 1)
-        # classes = self.dropout(classes)
-
-        # scale = self.attn_bias / np.sqrt(self.out_channels)
-        score = torch.bmm(nodes, cls_emb).transpose(1, 0)  # * scale[None, :, None]
-        score = score.sum(1)
-        return score
 
 
 class DenseClassification(nn.Module):

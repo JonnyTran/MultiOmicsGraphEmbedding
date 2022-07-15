@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 
 import numpy as np
 import torch
@@ -83,7 +83,19 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
     return y_pred, y_true, weights
 
 
-def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights: Dict[str, Tensor] = None):
+def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights: Dict[str, Tensor] = None) \
+        -> Tuple[Tensor, Tensor, Tensor]:
+    """
+    Returns y_pred, y_true, weights as Tensors and ensure they all have the same batch_size in dim 0.
+
+    Args:
+        y_pred ():
+        y_true ():
+        weights ():
+
+    Returns:
+
+    """
     if isinstance(y_true, dict) and isinstance(y_pred, dict):
         ntypes = list(y_pred.keys())
         # Filter node types which have no data

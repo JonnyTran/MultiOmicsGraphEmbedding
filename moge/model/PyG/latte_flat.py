@@ -453,29 +453,20 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             emb_relations[:, relations.index(metapath)] = out
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
-        # print("\n>", ntype, self.get_tail_relations(ntype))
 
         remaining_orders = list(range(2, min(self.layer + 1, self.t_order) + 1))
         higher_relations = self.get_tail_relations(ntype, order=remaining_orders)
-        # print("\t t-order", self.t_order, "remaining_orders", remaining_orders, "higher_relations", higher_relations)
 
         # Create high-order edge index for next layer (but may not be used for aggregation)
-        # print(self.layer, ntype, sizes)
-        # print("> edge_index_dict", )
-        # pprint(edge_index_sizes(edge_index_dict), indent=3, width=300)
-        # print("> edge_pred_dict", )
-        # pprint(edge_index_sizes(edge_pred_dict), indent=3, width=300)
         if len(edge_pred_dict) < len(higher_relations):
             higher_order_edge_index = join_edge_indexes(edge_index_dict_A=edge_pred_dict,
                                                         edge_index_dict_B=edge_index_dict,
                                                         sizes=sizes,
                                                         filter_metapaths=higher_relations,
-                                                        edge_threshold=0.2,
+                                                        edge_threshold=None,
                                                         device=self.empty_gpu_device)
         else:
             higher_order_edge_index = edge_pred_dict
-        # print("higher_order_edge_index")
-        # pprint(tensor_sizes(higher_order_edge_index), width=250)
 
         # Aggregate higher order relations
         for metapath in higher_relations:
@@ -499,9 +490,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
 
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
-
-        # print(f'edge_pred_dict')
-        # pprint(tensor_sizes(edge_pred_dict),width=300)
 
         return emb_relations, edge_pred_dict
 
