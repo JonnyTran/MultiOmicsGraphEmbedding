@@ -21,7 +21,7 @@ from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
 from moge.model.PyG.latte import LATTE
-from moge.model.PyG.latte_flat import LATTE
+from moge.model.PyG.latte_flat import LATTE_Flat
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
 from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
@@ -655,21 +655,21 @@ class LATTEFlatNodeClf(NodeClfTrainer):
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset)
 
         # Graph embedding
-        self.embedder = LATTE(n_layers=hparams.n_layers,
-                              t_order=min(hparams.t_order, hparams.n_layers),
-                              embedding_dim=hparams.embedding_dim,
-                              num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(khop=None),
-                              layer_pooling=hparams.layer_pooling,
-                              activation=hparams.activation,
-                              attn_heads=hparams.attn_heads,
-                              attn_activation=hparams.attn_activation,
-                              attn_dropout=hparams.attn_dropout,
-                              use_proximity=hparams.use_proximity if hasattr(hparams, "use_proximity") else False,
-                              neg_sampling_ratio=hparams.neg_sampling_ratio \
+        self.embedder = LATTE_Flat(n_layers=hparams.n_layers,
+                                   t_order=min(hparams.t_order, hparams.n_layers),
+                                   embedding_dim=hparams.embedding_dim,
+                                   num_nodes_dict=dataset.num_nodes_dict,
+                                   metapaths=dataset.get_metapaths(khop=None),
+                                   layer_pooling=hparams.layer_pooling,
+                                   activation=hparams.activation,
+                                   attn_heads=hparams.attn_heads,
+                                   attn_activation=hparams.attn_activation,
+                                   attn_dropout=hparams.attn_dropout,
+                                   use_proximity=hparams.use_proximity if hasattr(hparams, "use_proximity") else False,
+                                   neg_sampling_ratio=hparams.neg_sampling_ratio \
                                   if hasattr(hparams, "neg_sampling_ratio") else None,
-                              edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
-                              hparams=hparams)
+                                   edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
+                                   hparams=hparams)
 
         # Output layer
         if "cls_graph" in hparams and hparams.cls_graph is not None:
