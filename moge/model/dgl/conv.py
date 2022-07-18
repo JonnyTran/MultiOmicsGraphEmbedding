@@ -1,13 +1,11 @@
-import torch
 import dgl
-from dgl.heterograph import DGLBlock
+import torch
+from dgl import function as fn
 from dgl.nn import pytorch as dglnn
-from dgl.udf import EdgeBatch, NodeBatch
-from dgl.utils import expand_as_pair
+from dgl.nn.pytorch import GATConv
 from torch import nn
 from torch.nn import functional as F
-from dgl.nn.pytorch import GATConv
-from typing import List
+from transformers import BertForSequenceClassification
 
 
 class StochasticTwoLayerRGCN(nn.Module):
@@ -105,3 +103,68 @@ class HAN(nn.Module):
             h = gnn(g, h)
 
         return self.predict(h)
+
+
+class HeteroRGCNLayer(nn.Module):
+    def __init__(self, in_size, out_size, etypes, agg='stack'):
+        super(HeteroRGCNLayer, self).__init__()
+        # W_r for each relation
+        self.weight = nn.ModuleDict({
+            name: nn.Linear(in_size, out_size) for name in etypes
+        })
+        self.agg = agg
+
+    def forward(self, G, feat_dict):
+        # The input is a dictionary of node features for each type
+        funcs = {}
+        for srctype, etype, dsttype in G.canonical_etypes:
+            # Compute W_r * h
+            Wh = self.weight[etype](feat_dict[srctype])
+            # Save it in graph for message passing
+            G.nodes[srctype].data['Wh_%s' % etype] = Wh
+            # Specify per-relation message passing functions: (message_func, reduce_func).
+            # Note that the results are saved to the same destination feature 'h', which
+            # hints the type wise reducer for aggregation.
+            funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
+
+        # Trigger message passing of multiple types.
+        # The first argument is the message passing functions for each relation.
+        # The second one is the type wise reducer, could be "sum", "max",
+        # "min", "mean", "stack"
+        G.multi_update_all(funcs, self.agg)
+        # return the updated node feature dictionary
+        return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
+
+
+class HeteroRGCN(nn.Module):
+    def __init__(self, G: dgl.DGLHeteroGraph, in_size, hidden_size, out_size,
+                 encoder: BertForSequenceClassification = None):
+        super(HeteroRGCN, self).__init__()
+
+        # Use trainable node embeddings as featureless inputs.
+        if encoder is not None and "input_ids" in G.node_attr_schemes():
+            self.encoder = encoder
+        else:
+            self.embeddings = nn.ParameterDict(
+                {ntype: nn.Embedding(G.num_nodes(ntype), embedding_dim=in_size) for ntype in G.ntypes})
+
+        # create layers
+        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes, agg="mean")
+        self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes, agg="mean")
+
+    def forward(self, G: dgl.DGLHeteroGraph):
+        if hasattr(self, "embeddings"):
+            feats = {ntype: self.embeddings[ntype].weight for ntype in G.ntypes}
+        elif hasattr(self, "encoder"):
+            feats = {}
+            for ntype in G.ntypes:
+                out = self.encoder.forward(G.nodes[ntype].data["input_ids"],
+                                           G.nodes[ntype].data["attention_mask"],
+                                           G.nodes[ntype].data["token_type_ids"])
+                feats[ntype] = out.logits
+
+        h_dict = self.layer1(G, feats)
+        h_dict = {k: F.relu(h) for k, h in h_dict.items()}
+        h_dict = self.layer2(G, h_dict)
+
+        return h_dict

@@ -3,82 +3,14 @@ from collections import OrderedDict
 from copy import deepcopy
 
 import dgl
-import dgl.function as fn
 import networkx as nx
 import numpy as np
 import torch
 from torch import nn, Tensor
-from torch.nn import functional as F
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
 
-
-class HeteroRGCNLayer(nn.Module):
-    def __init__(self, in_size, out_size, etypes, agg='stack'):
-        super(HeteroRGCNLayer, self).__init__()
-        # W_r for each relation
-        self.weight = nn.ModuleDict({
-            name: nn.Linear(in_size, out_size) for name in etypes
-        })
-        self.agg = agg
-
-    def forward(self, G, feat_dict):
-        # The input is a dictionary of node features for each type
-        funcs = {}
-        for srctype, etype, dsttype in G.canonical_etypes:
-            # Compute W_r * h
-            Wh = self.weight[etype](feat_dict[srctype])
-            # Save it in graph for message passing
-            G.nodes[srctype].data['Wh_%s' % etype] = Wh
-            # Specify per-relation message passing functions: (message_func, reduce_func).
-            # Note that the results are saved to the same destination feature 'h', which
-            # hints the type wise reducer for aggregation.
-            funcs[etype] = (fn.copy_u('Wh_%s' % etype, 'm'), fn.mean('m', 'h'))
-
-        # Trigger message passing of multiple types.
-        # The first argument is the message passing functions for each relation.
-        # The second one is the type wise reducer, could be "sum", "max",
-        # "min", "mean", "stack"
-        G.multi_update_all(funcs, self.agg)
-        # return the updated node feature dictionary
-        return {ntype: G.nodes[ntype].data['h'] for ntype in G.ntypes}
-
-
-class HeteroRGCN(nn.Module):
-    def __init__(self, G: dgl.DGLHeteroGraph, in_size, hidden_size, out_size,
-                 encoder: BertForSequenceClassification = None):
-        super(HeteroRGCN, self).__init__()
-
-        # Use trainable node embeddings as featureless inputs.
-        if encoder is not None and "input_ids" in G.node_attr_schemes():
-            self.encoder = encoder
-        else:
-            embed_dict = {ntype: nn.Parameter(torch.Tensor(G.num_nodes(ntype), in_size))
-                          for ntype in G.ntypes}
-            for key, embed in embed_dict.items():
-                nn.init.xavier_uniform_(embed)
-            self.embeddings = nn.ParameterDict(embed_dict)
-
-        # create layers
-        self.layer1 = HeteroRGCNLayer(in_size, hidden_size, G.etypes, agg="sum")
-        self.layer2 = HeteroRGCNLayer(hidden_size, out_size, G.etypes, agg="sum")
-
-    def forward(self, G: dgl.DGLHeteroGraph):
-        if hasattr(self, "embeddings"):
-            feats = self.embeddings
-        elif hasattr(self, "encoder"):
-            feats = {}
-            for ntype in G.ntypes:
-                out = self.encoder.forward(G.nodes[ntype].data["input_ids"],
-                                           G.nodes[ntype].data["attention_mask"],
-                                           G.nodes[ntype].data["token_type_ids"])
-                feats[ntype] = out.logits
-
-        h_dict = self.layer1(G, feats)
-        h_dict = {k: F.leaky_relu(h) for k, h in h_dict.items()}
-        h_dict = self.layer2(G, h_dict)
-
-        return h_dict
+from moge.model.dgl.HGT import Hgt
 
 
 class LabelGraphNodeClassifier(nn.Module):
@@ -98,26 +30,35 @@ class LabelGraphNodeClassifier(nn.Module):
         self.dropout = nn.Dropout(p=hparams.nb_cls_dropout)
         self.attn_kernels = nn.Parameter(torch.rand((hparams.embedding_dim)), requires_grad=True)
 
-        if isinstance(hparams.cls_graph, dgl.DGLGraph):
-            self.g: dgl.DGLHeteroGraph = hparams.cls_graph
-            if "input_ids" in self.g.ndata and "cls_encoder" in hparams:
-                go_encoder = self.create_encoder(hparams)
-            else:
-                go_encoder = None
-
-            self.embedder = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
-                                       out_size=hparams.embedding_dim, encoder=go_encoder)
-            self.embedder.cls_graph_nodes = hparams.classes
+        assert isinstance(hparams.cls_graph, dgl.DGLGraph)
+        self.g: dgl.DGLHeteroGraph = hparams.cls_graph
+        if "input_ids" in self.g.ndata and "cls_encoder" in hparams:
+            go_encoder = self.create_encoder(hparams)
         else:
-            self.embeddings = nn.Embedding(num_embeddings=hparams.n_classes,
-                                           embedding_dim=hparams.embedding_dim)
-            nn.init.xavier_uniform_(self.embeddings.weight)
+            go_encoder = None
+
+        # self.embedder = HeteroRGCN(self.g, in_size=hparams.embedding_dim, hidden_size=128,
+        #                            out_size=hparams.embedding_dim, encoder=go_encoder)
+        self.embeddings = nn.ParameterDict(
+            {ntype: nn.Embedding(self.g.num_nodes(ntype), embedding_dim=hparams.embedding_dim) for ntype in
+             self.g.ntypes})
+
+        self.embedder = Hgt(node_dict={ntype: i for i, ntype in enumerate(self.g.ntypes)},
+                            edge_dict={etype: i for i, etype in enumerate(self.g.etypes)},
+                            n_inp=hparams.embedding_dim,
+                            n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
+                            n_layers=2,
+                            n_heads=self.n_heads,
+                            use_norm=True)
+
+        self.embedder.cls_graph_nodes = hparams.classes
 
     def forward(self, embeddings: Tensor, classes=None) -> Tensor:
         if self.g.device != embeddings.device:
             self.g = self.g.to(embeddings.device)
 
-        cls_emb = self.embedder(self.g)["_N"]
+        cls_emb = {ntype: self.embeddings[ntype].weight for ntype in self.g.ntypes}
+        cls_emb = self.embedder(blocks=self.g, feat_dict=cls_emb)["_N"]
         cls_emb = self.dropout(cls_emb)
 
         if classes is None:
@@ -126,6 +67,7 @@ class LabelGraphNodeClassifier(nn.Module):
             mask = np.isin(self.embedder.cls_graph_nodes, classes, )
             cls_emb = cls_emb[mask]
 
+        # logits = embeddings @ cls_emb.T
         side_A = (embeddings * self.attn_kernels).unsqueeze(1)  # (n_edges, 1, emb_dim)
         emb_B = cls_emb.unsqueeze(2)  # (n_edges, emb_dim, 1)
         logits = side_A[:, None, :] @ emb_B[None, :, :]

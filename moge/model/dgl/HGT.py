@@ -1,12 +1,13 @@
 import math
+from typing import Dict, List, Union
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from dgl.heterograph import DGLBlock
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
-
-from dgl.heterograph import DGLBlock
+from torch import Tensor
 
 
 class HGTLayer(nn.Module):
@@ -150,7 +151,8 @@ class HGTLayer(nn.Module):
 
 
 class Hgt(nn.Module):
-    def __init__(self, node_dict, edge_dict, n_inp, n_hid, n_out, n_layers, n_heads, use_norm=True):
+    def __init__(self, node_dict: Dict[str, int], edge_dict: Dict[str, int],
+                 n_inp: int, n_hid: int, n_out: int, n_layers: int, n_heads: int, use_norm: bool = True):
         super(Hgt, self).__init__()
         self.node_dict = node_dict
         self.edge_dict = edge_dict
@@ -167,15 +169,14 @@ class Hgt(nn.Module):
         for _ in range(n_layers):
             self.layers.append(HGTLayer(n_hid, n_hid, node_dict, edge_dict, n_heads, use_norm=use_norm))
 
-    def forward(self, blocks, feat_dict):
+    def forward(self, G: Union[DGLBlock, List[DGLBlock]], feat: Dict[str, Tensor]):
         h = {}
-        for ntype in feat_dict:
+        for ntype in feat:
             n_id = self.node_dict[ntype]
-            h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat_dict[ntype]))
+            h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat[ntype]))
 
         for i in range(self.n_layers):
-            h = self.layers[i].forward(blocks[i], h)
+            h = self.layers[i].forward(G=G[i] if isinstance(G, (list, tuple)) else G,
+                                       feat=h)
 
         return h
-
-

@@ -21,7 +21,7 @@ from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
 from moge.model.PyG.latte import LATTE
-from moge.model.PyG.latte_flat import LATTE_Flat
+from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
 from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
