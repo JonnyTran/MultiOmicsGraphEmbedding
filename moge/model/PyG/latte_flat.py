@@ -9,14 +9,13 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
+from moge.model.PyG import filter_metapaths
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 from pandas import DataFrame
+from run.utils import select_empty_gpu
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
-
-from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
-from run.utils import select_empty_gpu
 
 
 class LATTE(nn.Module):
@@ -347,7 +346,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             sizes: Dict of ntype and number of nodes in `edge_index_dict`
             edge_pred_dict: Higher order edge_index_dict calculated from the previous LATTE layer
         Returns:
-             output_emb, loss:
+             output_emb, edge_attn_scores
         """
         self.empty_gpu_device = select_empty_gpu()
 

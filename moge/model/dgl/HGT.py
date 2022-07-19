@@ -12,13 +12,13 @@ from torch import Tensor
 
 class HGTLayer(nn.Module):
     def __init__(self,
-                 in_dim,
-                 out_dim,
-                 node_dict,
-                 edge_dict,
-                 n_heads,
-                 dropout=0.2,
-                 use_norm=False):
+                 in_dim: int,
+                 out_dim: int,
+                 node_dict: Dict[str, int],
+                 edge_dict: Dict[str, int],
+                 n_heads: int,
+                 dropout: float = 0.2,
+                 use_norm: bool = False):
         super(HGTLayer, self).__init__()
 
         self.in_dim = in_dim
@@ -136,7 +136,6 @@ class HGTLayer(nn.Module):
                 '''
                 nty_id = self.node_dict[ntype]
                 alpha = torch.sigmoid(self.skip[nty_id])
-                # print(ntype, G.srcnodes[ntype].data.keys(), G.dstnodes[ntype].data.keys())
 
                 if "t" in G.dstnodes[ntype].data:
                     trans_out = self.dropout(self.a_linears[nty_id].forward(G.dstnodes[ntype].data['t']))
@@ -150,10 +149,10 @@ class HGTLayer(nn.Module):
             return new_h
 
 
-class Hgt(nn.Module):
+class HGT(nn.Module):
     def __init__(self, node_dict: Dict[str, int], edge_dict: Dict[str, int],
                  n_inp: int, n_hid: int, n_out: int, n_layers: int, n_heads: int, use_norm: bool = True):
-        super(Hgt, self).__init__()
+        super().__init__()
         self.node_dict = node_dict
         self.edge_dict = edge_dict
         self.n_inp = n_inp
@@ -161,9 +160,10 @@ class Hgt(nn.Module):
         self.n_out = n_out
         self.n_layers = n_layers
 
-        self.linear_inp = nn.ModuleList()
-        for t in range(len(node_dict)):
-            self.linear_inp.append(nn.Linear(n_inp, n_hid))
+        if n_inp != n_hid:
+            self.linear_inp = nn.ModuleList()
+            for t in range(len(node_dict)):
+                self.linear_inp.append(nn.Linear(n_inp, n_hid))
 
         self.layers = nn.ModuleList()
         for _ in range(n_layers):
@@ -172,8 +172,11 @@ class Hgt(nn.Module):
     def forward(self, G: Union[DGLBlock, List[DGLBlock]], feat: Dict[str, Tensor]):
         h = {}
         for ntype in feat:
-            n_id = self.node_dict[ntype]
-            h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat[ntype]))
+            if hasattr(self, "linear_inp"):
+                n_id = self.node_dict[ntype]
+                h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat[ntype]))
+            else:
+                h[ntype] = feat[ntype]
 
         for i in range(self.n_layers):
             h = self.layers[i].forward(G=G[i] if isinstance(G, (list, tuple)) else G,

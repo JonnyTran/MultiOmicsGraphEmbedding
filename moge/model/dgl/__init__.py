@@ -1,1 +1,1 @@
-from .node_clf import R_HGNN, LATTENodeClassifier, HGConv, NARS, HGT
+from .node_clf import R_HGNN, LATTENodeClf, HGConv, NARSNodeCLf, HGTNodeClf

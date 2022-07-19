@@ -16,7 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 
 from moge.model.PyG.node_clf import MetaPath2Vec, LATTENodeClf
 from moge.model.cogdl.node_clf import GTN
-from moge.model.dgl.node_clf import HAN, HGT, NARS, HGConv, R_HGNN
+from moge.model.dgl.node_clf import HANNodeClf, HGTNodeClf, NARSNodeCLf, HGConv, R_HGNN
 
 from pytorch_lightning.loggers import WandbLogger
 
@@ -59,8 +59,8 @@ def train(hparams):
             'lr': 0.001,
             'weight_decay': 0.001,
         }
-        ModelClass = HAN
-        model = HAN(args, dataset, metrics=METRICS)
+        ModelClass = HANNodeClf
+        model = HANNodeClf(args, dataset, metrics=METRICS)
 
     elif hparams.method == "GTN":
         USE_AMP = True
@@ -117,8 +117,8 @@ def train(hparams):
             "weight_decay": 1e-2,
             'epochs': 100,
         }
-        ModelClass = HGT
-        model = HGT(Namespace(**args), dataset, metrics=METRICS)
+        ModelClass = HGTNodeClf
+        model = HGTNodeClf(Namespace(**args), dataset, metrics=METRICS)
 
     elif hparams.method == "NARS":
         args = {
@@ -136,8 +136,8 @@ def train(hparams):
             'lr': 0.001,
             'weight_decay': 0.0,
         }
-        ModelClass = NARS
-        model = NARS(Namespace(**args), dataset, metrics=METRICS)
+        ModelClass = NARSNodeCLf
+        model = NARSNodeCLf(Namespace(**args), dataset, metrics=METRICS)
 
     elif hparams.method == "HGConv":
         args = {

@@ -6,9 +6,6 @@ from typing import Dict, List, Iterable
 
 import dgl
 import torch
-from torch import nn
-from torch.utils.data import DataLoader
-
 from moge.dataset import DGLNodeSampler
 from moge.dataset.dgl.node_generator import HANSampler
 from moge.model.classifier import DenseClassification
@@ -17,17 +14,20 @@ from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subset
 from moge.model.dgl.R_HGNN.model.R_HGNN import R_HGNN as RHGNN
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn
+from torch.utils.data import DataLoader
+
 from .HGConv.model.HGConv import HGConv as Hgconv
-from .HGT import Hgt
+from .HGT import HGT
 from .conv import HAN as Han
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes, process_tensor_dicts, filter_samples_weights
 
 
-class LATTENodeClassifier(NodeClfTrainer):
+class LATTENodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
-        super(LATTENodeClassifier, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
         self.dataset = dataset
@@ -504,10 +504,10 @@ class R_HGNN(NodeClfTrainer):
                 "scheduler": scheduler}
 
 
-class NARS(NodeClfTrainer):
+class NARSNodeCLf(NodeClfTrainer):
     def __init__(self, args: Namespace, dataset: DGLNodeSampler, metrics: List[str]):
         args.loss_type = "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
-        super(NARS, self).__init__(args, dataset, metrics)
+        super(NARSNodeCLf, self).__init__(args, dataset, metrics)
 
         self.dataset = dataset
 
@@ -664,9 +664,9 @@ class NARS(NodeClfTrainer):
         return optimizer
 
 
-class HAN(NodeClfTrainer):
+class HANNodeClf(NodeClfTrainer):
     def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
-        super(HAN, self).__init__(Namespace(**args), dataset, metrics)
+        super(HANNodeClf, self).__init__(Namespace(**args), dataset, metrics)
         self.dataset = dataset
 
         # metapath_list = [['pa', 'ap'], ['pf', 'fp']]
@@ -791,9 +791,9 @@ class HAN(NodeClfTrainer):
         return optimizer
 
 
-class HGT(NodeClfTrainer):
+class HGTNodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"]) -> None:
-        super(HGT, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        super(HGTNodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
@@ -805,7 +805,7 @@ class HGT(NodeClfTrainer):
 
         self.n_layers = len(self.dataset.neighbor_sizes)
 
-        self.model = Hgt(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+        self.model = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                          edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
                          n_inp=self.dataset.node_attr_shape[self.head_node_type if isinstance(self.head_node_type, str) \
                              else self.head_node_type[0]],

@@ -1,16 +1,16 @@
 from argparse import Namespace
 from collections import OrderedDict
 from copy import deepcopy
+from typing import List, Optional
 
 import dgl
 import networkx as nx
 import numpy as np
 import torch
+from moge.model.dgl.HGT import HGT
 from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
-
-from moge.model.dgl.HGT import Hgt
 
 
 class LabelGraphNodeClassifier(nn.Module):
@@ -43,7 +43,7 @@ class LabelGraphNodeClassifier(nn.Module):
             {ntype: nn.Embedding(self.g.num_nodes(ntype), embedding_dim=hparams.embedding_dim) for ntype in
              self.g.ntypes})
 
-        self.embedder = Hgt(node_dict={ntype: i for i, ntype in enumerate(self.g.ntypes)},
+        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(self.g.ntypes)},
                             edge_dict={etype: i for i, etype in enumerate(self.g.etypes)},
                             n_inp=hparams.embedding_dim,
                             n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
@@ -53,12 +53,12 @@ class LabelGraphNodeClassifier(nn.Module):
 
         self.embedder.cls_graph_nodes = hparams.classes
 
-    def forward(self, embeddings: Tensor, classes=None) -> Tensor:
+    def forward(self, embeddings: Tensor, classes: Optional[List[str]] = None) -> Tensor:
         if self.g.device != embeddings.device:
             self.g = self.g.to(embeddings.device)
 
-        cls_emb = {ntype: self.embeddings[ntype].weight for ntype in self.g.ntypes}
-        cls_emb = self.embedder(blocks=self.g, feat_dict=cls_emb)["_N"]
+        cls_emb = self.embedder(G=self.g,
+                                feat={ntype: self.embeddings[ntype].weight for ntype in self.g.ntypes})["_N"]
         cls_emb = self.dropout(cls_emb)
 
         if classes is None:
@@ -67,11 +67,11 @@ class LabelGraphNodeClassifier(nn.Module):
             mask = np.isin(self.embedder.cls_graph_nodes, classes, )
             cls_emb = cls_emb[mask]
 
-        # logits = embeddings @ cls_emb.T
-        side_A = (embeddings * self.attn_kernels).unsqueeze(1)  # (n_edges, 1, emb_dim)
-        emb_B = cls_emb.unsqueeze(2)  # (n_edges, emb_dim, 1)
-        logits = side_A[:, None, :] @ emb_B[None, :, :]
-        logits = logits.squeeze(-1).squeeze(-1)
+        logits = embeddings @ cls_emb.T
+        # side_A = (embeddings * self.attn_kernels).unsqueeze(1)  # (n_edges, 1, emb_dim)
+        # emb_B = cls_emb.unsqueeze(2)  # (n_edges, emb_dim, 1)
+        # logits = side_A[:, None, :] @ emb_B[None, :, :]
+        # logits = logits.squeeze(-1).squeeze(-1)
 
         return logits
 

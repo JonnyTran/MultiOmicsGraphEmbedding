@@ -6,12 +6,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from pandas import DataFrame
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.PyG.triplet_generator import TripletDataset
 from moge.dataset.graph import HeteroGraphDataset
@@ -19,6 +13,11 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -52,13 +51,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                       attr_cols=attr_cols, expression=expression, sequence=sequence,
                                       add_reverse=add_reverse, label_subset=label_subset)
 
-        self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False,
-                   edge_dir="in", **kwargs)
+        self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False, edge_dir="in", **kwargs)
         self.network = network
         self.classes = classes
         self.nodes = nodes
         self._name = ""
-
         self.use_reverse = True if any("rev_" in metapath[1] for metapath in hetero.edge_types) else False
 
         return self
@@ -73,8 +70,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.metapaths = hetero.edge_types
         self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
 
-    def add_ontology_edges(self, ontology, train_date='2017-06-15', valid_date='2017-11-15',
-                           test_date='2021-12-31',
+    def add_ontology_edges(self, ontology, train_date='2017-06-15', valid_date='2017-11-15', test_date='2021-12-31',
                            go_ntype="GO_term"):
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
         self.go_ntype = go_ntype
@@ -110,11 +106,19 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
             train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"])
         go_ann = pd.concat([train_go_ann, valid_go_ann, test_go_ann], axis=0)
-        nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].explode().to_frame().reset_index(),
+        nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].explode().to_frame().reset_index().dropna(),
                                            source="gene_name", target="go_id", create_using=nx.DiGraph)
         metapath = (self.head_node_type, "associated", go_ntype)
         self.G[metapath].edge_index = get_edge_index(nx_graph,
                                                      nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
+
+        self.set_train_test_split(ontology, train_date, valid_date, test_date)
+
+    def set_train_test_split(self, ontology, train_date='2017-06-15', valid_date='2017-11-15',
+                             test_date='2021-12-31', ):
+        # Edges between RNA nodes and GO terms
+        train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
+            train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"])
 
         # Set test nodes as new nodes in annotations
         train_node_list = train_go_ann.index
@@ -148,6 +152,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 mask = torch.zeros(self.G[ntype].num_nodes, dtype=torch.bool)
                 mask[test_idx[ntype]] = 1
                 self.G[ntype].test_mask = mask
+
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
                              node_mask: Tensor, transform_fn=None, num_workers=10, verbose=False, **kwargs):
@@ -467,7 +472,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             for ntype in self.network.annotations.index.drop(["MessengerRNA", "Protein"], errors="ignore"):
                 annotations = self.network.annotations[ntype]["go_id"].dropna()
                 source_ntype = annotations.index.name
-                nx_graph = nx.from_pandas_edgelist(annotations.explode().to_frame().reset_index(),
+                nx_graph = nx.from_pandas_edgelist(annotations.explode().to_frame().reset_index().dropna(),
                                                    source=source_ntype, target="go_id", create_using=nx.Graph)
                 metapath = (ntype, "associated", go_ntype)
                 self.metapaths.append(metapath)

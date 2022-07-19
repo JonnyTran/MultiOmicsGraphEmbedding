@@ -7,10 +7,10 @@ from typing import List, Tuple, Dict, Any, Union
 import numpy as np
 import torch
 from fairscale.nn import auto_wrap
-from torch import nn, Tensor
-
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
+from torch import nn, Tensor
+
 from .conv import HGT
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..metrics import Metrics
@@ -256,7 +256,7 @@ class LATTELinkPred(LinkPredTrainer):
             self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                return_score=False, **kwargs) \
+                return_embedding=True, return_score=False, **kwargs) \
             -> Tuple[Dict[str, Tensor], Any, Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]
@@ -272,6 +272,8 @@ class LATTELinkPred(LinkPredTrainer):
 
         embeddings = self.embedder.forward(h_out, edge_index_dict=inputs["edge_index_dict"],
                                            global_node_idx=inputs["global_node_index"], sizes=inputs["sizes"], **kwargs)
+        if return_embedding:
+            return embeddings
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
         if return_score:
