@@ -1,11 +1,18 @@
 from pprint import pprint
-from typing import List, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict, Optional
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from pandas import DataFrame, Series
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+from umap import UMAP
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.PyG.triplet_generator import TripletDataset
 from moge.dataset.graph import HeteroGraphDataset
@@ -13,11 +20,6 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -68,7 +70,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
 
         self.metapaths = hetero.edge_types
-        self.edge_index_dict = {etype: edge_index for etype, edge_index in zip(hetero.edge_types, hetero.edge_stores)}
+        self.edge_index_dict = {etype: etype_dict["edge_index"] \
+                                for etype, etype_dict in zip(hetero.edge_types, hetero.edge_stores)}
 
     def add_ontology_edges(self, ontology, train_date='2017-06-15', valid_date='2017-11-15', test_date='2021-12-31',
                            go_ntype="GO_term"):
@@ -115,7 +118,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.set_train_test_split(ontology, train_date, valid_date, test_date)
 
     def set_train_test_split(self, ontology, train_date='2017-06-15', valid_date='2017-11-15',
-                             test_date='2021-12-31', ):
+                             test_date='2021-12-31', ) -> None:
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
             train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"])
@@ -153,6 +156,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 mask[test_idx[ntype]] = 1
                 self.G[ntype].test_mask = mask
 
+            print(ntype, "train", train_idx[ntype].size, "valid", valid_idx[ntype].size, "test", test_idx[ntype].size)
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
                              node_mask: Tensor, transform_fn=None, num_workers=10, verbose=False, **kwargs):
@@ -233,8 +237,73 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return X, y_dict, weights
 
-    def get_full_graph(self):
+    def full_batch(self):
         return self.transform_heterograph(self.G)
+
+    def get_projection_pos(self, X: Dict, embeddings: Dict[str, Tensor], weights: Optional[Dict[str, Series]] = None):
+        """
+
+        Args:
+            X (): a batch's dict of data
+            embeddings (): Embeddings of nodes in the `X` batch
+            weights (Optional[Dict[str, Series]]): A Dict of ntype and a Pandas Series same same as number of nodes
+                where entries > 0 are returned.
+
+        Returns:
+
+        """
+        global_node_index = {ntype: nids.numpy() for ntype, nids in X["global_node_index"].items() if
+                             ntype in embeddings}
+
+        node_list = pd.concat([pd.Series(self.nodes[ntype][global_node_index[ntype]]) for ntype in global_node_index])
+
+        # Concatenated list of node embeddings
+        nodes_emb = {ntype: embeddings[ntype].detach().numpy() for ntype in embeddings}
+        nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
+        nodes_train_valid_test = np.vstack([
+            np.concatenate([self.G[ntype].train_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
+            np.concatenate([self.G[ntype].valid_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
+            np.concatenate([self.G[ntype].test_mask[nids].numpy() for ntype, nids in global_node_index.items()])],
+        ).T
+
+        # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
+        df = pd.DataFrame(
+            {"nid": np.concatenate([global_node_index[ntype] for ntype in global_node_index]),
+             "ntype": np.concatenate([[ntype] * global_node_index[ntype].shape[0] for ntype in global_node_index]),
+             "train_valid_test": np.array(["Train", "Valid", "Test"])[nodes_train_valid_test.argmax(1)],
+             },
+            index=np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]))
+        df.index.name = "name"
+
+        # Rename Gene Ontology namespace for GO_term ntypes
+        if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") \
+                and self.go_ntype in self.nodes:
+            go_namespace = {k: v for k, v in zip(self.nodes[self.go_ntype], self.go_namespace)}
+            rename_ntype = pd.Series(df.index.map(go_namespace), index=df.index).dropna()
+            df["ntype"].update(rename_ntype)
+            df["ntype"] = df["ntype"].replace(
+                {"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", })
+
+        tsne = UMAP(n_components=2, n_jobs=-1)
+        # tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1)
+        nodes_pos = tsne.fit_transform(nodes_emb)
+        nodes_pos = {node_name: pos for node_name, pos in zip(node_list, nodes_pos)}
+        df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
+
+        # Update all nodes embeddings
+        if not hasattr(self, "node_metadata"):
+            self.node_metadata = df
+        else:
+            self.node_metadata.update(df)
+
+        if weights is not None:
+            nodes_weight = {ntype: weights[ntype].detach().numpy() \
+                if isinstance(weights[ntype], Tensor) else weights[ntype] for ntype in weights}
+            nodes_weight = np.concatenate([nodes_weight[ntype] for ntype in global_node_index]).astype(bool)
+
+            return df.loc[nodes_weight]
+
+        return df
 
     def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
                     edge_index_dict: Dict[Tuple[str, str, str], Tensor] = [],
@@ -275,7 +344,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             if len(filter_nodes):
                 H = G.copy()
                 H = G.subgraph(filter_nodes)
-
         else:
             H = G.copy()
             H.remove_nodes_from(list(nx.isolates(H)))
@@ -769,7 +837,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                     metapaths: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = [],
                     global_node_idx: Dict[str, Tensor] = None,
                     pos_edges: Dict[Tuple[str, str, str], Tensor] = None, ) -> nx.MultiDiGraph:
-        G = super().to_networkx(nodes, metapaths, global_node_idx)
+        G = super().to_networkx(nodes=nodes, metapaths=metapaths, global_node_idx=global_node_idx)
 
         if pos_edges is not None:
             edge_list = convert_to_nx_edgelist(nodes=self.nodes, edge_index_dict=pos_edges,

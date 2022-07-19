@@ -36,6 +36,9 @@ class Graph:
         return self.G
 
     def get_node_degrees(self, directed=True, order=1):
+        if hasattr(self, "node_degrees") and self.node_degrees is not None:
+            return self.node_degrees
+
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
         node_type_nid = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
@@ -61,9 +64,9 @@ class Graph:
 
         # if order >= 2:
         #     global_node_idx = self.get_node_id_dict(self.edge_index_dict)
-        #     new_edge_index_dict = LATTE.join_edge_indexes(edge_index_dict_A=self.edge_index_dict,
-        #                                                   edge_index_dict_B=self.edge_index_dict,
-        #                                                   global_node_idx=global_node_idx)
+        #     new_edge_index_dict = join_edge_indexes(edge_index_dict_A=self.edge_index_dict,
+        #                                                  edge_index_dict_B=self.edge_index_dict,
+        #                                                  global_node_idx=global_node_idx)
         #
         #     metapaths = list(new_edge_index_dict.keys())
         #     metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
@@ -324,9 +327,6 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
             node_ids_dict[node_type] = torch.cat(node_ids_dict[node_type], 0).unique()
 
         return node_ids_dict
-
-
-
 
     def process_inmemorydataset(self, dataset: PyGInMemoryDataset, train_ratio):
         data = dataset[0]

@@ -7,10 +7,10 @@ from typing import List, Tuple, Dict, Any, Union
 import numpy as np
 import torch
 from fairscale.nn import auto_wrap
-from moge.model.PyG.latte_flat import LATTE
-from moge.model.losses import ClassificationLoss
 from torch import nn, Tensor
 
+from moge.model.PyG.latte_flat import LATTE
+from moge.model.losses import ClassificationLoss
 from .conv import HGT
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..metrics import Metrics
@@ -343,7 +343,7 @@ class LATTELinkPred(LinkPredTrainer):
                         [self.dataset.training_idx, self.dataset.validation_idx, self.dataset.testing_idx]))
                 embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=True)
 
-                self.predict_umap(X, embs, log_table=True)
+                self.plot_embeddings_tsne(X, embs)
                 self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
                 test_pred_dict = edge_pred_dict
                 self.log_score_averages(edge_pred_dict=test_pred_dict)

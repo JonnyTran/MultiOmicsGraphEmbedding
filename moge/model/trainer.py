@@ -3,7 +3,6 @@ import logging
 import os
 from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable, Any
 
-import MulticoreTSNE
 import numpy as np
 import pandas as pd
 import torch
@@ -153,51 +152,18 @@ class NodeEmbeddingEvaluator(LightningModule):
         self.embedding_plot_name = "node_emb_umap_plot"
         self.score_avg_table_name = "score_avgs"
 
-    def predict_umap(self, X: Dict[str, Any], embs: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
-                     log_table=False) -> Tensor:
-        global_node_index = {k: v.numpy() for k, v in X["global_node_index"].items()}
-
-        node_list = pd.concat([pd.Series(self.dataset.nodes[ntype][global_node_index[ntype]]) \
-                               for ntype in global_node_index])
-        node_types = pd.concat([pd.Series([ntype] * global_node_index[ntype].shape[0]) for ntype in global_node_index])
-
-        nodes_emb = {ntype: embs[ntype].detach().numpy() for ntype in embs}
-        nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
-
-        if weights is not None:
-            nodes_weight = {ntype: weights[ntype].detach().numpy() \
-                if isinstance(weights[ntype], Tensor) else weights[ntype] for ntype in weights}
-            nodes_weight = np.concatenate([nodes_weight[ntype] for ntype in global_node_index]).astype(bool)
-        else:
-            nodes_weight = None
-
-        df = pd.DataFrame({"ntype": node_types.values}, index=node_list.values)
-        df.index.name = "nid"
-        if hasattr(self.dataset, "go_namespace") and hasattr(self.dataset, "go_ntype") \
-                and self.dataset.go_ntype in self.dataset.nodes:
-            go_namespace = {k: v for k, v in zip(self.dataset.nodes[self.dataset.go_ntype], self.dataset.go_namespace)}
-            rename_ntype = pd.Series(df.index.map(go_namespace), index=df.index).dropna()
-            df["ntype"].update(rename_ntype)
-            df["ntype"] = df["ntype"].replace(
-                {"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", })
-
-        # nodes_umap = AlignedUMAP(n_components=2, n_jobs=10).fit_transform(nodes_emb)
-        nodes_umap = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1).fit_transform(nodes_emb)
-        nodes_pos = {node_name: pos for node_name, pos in zip(node_list, nodes_umap)}
-
-        df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
+    def plot_embeddings_tsne(self, X: Dict[str, Any], embeddings: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
+                             columns=["name", "ntype", "pos1", "pos2"], n_samples: int = 1000) -> Tensor:
+        df = self.dataset.get_projection_pos(X, embeddings, weights=weights)
 
         # Log_table
-        if log_table:
-            df_filter = df.reset_index().drop(columns=["pos"], errors="ignore")
-            if nodes_weight:
-                df_filter = df_filter.loc[nodes_weight].sample(1000)
-            else:
-                df_filter = df_filter.sample(1000)
+        df_filter = df.reset_index().filter(columns, axis="columns")
+        if n_samples:
+            df_filter = df_filter.sample(n_samples)
 
-            table = wandb.Table(data=df_filter)
-            wandb.log({self.embedding_plot_name: table})
-            print("Logging node_emb_umap_plot")
+        table = wandb.Table(data=df_filter)
+        wandb.log({self.embedding_plot_name: table})
+        print("Logging node_emb_umap_plot")
 
         return df
 
