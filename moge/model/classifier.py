@@ -57,8 +57,8 @@ class LabelGraphNodeClassifier(nn.Module):
         if self.g.device != embeddings.device:
             self.g = self.g.to(embeddings.device)
 
-        cls_emb = self.embedder(G=self.g,
-                                feat={ntype: self.embeddings[ntype].weight for ntype in self.g.ntypes})["_N"]
+        cls_emb = self.embedder.forward(G=self.g,
+                                        feat={ntype: self.embeddings[ntype].weight for ntype in self.g.ntypes})["_N"]
         cls_emb = self.dropout(cls_emb)
 
         if classes is None:

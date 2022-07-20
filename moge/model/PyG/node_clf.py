@@ -10,14 +10,6 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
 from moge.dataset import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -30,6 +22,13 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, concat_dict_batch
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -726,10 +725,9 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                                            **kwargs)
 
         if hasattr(self, "classifier"):
-            if hasattr(inputs, "batch_size"):
-                head_ntype_embeddings = embeddings[self.head_node_type][:inputs["batch_size"][self.head_node_type]]
-            else:
-                head_ntype_embeddings = embeddings[self.head_node_type]
+            head_ntype_embeddings = embeddings[self.head_node_type]
+            if "batch_size" in inputs:
+                head_ntype_embeddings = head_ntype_embeddings[:inputs["batch_size"][self.head_node_type]]
 
             y_hat = self.classifier.forward(head_ntype_embeddings)
         else:
@@ -817,7 +815,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
-                X, y, weights = self.dataset.full_batch()
+                X, y_true, weights = self.dataset.full_batch()
                 embs = self.cpu().forward(X, return_embs=True, save_betas=True)
 
                 self.plot_embeddings_tsne(X, embs, weights=weights)

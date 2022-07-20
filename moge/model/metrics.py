@@ -10,7 +10,8 @@ from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
 from sklearn.metrics import average_precision_score
 from torch import Tensor
-from torchmetrics import F1Score, AUROC, MeanSquaredError, Accuracy, Metric, AveragePrecision
+from torchmetrics import Metric, F1Score, AUROC, MeanSquaredError, Accuracy, AveragePrecision
+from torchmetrics.utilities.data import METRIC_EPS, to_onehot
 
 from .utils import filter_samples, tensor_sizes, activation
 
@@ -54,7 +55,7 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = F1Score(num_classes=n_classes, average="micro",
                                                top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "fmax" in metric:
-                pass
+                self.metrics[metric] = FMax(average="macro")
 
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
@@ -155,6 +156,7 @@ class Metrics(torch.nn.Module):
                     self.metrics[name].update(y_pred_act, y_true)
                 except Exception as e:
                     print(e, "\n", name, tensor_sizes({"y_pred": y_pred_act, "y_true": y_true}))
+                    raise e
                     # self.metrics[metric].update(y_pred_full, y_true_full)
 
 
@@ -184,6 +186,7 @@ class Metrics(torch.nn.Module):
 
             except Exception as e:
                 print(f"Had problem with metric {metric}, {str(e)}\r")
+                raise e
 
         # Needed for Precision(average=False) metrics
         logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v for k, v in logs.items()}
@@ -193,6 +196,80 @@ class Metrics(torch.nn.Module):
     def reset_metrics(self):
         for metric in self.metrics:
             self.metrics[metric].reset()
+
+
+class FMax(Metric):
+    def __init__(self, num_classes=None, thresholds: Union[int, Tensor, List[float]] = 100,
+                 average="macro", **kwargs) -> None:
+        assert average == "macro"
+        super().__init__(**kwargs)
+
+        self.num_classes = num_classes
+        if isinstance(thresholds, int):
+            self.num_thresholds = thresholds
+            self.thresholds = torch.linspace(0, 1.0, thresholds)
+
+        elif thresholds is not None:
+            if not isinstance(thresholds, (list, Tensor)):
+                raise ValueError("Expected argument `thresholds` to either be an integer, list of floats or a tensor")
+            self.thresholds = torch.tensor(thresholds) if isinstance(thresholds, list) else thresholds
+            self.num_thresholds = self.thresholds.numel()
+
+        if self.num_classes:
+            for name in ("TPs", "FPs", "FNs"):
+                self.add_state(
+                    name=name,
+                    default=torch.zeros(self.num_classes, self.num_thresholds, dtype=torch.float32),
+                    dist_reduce_fx="sum",
+                )
+
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        if self.num_classes is None:
+            self.num_classes = target.size(1)
+            for name in ("TPs", "FPs", "FNs"):
+                self.add_state(
+                    name=name,
+                    default=torch.zeros(self.num_classes, self.num_thresholds, dtype=torch.float32,
+                                        device=preds.device),
+                    dist_reduce_fx="sum",
+                )
+
+        if len(preds.shape) == len(target.shape) == 1:
+            preds = preds.reshape(-1, 1)
+            target = target.reshape(-1, 1)
+
+        if len(preds.shape) == len(target.shape) + 1:
+            target = to_onehot(target, num_classes=self.num_classes)
+
+        target = target == 1
+        # Iterate one threshold at a time to conserve memory
+        for i in range(self.num_thresholds):
+            predictions = preds >= self.thresholds[i]
+            self.TPs[:, i] += (target & predictions).sum(dim=0)
+            self.FPs[:, i] += ((~target) & predictions).sum(dim=0)
+            self.FNs[:, i] += (target & (~predictions)).sum(dim=0)
+
+    def compute(self) -> Tensor:
+        """Returns float tensor of size n_classes."""
+        precisions = (self.TPs + METRIC_EPS) / (self.TPs + self.FPs + METRIC_EPS)
+        recalls = self.TPs / (self.TPs + self.FNs + METRIC_EPS)
+
+        # Need to guarantee that last precision=1 and recall=0, similar to precision_recall_curve
+        t_ones = torch.ones(self.num_classes, 1, dtype=precisions.dtype, device=precisions.device)
+        precisions = torch.cat([precisions, t_ones], dim=1).cpu()
+        t_zeros = torch.zeros(self.num_classes, 1, dtype=recalls.dtype, device=recalls.device)
+        recalls = torch.cat([recalls, t_zeros], dim=1).cpu()
+
+        numerator = 2 * recalls * precisions
+        denom = recalls + precisions
+
+        f1_scores = np.divide(numerator, denom, out=np.zeros_like(denom), where=(denom != 0))
+        max_f1s = np.max(f1_scores, axis=1)
+
+        # thresholds = torch.stack([self.thresholds for _ in range(self.num_classes)], dim=0)
+        # max_f1_thresh = thresholds[np.argmax(f1_scores, axis=1)]
+
+        return max_f1s.mean()
 
 
 class OGBNodeClfMetrics(torchmetrics.Metric):

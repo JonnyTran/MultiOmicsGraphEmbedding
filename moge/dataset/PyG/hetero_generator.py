@@ -6,13 +6,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from pandas import DataFrame, Series
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-from umap import UMAP
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.PyG.triplet_generator import TripletDataset
 from moge.dataset.graph import HeteroGraphDataset
@@ -20,6 +13,12 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame, Series
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+from umap import UMAP
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -74,7 +73,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                 for etype, etype_dict in zip(hetero.edge_types, hetero.edge_stores)}
 
     def add_ontology_edges(self, ontology, train_date='2017-06-15', valid_date='2017-11-15', test_date='2021-12-31',
-                           go_ntype="GO_term"):
+                           go_ntype="GO_term", **kwargs):
         all_go = set(ontology.network.nodes).intersection(ontology.data.index)
         self.go_ntype = go_ntype
 
@@ -107,7 +106,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
-            train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"])
+            train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"], **kwargs)
         go_ann = pd.concat([train_go_ann, valid_go_ann, test_go_ann], axis=0)
         nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].explode().to_frame().reset_index().dropna(),
                                            source="gene_name", target="go_id", create_using=nx.DiGraph)
@@ -115,13 +114,13 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.G[metapath].edge_index = get_edge_index(nx_graph,
                                                      nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
 
-        self.set_train_test_split(ontology, train_date, valid_date, test_date)
+        self.set_train_test_split(ontology, train_date, valid_date, test_date, **kwargs)
 
     def set_train_test_split(self, ontology, train_date='2017-06-15', valid_date='2017-11-15',
-                             test_date='2021-12-31', ) -> None:
+                             test_date='2021-12-31', **kwargs) -> None:
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
-            train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"])
+            train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"], **kwargs)
 
         # Set test nodes as new nodes in annotations
         train_node_list = train_go_ann.index
