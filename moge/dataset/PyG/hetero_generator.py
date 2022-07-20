@@ -6,6 +6,13 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from pandas import DataFrame, Series
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+from umap import UMAP
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.PyG.triplet_generator import TripletDataset
 from moge.dataset.graph import HeteroGraphDataset
@@ -13,12 +20,6 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-from umap import UMAP
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -239,7 +240,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def full_batch(self):
         return self.transform_heterograph(self.G)
 
-    def get_projection_pos(self, X: Dict, embeddings: Dict[str, Tensor], weights: Optional[Dict[str, Series]] = None):
+    def get_projection_pos(self, X: Dict, embeddings: Dict[str, Tensor], weights: Optional[Dict[str, Series]] = None,
+                           targets: Tensor = None, y_pred: Tensor = None,
+                           ):
         """
 
         Args:
@@ -256,7 +259,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         node_list = pd.concat([pd.Series(self.nodes[ntype][global_node_index[ntype]]) for ntype in global_node_index])
 
-        # Concatenated list of node embeddings
+        # Concatenated list of node embeddings and other metadata
         nodes_emb = {ntype: embeddings[ntype].detach().numpy() for ntype in embeddings}
         nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
         nodes_train_valid_test = np.vstack([
@@ -264,12 +267,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             np.concatenate([self.G[ntype].valid_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
             np.concatenate([self.G[ntype].test_mask[nids].numpy() for ntype, nids in global_node_index.items()])],
         ).T
+        nodes_train_valid_test = np.array(["Train", "Valid", "Test"])[nodes_train_valid_test.argmax(1)]
 
+        # Metadata
         # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
         df = pd.DataFrame(
             {"nid": np.concatenate([global_node_index[ntype] for ntype in global_node_index]),
              "ntype": np.concatenate([[ntype] * global_node_index[ntype].shape[0] for ntype in global_node_index]),
-             "train_valid_test": np.array(["Train", "Valid", "Test"])[nodes_train_valid_test.argmax(1)],
+             "train_valid_test": nodes_train_valid_test,
              },
             index=np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]))
         df.index.name = "name"
@@ -289,12 +294,23 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         nodes_pos = {node_name: pos for node_name, pos in zip(node_list, nodes_pos)}
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
 
+        if targets is not None and y_pred is not None:
+            losses = F.binary_cross_entropy(y_pred.detach(),
+                                            target=targets.float(),
+                                            reduce=False).mean(dim=1).numpy()
+            node_losses = np.concatenate([losses if ntype != self.head_node_type else \
+                                              [None] * global_node_index[ntype].size \
+                                          for ntype in global_node_index]).astype(bool)
+
+            df["loss"] = node_losses
+
         # Update all nodes embeddings
         if not hasattr(self, "node_metadata"):
             self.node_metadata = df
         else:
             self.node_metadata.update(df)
 
+        # return only nodes that have at least labels (used for visualization of node clf models)
         if weights is not None:
             nodes_weight = {ntype: weights[ntype].detach().numpy() \
                 if isinstance(weights[ntype], Tensor) else weights[ntype] for ntype in weights}

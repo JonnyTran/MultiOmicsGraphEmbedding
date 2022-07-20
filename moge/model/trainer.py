@@ -153,8 +153,9 @@ class NodeEmbeddingEvaluator(LightningModule):
         self.score_avg_table_name = "score_avgs"
 
     def plot_embeddings_tsne(self, X: Dict[str, Any], embeddings: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
-                             columns=["name", "ntype", "pos1", "pos2"], n_samples: int = 1000) -> Tensor:
-        df = self.dataset.get_projection_pos(X, embeddings, weights=weights)
+                             targets: Tensor = None, y_pred: Tensor = None,
+                             columns=["name", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> Tensor:
+        df = self.dataset.get_projection_pos(X, embeddings, weights=weights, targets=targets, y_pred=y_pred)
 
         # Log_table
         df_filter = df.reset_index().filter(columns, axis="columns")
