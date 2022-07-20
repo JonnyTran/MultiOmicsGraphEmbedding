@@ -277,7 +277,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
              "train_valid_test": nodes_train_valid_test,
              },
             index=np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]))
-        df.index.name = "name"
+        df.index.name = "node"
 
         # Rename Gene Ontology namespace for GO_term ntypes
         if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") \
@@ -310,7 +310,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         else:
             self.node_metadata.update(df)
 
-        # return only nodes that have at least labels (used for visualization of node clf models)
+        # return only nodes that have > 0 weights (used for visualization of node clf models)
         if weights is not None:
             nodes_weight = {ntype: weights[ntype].detach().numpy() \
                 if isinstance(weights[ntype], Tensor) else weights[ntype] for ntype in weights}
