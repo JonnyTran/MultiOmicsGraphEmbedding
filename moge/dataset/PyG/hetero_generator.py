@@ -17,7 +17,7 @@ from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.PyG.triplet_generator import TripletDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency
+from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency, gather_node_dict
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.network.hetero import HeteroNetwork
 
@@ -92,6 +92,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 200: continue
             self.G[metapath].edge_index = edge_index
+            self.edge_index_dict[metapath] = edge_index
             self.metapaths.append(metapath)
 
         # Cls node attrs
@@ -240,9 +241,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def full_batch(self):
         return self.transform_heterograph(self.G)
 
-    def get_projection_pos(self, X: Dict, embeddings: Dict[str, Tensor], weights: Optional[Dict[str, Series]] = None,
+    def get_projection_pos(self, X: Dict[str, Dict[str, Tensor]], embeddings: Dict[str, Tensor],
+                           weights: Optional[Dict[str, Series]] = None,
                            targets: Tensor = None, y_pred: Tensor = None, return_all=False,
-                           ):
+                           ) -> DataFrame:
         """
 
         Args:
@@ -252,7 +254,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                 where entries > 0 are returned.
 
         Returns:
-
+            node_metadata (DataFrame)
         """
         if return_all and hasattr(self, "node_metadata"):
             return self.node_metadata
@@ -260,11 +262,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         global_node_index = {ntype: nids.numpy() for ntype, nids in X["global_node_index"].items() if
                              ntype in embeddings}
 
-        node_list = pd.concat([pd.Series(self.nodes[ntype][global_node_index[ntype]]) for ntype in global_node_index])
-
         # Concatenated list of node embeddings and other metadata
         nodes_emb = {ntype: embeddings[ntype].detach().numpy() for ntype in embeddings}
         nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
+
         nodes_train_valid_test = np.vstack([
             np.concatenate([self.G[ntype].train_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
             np.concatenate([self.G[ntype].valid_mask[nids].numpy() for ntype, nids in global_node_index.items()]),
@@ -275,18 +276,17 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         # Metadata
         # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
         df = pd.DataFrame(
-            {"nid": np.concatenate([global_node_index[ntype] for ntype in global_node_index]),
+            {"node": np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]),
              "ntype": np.concatenate([[ntype] * global_node_index[ntype].shape[0] for ntype in global_node_index]),
              "train_valid_test": nodes_train_valid_test,
              },
-            index=np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]))
-        df.index.name = "node"
+            index=pd.Index(np.concatenate([global_node_index[ntype] for ntype in global_node_index]), name="nid"))
 
         # Rename Gene Ontology namespace for GO_term ntypes
-        if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") \
-                and self.go_ntype in self.nodes:
+        if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") and self.go_ntype in self.nodes:
             go_namespace = {k: v for k, v in zip(self.nodes[self.go_ntype], self.go_namespace)}
-            rename_ntype = pd.Series(df.index.map(go_namespace), index=df.index).dropna()
+            rename_ntype = pd.Series(df["node"].map(go_namespace), index=df.index).dropna()
+
             df["ntype"].update(rename_ntype)
             df["ntype"] = df["ntype"].replace(
                 {"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", })
@@ -294,7 +294,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         tsne = UMAP(n_components=2, n_jobs=-1)
         # tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1)
         nodes_pos = tsne.fit_transform(nodes_emb)
-        nodes_pos = {node_name: pos for node_name, pos in zip(node_list, nodes_pos)}
+        nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
 
         if targets is not None and y_pred is not None:
@@ -308,7 +308,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             df["loss"] = node_losses
 
         # Reset index
-        df = df.reset_index().set_index(["ntype", "node"])
+        df = df.reset_index().set_index(["ntype", "nid"])
 
         # Update all nodes embeddings
         if not hasattr(self, "node_metadata"):
@@ -513,13 +513,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 100 or (
                     metapaths and metapath not in metapaths and metapath[1] not in metapaths): continue
-            self.G[metapath].edge_index = edge_index
             self.metapaths.append(metapath)
+            self.G[metapath].edge_index = edge_index
+            self.edge_index_dict[metapath] = edge_index
 
             if self.use_reverse:
                 rev_metapath = reverse_metapath_name(metapath)
                 self.metapaths.append(rev_metapath)
                 self.G[rev_metapath].edge_index = edge_index[[1, 0], :]
+                self.edge_index_dict[rev_metapath] = edge_index[[1, 0], :]
 
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
@@ -667,6 +669,19 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                             neg_train_valid_test_sizes[0] + neg_train_valid_test_sizes[1] + \
                                             neg_train_valid_test_sizes[2])
 
+        # Set node train_mask, valid_mask, and test_mask based on train/valid/test edges
+        train_nodes = gather_node_dict(self.get_edge_index_dict_from_triples(self.training_idx)[0])
+        valid_nodes = gather_node_dict(self.get_edge_index_dict_from_triples(self.validation_idx)[0])
+        test_nodes = gather_node_dict(self.get_edge_index_dict_from_triples(self.testing_idx)[0])
+
+        for ntype in train_nodes:
+            self.G[ntype].train_mask = F.one_hot(train_nodes[ntype],
+                                                 num_classes=self.G[ntype].num_nodes).sum(0).bool()
+            self.G[ntype].valid_mask = F.one_hot(valid_nodes[ntype],
+                                                 num_classes=self.G[ntype].num_nodes).sum(0).bool()
+            self.G[ntype].test_mask = F.one_hot(test_nodes[ntype],
+                                                num_classes=self.G[ntype].num_nodes).sum(0).bool()
+
     def get_prior(self) -> Tensor:
         return torch.tensor(1) / (1 + self.negative_sampling_size)
 
@@ -704,47 +719,34 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         if not isinstance(edge_idx, torch.LongTensor):
             edge_idx = torch.LongTensor(edge_idx)
 
-        # True pos edges
-        triples = {k: v[edge_idx] for k, v in self.triples.items() if not is_negative(k)}
-        # True negative edges
+        # Get train/valid/test indices
         if edge_idx[0] in self.training_idx:
-            mode = "train"
+            mode = "train" if mode is None else mode
             max_negative_sampling_size = self.negative_sampling_size
             all_neg_edge_idx = self.training_idx_neg
-
         elif edge_idx[0] in self.validation_idx:
-            mode = "valid"
+            mode = "valid" if mode is None else mode
             max_negative_sampling_size = self.eval_negative_sampling_size
             all_neg_edge_idx = self.validation_idx_neg
-
         elif edge_idx[0] in self.testing_idx:
-            mode = "test"
+            mode = "test" if mode is None else mode
             max_negative_sampling_size = self.eval_negative_sampling_size
             all_neg_edge_idx = self.testing_idx_neg
 
-        # If ensures same number of true neg edges to true pos edges
-        neg_edge_idx = np.random.choice(all_neg_edge_idx,
-                                        size=min(edge_idx.numel(), all_neg_edge_idx.numel()), replace=False)
-        triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
-        triples.update(triples_neg)
-
-        # Get edge_index_dict from triplets
-        edge_pos, edge_neg = TripletDataset.get_relabled_edge_index(triples=triples,
-                                                                    global_node_index=self.global_node_index,
-                                                                    metapaths=self.pred_metapaths)
+        # True pos edges
+        edge_pos, edge_neg = self.get_edge_index_dict_from_triples(edge_idx, neg_edge_idx=all_neg_edge_idx)
 
         # Get all nodes induced by sampled edges
         if num_edges(edge_neg):
             query_edges = {
                 metapath: torch.cat([edge_pos[metapath] if metapath in edge_pos else torch.tensor([], dtype=torch.long),
                                      edge_neg[metapath] if metapath in edge_neg else torch.tensor([], dtype=torch.long)
-                                     ],
-                                    dim=1) \
+                                     ], dim=1) \
                 for metapath in set(edge_pos).union(set(edge_neg))}
         else:
             query_edges = edge_pos
 
-        query_nodes = self.gather_node_set(query_edges)
+        query_nodes = gather_node_dict(query_edges)
 
         # Add random GO term nodes for negative sampling
         go_nodes_proba = 1 - F.one_hot(query_nodes[self.go_ntype], num_classes=self.num_nodes_dict[self.go_ntype]) \
@@ -783,6 +785,22 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         edge_weights = None
         return X, y, edge_weights
+
+    def get_edge_index_dict_from_triples(self, edge_idx, neg_edge_idx=None):
+        triples = {k: v[edge_idx] for k, v in self.triples.items() if not is_negative(k)}
+
+        # If ensures same number of true neg edges to true pos edges
+        if neg_edge_idx is not None:
+            neg_edge_idx = np.random.choice(neg_edge_idx, size=min(edge_idx.numel(), neg_edge_idx.numel()),
+                                            replace=False)
+            triples_neg = {k: v[neg_edge_idx] for k, v in self.triples.items() if is_negative(k)}
+            triples.update(triples_neg)
+
+        # Get edge_index_dict from triplets
+        edge_pos, edge_neg = TripletDataset.get_relabled_edge_index(triples=triples,
+                                                                    global_node_index=self.global_node_index,
+                                                                    metapaths=self.pred_metapaths)
+        return edge_pos, edge_neg
 
     def generate_negative_sampling(self, edge_pos: Dict[Tuple[str, str, str], Tensor],
                                    global_node_index: Dict[str, Tensor], max_negative_sampling_size: int,
@@ -844,15 +862,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return sampling_size
 
-    def gather_node_set(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dict[str, Tensor]:
-        nodes = {}
-        for metapath, edge_index in edge_index_dict.items():
-            nodes.setdefault(metapath[0], []).append(edge_index[0])
-            nodes.setdefault(metapath[-1], []).append(edge_index[1])
-
-        nodes = {ntype: torch.unique(torch.cat(nids, dim=0)) for ntype, nids in nodes.items()}
-
-        return nodes
+    def full_batch(self):
+        return self.transform(edge_idx=torch.cat([self.training_idx, self.validation_idx, self.testing_idx]),
+                              mode="test")
 
     def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
                     metapaths: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = [],

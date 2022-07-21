@@ -256,7 +256,7 @@ class LATTELinkPred(LinkPredTrainer):
             self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                return_embedding=True, return_score=False, **kwargs) \
+                return_embedding=False, return_score=False, **kwargs) \
             -> Tuple[Dict[str, Tensor], Any, Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]

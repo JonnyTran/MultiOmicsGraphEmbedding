@@ -3,12 +3,13 @@ from typing import Dict, Tuple, List
 import numpy as np
 import pandas as pd
 import torch
+from ogb.linkproppred import PygLinkPropPredDataset
+from torch import Tensor
+
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import merge_node_index
 from moge.model.PyG.utils import is_negative
-from ogb.linkproppred import PygLinkPropPredDataset
-from torch import Tensor
 
 
 class TripletDataset(HeteroGraphDataset):
@@ -198,7 +199,8 @@ class TripletDataset(HeteroGraphDataset):
     @staticmethod
     def get_relabled_edge_index(triples: Dict[str, Tensor], global_node_index: Dict[str, Tensor],
                                 metapaths: List[Tuple[str, str, str]], relation_ids_all: Tensor = None,
-                                local2batch: Dict[str, Dict[int, int]] = None) -> Dict[Tuple[str, str, str], Tensor]:
+                                local2batch: Dict[str, Dict[int, int]] = None) -> Tuple[
+        Dict[Tuple[str, str, str], Tensor]]:
         edges_pos = {}
         edges_neg = {}
 

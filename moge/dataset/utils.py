@@ -12,6 +12,17 @@ from torch_sparse import SparseTensor, transpose
 from moge.model.PyG import is_negative
 
 
+def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dict[str, Tensor]:
+    nodes = {}
+    for metapath, edge_index in edge_index_dict.items():
+        nodes.setdefault(metapath[0], []).append(edge_index[0])
+        nodes.setdefault(metapath[-1], []).append(edge_index[1])
+
+    nodes = {ntype: torch.unique(torch.cat(nids, dim=0)) for ntype, nids in nodes.items()}
+
+    return nodes
+
+
 def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
                        edge_types: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
                        reverse=False,

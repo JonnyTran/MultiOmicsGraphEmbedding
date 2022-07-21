@@ -35,13 +35,13 @@ class Graph:
 
         return self.G
 
-    def get_node_degrees(self, directed=True, order=1):
+    def get_node_degrees(self, undirected=True, order=1):
         if hasattr(self, "node_degrees") and self.node_degrees is not None:
             return self.node_degrees
 
         index = pd.concat([pd.DataFrame(range(v), [k, ] * v) for k, v in self.num_nodes_dict.items()],
                           axis=0).reset_index()
-        node_type_nid = pd.MultiIndex.from_frame(index, names=["node_type", "node"])
+        node_type_nid = pd.MultiIndex.from_frame(index, names=["ntype", "nid"])
 
         metapaths = list(self.edge_index_dict.keys())
         metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
@@ -52,15 +52,14 @@ class Graph:
             edge_index = self.edge_index_dict[metapath]
             head, tail = metapath[0], metapath[-1]
 
-            D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
-                                          sparse_sizes=(self.num_nodes_dict[head],
-                                                        self.num_nodes_dict[tail]))
+            adj = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
+                                            sparse_sizes=(self.num_nodes_dict[head], self.num_nodes_dict[tail]))
 
             self.node_degrees.loc[(head, name)] = (
-                    self.node_degrees.loc[(head, name)] + D.storage.rowcount().numpy()).values
-            if not directed:
+                    self.node_degrees.loc[(head, name)] + adj.storage.rowcount().numpy()).values
+            if undirected:
                 self.node_degrees.loc[(tail, name)] = (
-                        self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
+                        self.node_degrees.loc[(tail, name)] + adj.storage.colcount().numpy()).values
 
         # if order >= 2:
         #     global_node_idx = self.get_node_id_dict(self.edge_index_dict)
