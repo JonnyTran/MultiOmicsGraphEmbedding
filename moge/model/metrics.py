@@ -225,7 +225,7 @@ class FMax(Metric):
 
     def update(self, preds: Tensor, target: Tensor) -> None:
         if self.num_classes is None:
-            self.num_classes = target.size(1)
+            self.num_classes = target.size(1) if target.dim() > 1 else 1
             for name in ("TPs", "FPs", "FNs"):
                 self.add_state(
                     name=name,

@@ -241,7 +241,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return self.transform_heterograph(self.G)
 
     def get_projection_pos(self, X: Dict, embeddings: Dict[str, Tensor], weights: Optional[Dict[str, Series]] = None,
-                           targets: Tensor = None, y_pred: Tensor = None,
+                           targets: Tensor = None, y_pred: Tensor = None, return_all=False,
                            ):
         """
 
@@ -254,6 +254,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         Returns:
 
         """
+        if return_all and hasattr(self, "node_metadata"):
+            return self.node_metadata
+
         global_node_index = {ntype: nids.numpy() for ntype, nids in X["global_node_index"].items() if
                              ntype in embeddings}
 
@@ -300,9 +303,12 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                             reduce=False).mean(dim=1).numpy()
             node_losses = np.concatenate([losses if ntype != self.head_node_type else \
                                               [None] * global_node_index[ntype].size \
-                                          for ntype in global_node_index]).astype(bool)
+                                          for ntype in global_node_index])
 
             df["loss"] = node_losses
+
+        # Reset index
+        df = df.reset_index().set_index(["ntype", "node"])
 
         # Update all nodes embeddings
         if not hasattr(self, "node_metadata"):
@@ -390,7 +396,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return dataset
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].train_mask,
+        dataset = self.create_graph_sampler(self.G, batch_size, node_mask=self.G[self.head_node_type].test_mask,
                                             transform_fn=self.transform_heterograph, num_workers=num_workers)
 
         return dataset
