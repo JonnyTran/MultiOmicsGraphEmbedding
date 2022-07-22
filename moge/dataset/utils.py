@@ -5,11 +5,10 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from moge.model.PyG import is_negative
 from torch import Tensor
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
-
-from moge.model.PyG import is_negative
 
 
 def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dict[str, Tensor]:
@@ -23,42 +22,42 @@ def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dic
     return nodes
 
 
-def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
+def to_edge_index_dict(graph: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
                        edge_types: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
                        reverse=False,
                        format="coo", d_ntype="_N") -> Dict[Tuple[str, str, str], Tensor]:
     if reverse:
-        g = g.reverse(copy=True)
+        graph = graph.reverse(copy=True)
 
-    if not isinstance(g, nx.MultiGraph):
+    if not isinstance(graph, nx.MultiGraph):
         raise NotImplementedError
 
     if edge_types is None:
-        edge_types = {e for u, v, e in g.edges}
-    if not isinstance(edge_types, (list, tuple, set)) and isinstance(g, nx.Graph):
+        edge_types = {e for u, v, e in graph.edges}
+    if not isinstance(edge_types, (list, tuple, set)) and isinstance(graph, nx.Graph):
         edge_types = ["_E"]
 
     edge_index_dict = {}
     for etype in edge_types:
-        if isinstance(g, nx.MultiGraph) and isinstance(etype, str):
+        if isinstance(graph, nx.MultiGraph) and isinstance(etype, str):
             assert not isinstance(nodes, dict)
-            edge_subgraph = g.edge_subgraph([(u, v, e) for u, v, e in g.edges if e == etype])
+            edge_subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
             nodes_A = nodes
             nodes_B = nodes
             metapath = (d_ntype, etype, d_ntype)
 
-        elif isinstance(g, nx.MultiGraph) and isinstance(etype, tuple):
+        elif isinstance(graph, nx.MultiGraph) and isinstance(etype, tuple):
             assert isinstance(nodes, dict)
             metapath: Tuple[str, str, str] = etype
             head, etype, tail = metapath
-            edge_subgraph = g.edge_subgraph([(u, v, e) for u, v, e in g.edges if e == etype])
+            edge_subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
 
             nodes_A = nodes[head]
             nodes_B = nodes[tail]
 
         elif etype == "_E":
             assert not isinstance(nodes, dict)
-            edge_subgraph = g.edges
+            edge_subgraph = graph.edges
             nodes_A = nodes
             nodes_B = nodes
             metapath = (d_ntype, etype, d_ntype)
@@ -88,18 +87,19 @@ def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[st
 
     return edge_index_dict
 
-def one_hot_encoder(x, embed_dim=None):
+
+def one_hot_encoder(idx: Tensor, embed_dim=None):
     """
-    Get ont hot embedding of the input tensor.
+    Get one hot embedding of the input tensor.
     Args:
-        x: torch.Tensor, input 1-D tensor.
+        idx: torch.Tensor, input 1-D tensor.
     Returns:
         one_hot: torch.Tensor, one-hot embedding of x.
     """
-    ids = x.unique()
+    ids = idx.unique()
     id_dict = dict(list(zip(ids.numpy(), np.arange(len(ids)))))
-    one_hot = torch.zeros((len(x), len(ids)))
-    for i, u in enumerate(x):
+    one_hot = torch.zeros((len(idx), len(ids)))
+    for i, u in enumerate(idx):
         if id_dict[u.item()] == 4:
             pass
         else:

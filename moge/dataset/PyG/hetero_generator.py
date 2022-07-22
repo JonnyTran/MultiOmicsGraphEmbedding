@@ -6,20 +6,19 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
+from moge.dataset.PyG.triplet_generator import TripletDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.dataset.sequences import SequenceTokenizers
+from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_edge_index_dict, gather_node_dict
+from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
+from moge.network.hetero import HeteroNetwork
 from pandas import DataFrame, Series, Index
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
 from torch_sparse.tensor import SparseTensor
 from umap import UMAP
-
-from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
-from moge.dataset.PyG.triplet_generator import TripletDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_scipy_adjacency, gather_node_dict
-from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
-from moge.network.hetero import HeteroNetwork
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -88,7 +87,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
-        edge_index_dict = to_scipy_adjacency(ontology.network, nodes=go_nodes, edge_types=edge_types,
+        edge_index_dict = to_edge_index_dict(ontology.network, nodes=go_nodes, edge_types=edge_types,
                                              reverse=not self.use_reverse,
                                              format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
@@ -507,9 +506,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
-        edge_index_dict = ontology.to_scipy_adjacency(nodes=go_nodes, edge_types=edge_types,
-                                                      reverse=not self.use_reverse,
-                                                      format="pyg", d_ntype=go_ntype)
+        edge_index_dict = to_edge_index_dict(graph=ontology.network, nodes=go_nodes, edge_types=edge_types,
+                                             reverse=not self.use_reverse,
+                                             format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 100 or (
                     metapaths and metapath not in metapaths and metapath[1] not in metapaths): continue
@@ -606,7 +605,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                edge_key="Qualifier", create_using=nx.MultiGraph)
 
             metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
-            edge_index_dict = to_scipy_adjacency(nx_graph, nodes=self.nodes,
+            edge_index_dict = to_edge_index_dict(nx_graph, nodes=self.nodes,
                                                  edge_types=metapaths.intersection(self.pred_metapaths),
                                                  reverse=None, format="pyg")
             for metapath, edge_index in edge_index_dict.items():
@@ -624,7 +623,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                source="gene_name", target="neg_go_id", edge_attr=True,
                                                edge_key="Qualifier", create_using=nx.MultiGraph)
             metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
-            neg_edge_index_dict = to_scipy_adjacency(nx_graph, nodes=self.nodes,
+            neg_edge_index_dict = to_edge_index_dict(nx_graph, nodes=self.nodes,
                                                      edge_types=metapaths.intersection(self.pred_metapaths),
                                                      reverse=None, format="pyg")
             for metapath, edge_index in neg_edge_index_dict.items():

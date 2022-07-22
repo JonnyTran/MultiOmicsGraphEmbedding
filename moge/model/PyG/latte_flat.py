@@ -336,7 +336,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 global_node_idx: Dict[str, Tensor],
                 sizes: Dict[str, int],
                 edge_pred_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
-                save_betas=False, verbose=False) -> \
+                save_betas=False, empty_gpu_device=None, verbose=False) -> \
             Tuple[Dict[str, Tensor], Optional[Any], Dict[Tuple[str, str, str], Tensor]]:
         """
         Args:
