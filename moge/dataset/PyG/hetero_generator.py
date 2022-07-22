@@ -292,7 +292,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Rename Gene Ontology namespace for GO_term ntypes
         if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") and self.go_ntype in self.nodes:
-            go_namespace = {k: v for k, v in zip(self.nodes[self.go_ntype], self.go_namespace)}
+            go_namespace = {term: namespace for term, namespace in zip(self.nodes[self.go_ntype], self.go_namespace)}
             rename_ntype = pd.Series(df["node"].map(go_namespace), index=df.index).dropna()
 
             df["ntype"].update(rename_ntype)

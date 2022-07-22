@@ -47,7 +47,7 @@ class Graph:
         metapaths = list(self.edge_index_dict.keys())
         metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
                           metapaths]
-        node_degrees = pd.DataFrame(data=0, index=node_type_nid, columns=metapath_names)
+        df = pd.DataFrame(data=0, index=node_type_nid, columns=metapath_names)
 
         for metapath, name in zip(metapaths, metapath_names):
             edge_index = self.edge_index_dict[metapath]
@@ -56,24 +56,26 @@ class Graph:
             adj = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
                                             sparse_sizes=(self.num_nodes_dict[head], self.num_nodes_dict[tail]))
 
-            node_degrees.loc[(head, name)] = (
-                    node_degrees.loc[(head, name)] + adj.storage.rowcount().numpy()).values
+            df.loc[(head, name)] = (df.loc[(head, name)] + adj.storage.rowcount().numpy()).values
             if undirected:
-                node_degrees.loc[(tail, name)] = (
-                        node_degrees.loc[(tail, name)] + adj.storage.colcount().numpy()).values
+                df.loc[(tail, name)] = (df.loc[(tail, name)] + adj.storage.colcount().numpy()).values
 
         if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") and self.go_ntype in self.nodes:
-            node_degrees.reset_index(inplace=True)
-            go_namespace = {nid: namespace for nid, namespace in zip(range(len(self.go_namespace)), self.go_namespace)}
-            rename_ntype = pd.Series(node_degrees["nid"].map(go_namespace),
-                                     index=node_degrees.index).dropna()
+            go_namespace = {term: namespace for term, namespace in zip(self.nodes[self.go_ntype], self.go_namespace)}
+            go_term_nids = df[df.index.get_level_values("ntype") == self.go_ntype].index.get_level_values("nid")
+            go_term_names = self.nodes[self.go_ntype][go_term_nids]
 
-            node_degrees["ntype"].update(rename_ntype)
-            node_degrees["ntype"] = node_degrees["ntype"].replace(
-                {"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", })
-            node_degrees.set_index(["ntype", "nid"], inplace=True)
+            rename_ntype = pd.Series(go_term_names.map(go_namespace),
+                                     index=df[df.index.get_level_values("ntype") == "GO_term"].index) \
+                .replace({"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", }) \
+                .dropna()
 
-        self.node_degrees = node_degrees
+            old_index = df.index.copy()
+            df.reset_index(inplace=True)
+            df.loc[df["ntype"] == self.go_ntype, "ntype"] = old_index.map(rename_ntype).dropna()
+            df.set_index(["ntype", "nid"], inplace=True)
+
+        self.node_degrees = df
 
         # if order >= 2:
         #     global_node_idx = self.get_node_id_dict(self.edge_index_dict)
@@ -98,7 +100,7 @@ class Graph:
         #         self.node_degrees.loc[(tail, name)] = (
         #                 self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
 
-        return node_degrees
+        return df
 
     def get_projection_pos(self, node_embs, UMAP: classmethod, n_components=2):
         pos = UMAP(n_components=n_components).fit_transform(node_embs)

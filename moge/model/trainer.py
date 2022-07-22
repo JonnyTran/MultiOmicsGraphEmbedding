@@ -246,6 +246,13 @@ class NodeEmbeddingEvaluator(LightningModule):
             if len(version.aliases) == 0:
                 version.delete()
 
+        artifact_type, artifact_name = "run_table", f"run-{experiment.id}-{self.embedding_plot_name}"
+        for version in api.artifact_versions(artifact_type, artifact_name):
+            # Clean up all versions that don't have an alias such as 'latest'.
+            # NOTE: You can put whatever deletion logic you want here.
+            if len(version.aliases) == 0:
+                version.delete()
+
 
 class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
