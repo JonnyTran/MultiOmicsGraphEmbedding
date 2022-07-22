@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from pandas import DataFrame, Series
+from pandas import DataFrame, Series, Index
 from torch import Tensor
 from torch.utils.data import DataLoader
 from torch_geometric.data import HeteroData
@@ -47,11 +47,13 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     @classmethod
     def from_pyg_heterodata(cls, network: HeteroNetwork, target: str = None, min_count: int = None,
                             attr_cols: List[str] = None,
-                            expression=False, sequence=False, add_reverse=True, label_subset=None, **kwargs):
+                            expression=False, sequence=False, add_reverse=True,
+                            label_subset: Optional[Union[Index, np.ndarray]] = None,
+                            ntype_subset: Optional[List[str]] = None, **kwargs):
         hetero, classes, nodes = \
             network.to_pyg_heterodata(target=target, min_count=min_count,
                                       attr_cols=attr_cols, expression=expression, sequence=sequence,
-                                      add_reverse=add_reverse, label_subset=label_subset)
+                                      add_reverse=add_reverse, label_subset=label_subset, ntype_subset=ntype_subset)
 
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False, edge_dir="in", **kwargs)
         self.network = network

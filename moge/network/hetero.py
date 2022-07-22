@@ -1,5 +1,5 @@
 from argparse import Namespace
-from typing import Dict, Tuple, Union, List, Any
+from typing import Dict, Tuple, Union, List, Any, Optional
 
 import dgl
 import networkx as nx
@@ -7,16 +7,17 @@ import numpy as np
 import pandas as pd
 import torch
 import torch_geometric.transforms as T
+from openomics import MultiOmics
+from openomics.utils.df import concat_uniques
+from pandas import Series, Index
+from torch import Tensor
+from torch_geometric.data import HeteroData
+
 from moge.dataset.utils import get_edge_index
 from moge.network.attributed import AttributedNetwork, MODALITY_COL
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit, stratify_train_test
 from moge.network.utils import filter_multilabel
-from openomics import MultiOmics
-from openomics.utils.df import concat_uniques
-from pandas import Series
-from torch import Tensor
-from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -278,24 +279,34 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         return G, labels, num_classes, training_idx, validation_idx, testing_idx
 
-    def to_pyg_heterodata(self, target="go_id", min_count=10, label_subset=None, sequence=False,
-                          attr_cols=[], expression=True, add_reverse=True) \
+    def to_pyg_heterodata(self, target="go_id", min_count=10,
+                          label_subset: Optional[Union[Index, np.ndarray]] = None,
+                          ntype_subset: Optional[List[str]] = None,
+                          sequence=False, attr_cols: List[str] = [],
+                          expression=True, add_reverse=True) \
             -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]]]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
 
         hetero = HeteroData()
+        node_types = self.node_types
+        if ntype_subset:
+            node_types = [ntype for ntype in node_types if ntype in ntype_subset]
 
         # Edge index
         for metapath, nxgraph in self.networks.items():
-            hetero[metapath].edge_index = get_edge_index(nxgraph, self.nodes[metapath[0]], self.nodes[metapath[-1]])
+            head_type, tail_type = metapath[0], metapath[-1]
+            if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset):
+                continue
+
+            hetero[metapath].edge_index = get_edge_index(nxgraph, self.nodes[head_type], self.nodes[tail_type])
 
         # Add node attributes
         node_attr_cols = self.all_annotations.columns.drop([target, "omic", SEQUENCE_COL], errors="ignore")
         node_attr_cols = node_attr_cols.intersection(attr_cols if attr_cols is not None else [])
 
-        for ntype in self.node_types:
+        for ntype in node_types:
             annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
 
             node_feats = []
@@ -336,7 +347,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             ## Node labels
             y_dict = {}
-            for ntype in self.node_types:
+            for ntype in node_types:
                 if target not in self.multiomics[ntype].annotations.columns: continue
                 y_label = filter_multilabel(self.multiomics[ntype].annotations.loc[self.nodes[ntype], target],
                                             min_count=None, label_subset=classes, dropna=False,
@@ -361,7 +372,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         test_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.testing.node_list)) \
                     for ntype, ntype_nids in self.nodes.items()}
 
-        for ntype in self.node_types:
+        for ntype in node_types:
             hetero[ntype].num_nodes = len(self.nodes[ntype])
 
             if ntype in train_idx:

@@ -39,6 +39,9 @@ class Graph:
         if hasattr(self, "node_degrees") and self.node_degrees is not None:
             return self.node_degrees
 
+        if any("rev_" in metapath for metapath in self.edge_index_dict):
+            undirected = False
+
         index = pd.concat([pd.DataFrame(range(num_nodes), [ntype, ] * num_nodes) \
                            for ntype, num_nodes in self.num_nodes_dict.items()],
                           axis=0).reset_index()
@@ -66,7 +69,7 @@ class Graph:
             go_term_names = self.nodes[self.go_ntype][go_term_nids]
 
             rename_ntype = pd.Series(go_term_names.map(go_namespace),
-                                     index=df[df.index.get_level_values("ntype") == "GO_term"].index) \
+                                     index=df[df.index.get_level_values("ntype") == self.go_ntype].index) \
                 .replace({"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", }) \
                 .dropna()
 
@@ -76,29 +79,6 @@ class Graph:
             df.set_index(["ntype", "nid"], inplace=True)
 
         self.node_degrees = df
-
-        # if order >= 2:
-        #     global_node_idx = self.get_node_id_dict(self.edge_index_dict)
-        #     new_edge_index_dict = join_edge_indexes(edge_index_dict_A=self.edge_index_dict,
-        #                                                  edge_index_dict_B=self.edge_index_dict,
-        #                                                  global_node_idx=global_node_idx)
-        #
-        #     metapaths = list(new_edge_index_dict.keys())
-        #     metapath_names = [".".join(metapath) if isinstance(metapath, tuple) else metapath for metapath in
-        #                       metapaths]
-        #     for metapath, name in zip(metapaths, metapath_names):
-        #         edge_index = new_edge_index_dict[metapath]
-        #         head, tail = metapath[0], metapath[-1]
-        #
-        #     D = torch_sparse.SparseTensor(row=edge_index[0], col=edge_index[1],
-        #                                   sparse_sizes=(self.num_nodes_dict[head],
-        #                                                 self.num_nodes_dict[tail]))
-        #
-        #     self.node_degrees.loc[(head, name)] = (
-        #             self.node_degrees.loc[(head, name)] + D.storage.rowcount().numpy()).values
-        #     if not directed:
-        #         self.node_degrees.loc[(tail, name)] = (
-        #                 self.node_degrees.loc[(tail, name)] + D.storage.colcount().numpy()).values
 
         return df
 

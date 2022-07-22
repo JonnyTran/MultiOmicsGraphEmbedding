@@ -38,8 +38,6 @@ def to_scipy_adjacency(g: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[st
     if not isinstance(edge_types, (list, tuple, set)) and isinstance(g, nx.Graph):
         edge_types = ["_E"]
 
-    print("edge_types:", edge_types)
-
     edge_index_dict = {}
     for etype in edge_types:
         if isinstance(g, nx.MultiGraph) and isinstance(etype, str):
