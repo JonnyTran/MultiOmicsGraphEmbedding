@@ -307,3 +307,49 @@ def spspmm_outer_norm(indexA, valueA, indexB, valueB, m, k, n, coalesced=True, s
     row, col, values = out.coo()
 
     return torch.stack([row, col], dim=0), values
+
+
+def get_edge_index_from_neg_batch(neg_batch: Dict[Tuple[str, str, str], Tensor],
+                                  edge_pos: Dict[Tuple[str, str, str], Tensor],
+                                  mode: str) -> Tuple[Dict[Tuple[str, str, str], Tensor], int]:
+    """
+
+    Args:
+        neg_batch (Dict[Tuple[str, str, str], Tensor]): The head_batch or tail_batch, a dict with values
+            of shape [num_pos_edges, num_neg_sampling].
+        edge_pos (Dict[Tuple[str, str, str], Tensor]): An edge_index_dict with values of shape [2, num_pos_edges].
+        mode (str): either "head_batch" or "tail_batch"
+
+    Returns:
+        edge_index_dict, neg_samp_size
+    """
+    edge_index_dict = {}
+
+    for metapath, edge_index in edge_pos.items():
+        num_edges, neg_samp_size = neg_batch[metapath].shape
+
+        if mode == "head_batch":
+            head_nodes = neg_batch[metapath].view(-1)
+            tail_nodes = edge_pos[metapath][1].repeat_interleave(neg_samp_size)
+            edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
+
+        elif mode == "tail_batch":
+            head_nodes = edge_pos[metapath][0].repeat_interleave(neg_samp_size)
+            tail_nodes = neg_batch[metapath].view(-1)
+            edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
+
+    return edge_index_dict, neg_samp_size
+
+
+def batch2global_edge_index(batch_edge_index: Tensor, metapath: Tuple[str, str, str],
+                            global_node_index: Dict[str, Tensor], ntype_mapping: Dict[str, str] = None) -> Tensor:
+    head_type, tail_type = metapath[0], metapath[-1]
+    if ntype_mapping is not None:
+        head_type = ntype_mapping[head_type] if head_type not in global_node_index else head_type
+        tail_type = ntype_mapping[tail_type] if tail_type not in global_node_index else tail_type
+
+    sources = global_node_index[head_type][batch_edge_index[0]]
+    targets = global_node_index[tail_type][batch_edge_index[-1]]
+
+    global_edge_index = torch.stack([sources, targets], dim=1).t()
+    return global_edge_index

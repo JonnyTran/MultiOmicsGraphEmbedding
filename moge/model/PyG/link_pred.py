@@ -12,6 +12,7 @@ from torch import nn, Tensor
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
 from .conv import HGT
+from .utils import get_edge_index_from_neg_batch
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -76,16 +77,16 @@ class LinkPred(torch.nn.Module):
         # Sampled head or tail negative sampling
         if self.head_batch in edges_input or self.tail_batch in edges_input:
             # Head batch
-            edge_head_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_input["edge_pos"],
-                                                                                neg_edges=edges_input[self.head_batch],
-                                                                                mode=self.head_batch)
+            edge_head_batch, neg_samp_size = get_edge_index_from_neg_batch(neg_batch=edges_input[self.head_batch],
+                                                                           edge_pos=edges_input["edge_pos"],
+                                                                           mode=self.head_batch)
             output[self.head_batch] = self.score_func(edge_head_batch, embeddings=embeddings, mode=self.tail_batch,
                                                       neg_sampling_batch_size=neg_samp_size)
 
             # Tail batch
-            edge_tail_batch, neg_samp_size = self.get_edge_index_from_neg_batch(edges_input["edge_pos"],
-                                                                                neg_edges=edges_input[self.tail_batch],
-                                                                                mode=self.tail_batch)
+            edge_tail_batch, neg_samp_size = get_edge_index_from_neg_batch(neg_batch=edges_input[self.tail_batch],
+                                                                           edge_pos=edges_input["edge_pos"],
+                                                                           mode=self.tail_batch)
             output[self.tail_batch] = self.score_func(edge_tail_batch, embeddings=embeddings, mode=self.tail_batch,
                                                       neg_sampling_batch_size=neg_samp_size)
 
@@ -162,26 +163,6 @@ class LinkPred(torch.nn.Module):
             edge_pred_dict[metapath] = scores
 
         return edge_pred_dict
-
-    def get_edge_index_from_neg_batch(self, pos_edges: Dict[Tuple[str, str, str], Tensor],
-                                      neg_edges: Dict[Tuple[str, str, str], Tensor],
-                                      mode: str) -> Tuple[Dict[Tuple[str, str, str], Tensor], int]:
-        edge_index_dict = {}
-
-        for metapath, edge_index in pos_edges.items():
-            num_edges, neg_samp_size = neg_edges[metapath].shape
-
-            if mode == "head_batch":
-                head_nodes = neg_edges[metapath].view(-1)
-                tail_nodes = pos_edges[metapath][1].repeat_interleave(neg_samp_size)
-                edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
-
-            elif mode == "tail_batch":
-                head_nodes = pos_edges[metapath][0].repeat_interleave(neg_samp_size)
-                tail_nodes = neg_edges[metapath].view(-1)
-                edge_index_dict[metapath] = torch.stack([head_nodes, tail_nodes], dim=0)
-
-        return edge_index_dict, neg_samp_size
 
 
 class LATTELinkPred(LinkPredTrainer):

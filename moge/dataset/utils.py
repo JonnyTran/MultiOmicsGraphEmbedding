@@ -142,11 +142,27 @@ def nonduplicate_indices(edge_index):
 
 def edge_index_to_adjs(edge_index_dict: Dict[Tuple[str, str, str], Tensor], nodes=Dict[str, List[str]]) \
         -> Dict[Tuple[str, str, str], SparseTensor]:
+    """
+
+    Args:
+        edge_index_dict ():
+        nodes (): A Dict of ntype and a list of all nodes.
+
+    Returns:
+
+    """
     adj_dict = {}
 
     for metapath, edge_index in edge_index_dict.items():
         head_type, tail_type = metapath[0], metapath[-1]
+
+        if isinstance(edge_index, (tuple, list)):
+            edge_index, edge_values = edge_index
+        else:
+            edge_values = None
+
         adj = SparseTensor.from_edge_index(edge_index,
+                                           edge_attr=edge_values,
                                            sparse_sizes=(len(nodes[head_type]), len(nodes[tail_type])))
 
         adj_dict[metapath] = adj

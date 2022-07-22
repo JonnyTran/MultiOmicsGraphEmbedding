@@ -243,10 +243,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
     def get_projection_pos(self, X: Dict[str, Dict[str, Tensor]], embeddings: Dict[str, Tensor],
                            weights: Optional[Dict[str, Series]] = None,
-                           targets: Tensor = None, y_pred: Tensor = None, return_all=False,
+                           losses: Dict[str, Tensor] = None, return_all=False,
                            ) -> DataFrame:
         """
-
+        Collect node metadata for all nodes in X["global_node_index"]
         Args:
             X (): a batch's dict of data
             embeddings (): Embeddings of nodes in the `X` batch
@@ -259,8 +259,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if return_all and hasattr(self, "node_metadata"):
             return self.node_metadata
 
-        global_node_index = {ntype: nids.numpy() for ntype, nids in X["global_node_index"].items() if
-                             ntype in embeddings}
+        global_node_index = {ntype: nids.numpy() for ntype, nids in X["global_node_index"].items() \
+                             if ntype in embeddings}
 
         # Concatenated list of node embeddings and other metadata
         nodes_emb = {ntype: embeddings[ntype].detach().numpy() for ntype in embeddings}
@@ -273,14 +273,22 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         ).T
         nodes_train_valid_test = np.array(["Train", "Valid", "Test"])[nodes_train_valid_test.argmax(1)]
 
+        if losses:
+            node_losses = np.concatenate([losses[ntype] if ntype in losses else \
+                                              [None] * global_node_index[ntype].size \
+                                          for ntype in global_node_index])
+        else:
+            node_losses = None
+
         # Metadata
         # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
         df = pd.DataFrame(
             {"node": np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]),
              "ntype": np.concatenate([[ntype] * global_node_index[ntype].shape[0] for ntype in global_node_index]),
              "train_valid_test": nodes_train_valid_test,
-             },
+             "loss": node_losses},
             index=pd.Index(np.concatenate([global_node_index[ntype] for ntype in global_node_index]), name="nid"))
+
 
         # Rename Gene Ontology namespace for GO_term ntypes
         if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") and self.go_ntype in self.nodes:
@@ -296,16 +304,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         nodes_pos = tsne.fit_transform(nodes_emb)
         nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
-
-        if targets is not None and y_pred is not None:
-            losses = F.binary_cross_entropy(y_pred.detach(),
-                                            target=targets.float(),
-                                            reduce=False).mean(dim=1).numpy()
-            node_losses = np.concatenate([losses if ntype != self.head_node_type else \
-                                              [None] * global_node_index[ntype].size \
-                                          for ntype in global_node_index])
-
-            df["loss"] = node_losses
 
         # Reset index
         df = df.reset_index().set_index(["ntype", "nid"])
