@@ -6,6 +6,13 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+from umap import UMAP
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.PyG.triplet_generator import TripletDataset
 from moge.dataset.graph import HeteroGraphDataset
@@ -13,12 +20,6 @@ from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_edge_index_dict, gather_node_dict
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-from umap import UMAP
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -257,10 +258,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         dfs = []
         for ntype, node_list in nodes.items():
-            df = network.annotations[ntype].loc[nodes[ntype]].reset_index()
+            df: DataFrame = network.annotations[ntype].loc[nodes[ntype]].reset_index()
             if "start" in df.columns and "end" in df.columns:
                 df["length"] = process_int_values(df["end"]) - process_int_values(df["start"]) + 1
+
             df = df.rename(columns=rename_mapper).filter(columns, axis="columns")
+
+            for col in df.columns.intersection(["class", "disease_associations"]):
+                if df[col].str.contains("\||, ", regex=True).any():
+                    print(ntype, col)
+                    df[col] = df[col].str.split("\||, ", regex=True, expand=True)[0]
 
             df["ntype"] = ntype
             df["nid"] = range(len(node_list))
@@ -317,16 +324,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
              "train_valid_test": nodes_train_valid_test,
              "loss": node_losses},
             index=pd.Index(np.concatenate([global_node_index[ntype] for ntype in global_node_index]), name="nid"))
-
-
-        # Rename Gene Ontology namespace for GO_term ntypes
-        if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") and self.go_ntype in self.nodes:
-            go_namespace = {term: namespace for term, namespace in zip(self.nodes[self.go_ntype], self.go_namespace)}
-            rename_ntype = pd.Series(df["node"].map(go_namespace), index=df.index).dropna()
-
-            df["ntype"].update(rename_ntype)
-            df["ntype"] = df["ntype"].replace(
-                {"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", })
 
         tsne = UMAP(n_components=2, n_jobs=-1)
         # tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1)
