@@ -106,7 +106,7 @@ class LATTE(nn.Module):
                 edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                 global_node_idx: Dict[str, Tensor],
                 sizes: Dict[str, int],
-                save_betas=False, verbose=False):
+                **kwargs):
         """
         Args:
             h_dict: Dict of <ntype>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
@@ -123,7 +123,7 @@ class LATTE(nn.Module):
                                                             global_node_idx=global_node_idx,
                                                             sizes=sizes,
                                                             edge_pred_dict=edge_pred_dict,
-                                                            save_betas=save_betas, verbose=verbose)
+                                                            **kwargs)
 
             for ntype in h_dict:
                 h_layers[ntype].append(h_dict[ntype])
@@ -348,7 +348,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         Returns:
              output_emb, edge_attn_scores
         """
-        self.empty_gpu_device = select_empty_gpu()
+        self.empty_gpu_device = select_empty_gpu() if not empty_gpu_device else empty_gpu_device
 
         l_dict = self.projection(feats, linears=self.linear_l)
         r_dict = self.projection(feats, linears=self.linear_r)

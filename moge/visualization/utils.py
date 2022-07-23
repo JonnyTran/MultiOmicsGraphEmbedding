@@ -1,3 +1,5 @@
+from plotly import graph_objects as go
+
 colors = ["aliceblue", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedalmond",
           "blue", "blueviolet", "brown", "burlywood", "cadetblue", "chartreuse", "chocolate", "coral", "cornflowerblue",
           "cornsilk", "crimson", "cyan", "darkblue", "darkcyan", "darkgoldenrod", "darkgray", "darkgrey", "darkgreen",
@@ -30,3 +32,64 @@ main_colors = [
     '#bcbd22',  # curry yellow-green
     '#17becf'  # blue-teal
 ]
+
+
+def configure_layout(fig, showlegend=True, **kwargs) -> go.Figure:
+    # Figure
+    axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
+                zeroline=False,
+                showgrid=False,
+                showticklabels=False,
+                title=''
+                )
+    fig.update_layout(
+        **kwargs,
+        showlegend=showlegend,
+        # legend=dict(autosize=True, width=100),
+        legend=dict(
+            x=0,
+            y=1.0,
+            bgcolor='rgba(255, 255, 255, 0)',
+            bordercolor='rgba(255, 255, 255, 0)'
+        ),
+        legend_orientation="v",
+        autosize=True,
+        margin=dict(
+            l=5,
+            r=5,
+            b=5,
+            t=5,
+            pad=5
+        ),
+        xaxis=axis,
+        yaxis=axis
+    )
+    return fig
+
+
+def compress_legend(fig):
+    group1_base, group2_base = fig.data[0].name.split(",")
+    lines_marker_name = []
+    for i, trace in enumerate(fig.data):
+        part1, part2 = trace.name.split(',')
+        if part1 == group1_base:
+            lines_marker_name.append(
+                {"line": trace.line.to_plotly_json(), "marker": trace.marker.to_plotly_json(),
+                 "mode": trace.mode, "name": part2.lstrip(" ")})
+        if part2 != group2_base:
+            trace['name'] = ''
+            trace['showlegend'] = False
+        else:
+            trace['name'] = part1
+
+    ## Add the line/markers for the 2nd group
+    for lmn in lines_marker_name:
+        lmn["line"]["color"] = "black"
+        lmn["marker"]["color"] = "black"
+        fig.add_trace(go.Scatter(y=[None], **lmn))
+
+    fig.update_layout(legend_title_text='',
+                      # legend_itemclick=False,
+                      # legend_itemdoubleclick=False
+                      )
+    return fig

@@ -105,7 +105,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.num_nodes_dict[go_ntype] = len(go_nodes)
         self.node_types.append(go_ntype)
 
+        # Save GO nodes & annotation data
         self.nodes[go_ntype] = pd.Index(go_nodes)
+        self.network.annotations[go_ntype] = ontology.data
 
         # Edges between RNA nodes and GO terms
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
@@ -242,9 +244,35 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def full_batch(self):
         return self.transform_heterograph(self.G)
 
+    def create_node_metadata(
+            self, network: HeteroNetwork, nodes: Dict[str, List[str]],
+            columns=["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
+                     "gene_biotype", "transcript_biotype", "seqname", "length"],
+            rename_mapper={"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}) \
+            -> DataFrame:
+        def process_int_values(s: Series):
+            if s.str.contains("|").any():
+                s = s.str.split("|", expand=True)[0]
+            return s.fillna(0).astype(int)
+
+        dfs = []
+        for ntype, node_list in nodes.items():
+            df = network.annotations[ntype].loc[nodes[ntype]].reset_index()
+            if "start" in df.columns and "end" in df.columns:
+                df["length"] = process_int_values(df["end"]) - process_int_values(df["start"]) + 1
+            df = df.rename(columns=rename_mapper).filter(columns, axis="columns")
+
+            df["ntype"] = ntype
+            df["nid"] = range(len(node_list))
+
+            dfs.append(df)
+
+        self.node_metadata = pd.concat(dfs, axis=0).set_index(["ntype", "nid"]).dropna(axis=1, how="all")
+        return self.node_metadata
+
     def get_projection_pos(self, X: Dict[str, Dict[str, Tensor]], embeddings: Dict[str, Tensor],
                            weights: Optional[Dict[str, Series]] = None,
-                           losses: Dict[str, Tensor] = None, return_all=False,
+                           losses: Dict[str, Tensor] = None
                            ) -> DataFrame:
         """
         Collect node metadata for all nodes in X["global_node_index"]
@@ -257,8 +285,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         Returns:
             node_metadata (DataFrame)
         """
-        if return_all and hasattr(self, "node_metadata"):
-            return self.node_metadata
+        if not hasattr(self, "node_metadata"):
+            self.create_node_metadata(self.network, nodes=self.nodes)
 
         global_node_index = {ntype: nids.numpy() for ntype, nids in X["global_node_index"].items() \
                              if ntype in embeddings}
@@ -310,10 +338,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         df = df.reset_index().set_index(["ntype", "nid"])
 
         # Update all nodes embeddings
-        if not hasattr(self, "node_metadata"):
-            self.node_metadata = df
-        else:
-            self.node_metadata.update(df)
+        for col in set(self.node_metadata.columns) - set(df.columns):
+            df[col] = None
+        df.update(self.node_metadata, overwrite=False)
+        df.dropna(axis=1, how="all", inplace=True)
+
+        for col in set(df.columns) - set(self.node_metadata.columns):
+            self.node_metadata[col] = None
+        self.node_metadata.update(df[~df.index.duplicated()], )
 
         # return only nodes that have > 0 weights (used for visualization of node clf models)
         if weights is not None:
@@ -529,11 +561,12 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.G[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
         self.G[go_ntype].num_nodes = len(go_nodes)
         self.num_nodes_dict[go_ntype] = len(go_nodes)
+        self.nodes[go_ntype] = pd.Index(go_nodes)
         self.node_types.append(go_ntype)
         self.go_namespace = self.G[go_ntype].namespace
+        self.network.annotations[go_ntype] = ontology.data
 
         # Set sequence
-        self.nodes[go_ntype] = pd.Index(go_nodes)
         self.G[go_ntype]["sequence"] = pd.Series(self.G[go_ntype]["name"] + " : " + self.G[go_ntype]["def"],
                                                  index=self.nodes[go_ntype])
 

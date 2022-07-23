@@ -1,11 +1,12 @@
 import logging
-from typing import Dict, List
+from typing import Dict, List, Any, Tuple
 
 import networkx as nx
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from moge.visualization.utils import configure_layout
 
 
 def node_degree_viz(node_degrees, x_label, y_label, width=500, height=90):
@@ -22,7 +23,7 @@ def node_degree_viz(node_degrees, x_label, y_label, width=500, height=90):
     return fig
 
 
-def force_layout(g, nodelist, iterations=100, init_pos=None):
+def force_layout(g: nx.Graph, nodelist: List[str], iterations=100, init_pos=None) -> Dict[Any, Tuple[float, float]]:
     from fa2 import ForceAtlas2
     forceatlas2 = ForceAtlas2(
         # Behavior alternatives
@@ -34,7 +35,7 @@ def force_layout(g, nodelist, iterations=100, init_pos=None):
         jitterTolerance=1.0,  # Tolerance
         barnesHutOptimize=True,
         barnesHutTheta=1.2,
-        multiThreaded=False,
+        multiThreaded=True,
         # Tuning
         scalingRatio=2.0,
         strongGravityMode=True,
@@ -180,32 +181,6 @@ def graph_viz3d(g: nx.Graph,
     configure_layout(fig, height, showlegend, title, width)
 
     return fig
-
-
-def configure_layout(fig, showlegend=True, **kwargs):
-    # Figure
-    axis = dict(showline=False,  # hide axis line, grid, ticklabels and  title
-                zeroline=False,
-                showgrid=False,
-                showticklabels=False,
-                title=''
-                )
-    fig.update_layout(
-        **kwargs,
-        showlegend=showlegend,
-        # legend=dict(autosize=True, width=100),
-        legend_orientation="v",
-        autosize=True,
-        margin=dict(
-            l=5,
-            r=5,
-            b=5,
-            t=5,
-            pad=5
-        ),
-        xaxis=axis,
-        yaxis=axis
-    )
 
 
 def plot_edges(fig, edges, pos, plot3d=True):
