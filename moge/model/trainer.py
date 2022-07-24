@@ -170,7 +170,7 @@ class NodeEmbeddingEvaluator(LightningModule):
     def plot_embeddings_tsne(self, X: Dict[str, Any], embeddings: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
                              targets: Tensor = None, y_pred: Tensor = None,
                              columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> Tensor:
-        node_losses = self.get_node_loss(targets=targets, y_pred=y_pred, global_node_index=X["global_node_index"])
+        node_losses = self.get_node_loss(targets, y_pred, global_node_index=X["global_node_index"])
 
         df = self.dataset.get_projection_pos(X, embeddings, weights=weights, losses=node_losses)
 

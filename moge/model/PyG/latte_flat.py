@@ -9,13 +9,14 @@ import torch
 import torch.nn.functional as F
 from colorhash import ColorHash
 from fairscale.nn import auto_wrap
-from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
 from pandas import DataFrame
-from run.utils import select_empty_gpu
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG import filter_metapaths
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
+from run.utils import select_empty_gpu
 
 
 class LATTE(nn.Module):
@@ -87,7 +88,6 @@ class LATTE(nn.Module):
             layers.append(layer)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
-
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -348,7 +348,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         Returns:
              output_emb, edge_attn_scores
         """
-        self.empty_gpu_device = select_empty_gpu() if not empty_gpu_device else empty_gpu_device
+        self.empty_gpu_device = select_empty_gpu() if empty_gpu_device is None else empty_gpu_device
 
         l_dict = self.projection(feats, linears=self.linear_l)
         r_dict = self.projection(feats, linears=self.linear_r)

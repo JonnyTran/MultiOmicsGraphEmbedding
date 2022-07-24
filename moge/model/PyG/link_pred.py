@@ -319,15 +319,14 @@ class LATTELinkPred(LinkPredTrainer):
         try:
             if self.wandb_experiment is not None:
                 # X, y, _ = self.dataset.get_full_graph()
-                X, y, _ = self.dataset.transform(
+                X, e_true, _ = self.dataset.transform(
                     edge_idx=torch.cat(
                         [self.dataset.training_idx, self.dataset.validation_idx, self.dataset.testing_idx]))
-                embs, edge_pred_dict = self.cpu().forward(X, y, save_betas=True)
+                embs, e_pred = self.cpu().forward(X, e_true, save_betas=True)
 
-                self.plot_embeddings_tsne(X, embs)
+                self.plot_embeddings_tsne(X, embs, targets=e_true, y_pred=e_pred)
                 self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-                test_pred_dict = edge_pred_dict
-                self.log_score_averages(edge_pred_dict=test_pred_dict)
+                self.log_score_averages(edge_pred_dict=e_pred)
                 self.cleanup_artifacts()
 
         except Exception as e:

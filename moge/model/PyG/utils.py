@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Union, Tuple, List, Dict, Optional, Set, Mapping
+from typing import Union, Tuple, List, Dict, Optional, Set
 
 import pandas as pd
 import torch
@@ -128,7 +128,8 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                       layer: Optional[int] = None,
                       filter_metapaths: Union[List[Tuple[str, str, str]], Set[Tuple[str, str, str]]] = None,
                       edge_threshold: Optional[float] = None,
-                      device=None) -> Mapping[Tuple[str, str, str], Tensor]:
+                      device=None) \
+        -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
     """
     Return a cartesian product from two set of adjacency matrices, such that each metapath_A have same tail node type
      as metapath_B's head node type.
