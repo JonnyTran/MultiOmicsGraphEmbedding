@@ -58,7 +58,6 @@ class LinkPred(torch.nn.Module):
         else:
             raise Exception(f"Scoring function parameter `scoring` not supported: {scoring}")
 
-        nn.init.uniform_(tensor=self.rel_embedding)
 
     def forward(self, edges_input: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
@@ -268,11 +267,11 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
+        pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
-        loss = self.criterion.forward(e_pos, e_neg, e_weights)
+        loss = self.criterion.forward(pos_edges, neg_batch, e_weights)
 
-        self.update_link_pred_metrics(self.train_metrics, edge_pred_dict, e_pos, e_neg)
+        self.update_link_pred_metrics(self.train_metrics, edge_pred_dict, pos_edges, neg_batch)
 
         logs = {'loss': loss,
                 # **self.train_metrics.compute_metrics()
@@ -285,11 +284,11 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, edge_pred_dict = self.forward(X, edge_true, save_betas=True)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
+        pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
-        loss = self.criterion.forward(e_pos, e_neg, e_weights)
+        loss = self.criterion.forward(pos_edges, neg_batch, e_weights)
 
-        self.update_link_pred_metrics(self.valid_metrics, edge_pred_dict, e_pos, e_neg)
+        self.update_link_pred_metrics(self.valid_metrics, edge_pred_dict, pos_edges, neg_batch)
 
         self.log("val_loss", loss, prog_bar=True)
 
@@ -304,11 +303,11 @@ class LATTELinkPred(LinkPredTrainer):
         X, edge_true, edge_weights = batch
         embeddings, edge_pred_dict = self.forward(X, edge_true)
 
-        e_pos, e_neg, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
+        pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
         # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
-        loss = self.criterion.forward(e_pos, e_neg, e_weights)
+        loss = self.criterion.forward(pos_edges, neg_batch, e_weights)
 
-        self.update_link_pred_metrics(self.test_metrics, edge_pred_dict, e_pos, e_neg)
+        self.update_link_pred_metrics(self.test_metrics, edge_pred_dict, pos_edges, neg_batch)
 
         self.log("test_loss", loss)
         return loss

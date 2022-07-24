@@ -907,7 +907,7 @@ class LATTEFlatNodeClfLink(LATTELinkPred):
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
 
-        loss = self.criterion.forward(y_pred, y_true, weights=weights)
+        loss = self.criterion.forward(y_pred, y_true, neg_edges=weights)
 
         self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights)
 
@@ -924,7 +924,7 @@ class LATTEFlatNodeClfLink(LATTELinkPred):
         if y_true.size(0) == 0:
             return torch.tensor(0.0, requires_grad=False)
 
-        val_loss = self.criterion.forward(y_pred, y_true, weights=weights)
+        val_loss = self.criterion.forward(y_pred, y_true, neg_edges=weights)
         self.update_node_clf_metrics(self.valid_metrics, y_pred, y_true, weights)
 
         self.log("val_loss", val_loss, )

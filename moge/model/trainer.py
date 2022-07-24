@@ -441,15 +441,15 @@ class LinkPredTrainer(NodeClfTrainer):
                                   edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None,
                                   activation: Optional[Callable] = None) -> \
             Tuple[Tensor, Tensor, Optional[Tensor]]:
-        e_pos = []
-        e_neg = []
+        pos_edges = []
+        neg_batch = []
         e_weights = []
 
         for metapath, edge_pred in edge_pred_dict["edge_pos"].items():
             num_edges = edge_pred.shape[0]
 
             # Positive edges
-            e_pos.append(edge_pred)
+            pos_edges.append(edge_pred)
 
             if edge_weights_dict:
                 e_weights.append(edge_weights_dict[metapath])
@@ -458,16 +458,16 @@ class LinkPredTrainer(NodeClfTrainer):
             if "head_batch" in edge_pred_dict or "tail_batch" in edge_pred_dict:
                 e_pred_head = edge_pred_dict["head_batch"][metapath].view(num_edges, -1)
                 e_pred_tail = edge_pred_dict["tail_batch"][metapath].view(num_edges, -1)
-                e_neg.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
+                neg_batch.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
 
             # True negatives
             elif "edge_neg" in edge_pred_dict:
-                e_neg.append(edge_pred_dict["edge_neg"][metapath].view(num_edges, -1))
+                neg_batch.append(edge_pred_dict["edge_neg"][metapath].view(num_edges, -1))
             else:
                 raise Exception(f"No negative edges in {edge_pred_dict.keys()}")
 
-        e_pos = torch.cat(e_pos, dim=0)
-        e_neg = torch.cat(e_neg, dim=0)
+        pos_edges = torch.cat(pos_edges, dim=0)
+        neg_batch = torch.cat(neg_batch, dim=0)
 
         if e_weights:
             e_weights = torch.cat(e_weights, dim=0)
@@ -475,10 +475,10 @@ class LinkPredTrainer(NodeClfTrainer):
             e_weights = None
 
         if callable(activation):
-            e_pos = activation(e_pos)
-            e_neg = activation(e_neg)
+            pos_edges = activation(pos_edges)
+            neg_batch = activation(neg_batch)
 
-        return e_pos, e_neg, e_weights
+        return pos_edges, neg_batch, e_weights
 
     def get_node_loss(self, edge_pred: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                       edge_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],

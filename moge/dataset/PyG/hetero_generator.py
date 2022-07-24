@@ -793,6 +793,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Get subgraph induced by neighborhood hopping from the query nodes
         X, _, _ = self.graph_sampler.transform_fn(self.graph_sampler.collate_fn(query_nodes))
+        X['batch_size'] = {ntype: query_nodes[ntype].numel() for ntype in query_nodes}
 
         # Edge_pos must be global index, not batch index
         edge_pos_split = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=None)
@@ -807,21 +808,22 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             range(len(X["global_node_index"][ntype])))
         ) for ntype in X["global_node_index"]}
 
+        edge_true = {}
         edge_pos = self.get_relabled_edge_index(edge_pos, global_node_index=X["global_node_index"],
                                                 global2batch=global2batch)
-        edge_pos = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=X["global_node_index"])
-        y = {"edge_pos": edge_pos, }
+        edge_true['edge_pos'] = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=X["global_node_index"])
 
         if num_edges(edge_neg):
             edge_neg = self.get_relabled_edge_index(edge_neg, global_node_index=X["global_node_index"],
                                                     global2batch=global2batch, )
-            y['edge_neg'] = self.split_edge_index_by_go_namespace(edge_neg, batch_to_global=X["global_node_index"])
+            edge_true['edge_neg'] = self.split_edge_index_by_go_namespace(edge_neg,
+                                                                          batch_to_global=X["global_node_index"])
 
         # Negative sampling
-        y.update({"head_batch": head_batch, "tail_batch": tail_batch, })
+        edge_true.update({"head_batch": head_batch, "tail_batch": tail_batch, })
 
         edge_weights = None
-        return X, y, edge_weights
+        return X, edge_true, edge_weights
 
     def get_edge_index_dict_from_triples(self, edge_idx: Tensor, neg_edge_idx: Tensor = None):
         triples = {k: v[edge_idx] for k, v in self.triples.items() if not is_negative(k)}

@@ -66,7 +66,10 @@ class ClassificationLoss(nn.Module):
                     and targets.dim() == 1:
                 targets = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[targets]
 
-        loss = self.criterion.forward(logits, targets)
+        if isinstance(self.criterion, ContrastiveLoss):
+            loss = self.criterion.forward(logits, targets, weights)
+        else:
+            loss = self.criterion.forward(logits, targets)
 
         if weights is not None and isinstance(weights, Tensor) and weights.numel():
             assert self.reduction == None or self.reduction == "none", "Must have reduction='none' when using sample `weights`"
@@ -83,9 +86,9 @@ class ContrastiveLoss(nn.Module):
         self.temperature = temperature
         self.base_temperature = base_temperature
 
-    def forward(self, e_pos: Tensor, e_neg: Tensor):
-        pos_logits = torch.div(e_pos, self.temperature)
-        neg_logits = torch.div(e_neg, self.temperature)
+    def forward(self, pos_edges: Tensor, neg_batch: Tensor, neg_edges=None):
+        pos_logits = torch.div(pos_edges, self.temperature)
+        neg_logits = torch.div(neg_batch, self.temperature)
 
         # For numerical stability
         # logits_max, _ = torch.max(torch.cat([pos_logits.unsqueeze(1), neg_logits], dim=1),
@@ -178,7 +181,7 @@ class FocalLoss(nn.Module):
         self.alpha = alpha
         self.epsilon = epsilon
 
-    def forward(self, logits, target):
+    def forward(self, logits, target, weight=None):
         """
         Args:
             logits: model's output, shape of [batch_size, num_cls]
