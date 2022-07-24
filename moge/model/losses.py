@@ -1,4 +1,5 @@
 import codecs as cs
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -45,12 +46,12 @@ class ClassificationLoss(nn.Module):
         else:
             raise TypeError(f"Unsupported loss type:{loss_type}")
 
-    def forward(self, logits, targets, weights=None):
+    def forward(self, logits: Tensor, targets: Tensor, weights: Optional[Tensor] = None):
         """
 
         Args:
-            logits (torch.Tensor): y_pred
-            targets (torch.Tensor): y_true
+            logits (torch.Tensor): predicted labels or logits
+            targets (torch.Tensor): true labels
             weights (): Sample weights.
 
         Returns:

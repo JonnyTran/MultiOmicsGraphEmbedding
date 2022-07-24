@@ -246,12 +246,18 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         return self.transform_heterograph(self.G)
 
     def create_node_metadata(
-            self, network: HeteroNetwork, nodes: Dict[str, List[str]],
-            columns=["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
-                     "gene_biotype", "transcript_biotype", "seqname", "length"],
-            rename_mapper={"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}) \
+            self, network: HeteroNetwork,
+            nodes: Dict[str, List[str]],
+            columns: List[str] = None,
+            rename_mapper: Dict[str, str] = None) \
             -> DataFrame:
-        def process_int_values(s: Series):
+        if columns is None:
+            columns = ["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
+                       "gene_biotype", "transcript_biotype", "seqname", "length"]
+        if rename_mapper is None:
+            rename_mapper = {"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}
+
+        def process_int_values(s: Series) -> Series:
             if s.str.contains("|").any():
                 s = s.str.split("|", expand=True)[0]
             return s.fillna(0).astype(int)
@@ -266,8 +272,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
             for col in df.columns.intersection(["class", "disease_associations"]):
                 if df[col].str.contains("\||, ", regex=True).any():
-                    print(ntype, col)
                     df[col] = df[col].str.split("\||, ", regex=True, expand=True)[0]
+                elif df[col].apply(lambda x: isinstance(x, (tuple, list))).any():
+                    df[col] = df[col].apply(
+                        lambda li: li[0] if isinstance(li, (tuple, list)) else None)
 
             df["ntype"] = ntype
             df["nid"] = range(len(node_list))
@@ -277,14 +285,14 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.node_metadata = pd.concat(dfs, axis=0).set_index(["ntype", "nid"]).dropna(axis=1, how="all")
         return self.node_metadata
 
-    def get_projection_pos(self, X: Dict[str, Dict[str, Tensor]], embeddings: Dict[str, Tensor],
+    def get_projection_pos(self, batch: Dict[str, Dict[str, Tensor]], embeddings: Dict[str, Tensor],
                            weights: Optional[Dict[str, Series]] = None,
                            losses: Dict[str, Tensor] = None
                            ) -> DataFrame:
         """
         Collect node metadata for all nodes in X["global_node_index"]
         Args:
-            X (): a batch's dict of data
+            batch (): a batch's dict of data
             embeddings (): Embeddings of nodes in the `X` batch
             weights (Optional[Dict[str, Series]]): A Dict of ntype and a Pandas Series same same as number of nodes
                 where entries > 0 are returned.
@@ -295,7 +303,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if not hasattr(self, "node_metadata"):
             self.create_node_metadata(self.network, nodes=self.nodes)
 
-        global_node_index = {ntype: nids.numpy() for ntype, nids in X["global_node_index"].items() \
+        global_node_index = {ntype: nids.numpy() for ntype, nids in batch["global_node_index"].items() \
                              if ntype in embeddings}
 
         # Concatenated list of node embeddings and other metadata
@@ -744,7 +752,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return renamed_edge_index_dict
 
-    def transform(self, edge_idx: List[int], mode=None):
+    def transform(self, edge_idx: List[int], mode=None) -> Tuple[Dict[str, Dict], Dict[str, Dict], Optional[Tensor]]:
         if not isinstance(edge_idx, torch.LongTensor):
             edge_idx = torch.LongTensor(edge_idx)
 
@@ -802,8 +810,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_pos = self.get_relabled_edge_index(edge_pos, global_node_index=X["global_node_index"],
                                                 global2batch=global2batch)
         edge_pos = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=X["global_node_index"])
-
         y = {"edge_pos": edge_pos, }
+
         if num_edges(edge_neg):
             edge_neg = self.get_relabled_edge_index(edge_neg, global_node_index=X["global_node_index"],
                                                     global2batch=global2batch, )
@@ -815,7 +823,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_weights = None
         return X, y, edge_weights
 
-    def get_edge_index_dict_from_triples(self, edge_idx, neg_edge_idx=None):
+    def get_edge_index_dict_from_triples(self, edge_idx: Tensor, neg_edge_idx: Tensor = None):
         triples = {k: v[edge_idx] for k, v in self.triples.items() if not is_negative(k)}
 
         # If ensures same number of true neg edges to true pos edges

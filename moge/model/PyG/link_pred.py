@@ -238,7 +238,7 @@ class LATTELinkPred(LinkPredTrainer):
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 return_embedding=False, return_score=False, **kwargs) \
-            -> Tuple[Dict[str, Tensor], Any, Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
+            -> Tuple[Dict[str, Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]
 
@@ -258,7 +258,8 @@ class LATTELinkPred(LinkPredTrainer):
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
         if return_score:
-            edges_pred = {pos_neg: {metapath: torch.sigmoid(edge_logits) for metapath, edge_logits in edge_dict.items()} \
+            edges_pred = {pos_neg: {metapath: torch.sigmoid(edge_logits) \
+                                    for metapath, edge_logits in edge_dict.items()} \
                           for pos_neg, edge_dict in edges_pred.items()}
 
         return embeddings, edges_pred
@@ -308,9 +309,6 @@ class LATTELinkPred(LinkPredTrainer):
         loss = self.criterion.forward(e_pos, e_neg, e_weights)
 
         self.update_link_pred_metrics(self.test_metrics, edge_pred_dict, e_pos, e_neg)
-        # np.set_printoptions(precision=3, suppress=True, linewidth=300)
-        # print("\npos", torch.sigmoid(e_pos[:20]).detach().cpu().numpy(),
-        #       "\nneg", torch.sigmoid(e_neg[:20, 0].view(-1)).detach().cpu().numpy()) if batch_nb == 1 else None
 
         self.log("test_loss", loss)
         return loss
@@ -318,10 +316,7 @@ class LATTELinkPred(LinkPredTrainer):
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
-                # X, y, _ = self.dataset.get_full_graph()
-                X, e_true, _ = self.dataset.transform(
-                    edge_idx=torch.cat(
-                        [self.dataset.training_idx, self.dataset.validation_idx, self.dataset.testing_idx]))
+                X, e_true, _ = self.dataset.full_batch()
                 embs, e_pred = self.cpu().forward(X, e_true, save_betas=True)
 
                 self.plot_embeddings_tsne(X, embs, targets=e_true, y_pred=e_pred)

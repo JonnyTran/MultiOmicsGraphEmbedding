@@ -437,37 +437,6 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
-    def reshape_edge_pred_dict(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> \
-            Tuple[Tensor, Tensor]:
-
-        e_pred, e_true = [], []
-        for metapath, edge_pos_pred in edge_pred_dict["edge_pos"].items():
-            e_pred.append(edge_pos_pred.view(-1))
-            e_true.append(torch.ones_like(edge_pos_pred.view(-1)))
-
-        for metapath, edge_neg_pred in edge_pred_dict["edge_neg"].items():
-            e_pred.append(edge_neg_pred.view(-1))
-            e_true.append(torch.zeros_like(edge_neg_pred.view(-1)))
-
-        for metapath, edge_neg_pred in edge_pred_dict["head_batch"].items():
-            e_pred.append(edge_neg_pred.view(-1))
-            if self.hparams.loss_type == "PU_LOSS_WITH_LOGITS":
-                e_true.append(-torch.ones_like(edge_neg_pred.view(-1)))
-            else:
-                e_true.append(torch.zeros_like(edge_neg_pred.view(-1)))
-
-        for metapath, edge_neg_pred in edge_pred_dict["tail_batch"].items():
-            e_pred.append(edge_neg_pred.view(-1))
-            if self.hparams.loss_type == "PU_LOSS_WITH_LOGITS":
-                e_true.append(-torch.ones_like(edge_neg_pred.view(-1)))
-            else:
-                e_true.append(torch.zeros_like(edge_neg_pred.view(-1)))
-
-        e_pred = torch.cat(e_pred)
-        e_true = torch.cat(e_true)
-
-        return e_pred, e_true
-
     def stack_pos_head_tail_batch(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                                   edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None,
                                   activation: Optional[Callable] = None) -> \
@@ -537,7 +506,8 @@ class LinkPredTrainer(NodeClfTrainer):
 
     def get_edge_index_loss(self, edge_pred: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                             edge_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                            global_node_index: Dict[str, Tensor]) \
+                            global_node_index: Dict[str, Tensor],
+                            loss_fn: Callable = F.binary_cross_entropy) \
             -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
 
         e_pred, e_true = defaultdict(list), defaultdict(list)
@@ -585,9 +555,13 @@ class LinkPredTrainer(NodeClfTrainer):
         e_true = {m: (torch.cat([eid for eid, v in li_eid_v], dim=1),
                       torch.cat([v for eid, v in li_eid_v], dim=0)) for m, li_eid_v in e_true.items()}
 
-        e_losses = {m: (eid, F.binary_cross_entropy(e_pred[m][1], target=e_true[m][1], reduce=False)) \
+        e_losses = {m: (eid, loss_fn(e_pred[m][1], target=e_true[m][1], reduce=False)) \
                     for m, (eid, _) in e_pred.items()}
+
         return e_losses
+
+    def stack_edge_index_values(self, edge_index_dict):
+        pass
 
     def train_dataloader(self, **kwargs):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
