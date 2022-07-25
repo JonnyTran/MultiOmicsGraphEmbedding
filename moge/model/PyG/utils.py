@@ -7,8 +7,9 @@ from torch import Tensor
 from torch_sparse import SparseTensor, spspmm
 
 
-def num_edges(edge_index_dict):
-    return sum(edge_index.size(1) for m, edge_index in edge_index_dict.items())
+def num_edges(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]]):
+    return sum(edge_index.size(1) if isinstance(edge_index, Tensor) else edge_index[0].size(1) \
+               for m, edge_index in edge_index_dict.items())
 
 
 def tag_negative(metapath):

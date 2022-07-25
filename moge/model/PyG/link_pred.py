@@ -16,6 +16,7 @@ from .utils import get_edge_index_from_neg_batch
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
+from ..utils import activation
 from ...dataset import HeteroLinkPredDataset
 
 
@@ -57,7 +58,6 @@ class LinkPred(torch.nn.Module):
 
         else:
             raise Exception(f"Scoring function parameter `scoring` not supported: {scoring}")
-
 
     def forward(self, edges_input: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                 embeddings: Dict[str, Tensor]) -> Dict[str, Dict[Tuple[str, str, str], Tensor]]:
@@ -257,7 +257,7 @@ class LATTELinkPred(LinkPredTrainer):
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
         if return_score:
-            edges_pred = {pos_neg: {metapath: torch.sigmoid(edge_logits) \
+            edges_pred = {pos_neg: {metapath: activation(edge_logits, loss_type=self.hparams.loss_type) \
                                     for metapath, edge_logits in edge_dict.items()} \
                           for pos_neg, edge_dict in edges_pred.items()}
 

@@ -88,7 +88,7 @@ class LATTE(nn.Module):
             layers.append(layer)
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
-        # self.reset_parameters()
+        self.reset_parameters()
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('relu')
@@ -271,7 +271,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
 
-        # self.reset_parameters()
+        self.reset_parameters()
 
     def reset_parameters(self):
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
