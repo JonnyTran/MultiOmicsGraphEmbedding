@@ -257,7 +257,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if rename_mapper is None:
             rename_mapper = {"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}
 
-        def process_int_values(s: Series) -> Series:
+        def _process_int_values(s: Series) -> Series:
             if s.str.contains("|").any():
                 s = s.str.split("|", expand=True)[0]
             return s.fillna(0).astype(int)
@@ -266,7 +266,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         for ntype, node_list in nodes.items():
             df: DataFrame = network.annotations[ntype].loc[nodes[ntype]].reset_index()
             if "start" in df.columns and "end" in df.columns:
-                df["length"] = process_int_values(df["end"]) - process_int_values(df["start"]) + 1
+                df["length"] = _process_int_values(df["end"]) - _process_int_values(df["start"]) + 1
 
             df = df.rename(columns=rename_mapper).filter(columns, axis="columns")
 
@@ -282,13 +282,15 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
             dfs.append(df)
 
-        self.node_metadata = pd.concat(dfs, axis=0).set_index(["ntype", "nid"]).dropna(axis=1, how="all")
+        dfs = pd.concat(dfs, axis=0)
+        dfs["namespace"].fillna(dfs["ntype"], inplace=True)
+        self.node_metadata = dfs.set_index(["ntype", "nid"]).dropna(axis=1, how="all")
         return self.node_metadata
 
-    def get_projection_pos(self, batch: Dict[str, Dict[str, Tensor]], embeddings: Dict[str, Tensor],
+    def get_projection_pos(self, batch: Dict[str, Dict[str, Tensor]],
+                           embeddings: Dict[str, Tensor],
                            weights: Optional[Dict[str, Series]] = None,
-                           losses: Dict[str, Tensor] = None
-                           ) -> DataFrame:
+                           losses: Dict[str, Tensor] = None) -> DataFrame:
         """
         Collect node metadata for all nodes in X["global_node_index"]
         Args:
@@ -340,14 +342,17 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
 
         # Reset index
-        df = df.reset_index().set_index(["ntype", "nid"])
+        df = df.reset_index()
+        df["nx_node"] = df["ntype"] + "-" + df["node"]
+        df = df.set_index(["ntype", "nid"])
 
-        # Update all nodes embeddings
+        # Update all nodes embeddings with self.node_metadata
         for col in set(self.node_metadata.columns) - set(df.columns):
             df[col] = None
         df.update(self.node_metadata, overwrite=False)
         df.dropna(axis=1, how="all", inplace=True)
 
+        # Update self.node_metadata with df
         for col in set(df.columns) - set(self.node_metadata.columns):
             self.node_metadata[col] = None
         self.node_metadata.update(df[~df.index.duplicated()], )
@@ -367,13 +372,17 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                     global_node_idx: Dict[str, Tensor] = None) -> nx.MultiDiGraph:
         G = nx.MultiDiGraph()
 
-        if not edge_index_dict:
+        if edge_index_dict is None or len(edge_index_dict) == 0:
             edge_index_dict = self.G.edge_index_dict
+
         elif isinstance(edge_index_dict, list):
-            edge_index_dict = {m: eidx for m, eidx in self.G.edge_index_dict if
+            # edge_index_dict is a list of metapaths
+            edge_index_dict = {m: eidx for m, eidx in self.G.edge_index_dict.items() if
                                m in edge_index_dict or m[1] in edge_index_dict}
 
-        edge_list = convert_to_nx_edgelist(nodes=self.nodes, edge_index_dict=edge_index_dict,
+        edge_index_dict = {m: eid for m, eid in edge_index_dict.items() if "rev_" not in m[1]}
+
+        edge_list = convert_to_nx_edgelist(edge_index_dict, node_names=self.nodes,
                                            global_node_idx=global_node_idx)
         for etype, edges in edge_list.items():
             G.add_edges_from(edges, etype=etype)
@@ -401,6 +410,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             if len(filter_nodes):
                 H = G.copy()
                 H = G.subgraph(filter_nodes)
+            else:
+                H = G
         else:
             H = G.copy()
             H.remove_nodes_from(list(nx.isolates(H)))
@@ -501,10 +512,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                         out_edge_index_dict[new_metapath] = edge_index
 
         return out_edge_index_dict
-
-
-
-
 
 class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def __init__(self, dataset: HeteroData,
@@ -901,24 +908,21 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return sampling_size
 
-    def full_batch(self):
+    def full_batch(self, mode="test"):
         return self.transform(edge_idx=torch.cat([self.training_idx, self.validation_idx, self.testing_idx]),
-                              mode="test")
+                              mode=mode)
 
     def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
-                    metapaths: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = [],
+                    edge_index_dict: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = [],
                     global_node_idx: Dict[str, Tensor] = None,
-                    pos_edges: Dict[Tuple[str, str, str], Tensor] = None, ) -> nx.MultiDiGraph:
-        G = super().to_networkx(nodes=nodes, metapaths=metapaths, global_node_idx=global_node_idx)
+                    pos_edges: Dict[Tuple[str, str, str], Tensor] = None) -> nx.MultiDiGraph:
+        G = super().to_networkx(nodes, edge_index_dict, global_node_idx=global_node_idx)
 
         if pos_edges is not None:
-            edge_list = convert_to_nx_edgelist(nodes=self.nodes, edge_index_dict=pos_edges,
+            edge_list = convert_to_nx_edgelist(pos_edges, node_names=self.nodes,
                                                global_node_idx=global_node_idx)
-        else:
-            edge_list = {}
-
-        for etype, edges in edge_list.items():
-            G.add_edges_from(edges, etype=etype)
+            for etype, edges in edge_list.items():
+                G.add_edges_from(edges, etype=etype)
 
         return G
 

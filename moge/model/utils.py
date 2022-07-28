@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 
 import numpy as np
 import torch
@@ -69,7 +69,9 @@ def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights, return_index=False
     return Y_hat, Y, weights[idx]
 
 
-def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights=None):
+def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
+                      weights: Optional[Dict[str, Tensor]] = None) \
+        -> Tuple[Tensor, Tensor, Tensor]:
     # Filter out node types which have no labels
     batch_size = OrderedDict({ntype: size for ntype, size in batch_size.items() if y_true[ntype].sum() > 0})
 
@@ -83,7 +85,8 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
     return y_pred, y_true, weights
 
 
-def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor], weights: Dict[str, Tensor] = None) \
+def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
+                         weights: Optional[Dict[str, Tensor]] = None) \
         -> Tuple[Tensor, Tensor, Tensor]:
     """
     Returns y_pred, y_true, weights as Tensors and ensure they all have the same batch_size in dim 0.

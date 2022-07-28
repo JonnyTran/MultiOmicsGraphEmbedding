@@ -39,7 +39,7 @@ def is_negative(metapath):
         return False
 
 
-def convert_to_nx_edgelist(nodes: Dict[str, pd.Index], edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+def convert_to_nx_edgelist(edge_index_dict: Dict[Tuple[str, str, str], Tensor], node_names: Dict[str, pd.Index],
                            global_node_idx: Dict[str, Tensor] = None) -> Dict[str, List[Tuple[str, str]]]:
     edge_list = {}
     for metapath, edge_index in edge_index_dict.items():
@@ -55,8 +55,8 @@ def convert_to_nx_edgelist(nodes: Dict[str, pd.Index], edge_index_dict: Dict[Tup
         if isinstance(tail_nodes, Tensor):
             tail_nodes = tail_nodes.detach().numpy()
 
-        head_nodes = head_type + "-" + nodes[head_type][head_nodes]
-        tail_nodes = tail_type + "-" + nodes[tail_type][tail_nodes]
+        head_nodes = head_type + "-" + node_names[head_type][head_nodes]
+        tail_nodes = tail_type + "-" + node_names[tail_type][tail_nodes]
         edge_list[etype] = [(u, v) for u, v in zip(head_nodes, tail_nodes)]
 
     return edge_list
