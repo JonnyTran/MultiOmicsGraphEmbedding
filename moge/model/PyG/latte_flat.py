@@ -16,7 +16,6 @@ from torch_geometric.utils import softmax
 
 from moge.model.PyG import filter_metapaths
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
-from run.utils import select_empty_gpu
 
 
 class LATTE(nn.Module):
@@ -231,12 +230,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
-        self.linear_l = nn.ModuleDict(
+        self.linear = nn.ModuleDict(
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F)
-        self.linear_r = nn.ModuleDict(
-            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
-             for node_type in self.node_types})  # W.shape (F x F}
+        # self.linear_r = nn.ModuleDict(
+        #     {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+        #      for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn = nn.Parameter(torch.rand((len(self.metapaths), attn_heads, self.out_channels * 2)))
@@ -279,14 +278,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             nn.init.xavier_normal_(self.attn[i], gain=gain)
 
         gain = nn.init.calculate_gain('relu')
-        for node_type in self.linear_l:
-            nn.init.xavier_normal_(self.linear_l[node_type].weight, gain=gain)
-            nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
+        for node_type in self.linear:
+            nn.init.xavier_normal_(self.linear[node_type].weight, gain=gain)
+        # for node_type in self.linear_r:
+        #     nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
 
         gain = nn.init.calculate_gain('leaky_relu', 0.2)
         if hasattr(self, "rel_attn_l"):
             for ntype, rel_attn in self.rel_attn_l.items():
                 nn.init.xavier_normal_(rel_attn, gain=gain)
+        if hasattr(self, "rel_attn_r"):
             for ntype, rel_attn in self.rel_attn_r.items():
                 nn.init.xavier_normal_(rel_attn, gain=gain)
 
@@ -314,23 +315,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
-    #     kernel = self.rel_attn[ntype]
-    #     print(ntype, tensor_sizes({"query":query, "kernel":kernel, "key":key,}),
-    #           torch.isnan(query).any().item(),torch.isnan(kernel).any().item(),torch.isnan(key).any().item()) if self.verbose else None
-    #
-    #     beta_l = (query.transpose(0, 1) @ kernel).transpose(1, 0)[:, None, :]
-    #     beta_r = key
-    #     print("beta_l", beta_l.shape, "beta_r", beta_r.shape, torch.isnan(beta_l).any(), torch.isnan(beta_r).any()) if self.verbose else None
-    #
-    #     beta = (beta_l * beta_r).sum(-1)
-    #     print("beta", beta.shape, torch.isinf(beta).sum(-1).sum(0) + torch.isnan(beta).sum(-1).sum(0)) if self.verbose else None
-    #     # beta = F.relu(beta)
-    #     beta = F.relu(beta / beta.sum(1, keepdim=True))
-    #     # beta = F.softmax(beta, dim=1)
-    #     # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
-    #     return beta
-
     def forward(self, feats: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                 global_node_idx: Dict[str, Tensor],
@@ -348,10 +332,11 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         Returns:
              output_emb, edge_attn_scores
         """
-        self.empty_gpu_device = select_empty_gpu() if empty_gpu_device is None else empty_gpu_device
+        # self.empty_gpu_device = select_empty_gpu() if empty_gpu_device is None else empty_gpu_device
 
-        l_dict = self.projection(feats, linears=self.linear_l)
-        r_dict = self.projection(feats, linears=self.linear_r)
+        l_dict = self.projection(feats, linears=self.linear)
+        r_dict = l_dict
+        # r_dict = self.projection(feats, linears=self.linear_r)
 
         print("\nLayer", self.layer + 1, ) if verbose else None
 
@@ -463,7 +448,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                                                         sizes=sizes,
                                                         filter_metapaths=higher_relations,
                                                         edge_threshold=None,
-                                                        device=self.empty_gpu_device)
+                                                        # device=self.empty_gpu_device
+                                                        )
         else:
             higher_order_edge_index = edge_pred_dict
 

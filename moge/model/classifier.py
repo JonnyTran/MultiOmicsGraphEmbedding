@@ -1,16 +1,17 @@
 from argparse import Namespace
 from collections import OrderedDict
 from copy import deepcopy
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import dgl
 import networkx as nx
 import numpy as np
 import torch
-from moge.model.dgl.HGT import HGT
 from torch import nn, Tensor
 from torch_geometric.nn.inits import glorot, zeros
 from transformers import BertForSequenceClassification, BertConfig
+
+from moge.model.dgl.HGT import HGT
 
 
 class LabelGraphNodeClassifier(nn.Module):
@@ -53,12 +54,15 @@ class LabelGraphNodeClassifier(nn.Module):
 
         self.embedder.cls_graph_nodes = hparams.classes
 
-    def forward(self, embeddings: Tensor, classes: Optional[List[str]] = None) -> Tensor:
+    def forward(self, embeddings: Tensor, classes: Optional[List[str]] = None,
+                cls_emb: Dict[str, Tensor] = None) -> Tensor:
         if self.g.device != embeddings.device:
             self.g = self.g.to(embeddings.device)
 
+        if cls_emb is None:
+            cls_emb = {ntype: self.embeddings[ntype].weight for ntype in self.g.ntypes}
         cls_emb = self.embedder.forward(G=self.g,
-                                        feat={ntype: self.embeddings[ntype].weight for ntype in self.g.ntypes})["_N"]
+                                        feat=cls_emb)["_N"]
         cls_emb = self.dropout(cls_emb)
 
         if classes is None:

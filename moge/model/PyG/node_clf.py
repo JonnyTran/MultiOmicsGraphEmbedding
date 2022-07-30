@@ -754,7 +754,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         self.update_node_clf_metrics(self.train_metrics, y_pred, y_true, weights)
 
-        self.log("loss", loss, logger=True, on_step=True)
+        self.log("loss", loss, prog_bar=True, logger=True, on_step=True)
 
         return loss
 

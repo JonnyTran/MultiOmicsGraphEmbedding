@@ -112,9 +112,9 @@ def graph_viz(g: nx.Graph,
         edges = edges[:max_edges]
 
     if edge_label:
-        plot_edge_w_labels(fig, edges, edge_label, pos, plot3d=False)
+        plot_edge_w_labels(fig, edges=edges, edge_label=edge_label, pos=pos, plot3d=False)
     else:
-        plot_edges(fig, edges, pos, plot3d=False)
+        plot_edges(fig, edges=edges, pos=pos, plot3d=False)
 
     configure_layout(
         fig, showlegend=showlegend, height=height, width=width, title=title,

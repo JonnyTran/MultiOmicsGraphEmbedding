@@ -283,7 +283,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             dfs.append(df)
 
         dfs = pd.concat(dfs, axis=0)
-        dfs["namespace"].fillna(dfs["ntype"], inplace=True)
+        if "namespace" in dfs.columns:
+            dfs["namespace"].fillna(dfs["ntype"], inplace=True)
         self.node_metadata = dfs.set_index(["ntype", "nid"]).dropna(axis=1, how="all")
         return self.node_metadata
 
@@ -783,9 +784,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Get all nodes induced by sampled edges
         if num_edges(edge_neg):
             query_edges = {
-                metapath: torch.cat([edge_pos[metapath] if metapath in edge_pos else torch.tensor([], dtype=torch.long),
-                                     edge_neg[metapath] if metapath in edge_neg else torch.tensor([], dtype=torch.long)
-                                     ], dim=1) \
+                metapath: torch.cat(
+                    [edge_pos[metapath] if metapath in edge_pos else torch.tensor([], dtype=torch.long),
+                     edge_neg[metapath] if metapath in edge_neg else torch.tensor([], dtype=torch.long)],
+                    dim=1) \
                 for metapath in set(edge_pos).union(set(edge_neg))}
         else:
             query_edges = edge_pos
@@ -800,6 +802,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Get subgraph induced by neighborhood hopping from the query nodes
         X, _, _ = self.graph_sampler.transform_fn(self.graph_sampler.collate_fn(query_nodes))
+        # print(tensor_sizes(edge_pos))
         X['batch_size'] = {ntype: query_nodes[ntype].numel() for ntype in query_nodes}
 
         # Edge_pos must be global index, not batch index
@@ -832,7 +835,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_weights = None
         return X, edge_true, edge_weights
 
-    def get_edge_index_dict_from_triples(self, edge_idx: Tensor, neg_edge_idx: Tensor = None):
+    # def query(self):
+
+    def get_edge_index_dict_from_triples(self, edge_idx: Tensor,
+                                         neg_edge_idx: Tensor = None):
         triples = {k: v[edge_idx] for k, v in self.triples.items() if not is_negative(k)}
 
         # If ensures same number of true neg edges to true pos edges
@@ -849,7 +855,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return edge_pos, edge_neg
 
     def generate_negative_sampling(self, edge_pos: Dict[Tuple[str, str, str], Tensor],
-                                   global_node_index: Dict[str, Tensor], max_negative_sampling_size: int,
+                                   global_node_index: Dict[str, Tensor],
+                                   max_negative_sampling_size: int,
                                    mode: str = None) -> \
             Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         head_batch = {}
@@ -877,15 +884,13 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             tail_prob_dist = 1 - adj[edge_index[0], tail_neg_nodes].to_dense()
 
             # Only generate negative tail_batch within BPO, CCO, or MFO terms of the positive edge's tail go_type
-            for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
-                if go_type != tail_type: continue
+            # for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
+            #     if go_type != tail_type: continue
+            #
+            #     go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
+            #     tail_prob_dist[:, go_terms_mask] = 0
 
-                go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
-                tail_prob_dist[:, go_terms_mask] = 0
-
-            # print(tail_prob_dist.sum(1), "num_samples", sampling_size, "tail_neg_nodes", tail_neg_nodes.shape)
-            tail_batch[metapath] = torch.multinomial(tail_prob_dist, num_samples=sampling_size,
-                                                     replacement=True)
+            tail_batch[metapath] = torch.multinomial(tail_prob_dist, num_samples=sampling_size, replacement=True)
 
         return head_batch, tail_batch
 
