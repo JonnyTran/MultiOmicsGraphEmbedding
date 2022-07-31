@@ -313,9 +313,9 @@ class LATTELinkPred(LinkPredTrainer):
                 X, e_true, _ = self.dataset.full_batch()
                 embs, e_pred = self.cpu().forward(X, e_true, save_betas=True)
 
-                self.plot_embeddings_tsne(X, embs, targets=e_true, y_pred=e_pred)
-                self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
                 self.log_score_averages(edge_pred_dict=e_pred)
+                self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+                self.plot_embeddings_tsne(X, embs, targets=e_true, y_pred=e_pred)
                 self.cleanup_artifacts()
 
         except Exception as e:

@@ -59,17 +59,15 @@ class ClassificationLoss(nn.Module):
         """
         if self.multilabel:
             assert self.loss_type in ["BCE_WITH_LOGITS", "BCE", "PU_LOSS_WITH_LOGITS",
-                                      "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"], self.loss_type
+                                      "SIGMOID_FOCAL_CROSS_ENTROPY", "MULTI_LABEL_MARGIN"], \
+                f"Multilabel loss in compatible with loss type: {self.loss_type}"
             targets = targets.type_as(logits)
         else:
             if self.loss_type in ["SOFTMAX_CROSS_ENTROPY", "NEGATIVE_LOG_LIKELIHOOD", "SOFTMAX_FOCAL_CROSS_ENTROPY"] \
                     and targets.dim() == 1:
                 targets = torch.eye(self.n_classes, device=logits.device, dtype=torch.long)[targets]
 
-        if isinstance(self.criterion, ContrastiveLoss):
-            loss = self.criterion.forward(logits, targets, weights)
-        else:
-            loss = self.criterion.forward(logits, targets)
+        loss = self.criterion.forward(logits, targets)
 
         if weights is not None and isinstance(weights, Tensor) and weights.numel():
             assert self.reduction == None or self.reduction == "none", "Must have reduction='none' when using sample `weights`"
@@ -86,7 +84,7 @@ class ContrastiveLoss(nn.Module):
         self.temperature = temperature
         self.base_temperature = base_temperature
 
-    def forward(self, pos_edges: Tensor, neg_batch: Tensor, neg_edges=None):
+    def forward(self, pos_edges: Tensor, neg_batch: Tensor):
         pos_logits = torch.div(pos_edges, self.temperature)
         neg_logits = torch.div(neg_batch, self.temperature)
 

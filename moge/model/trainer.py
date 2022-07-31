@@ -223,6 +223,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         table = wandb.Table(dataframe=score_avgs.reset_index())
 
         wandb.log({self.score_avg_table_name: table})
+        print("Logging log_score_averages")
         return score_avgs
 
     @property
