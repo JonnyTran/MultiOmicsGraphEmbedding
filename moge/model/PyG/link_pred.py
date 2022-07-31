@@ -20,7 +20,9 @@ from ...dataset import HeteroLinkPredDataset
 
 
 class LinkPred(torch.nn.Module):
-    def __init__(self, embedding_dim: int, pred_metapaths: List[Tuple[str, str, str]], scoring, loss_type: str,
+    def __init__(self, embedding_dim: int, pred_metapaths: List[Tuple[str, str, str]],
+                 scoring: str = "DistMult",
+                 loss_type: str = "CONTRASTIVE_LOSS",
                  ntype_mapping: Dict[str, str] = None):
         """
 
@@ -198,10 +200,9 @@ class LATTELinkPred(LinkPredTrainer):
                               attn_heads=hparams.attn_heads,
                               attn_activation=hparams.attn_activation,
                               attn_dropout=hparams.attn_dropout,
-                              use_proximity=hparams.use_proximity if hasattr(hparams, "use_proximity") else False,
-                              neg_sampling_ratio=hparams.neg_sampling_ratio \
-                                  if hasattr(hparams, "neg_sampling_ratio") else None,
-                              edge_sampling=hparams.edge_sampling if hasattr(hparams, "edge_sampling") else False,
+                              use_proximity=hparams.use_proximity if "use_proximity" in hparams else False,
+                              neg_sampling_ratio=hparams.neg_sampling_ratio if "neg_sampling_ratio" in hparams else None,
+                              edge_sampling=hparams.edge_sampling if "edge_sampling" in hparams else False,
                               hparams=hparams)
 
         if hparams.layer_pooling == "concat":
@@ -221,6 +222,18 @@ class LATTELinkPred(LinkPredTrainer):
 
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
+
+    @property
+    def metapaths(self):
+        return {i + 1: layer.metapaths for i, layer in enumerate(self.embedder.layers)}
+
+    @property
+    def betas(self):
+        return {i + 1: layer._betas for i, layer in enumerate(self.embedder.layers)}
+
+    @property
+    def beta_avg(self):
+        return {i + 1: layer._beta_avg for i, layer in enumerate(self.embedder.layers)}
 
     def configure_sharded_model(self):
         # modules are sharded across processes
@@ -263,14 +276,11 @@ class LATTELinkPred(LinkPredTrainer):
         embeddings, edge_pred_dict = self.forward(X, edge_true)
 
         pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
-        loss = self.criterion.forward(pos_edges, neg_batch, e_weights)
+        loss = self.criterion.forward(pos_edges, neg_batch)
 
         self.update_link_pred_metrics(self.train_metrics, edge_pred_dict, pos_edges, neg_batch)
 
-        logs = {'loss': loss,
-                # **self.train_metrics.compute_metrics()
-                }
+        logs = {'loss': loss}
         self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
         return loss
@@ -280,8 +290,7 @@ class LATTELinkPred(LinkPredTrainer):
         embeddings, edge_pred_dict = self.forward(X, edge_true, save_betas=True)
 
         pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
-        loss = self.criterion.forward(pos_edges, neg_batch, e_weights)
+        loss = self.criterion.forward(pos_edges, neg_batch)
 
         self.update_link_pred_metrics(self.valid_metrics, edge_pred_dict, pos_edges, neg_batch)
 
@@ -289,33 +298,40 @@ class LATTELinkPred(LinkPredTrainer):
 
         return loss
 
-    def on_validation_end(self) -> None:
-        super().on_validation_end()
-        if self.current_epoch % 5 == 1:
-            self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-
     def test_step(self, batch, batch_nb):
         X, edge_true, edge_weights = batch
         embeddings, edge_pred_dict = self.forward(X, edge_true)
 
         pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        # loss = self.criterion.forward(*self.reshape_edge_pred_dict(edge_pred_dict))
-        loss = self.criterion.forward(pos_edges, neg_batch, e_weights)
+        loss = self.criterion.forward(pos_edges, neg_batch)
 
         self.update_link_pred_metrics(self.test_metrics, edge_pred_dict, pos_edges, neg_batch)
 
         self.log("test_loss", loss)
         return loss
 
+    def on_validation_end(self) -> None:
+        try:
+            if self.current_epoch % 5 == 1:
+                X, e_true, _ = self.dataset.full_batch(edge_idx=self.dataset.validation_idx)
+                embeddings, e_pred = self.forward(X, e_true, save_betas=True)
+
+                self.log_score_averages(edge_pred_dict=e_pred)
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+            super().on_validation_end()
+
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
                 X, e_true, _ = self.dataset.full_batch()
-                embs, e_pred = self.cpu().forward(X, e_true, save_betas=True)
+                embeddings, e_pred = self.cpu().forward(X, e_true, save_betas=True)
 
                 self.log_score_averages(edge_pred_dict=e_pred)
                 self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-                self.plot_embeddings_tsne(X, embs, targets=e_true, y_pred=e_pred)
+                self.plot_embeddings_tsne(X, embeddings, targets=e_true, y_pred=e_pred)
                 self.cleanup_artifacts()
 
         except Exception as e:

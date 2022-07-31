@@ -1,4 +1,5 @@
 import copy
+from argparse import Namespace
 from pprint import pprint
 from typing import List, Dict, Tuple, Union, Optional, Any
 
@@ -19,11 +20,13 @@ from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edg
 
 
 class LATTE(nn.Module):
-    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: Dict[str, int],
+    def __init__(self, n_layers: int, t_order: int,
+                 embedding_dim: int, num_nodes_dict: Dict[str, int],
                  metapaths: List[Tuple[str, str, str]], layer_pooling: str = None,
-                 activation: str = "relu", attn_heads: int = 1, attn_activation="sharpening", attn_dropout: float = 0.5,
+                 activation: str = "relu",
+                 attn_heads: int = 1, attn_activation="sharpening", attn_dropout: float = 0.5,
                  use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
-                 hparams=None):
+                 hparams: Namespace = None):
         super().__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
@@ -38,42 +41,37 @@ class LATTE(nn.Module):
         self.use_proximity = use_proximity
         self.layer_pooling = layer_pooling
 
-        # align the dimension of different types of nodes
-        if hparams.batchnorm:
-            self.batchnorm = nn.ModuleDict({
-                ntype: nn.BatchNorm1d(embedding_dim) for ntype in num_nodes_dict
-            })
-        self.dropout = hparams.dropout if hasattr(hparams, "dropout") else 0.0
-
         layer_t_orders = {
             l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
                 if (t_order - (n_layers - (l + 1))) > 0 \
                 else [1] \
             for l in reversed(range(n_layers))}
+        # layer_t_orders = {
+        #     l: list(range(1, t_order + 1)) \
+        #     for l in range(n_layers)}
 
         higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
 
         layers = []
         for l in range(n_layers):
             is_last_layer = l + 1 == n_layers
-            is_output_layer = False
 
-            l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
-                                                 order=layer_t_orders[l],  # Select only up to t-order
-                                                 # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
-                                                 tail_type=[self.head_node_type, "GO_term"] if is_last_layer else None)
+            l_layer_metapaths = filter_metapaths(
+                metapaths=metapaths + higher_order_metapaths,
+                order=layer_t_orders[l],  # Select only up to t-order
+                # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
+                tail_type=[self.head_node_type, "GO_term"] if is_last_layer else None)
 
             layer = LATTEConv(input_dim=embedding_dim,
-                              output_dim=hparams.n_classes if is_last_layer and is_output_layer else embedding_dim,
+                              output_dim=embedding_dim,
                               num_nodes_dict=num_nodes_dict,
                               metapaths=l_layer_metapaths,
-                              layer=l, t_order=self.t_order,
-                              activation=None if is_last_layer and is_output_layer else activation,
-                              layernorm=False if not hasattr(hparams, "layernorm") or (
-                                      is_last_layer and is_output_layer) else hparams.layernorm,
-                              batchnorm=False if not hasattr(hparams, "layernorm") or (
-                                      is_last_layer and is_output_layer) else hparams.batchnorm,
-                              dropout=self.dropout,
+                              layer=l,
+                              t_order=self.t_order,
+                              activation=activation,
+                              layernorm=hparams.layernorm,
+                              batchnorm=hparams.batchnorm,
+                              dropout=hparams.dropout if "dropout" in hparams else 0.0,
                               attn_heads=attn_heads,
                               attn_activation=attn_activation,
                               attn_dropout=attn_dropout,
@@ -247,9 +245,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
             for ntype in self.node_types})
 
-        # self.rel_attn = nn.ParameterDict({
-        #     ntype: nn.Parameter(Tensor(attn_heads, self.out_channels, self.out_channels)) \
-        #     for ntype in self.node_types})
+        self.rel_attn_bias = nn.ParameterDict({
+            ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
+            for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(Tensor(len(self.metapaths)).fill_(1.0))
@@ -309,7 +307,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         beta_l = F.relu(query * self.rel_attn_l[ntype], )
         beta_r = F.relu(key * self.rel_attn_r[ntype], )
 
-        beta = (beta_l[:, None, :] + beta_r).sum(-1)
+        beta = (beta_l[:, None, :, :] * beta_r).sum(-1) + self.rel_attn_bias[ntype][None, :, None]
         beta = F.softmax(beta, dim=1)
         # beta = torch.relu(beta / beta.sum(1, keepdim=True))
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
@@ -357,15 +355,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embeddings, ntype=ntype)
 
             if verbose:
-                print("  >", ntype, global_node_idx[ntype].shape)
-                for i, (metapath, beta) in enumerate(
-                        zip(self.get_tail_relations(ntype) + [ntype], betas[ntype].mean(-1).mean(0))):
+                print("  >", ntype, global_node_idx[ntype].shape, )
+                for i, (metapath, beta_mean, beta_std) in enumerate(
+                        zip(self.get_tail_relations(ntype) + [ntype],
+                            betas[ntype].mean(-1).mean(0),
+                            betas[ntype].mean(-1).std(0))):
                     print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
-                          f"\tedge_index: {list(edge_pred_dict[metapath][0].shape) if metapath in edge_pred_dict else None}, "
-                          f"\tbeta: {beta.item():.2f}, "
+                          f"\tedge_index: {edge_pred_dict[metapath][0].size(1) if metapath in edge_pred_dict else 0}, "
+                          f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(embeddings[:, i]).item():.2f}")
-
-                print(embeddings.shape)
 
             embeddings = embeddings * betas[ntype].unsqueeze(-1)
             embeddings = embeddings.sum(1).view(embeddings.size(0), self.embedding_dim)

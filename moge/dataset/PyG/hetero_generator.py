@@ -939,9 +939,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return out_edge_index_dict
 
-    def full_batch(self, mode="test"):
-        return self.transform(edge_idx=torch.cat([self.training_idx, self.validation_idx, self.testing_idx]),
-                              mode=mode)
+    def full_batch(self, edge_idx: Tensor = None, mode="test"):
+        if edge_idx is None:
+            edge_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
+        return self.transform(edge_idx=edge_idx, mode=mode)
 
     def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
                     edge_index_dict: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = [],
