@@ -16,7 +16,6 @@ from .utils import get_edge_index_from_neg_batch
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
-from ..utils import activation
 from ...dataset import HeteroLinkPredDataset
 
 
@@ -97,7 +96,7 @@ class LinkPred(torch.nn.Module):
                   embeddings: Dict[str, Tensor],
                   mode: str,
                   neg_sampling_batch_size: int = None) -> Dict[Tuple[str, str, str], Tensor]:
-        edge_pred_dict = {}
+        edge_index_dict_logits = {}
 
         for metapath, edge_index in edge_index_dict.items():
             head_type, edge_type, tail_type = metapath
@@ -124,12 +123,12 @@ class LinkPred(torch.nn.Module):
             if neg_sampling_batch_size:
                 scores = scores.view(-1, neg_sampling_batch_size)
 
-            edge_pred_dict[metapath] = scores
+            edge_index_dict_logits[metapath] = scores
 
         # print("\n", mode)
         # torch.set_printoptions(precision=3, linewidth=300)
         # pprint(edge_pred_dict)
-        return edge_pred_dict
+        return edge_index_dict_logits
 
     def transE(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
                embeddings: Dict[str, Tensor],
@@ -236,7 +235,7 @@ class LATTELinkPred(LinkPredTrainer):
             self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                return_embedding=False, return_score=False, **kwargs) \
+                return_embedding=False, **kwargs) \
             -> Tuple[Dict[str, Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
         if not self.training:
             self._node_ids = inputs["global_node_index"]
@@ -256,10 +255,6 @@ class LATTELinkPred(LinkPredTrainer):
             return embeddings
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
-        if return_score:
-            edges_pred = {pos_neg: {metapath: activation(edge_logits, loss_type=self.hparams.loss_type) \
-                                    for metapath, edge_logits in edge_dict.items()} \
-                          for pos_neg, edge_dict in edges_pred.items()}
 
         return embeddings, edges_pred
 

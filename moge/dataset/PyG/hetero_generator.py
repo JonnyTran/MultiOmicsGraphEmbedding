@@ -88,8 +88,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
-        edge_index_dict = to_edge_index_dict(ontology.network, nodes=go_nodes, edge_types=edge_types,
-                                             reverse=not self.use_reverse,
+        edge_index_dict = to_edge_index_dict(ontology.network, nodes=go_nodes, metapaths=edge_types,
+                                             # reverse=not self.use_reverse,
                                              format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 200: continue
@@ -521,7 +521,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                  neighbor_loader: str = "NeighborLoader",
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
                  metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None, edge_dir: str = "in",
-                 reshuffle_train: float = None, add_reverse_metapaths: bool = True, inductive: bool = False, **kwargs):
+                 reshuffle_train: float = None, add_reverse_metapaths: bool = True, inductive: bool = False,
+                 split_by_qualifier=False,
+                 **kwargs):
         super().__init__(dataset, seq_tokenizer, neighbor_loader, neighbor_sizes, node_types, metapaths, head_node_type,
                          edge_dir, reshuffle_train, add_reverse_metapaths, inductive, **kwargs)
         self.negative_sampling_size = negative_sampling_size
@@ -539,8 +541,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                            train_date='2017-06-15', valid_date='2017-11-15', test_date='2021-12-31',
                            go_ntype="GO_term",
                            metapaths: List[Tuple[str, str, str]] = None,
-                           add_annotation_as_edges=True):
-
+                           add_annotation_as_edges=True, split_by=None):
+        self.split_by_qualifier = split_by
         self._name = f"{self.head_node_type}-{go_ntype}-{train_date}"
         if ontology.data.index.name != "go_id":
             ontology.data.set_index("go_id", inplace=True)
@@ -551,21 +553,18 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
-        edge_index_dict = to_edge_index_dict(graph=ontology.network, nodes=go_nodes, edge_types=edge_types,
-                                             reverse=not self.use_reverse,
+        edge_index_dict = to_edge_index_dict(graph=ontology.network, nodes=go_nodes, metapaths=edge_types,
                                              format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
-            if edge_index.size(1) < 100 or (
-                    metapaths and metapath not in metapaths and metapath[1] not in metapaths): continue
+            if edge_index.size(1) < 100 or metapaths and metapath not in metapaths and metapath[1] not in metapaths:
+                continue
             self.metapaths.append(metapath)
-            self.G[metapath].edge_index = edge_index
-            self.edge_index_dict[metapath] = edge_index
+            self.G[metapath].edge_index = self.edge_index_dict[metapath] = edge_index
 
             if self.use_reverse:
                 rev_metapath = reverse_metapath_name(metapath)
                 self.metapaths.append(rev_metapath)
-                self.G[rev_metapath].edge_index = edge_index[[1, 0], :]
-                self.edge_index_dict[rev_metapath] = edge_index[[1, 0], :]
+                self.G[rev_metapath].edge_index = self.edge_index_dict[rev_metapath] = edge_index[[1, 0], :]
 
         # Cls node attrs
         for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
@@ -586,14 +585,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Edges between RNA nodes and GO terms
         if hasattr(ontology, "gaf_annotations"):
             self.load_annotation_edges(ontology, go_nodes=go_nodes, train_date=train_date, valid_date=valid_date,
-                                       test_date=test_date)
+                                       test_date=test_date, split_by=split_by)
 
         # Add the training pos edges to hetero graph
         if add_annotation_as_edges:
             edge_index_dict, _ = TripletDataset.get_relabled_edge_index(
                 triples={k: tensor[self.training_idx] for k, tensor in self.triples.items() if not is_negative(k)},
                 global_node_index={ntype: torch.arange(len(nodelist)) for ntype, nodelist in self.nodes.items()},
-                metapaths=self.pred_metapaths, relation_ids_all=self.triples["relation"].unique())
+                metapaths=self.pred_metapaths,
+                relation_ids_all=self.triples["relation"].unique())
 
             for metapath, edge_index in edge_index_dict.items():
                 self.G[metapath].edge_index = edge_index
@@ -631,29 +631,40 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        num_workers=0, verbose=True)
 
     def load_annotation_edges(self, ontology, go_nodes: List[str],
-                              train_date: str, valid_date: str, test_date: str):
+                              train_date: str, valid_date: str, test_date: str, split_by="Qualifier"):
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
             train_date=train_date, valid_date=valid_date, test_date=test_date,
-            groupby=["gene_name", "Qualifier"], filter_go_id=go_nodes)
+            groupby=["gene_name", split_by] if split_by else ["gene_name"],
+            filter_go_id=go_nodes)
         self.triples = {}
         self.triples_neg = {}
         pos_train_valid_test_sizes = []
         neg_train_valid_test_sizes = []
-        self.pred_metapaths = [(self.head_node_type, etype, self.go_ntype) \
-                               for etype in train_go_ann.reset_index()["Qualifier"].unique()]
+
+        if split_by:
+            nx_options = dict(edge_key=split_by, create_using=nx.MultiGraph)
+            self.d_etype = None
+            self.pred_metapaths = [(self.head_node_type, etype, self.go_ntype) \
+                                   for etype in train_go_ann.reset_index()[split_by].unique()]
+        else:
+            nx_options = dict(edge_key=None, create_using=nx.Graph)
+            self.d_etype = "associated"
+            self.pred_metapaths = [(self.head_node_type, self.d_etype, self.go_ntype)]
 
         # Process train, validation, and test annotations
         for go_ann in [train_go_ann, valid_go_ann, test_go_ann]:
             # True Positive links (undirected)
-            edges_df = go_ann["go_id"].dropna().explode().to_frame().reset_index()
-            nx_graph = nx.from_pandas_edgelist(edges_df,
+            nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].dropna().explode().to_frame().reset_index(),
                                                source="gene_name", target="go_id", edge_attr=True,
-                                               edge_key="Qualifier", create_using=nx.MultiGraph)
+                                               **nx_options)
+            if split_by:
+                metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
+            else:
+                metapaths = set(self.pred_metapaths)
 
-            metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
             edge_index_dict = to_edge_index_dict(nx_graph, nodes=self.nodes,
-                                                 edge_types=metapaths.intersection(self.pred_metapaths),
-                                                 reverse=None, format="pyg")
+                                                 metapaths=metapaths.intersection(self.pred_metapaths),
+                                                 format="pyg")
             for metapath, edge_index in edge_index_dict.items():
                 if metapath not in self.pred_metapaths: continue
                 relation_ids = torch.tensor([self.pred_metapaths.index(metapath)] * edge_index.size(1))
@@ -667,11 +678,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             # True Negative links (undirected)
             nx_graph = nx.from_pandas_edgelist(go_ann["neg_go_id"].dropna().explode().to_frame().reset_index(),
                                                source="gene_name", target="neg_go_id", edge_attr=True,
-                                               edge_key="Qualifier", create_using=nx.MultiGraph)
-            metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
+                                               **nx_options)
+            if split_by:
+                metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
+            else:
+                metapaths = set(self.pred_metapaths)
             neg_edge_index_dict = to_edge_index_dict(nx_graph, nodes=self.nodes,
-                                                     edge_types=metapaths.intersection(self.pred_metapaths),
-                                                     reverse=None, format="pyg")
+                                                     metapaths=metapaths.intersection(self.pred_metapaths),
+                                                     format="pyg")
             for metapath, edge_index in neg_edge_index_dict.items():
                 if metapath not in self.pred_metapaths: continue
                 relation_ids = torch.tensor([self.pred_metapaths.index(metapath)] * edge_index.size(1))
@@ -806,8 +820,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         X['batch_size'] = {ntype: query_nodes[ntype].numel() for ntype in query_nodes}
 
         # Edge_pos must be global index, not batch index
-        edge_pos_split = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=None)
-        head_batch, tail_batch = self.generate_negative_sampling(edge_pos_split,
+        if self.split_by_qualifier:
+            edge_pos = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=None)
+        head_batch, tail_batch = self.generate_negative_sampling(edge_pos,
                                                                  global_node_index=X["global_node_index"],
                                                                  max_negative_sampling_size=max_negative_sampling_size,
                                                                  mode=mode)
@@ -821,13 +836,20 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_true = {}
         edge_pos = self.get_relabled_edge_index(edge_pos, global_node_index=X["global_node_index"],
                                                 global2batch=global2batch)
-        edge_true['edge_pos'] = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=X["global_node_index"])
+        if self.split_by_qualifier:
+            edge_true['edge_pos'] = self.split_edge_index_by_go_namespace(edge_pos,
+                                                                          batch_to_global=X["global_node_index"])
+        else:
+            edge_true['edge_pos'] = edge_pos
 
         if num_edges(edge_neg):
             edge_neg = self.get_relabled_edge_index(edge_neg, global_node_index=X["global_node_index"],
                                                     global2batch=global2batch, )
-            edge_true['edge_neg'] = self.split_edge_index_by_go_namespace(edge_neg,
-                                                                          batch_to_global=X["global_node_index"])
+            if self.split_by_qualifier:
+                edge_true['edge_neg'] = self.split_edge_index_by_go_namespace(edge_neg,
+                                                                              batch_to_global=X["global_node_index"])
+            else:
+                edge_true['edge_neg'] = edge_neg
 
         # Negative sampling
         edge_true.update({"head_batch": head_batch, "tail_batch": tail_batch, })

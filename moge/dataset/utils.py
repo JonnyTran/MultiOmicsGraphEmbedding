@@ -23,26 +23,24 @@ def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dic
     return nodes
 
 
-def to_edge_index_dict(graph: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
-                       edge_types: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
-                       reverse=False,
+def to_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
+                       metapaths: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
                        format="coo", d_ntype="_N") -> Dict[Tuple[str, str, str], Tensor]:
-    if reverse:
-        graph = graph.reverse(copy=True)
+    if metapaths is None and isinstance(graph, nx.MultiGraph):
+        metapaths = {e for u, v, e in graph.edges}
+    if isinstance(graph, nx.Graph):
+        if isinstance(metapaths, (tuple, str)):
+            metapaths = [metapaths]
+        elif metapaths is None:
+            metapaths = [d_etype]
 
-    if not isinstance(graph, nx.MultiGraph):
-        raise NotImplementedError
-
-    if edge_types is None:
-        edge_types = {e for u, v, e in graph.edges}
-    if not isinstance(edge_types, (list, tuple, set)) and isinstance(graph, nx.Graph):
-        edge_types = ["_E"]
+    assert isinstance(metapaths, (list, set)) and isinstance(list(metapaths)[0], (tuple, str))
 
     edge_index_dict = {}
-    for etype in edge_types:
+    for etype in metapaths:
         if isinstance(graph, nx.MultiGraph) and isinstance(etype, str):
             assert not isinstance(nodes, dict)
-            edge_subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
+            subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
             nodes_A = nodes
             nodes_B = nodes
             metapath = (d_ntype, etype, d_ntype)
@@ -51,22 +49,26 @@ def to_edge_index_dict(graph: Tuple[nx.DiGraph, nx.MultiGraph], nodes: Union[Lis
             assert isinstance(nodes, dict)
             metapath: Tuple[str, str, str] = etype
             head, etype, tail = metapath
-            edge_subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
+            subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
 
-            nodes_A = nodes[head]
-            nodes_B = nodes[tail]
+            nodes_A, nodes_B = nodes[head], nodes[tail]
 
-        elif etype == "_E":
-            assert not isinstance(nodes, dict)
-            edge_subgraph = graph.edges
-            nodes_A = nodes
-            nodes_B = nodes
-            metapath = (d_ntype, etype, d_ntype)
+        elif isinstance(graph, nx.Graph):
+            subgraph = graph
+
+            if isinstance(etype, str):
+                assert not isinstance(nodes, dict)
+                nodes_A = nodes_B = nodes
+                metapath = (d_ntype, etype, d_ntype)
+            elif isinstance(etype, tuple):
+                head, etype, tail = metapath = etype
+                nodes_A, nodes_B = nodes[head], nodes[tail]
+
         else:
-            raise Exception(f"Edge types `{edge_types}` are ill formed.")
+            raise Exception(f"Edge types `{metapaths}` are ill formed.")
 
         try:
-            biadj = nx.bipartite.biadjacency_matrix(edge_subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
+            biadj = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
                                                     format="coo")
         except Exception as e:
             print(etype, e)
