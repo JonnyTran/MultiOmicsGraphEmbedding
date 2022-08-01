@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, Union, List
 
 import numpy as np
 import torch
@@ -19,6 +19,29 @@ def activation(y_pred: Tensor, loss_type: str):
         y_pred = torch.softmax(y_pred, dim=1)
 
     return y_pred
+
+
+def to_device(obj: Union[Dict, List, Tensor], device: str):
+    if torch.is_tensor(obj):
+        return obj.to(device)
+
+    elif isinstance(obj, dict):
+        res = {}
+        for k, v in obj.items():
+            res[k] = to_device(v, device)
+        return res
+
+    elif isinstance(obj, list):
+        res = []
+        for v in obj:
+            res.append(to_device(v, device))
+        return res
+
+    elif isinstance(obj, (int, float, str)) or obj is None:
+        return obj
+
+    else:
+        raise TypeError("Invalid type for move_to", type(obj), "\n", obj)
 
 
 def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):

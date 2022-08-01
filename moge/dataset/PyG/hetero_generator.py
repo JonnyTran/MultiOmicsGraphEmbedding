@@ -19,6 +19,7 @@ from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
 from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_edge_index_dict, gather_node_dict
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
+from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
 
 
@@ -939,10 +940,19 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return out_edge_index_dict
 
-    def full_batch(self, edge_idx: Tensor = None, mode="test"):
+    def full_batch(self, edge_idx: Tensor = None, mode="test", device="cpu"):
         if edge_idx is None:
             edge_idx = torch.cat([self.training_idx, self.validation_idx, self.testing_idx])
-        return self.transform(edge_idx=edge_idx, mode=mode)
+        elif not torch.is_tensor(edge_idx):
+            edge_idx = torch.tensor(edge_idx)
+
+        X, edge_pred, _ = self.transform(edge_idx=edge_idx, mode=mode)
+
+        if device != "cpu":
+            X = to_device(X, device)
+            edge_pred = to_device(edge_pred, device)
+
+        return X, edge_pred, _
 
     def to_networkx(self, nodes: Dict[str, Union[List[str], List[int]]] = None,
                     edge_index_dict: Union[Dict[Tuple[str, str, str], Tensor], List[Tuple[str, str, str]]] = [],

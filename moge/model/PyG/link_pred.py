@@ -7,6 +7,7 @@ from typing import List, Tuple, Dict, Any, Union
 import numpy as np
 import torch
 from fairscale.nn import auto_wrap
+from pandas import DataFrame
 from torch import nn, Tensor
 
 from moge.model.PyG.latte_flat import LATTE
@@ -224,16 +225,16 @@ class LATTELinkPred(LinkPredTrainer):
         self.lr = self.hparams.lr
 
     @property
-    def metapaths(self):
-        return {i + 1: layer.metapaths for i, layer in enumerate(self.embedder.layers)}
+    def metapaths(self) -> List[Tuple[str, str, str]]:
+        return [layer.metapaths for layer in self.embedder.layers]
 
     @property
-    def betas(self):
-        return {i + 1: layer._betas for i, layer in enumerate(self.embedder.layers)}
+    def betas(self) -> List[Dict[str, DataFrame]]:
+        return [layer._betas for layer in self.embedder.layers]
 
     @property
-    def beta_avg(self):
-        return {i + 1: layer._beta_avg for i, layer in enumerate(self.embedder.layers)}
+    def beta_avg(self) -> List[Dict[Tuple[str, str, str], float]]:
+        return [layer._beta_avg for layer in self.embedder.layers]
 
     def configure_sharded_model(self):
         # modules are sharded across processes
@@ -313,9 +314,11 @@ class LATTELinkPred(LinkPredTrainer):
     def on_validation_end(self) -> None:
         try:
             if self.current_epoch % 5 == 1:
-                X, e_true, _ = self.dataset.full_batch(edge_idx=self.dataset.validation_idx)
+                X, e_true, _ = self.dataset.full_batch(
+                    edge_idx=np.random.choice(self.dataset.validation_idx, size=10, replace=False), device=self.device)
                 embeddings, e_pred = self.forward(X, e_true, save_betas=True)
 
+                self.log_beta_degree_correlation(X)
                 self.log_score_averages(edge_pred_dict=e_pred)
         except Exception as e:
             traceback.print_exc()

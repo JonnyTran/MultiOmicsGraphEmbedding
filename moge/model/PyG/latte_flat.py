@@ -248,6 +248,8 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.rel_attn_bias = nn.ParameterDict({
             ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
             for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
+        # self.rel_mha = nn.MultiheadAttention(embed_dim=self.embedding_dim, num_heads=attn_heads, dropout=attn_dropout,
+        #                                      batch_first=True)
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(Tensor(len(self.metapaths)).fill_(1.0))
@@ -289,10 +291,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             for ntype, rel_attn in self.rel_attn_r.items():
                 nn.init.xavier_normal_(rel_attn, gain=gain)
 
-        elif hasattr(self, "rel_attn"):
-            for ntype, rel_attn in self.rel_attn.items():
-                nn.init.xavier_normal_(rel_attn)
-
     # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str) -> Tensor:
     #     beta_l = (query * self.rel_attn_l[ntype]).sum(dim=-1)
     #     beta_r = (key * self.rel_attn_r[ntype]).sum(dim=-1)
@@ -312,6 +310,16 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         # beta = torch.relu(beta / beta.sum(1, keepdim=True))
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
+
+    # def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str):
+    #     """
+    #     Multihead Attention to find betas
+    #     """
+    #     key = key.view(query.size(0), self.num_tail_relations(ntype), -1)
+    #     _, betas = self.rel_mha.forward(key, key=key, value=key, average_attn_weights=False)
+    #
+    #     betas = betas.mean(2).permute([0,2,1])
+    #     return betas
 
     def forward(self, feats: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],

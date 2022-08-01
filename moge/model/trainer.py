@@ -155,6 +155,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         self.attn_plot_name = "sankey_flow"
         self.embedding_plot_name = "node_emb_umap_plot"
         self.score_avg_table_name = "score_avgs"
+        self.beta_degree_corr_table_name = "beta_degree_correlation"
 
     def plot_embeddings_tsne(self, X: Dict[str, Any], embeddings: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
                              targets: Tensor = None, y_pred: Tensor = None,
@@ -225,6 +226,37 @@ class NodeEmbeddingEvaluator(LightningModule):
         wandb.log({self.score_avg_table_name: table})
         print("Logging log_score_averages")
         return score_avgs
+
+    def log_beta_degree_correlation(self, X: Dict[str, Dict[str, Tensor]]) -> DataFrame:
+        batch_size = X["batch_size"]
+        global_node_index = X["global_node_index"]
+        nodes_index = {ntype: nids[: batch_size[ntype]].numpy() \
+                       for ntype, nids in global_node_index.items() if ntype in batch_size}
+        nodes_index = pd.MultiIndex.from_tuples(
+            ((ntype, nid) for ntype, nids in nodes_index.items() for nid in nids),
+            names=["ntype", "nid"])
+
+        nodes_degree = self.dataset.get_node_degrees().loc[nodes_index].fillna(0)
+
+        layers_corr = {}
+        for layer, betas in enumerate(self.betas):
+            nodes_betas = pd.concat(betas, names=["ntype", "nid"]).loc[nodes_index].fillna(0)
+            nodes_corr = nodes_betas.corrwith(nodes_degree, axis=1, drop=True) \
+                .groupby("ntype") \
+                .mean()
+
+            layers_corr[layer + 1] = nodes_corr
+
+        layers_corr = pd.concat(layers_corr, names=["Layer", "ntype"]).unstack().fillna(0.0)
+        layers_corr.columns.name = None
+
+        try:
+            wandb.log({self.beta_degree_corr_table_name: layers_corr.reset_index()})
+            print("Logging beta_degree_correlation")
+        except:
+            pass
+
+        return layers_corr
 
     @property
     def wandb_experiment(self):
