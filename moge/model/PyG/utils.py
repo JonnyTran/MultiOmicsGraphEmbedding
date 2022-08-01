@@ -12,6 +12,10 @@ def num_edges(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Te
                for m, edge_index in edge_index_dict.items())
 
 
+def max_hops(metapaths: List[Tuple[str, str, str]]):
+    return max(len(metapath[1::2]) for metapath in metapaths)
+
+
 def tag_negative(metapath):
     if isinstance(metapath, tuple):
         return metapath + ("neg",)

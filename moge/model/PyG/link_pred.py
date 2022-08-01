@@ -215,7 +215,7 @@ class LATTELinkPred(LinkPredTrainer):
 
         self.classifier = LinkPred(embedding_dim=hparams.embedding_dim,
                                    pred_metapaths=dataset.pred_metapaths,
-                                   scoring=hparams.scoring if hasattr(hparams, "scoring") else "DistMult",
+                                   scoring=hparams.scoring if "scoring" in hparams else "DistMult",
                                    loss_type=hparams.loss_type,
                                    ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
 
@@ -318,7 +318,7 @@ class LATTELinkPred(LinkPredTrainer):
                     edge_idx=np.random.choice(self.dataset.validation_idx, size=10, replace=False), device=self.device)
                 embeddings, e_pred = self.forward(X, e_true, save_betas=True)
 
-                self.log_beta_degree_correlation(X)
+                self.log_beta_degree_correlation(global_node_index=X["global_node_index"], batch_size=X["batch_size"])
                 self.log_score_averages(edge_pred_dict=e_pred)
         except Exception as e:
             traceback.print_exc()
@@ -329,7 +329,7 @@ class LATTELinkPred(LinkPredTrainer):
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
-                X, e_true, _ = self.dataset.full_batch()
+                X, e_true, _ = self.dataset.full_batch(device="cpu")
                 embeddings, e_pred = self.cpu().forward(X, e_true, save_betas=True)
 
                 self.log_score_averages(edge_pred_dict=e_pred)

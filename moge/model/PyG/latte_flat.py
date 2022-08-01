@@ -16,7 +16,7 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
 from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_hops
 
 
 class LATTE(nn.Module):
@@ -50,7 +50,7 @@ class LATTE(nn.Module):
         #     l: list(range(1, t_order + 1)) \
         #     for l in range(n_layers)}
 
-        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
+        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of meapaths
 
         layers = []
         for l in range(n_layers):
@@ -79,7 +79,7 @@ class LATTE(nn.Module):
                               use_proximity=use_proximity,
                               neg_sampling_ratio=neg_sampling_ratio,
                               verbose=hparams.verbose if "verbose" in hparams else False)
-            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
+            if l + 1 < n_layers and max_hops(l_layer_metapaths) < len(layer_t_orders[l]):
                 higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
             layers.append(layer)
@@ -352,15 +352,15 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         edge_pred_dicts = {}
         for ntype in global_node_idx:
             if global_node_idx[ntype].size(0) == 0 or self.num_tail_relations(ntype) <= 1: continue
-            embeddings, edge_pred_dict = self.aggregate_relations(
+            embedding, edge_pred_dict = self.aggregate_relations(
                 ntype=ntype, l_dict=l_dict, r_dict=r_dict,
                 edge_index_dict=edge_index_dict, edge_pred_dict=edge_pred_dict, sizes=sizes)
             edge_pred_dicts.update(edge_pred_dict)
 
-            embeddings[:, -1] = l_dict[ntype]
+            embedding[:, -1] = l_dict[ntype]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embeddings, ntype=ntype)
+            betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
 
             if verbose:
                 print("  >", ntype, global_node_idx[ntype].shape, )
@@ -371,23 +371,23 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                     print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
                           f"\tedge_index: {edge_pred_dict[metapath][0].size(1) if metapath in edge_pred_dict else 0}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(embeddings[:, i]).item():.2f}")
+                          f"\tnorm: {torch.norm(embedding[:, i]).item():.2f}")
 
-            embeddings = embeddings * betas[ntype].unsqueeze(-1)
-            embeddings = embeddings.sum(1).view(embeddings.size(0), self.embedding_dim)
+            embedding = embedding * betas[ntype].unsqueeze(-1)
+            embedding = embedding.sum(1).view(embedding.size(0), self.embedding_dim)
 
             if hasattr(self, "activation"):
-                embeddings = self.activation(embeddings)
+                embedding = self.activation(embedding)
 
             if hasattr(self, "layernorm"):
-                embeddings = self.layernorm(embeddings)
+                embedding = self.layernorm(embedding)
             elif hasattr(self, "batchnorm"):
-                embeddings = self.batchnorm(embeddings)
+                embedding = self.batchnorm(embedding)
 
             if hasattr(self, "dropout"):
-                embeddings = self.dropout(embeddings)
+                embedding = self.dropout(embedding)
 
-            h_out[ntype] = embeddings
+            h_out[ntype] = embedding
 
         if save_betas:
             self.save_relation_weights(betas={ntype: betas[ntype].mean(-1) for ntype in betas},

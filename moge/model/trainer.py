@@ -221,17 +221,24 @@ class NodeEmbeddingEvaluator(LightningModule):
                                          for m, edges in eid.items()} \
                                    for pos, eid in edge_pred_dict.items()})
         score_avgs.index.names = ("head", "relation", "tail")
-        table = wandb.Table(dataframe=score_avgs.reset_index())
+        try:
+            table = wandb.Table(dataframe=score_avgs.reset_index())
 
-        wandb.log({self.score_avg_table_name: table})
-        print("Logging log_score_averages")
-        return score_avgs
+            wandb.log({self.score_avg_table_name: table})
+            print("Logging log_score_averages")
+        except:
+            pass
+        finally:
+            return score_avgs
 
-    def log_beta_degree_correlation(self, X: Dict[str, Dict[str, Tensor]]) -> DataFrame:
-        batch_size = X["batch_size"]
-        global_node_index = X["global_node_index"]
-        nodes_index = {ntype: nids[: batch_size[ntype]].numpy() \
-                       for ntype, nids in global_node_index.items() if ntype in batch_size}
+    def log_beta_degree_correlation(self, global_node_index: Dict[str, Tensor],
+                                    batch_size: Dict[str, int] = None) -> DataFrame:
+        nodes_index = {ntype: nids.numpy() \
+                       for ntype, nids in global_node_index.items()}
+        if batch_size:
+            nodes_index = {ntype: nids[: batch_size[ntype]] \
+                           for ntype, nids in nodes_index.items() if ntype in batch_size}
+
         nodes_index = pd.MultiIndex.from_tuples(
             ((ntype, nid) for ntype, nids in nodes_index.items() for nid in nids),
             names=["ntype", "nid"])
