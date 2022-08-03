@@ -154,6 +154,8 @@ def tensor_sizes(input: Any) -> Any:
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)
     elif isinstance(input, list):
+        if isinstance(input[0], str):
+            return len(input)
         return [tensor_sizes(v) for v in input]
     else:
         if input is not None and hasattr(input, "shape"):

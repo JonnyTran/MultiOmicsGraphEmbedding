@@ -14,10 +14,10 @@ from torch_sparse.tensor import SparseTensor
 from umap import UMAP
 
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
-from moge.dataset.PyG.triplet_generator import TripletDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_edge_index_dict, gather_node_dict
+from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_edge_index_dict, gather_node_dict, \
+    get_relabled_edge_index
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
@@ -475,7 +475,6 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                  neighbor_sizes: Union[List[int], Dict[str, List[int]]] = [128, 128], node_types: List[str] = None,
                  metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None, edge_dir: str = "in",
                  reshuffle_train: float = None, add_reverse_metapaths: bool = True, inductive: bool = False,
-                 split_by_qualifier=False,
                  **kwargs):
         super().__init__(dataset, seq_tokenizer, neighbor_loader, neighbor_sizes, node_types, metapaths, head_node_type,
                          edge_dir, reshuffle_train, add_reverse_metapaths, inductive, **kwargs)
@@ -491,10 +490,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        num_workers=0)
 
     def add_ontology_edges(self, ontology,
-                           train_date='2017-06-15', valid_date='2017-11-15', test_date='2021-12-31',
+                           train_date='2017-06-15',
+                           valid_date='2017-11-15',
+                           test_date='2021-12-31',
                            go_ntype="GO_term",
                            metapaths: List[Tuple[str, str, str]] = None,
-                           add_annotation_as_edges=True, split_by=None, split_namespace=True):
+                           add_annotation_as_edges=True,
+                           split_etype=None,
+                           split_namespace=True):
         self.split_namespace = split_namespace
         self._name = f"{self.head_node_type}-{go_ntype}-{train_date}"
         if ontology.data.index.name != "go_id":
@@ -538,11 +541,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Edges between RNA nodes and GO terms
         if hasattr(ontology, "gaf_annotations"):
             self.load_annotation_edges(ontology, go_nodes=go_nodes, train_date=train_date, valid_date=valid_date,
-                                       test_date=test_date, split_by=split_by)
+                                       test_date=test_date, split_etype=split_etype)
 
         # Add the training pos edges to hetero graph
         if add_annotation_as_edges:
-            edge_index_dict, _ = TripletDataset.get_relabled_edge_index(
+            edge_index_dict, _ = get_relabled_edge_index(
                 triples={k: tensor[self.training_idx] for k, tensor in self.triples.items() if not is_negative(k)},
                 global_node_index={ntype: torch.arange(len(nodelist)) for ntype, nodelist in self.nodes.items()},
                 metapaths=self.pred_metapaths,
@@ -584,20 +587,20 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                        num_workers=0, verbose=True)
 
     def load_annotation_edges(self, ontology, go_nodes: List[str],
-                              train_date: str, valid_date: str, test_date: str, split_by="Qualifier"):
+                              train_date: str, valid_date: str, test_date: str, split_etype="Qualifier"):
         train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
             train_date=train_date, valid_date=valid_date, test_date=test_date,
-            groupby=["gene_name", split_by] if split_by else ["gene_name"],
+            groupby=["gene_name", split_etype] if split_etype else ["gene_name"],
             filter_go_id=go_nodes)
         self.triples = {}
         self.triples_neg = {}
         pos_train_valid_test_sizes = []
         neg_train_valid_test_sizes = []
 
-        if split_by:
-            nx_options = dict(edge_key=split_by, create_using=nx.MultiGraph, edge_attr=True)
+        if split_etype:
+            nx_options = dict(edge_key=split_etype, create_using=nx.MultiGraph, edge_attr=True)
             self.pred_metapaths = [(self.head_node_type, etype, self.go_ntype) \
-                                   for etype in train_go_ann.reset_index()[split_by].unique()]
+                                   for etype in train_go_ann.reset_index()[split_etype].unique()]
         else:
             nx_options = dict(edge_key=None, create_using=nx.Graph, edge_attr=None)
             self.pred_metapaths = [(self.head_node_type, "associated", self.go_ntype)]
@@ -608,7 +611,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].dropna().explode().to_frame().reset_index(),
                                                source="gene_name", target="go_id",
                                                **nx_options)
-            if split_by:
+            if split_etype:
                 metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
             else:
                 metapaths = set(self.pred_metapaths)
@@ -630,7 +633,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             nx_graph = nx.from_pandas_edgelist(go_ann["neg_go_id"].dropna().explode().to_frame().reset_index(),
                                                source="gene_name", target="neg_go_id",
                                                **nx_options)
-            if split_by:
+            if split_etype:
                 metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
             else:
                 metapaths = set(self.pred_metapaths)
@@ -655,7 +658,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         self.global_node_index = {ntype: torch.arange(len(nodelist)) for ntype, nodelist in self.nodes.items()}
 
         # Adjacency of pos edges (for neg sampling)
-        edge_index_dict, edge_neg_dict = TripletDataset.get_relabled_edge_index(
+        edge_index_dict, edge_neg_dict = get_relabled_edge_index(
             triples=self.triples,
             global_node_index={ntype: torch.arange(len(nodelist)) for ntype, nodelist in self.nodes.items()},
             metapaths=self.pred_metapaths,
@@ -827,9 +830,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             triples.update(triples_neg)
 
         # Get edge_index_dict from triplets
-        edge_pos, edge_neg = TripletDataset.get_relabled_edge_index(triples=triples,
-                                                                    global_node_index=self.global_node_index,
-                                                                    metapaths=self.pred_metapaths)
+        edge_pos, edge_neg = get_relabled_edge_index(triples=triples,
+                                                     global_node_index=self.global_node_index,
+                                                     metapaths=self.pred_metapaths)
         return edge_pos, edge_neg
 
     def generate_negative_sampling(self, edge_pos: Dict[Tuple[str, str, str], Tensor],

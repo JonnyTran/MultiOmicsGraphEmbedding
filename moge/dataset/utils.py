@@ -1,5 +1,5 @@
 import copy
-from typing import List, Union, Dict, Tuple, Set
+from typing import List, Union, Dict, Tuple, Set, Optional
 
 import networkx as nx
 import numpy as np
@@ -23,6 +23,81 @@ def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dic
     return nodes
 
 
+def is_sorted(arr: Tensor):
+    return torch.all(arr[:-1] <= arr[1:])
+
+
+def get_relabled_edge_index(triples: Dict[str, Tensor], global_node_index: Dict[str, Tensor],
+                            metapaths: List[Tuple[str, str, str]],
+                            relation_ids_all: Optional[Tensor] = None,
+                            local2batch: Optional[Dict[str, Dict[int, int]]] = None,
+                            format: str = "pyg") \
+        -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
+    edges_pos = {}
+    edges_neg = {}
+
+    if local2batch is None and not all(is_sorted(node_ids) for ntype, node_ids in global_node_index.items()):
+        local2batch = {
+            node_type: dict(zip(
+                global_node_index[node_type].numpy(),
+                range(len(global_node_index[node_type])))
+            ) for node_type in global_node_index}
+
+    if relation_ids_all is None:
+        relation_ids_all = triples["relation" if "relation" in triples else "relation_neg"].unique()
+        assert len(relation_ids_all) == len(metapaths)
+
+    # Get edge_index with batch id
+    for relation_id in relation_ids_all:
+        metapath = metapaths[relation_id]
+        head_type, tail_type = metapath[0], metapath[-1]
+
+        if "relation" in triples:
+            mask = triples["relation"] == relation_id
+            src = triples["head"][mask]
+            dst = triples["tail"][mask]
+            if local2batch:
+                src, dst = src.apply_(local2batch[head_type].get), dst.apply_(local2batch[tail_type].get)
+
+            if format == "pyg":
+                edges_pos[metapath] = torch.stack([src, dst], dim=1).t()
+            elif format == "dgl":
+                edges_pos[metapath] = (src, dst)
+
+        # Negative edges
+        if any(["neg" in k for k in triples.keys()]) and "relation_neg" in triples:
+            mask = triples["relation_neg"] == relation_id
+            src_neg = triples["head_neg"][mask]
+            dst_neg = triples["tail_neg"][mask]
+            if local2batch:
+                src_neg, dst_neg = src_neg.apply_(local2batch[head_type].get), dst_neg.apply_(
+                    local2batch[tail_type].get)
+
+            if format == "pyg":
+                edges_neg[metapath] = torch.stack([src_neg, dst_neg], dim=1).t()
+            elif format == "dgl":
+                edges_neg[metapath] = (src_neg, dst_neg)
+
+        # Negative sampled edges
+        if any(["neg" in k for k in triples.keys()]) and "relation" in triples and "relation_neg" not in triples:
+            mask = triples["relation"] == relation_id
+            src_neg = triples["head_neg"][mask]
+            dst_neg = triples["tail_neg"][mask]
+            if local2batch:
+                src_neg, dst_neg = src_neg.apply_(local2batch[head_type].get), dst_neg.apply_(
+                    local2batch[tail_type].get)
+            head_batch = torch.stack([src_neg.view(-1), dst.repeat(src_neg.size(1))])
+            tail_batch = torch.stack([src.repeat(dst_neg.size(1)), dst_neg.view(-1)])
+
+            if format == "pyg":
+                edges_neg[metapath] = torch.cat([head_batch, tail_batch], dim=1)
+            elif format == "dgl":
+                edge_index = torch.cat([head_batch, tail_batch], dim=1)
+                edges_neg[metapath] = (edge_index[0], edge_index[1])
+
+    return edges_pos, edges_neg
+
+
 def to_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
                        metapaths: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
                        format="coo", d_ntype="_N") -> Dict[Tuple[str, str, str], Tensor]:
@@ -32,7 +107,7 @@ def to_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List[
         if isinstance(metapaths, (tuple, str)):
             metapaths = [metapaths]
         elif metapaths is None:
-            metapaths = [d_etype]
+            metapaths = ["_E"]
 
     assert isinstance(metapaths, (list, set)) and isinstance(list(metapaths)[0], (tuple, str))
 
@@ -127,10 +202,11 @@ def edge_dict_intersection(edge_index_dict_A, edge_index_dict_B):
     return inters
 
 
-def edge_intersection(edge_index_A, edge_index_B, remove_duplicates=True):
+def edge_intersection(edge_index_A: Tensor, edge_index_B: Tensor, remove_duplicates=True):
     A = pd.DataFrame(edge_index_A.T.numpy(), columns=["source", "target"])
     B = pd.DataFrame(edge_index_B.T.numpy(), columns=["source", "target"])
     int_df = pd.merge(A, B, how='inner', on=["source", "target"], sort=True)
+
     if remove_duplicates:
         int_df = int_df[~int_df.duplicated()]
     return torch.tensor(int_df.to_numpy().T, dtype=torch.long)

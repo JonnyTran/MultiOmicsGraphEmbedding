@@ -24,8 +24,7 @@ from moge.network.sequence import BertSequenceTokenizer
 from .samplers import ImportanceSampler
 from .. import HeteroNeighborGenerator
 from ..utils import one_hot_encoder
-
-SEQUENCE_COL = "sequence"
+from ...network.base import SEQUENCE_COL
 
 
 class DGLNodeSampler(HeteroGraphDataset):
@@ -63,11 +62,11 @@ class DGLNodeSampler(HeteroGraphDataset):
             fanouts.append({etype: fanout for etype in self.G.canonical_etypes})
 
         if sampler == "MultiLayerNeighborSampler":
-            print("Using MultiLayerNeighborSampler", tensor_sizes(fanouts))
+            print("Using MultiLayerNeighborSampler")
             self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
 
         elif sampler == "ImportanceSampler":
-            print("Using ImportanceSampler", tensor_sizes(fanouts))
+            print("Using ImportanceSampler", )
             self.neighbor_sampler = ImportanceSampler(fanouts=fanouts,
                                                       metapaths=self.get_metapaths(),  # Original metapaths only
                                                       degree_counts=self.degree_counts,
@@ -437,8 +436,8 @@ class DGLNodeSampler(HeteroGraphDataset):
             seed_nodes = self.training_idx
 
         if collate_fn == "neighbor_sampler":
-            collator = LATTEPyGCollator(graph, nids=seed_nodes,
-                                        graph_sampler=self.neighbor_sampler)
+            collator = LATTENodeClfPyGCollator(graph, nids=seed_nodes,
+                                               graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     graph_sampler=self.neighbor_sampler)
@@ -498,8 +497,8 @@ class DGLNodeSampler(HeteroGraphDataset):
             seed_nodes = self.validation_idx
 
         if collate_fn == "neighbor_sampler":
-            collator = LATTEPyGCollator(graph, nids=seed_nodes,
-                                        graph_sampler=self.neighbor_sampler)
+            collator = LATTENodeClfPyGCollator(graph, nids=seed_nodes,
+                                               graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     graph_sampler=self.neighbor_sampler)
@@ -521,8 +520,8 @@ class DGLNodeSampler(HeteroGraphDataset):
             seed_nodes = self.testing_idx
 
         if collate_fn == "neighbor_sampler":
-            collator = LATTEPyGCollator(graph, nids=seed_nodes,
-                                        graph_sampler=self.neighbor_sampler)
+            collator = LATTENodeClfPyGCollator(graph, nids=seed_nodes,
+                                               graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     graph_sampler=self.neighbor_sampler)
@@ -533,7 +532,7 @@ class DGLNodeSampler(HeteroGraphDataset):
         return dataloader
 
 
-class LATTEPyGCollator(dgl.dataloading.NodeCollator):
+class LATTENodeClfPyGCollator(dgl.dataloading.NodeCollator):
     def collate(self, items):
         if isinstance(items[0], tuple):
             # returns a list of pairs: group them by node types into a dict

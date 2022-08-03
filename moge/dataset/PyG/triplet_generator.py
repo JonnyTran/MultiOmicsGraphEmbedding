@@ -8,7 +8,7 @@ from torch import Tensor
 
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.utils import merge_node_index
+from moge.dataset.utils import merge_node_index, get_relabled_edge_index
 from moge.model.PyG.utils import is_negative
 
 
@@ -152,9 +152,9 @@ class TripletDataset(HeteroGraphDataset):
         relation_ids_all = triples["relation"].unique()
 
         global_node_index = TripletDataset.gather_node_set(triples, relation_ids_all, metapaths=self.metapaths)
-        edge_index_dict = TripletDataset.get_relabled_edge_index(triples=triples, global_node_index=global_node_index,
-                                                                 metapaths=self.metapaths,
-                                                                 relation_ids_all=relation_ids_all)
+        edge_index_dict = get_relabled_edge_index(triples=triples, global_node_index=global_node_index,
+                                                  metapaths=self.metapaths,
+                                                  relation_ids_all=relation_ids_all)
         if self.use_reverse:
             self.add_reverse_edge_index(edge_index_dict)
 
@@ -196,45 +196,7 @@ class TripletDataset(HeteroGraphDataset):
                            for ntype, nids in node_index_dict.items()}
         return node_index_dict
 
-    @staticmethod
-    def get_relabled_edge_index(triples: Dict[str, Tensor], global_node_index: Dict[str, Tensor],
-                                metapaths: List[Tuple[str, str, str]], relation_ids_all: Tensor = None,
-                                local2batch: Dict[str, Dict[int, int]] = None) \
-            -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
-        edges_pos = {}
-        edges_neg = {}
 
-        if local2batch is None:
-            local2batch = {
-                node_type: dict(zip(
-                    global_node_index[node_type].numpy(),
-                    range(len(global_node_index[node_type])))
-                ) for node_type in global_node_index}
-
-        if relation_ids_all is None:
-            relation_ids_all = triples["relation" if "relation" in triples else "relation_neg"].unique()
-
-        # Get edge_index with batch id
-        for relation_id in relation_ids_all:
-            metapath = metapaths[relation_id]
-            head_type, tail_type = metapath[0], metapath[-1]
-            assert head_type in local2batch.keys() and tail_type in local2batch.keys()
-
-            if "relation" in triples:
-                mask = triples["relation"] == relation_id
-                sources = triples["head"][mask].apply_(local2batch[head_type].get)
-                targets = triples["tail"][mask].apply_(local2batch[tail_type].get)
-                edges_pos[metapath] = torch.stack([sources, targets], dim=1).t()
-
-            if any(["neg" in k for k in triples.keys()]):
-                mask = triples["relation_neg"] == relation_id
-                head_neg = triples["head_neg"][mask].apply_(local2batch[head_type].get)
-                tail_neg = triples["tail_neg"][mask].apply_(local2batch[tail_type].get)
-                # head_batch = torch.stack([head_neg.view(-1), targets.repeat(head_neg.size(1))])
-                # tail_batch = torch.stack([sources.repeat(tail_neg.size(1)), tail_neg.view(-1)])
-                edges_neg[metapath] = torch.stack([head_neg, tail_neg], dim=1).t()
-
-        return edges_pos, edges_neg
 
 
 class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
@@ -303,10 +265,10 @@ class BidirectionalGenerator(TripletDataset, HeteroNeighborGenerator):
         triplets_node_index = TripletDataset.gather_node_set(triples, relation_ids_all, metapaths=self.metapaths)
 
         # Get true edges from triples
-        edges_pos, edges_neg = TripletDataset.get_relabled_edge_index(triples=triples,
-                                                                      global_node_index=triplets_node_index,
-                                                                      metapaths=self.metapaths,
-                                                                      relation_ids_all=relation_ids_all)
+        edges_pos, edges_neg = get_relabled_edge_index(triples=triples,
+                                                       global_node_index=triplets_node_index,
+                                                       metapaths=self.metapaths,
+                                                       relation_ids_all=relation_ids_all)
 
         # Run negative sampling if no true negative edges
         if not edges_neg:
