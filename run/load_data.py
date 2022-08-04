@@ -5,21 +5,22 @@ from argparse import Namespace
 from typing import Union
 
 import dgl
-import moge
-import moge.dataset.PyG.triplet_generator
 import numpy as np
 import pandas as pd
 from cogdl.datasets.gtn_data import GTNDataset
-from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset, HeteroNodeClfDataset
-from moge.dataset.dgl.graph_generator import DGLGraphSampler
-from moge.dataset.sequences import SequenceTokenizers
-from moge.model.dgl.NARS.data import load_acm, load_mag
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset
 from ogb.nodeproppred import DglNodePropPredDataset
 from openomics.database.ontology import GeneOntology
-from run.utils import add_node_embeddings
 from torch_geometric.datasets import AMiner
+
+import moge
+import moge.dataset.PyG.triplet_generator
+from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset, HeteroNodeClfDataset
+from moge.dataset.dgl.graph_generator import DGLGraphSampler
+from moge.dataset.sequences import SequenceTokenizers
+from moge.model.dgl.NARS.data import load_acm, load_mag
+from run.utils import add_node_embeddings
 
 
 def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
@@ -61,7 +62,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         min_count = 0.01
         label_col = 'go_id'
         dataset = DGLNodeSampler.from_dgl_heterograph(
-            *network.to_dgl_heterograph(label_col=label_col,
+            *network.to_dgl_heterograph(target=label_col,
                                         min_count=min_count,
                                         sequence=False,
                                         ),

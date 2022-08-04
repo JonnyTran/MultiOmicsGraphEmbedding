@@ -1,12 +1,11 @@
 from collections import defaultdict
-from typing import List, Dict, Union, Iterable
+from typing import List, Dict, Union, Iterable, Tuple, Optional
 
 import dgl
 import numpy as np
 import pandas as pd
 import torch
-from dgl import backend as F
-from dgl import utils
+from dgl import AddReverse
 from dgl import utils as dglutils
 from dgl.init import zero_initializer
 from dgl.sampling import RandomWalkNeighborSampler
@@ -15,7 +14,6 @@ from ogb.nodeproppred import DglNodePropPredDataset
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
-from torch_geometric.utils import is_undirected
 
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.utils import tensor_sizes
@@ -23,7 +21,7 @@ from moge.network.hetero import HeteroNetwork
 from moge.network.sequence import BertSequenceTokenizer
 from .samplers import ImportanceSampler
 from .. import HeteroNeighborGenerator
-from ..utils import one_hot_encoder
+from ..utils import one_hot_encoder, reverse_metapath
 from ...network.base import SEQUENCE_COL
 
 
@@ -39,18 +37,18 @@ class DGLNodeSampler(HeteroGraphDataset):
                  reshuffle_train: float = None,
                  add_reverse_metapaths=True,
                  init_embeddings=False,
-                 inductive=False):
+                 inductive=False, **kwargs):
         self.neighbor_sizes = neighbor_sizes
         self.embedding_dim = embedding_dim
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
                          edge_dir=edge_dir, reshuffle_train=reshuffle_train,
-                         add_reverse_metapaths=add_reverse_metapaths, inductive=inductive)
+                         add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         assert isinstance(self.G, dgl.DGLHeteroGraph)
 
         if add_reverse_metapaths:
-            self.G = self.create_heterograph(self.G, add_reverse=True)
+            self.G = self.transform_heterograph(self.G, add_reverse=True)
         elif "feat" in self.G.edata and self.G.edata["feat"]:
-            self.G = self.create_heterograph(self.G, decompose_etypes=True, add_reverse=add_reverse_metapaths)
+            self.G = self.transform_heterograph(self.G, decompose_etypes=True, add_reverse=add_reverse_metapaths)
 
         if init_embeddings:
             self.init_node_embeddings(self.G)
@@ -180,67 +178,64 @@ class DGLNodeSampler(HeteroGraphDataset):
                                         inductive=kwargs["inductive"])
         return self
 
-    def create_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,
-                           decompose_etypes=False, nodes_subset: Dict[str, Tensor] = None) -> dgl.DGLHeteroGraph:
+    def transform_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,
+                              decompose_etypes=False, nodes_subset: Dict[str, Tensor] = None) -> dgl.DGLHeteroGraph:
+        if decompose_etypes:
+            relations = {}
+            for metapath in g.canonical_etypes:
+                # Original edges
+                src, dst, eid = g.all_edges(etype=metapath[1], form="all")
+                relations[metapath] = (src, dst)
+
+                # Separate edge types by each non-zero entry in the `g.edata["feat"]` vector, with length = number of etypes
+                if decompose_etypes:
+                    relations = {}
+                    edge_reltype = g.edata["feat"].argmax(1)
+                    assert src.size(0) == edge_reltype.size(0)
+
+                    for edge_type in range(g.edata["feat"].size(1)):
+                        mask = edge_reltype == edge_type
+                        metapath = (self.head_node_type, str(edge_type), self.head_node_type)
+                        relations[metapath] = (src[mask], dst[mask])
+
+            g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict)
+
+        if nodes_subset:
+            relations = {}
+            for metapath in g.canonical_etypes:
+                src, dst, eid = g.all_edges(etype=metapath[1], form="all")
+                src, dst, _ = self.filter_edges(src, dst, nodes_subset=nodes_subset, metapath=metapath)
+                relations[metapath] = (src, dst)
+
+            num_nodes_old = {ntype: g.num_nodes(ntype) for ntype in g.ntypes}
+            g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict)
+            num_nodes_removed = dict(num_nodes - g.num_nodes(ntype) \
+                                         if ntype in g.ntypes else 0 \
+                                     for ntype, num_nodes in num_nodes_old.items())
+            print(f"Removed {num_nodes_removed} nodes")
+
         if add_reverse:
-            reversed_g = g.reverse(copy_edata=False, share_edata=False)
+            self.reverse_etypes, self.reverse_eids = {}, {}
+            transform = AddReverse(copy_edata=True, sym_new_etype=True)
+            new_g: dgl.DGLHeteroGraph = transform(g)
 
-        relations = {}
-        for metapath in g.canonical_etypes:
-            # Original edges
-            src, dst = g.all_edges(etype=metapath[1])
+            # Get mapping between orig eid to reversed eid
+            for metapath in g.canonical_etypes:
+                rev_metapath = reverse_metapath(metapath)
+                src_rev, dst_rev, eid_rev = new_g.all_edges(etype=rev_metapath[1], form="all")
+                # print(metapath, eid[:10], (src[0], dst[0]))
+                # print(rev_metapath, eid_rev[:10], (src_rev[0], dst_rev[0]))
+                self.reverse_eids[metapath] = eid_rev
+                self.reverse_etypes[metapath] = rev_metapath
 
-            if nodes_subset is not None:
-                src, dst = self.filter_edges(src, dst, nodes_subset, metapath)
-
-            relations[metapath] = (src, dst)
-
-            if decompose_etypes:
-                relations = {}
-                edge_reltype = g.edata["feat"].argmax(1)
-                assert src.size(0) == edge_reltype.size(0)
-
-                for edge_type in range(g.edata["feat"].size(1)):
-                    mask = edge_reltype == edge_type
-                    metapath = (self.head_node_type, str(edge_type), self.head_node_type)
-                    relations[metapath] = (src[mask], dst[mask])
-
-            # Reverse edges
-            if add_reverse:
-                reverse_metapath = self.reverse_metapath_name(metapath)
-
-                if metapath[0] == metapath[-1] and is_undirected(torch.stack([src, dst], dim=0)):
-                    print(f"skipping reverse {metapath} because edges are symmetrical")
-                    continue
-
-                assert reverse_metapath not in relations
-                print("Reversing", metapath, "to", reverse_metapath)
-                src, dst = reversed_g.all_edges(etype=metapath[1])
-                relations[reverse_metapath] = (src, dst)
-
-        new_g: dgl.DGLHeteroGraph = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict)
-
-        # copy_ndata:
-        for ntype in g.ntypes:
-            for k, v in g.nodes[ntype].data.items():
-                new_g.nodes[ntype].data[k] = v.detach().clone()
-
-        node_frames = utils.extract_node_subframes(new_g,
-                                                   nodes=[new_g.nodes(ntype) for ntype in new_g.ntypes],
-                                                   store_ids=True)
-        utils.set_new_frames(new_g, node_frames=node_frames)
-
-        eids = []
-        for metapath in new_g.canonical_etypes:
-            eid = F.copy_to(F.arange(0, new_g.number_of_edges(metapath)), new_g.device)
-            eids.append(eid)
-
-        edge_frames = utils.extract_edge_subframes(new_g, eids, store_ids=True)
-        utils.set_new_frames(new_g, edge_frames=edge_frames)
+            assert new_g.num_nodes() == g.num_nodes() and len(new_g.canonical_etypes) > len(g.canonical_etypes)
+            print(f"Added reverse edges with {len(new_g.canonical_etypes) - len(g.canonical_etypes)} new etypes")
 
         return new_g
 
-    def filter_edges(self, src, dst, nodes_subset, metapath):
+    def filter_edges(self, src: Tensor, dst: Tensor,
+                     nodes_subset: Dict[str, Tensor], metapath: Tuple[str, str, str],
+                     eid: Optional[Tensor] = None) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         for i, ntype in enumerate([metapath[0], metapath[-1]]):
             if ntype in nodes_subset and \
                     nodes_subset[ntype].size(0) < (src if i == 0 else dst).unique().size(0):
@@ -251,7 +246,10 @@ class DGLNodeSampler(HeteroGraphDataset):
 
                 src = src[mask]
                 dst = dst[mask]
-        return src, dst
+                if eid is not None:
+                    eid = eid[mask]
+
+        return src, dst, eid
 
     def compute_node_degrees(self, add_reverse_metapaths):
         dfs = []
@@ -415,7 +413,7 @@ class DGLNodeSampler(HeteroGraphDataset):
     def get_training_subgraph(self):
         nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
         nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
-        graph = self.create_heterograph(self.G, nodes_subset=nodes)
+        graph = self.transform_heterograph(self.G, nodes_subset=nodes)
 
         print("Removed edges incident to test nodes from the training subgraph for inductive node classification: \n",
               graph)
@@ -436,8 +434,8 @@ class DGLNodeSampler(HeteroGraphDataset):
             seed_nodes = self.training_idx
 
         if collate_fn == "neighbor_sampler":
-            collator = LATTENodeClfPyGCollator(graph, nids=seed_nodes,
-                                               graph_sampler=self.neighbor_sampler)
+            collator = NodeClfPyGCollator(graph, nids=seed_nodes,
+                                          graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     graph_sampler=self.neighbor_sampler)
@@ -497,8 +495,8 @@ class DGLNodeSampler(HeteroGraphDataset):
             seed_nodes = self.validation_idx
 
         if collate_fn == "neighbor_sampler":
-            collator = LATTENodeClfPyGCollator(graph, nids=seed_nodes,
-                                               graph_sampler=self.neighbor_sampler)
+            collator = NodeClfPyGCollator(graph, nids=seed_nodes,
+                                          graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     graph_sampler=self.neighbor_sampler)
@@ -520,8 +518,8 @@ class DGLNodeSampler(HeteroGraphDataset):
             seed_nodes = self.testing_idx
 
         if collate_fn == "neighbor_sampler":
-            collator = LATTENodeClfPyGCollator(graph, nids=seed_nodes,
-                                               graph_sampler=self.neighbor_sampler)
+            collator = NodeClfPyGCollator(graph, nids=seed_nodes,
+                                          graph_sampler=self.neighbor_sampler)
         else:
             collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
                                                     graph_sampler=self.neighbor_sampler)
@@ -532,7 +530,7 @@ class DGLNodeSampler(HeteroGraphDataset):
         return dataloader
 
 
-class LATTENodeClfPyGCollator(dgl.dataloading.NodeCollator):
+class NodeClfPyGCollator(dgl.dataloading.NodeCollator):
     def collate(self, items):
         if isinstance(items[0], tuple):
             # returns a list of pairs: group them by node types into a dict

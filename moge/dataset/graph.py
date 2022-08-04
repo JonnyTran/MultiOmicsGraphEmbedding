@@ -35,7 +35,7 @@ class Graph:
 
         return self.G
 
-    def get_node_degrees(self, undirected=True, order=1):
+    def get_node_degrees(self, undirected=True):
         if hasattr(self, "node_degrees") and self.node_degrees is not None:
             return self.node_degrees
 
@@ -63,23 +63,7 @@ class Graph:
             if undirected:
                 df.loc[(tail, name)] = (df.loc[(tail, name)] + adj.storage.colcount().numpy()).values
 
-        # if hasattr(self, "go_namespace") and hasattr(self, "go_ntype") and self.go_ntype in self.nodes:
-        #     go_namespace = {term: namespace for term, namespace in zip(self.nodes[self.go_ntype], self.go_namespace)}
-        #     go_term_nids = df[df.index.get_level_values("ntype") == self.go_ntype].index.get_level_values("nid")
-        #     go_term_names = self.nodes[self.go_ntype][go_term_nids]
-        #
-        #     rename_ntype = pd.Series(go_term_names.map(go_namespace),
-        #                              index=df[df.index.get_level_values("ntype") == self.go_ntype].index) \
-        #         .replace({"biological_process": "BP", "molecular_function": "MF", "cellular_component": "CC", }) \
-        #         .dropna()
-        #
-        #     old_index = df.index.copy()
-        #     df.reset_index(inplace=True)
-        #     df.loc[df["ntype"] == self.go_ntype, "ntype"] = old_index.map(rename_ntype).dropna()
-        #     df.set_index(["ntype", "nid"], inplace=True)
-
         self.node_degrees = df
-
         return df
 
     def get_projection_pos(self, node_embs, UMAP: classmethod, n_components=2):

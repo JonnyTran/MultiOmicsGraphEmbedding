@@ -272,3 +272,7 @@ def get_multiplex_collate_fn(node_types, layers):
         return X_all, torch.cat(y_all), torch.cat(idx_all)
 
     return multiplex_collate_fn
+
+
+def is_sorted(arr: Tensor):
+    return torch.all(arr[:-1] <= arr[1:])

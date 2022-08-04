@@ -62,11 +62,11 @@ class MultiDigraphNetwork(AttributedNetwork, TrainTestSplit):
             self.G_u.add_edges_from(edgelist, type="u", **kwargs)
         print(len(edgelist), "edges added.")
 
-    def import_edgelist_file(self, file, directed):
+    def import_edgelist_file(self, filepath, directed):
         if directed:
-            self.G.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.DiGraph()).edges(data=True))
+            self.G.add_edges_from(nx.read_edgelist(filepath, data=True, create_using=nx.DiGraph()).edges(data=True))
         else:
-            self.G_u.add_edges_from(nx.read_edgelist(file, data=True, create_using=nx.Graph()).edges(data=True))
+            self.G_u.add_edges_from(nx.read_edgelist(filepath, data=True, create_using=nx.Graph()).edges(data=True))
 
     def get_adjacency_matrix(self, edge_types: list, node_list=None, databases=None, sample_negative=0.0, method="GAT",
                              output="csr"):

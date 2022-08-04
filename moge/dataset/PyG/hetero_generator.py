@@ -16,7 +16,7 @@ from umap import UMAP
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import get_edge_index, edge_index_to_adjs, to_edge_index_dict, gather_node_dict, \
+from moge.dataset.utils import get_edge_index, edge_index_to_adjs, get_edge_index_dict, gather_node_dict, \
     get_relabled_edge_index
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist, is_negative
 from moge.model.utils import to_device
@@ -89,9 +89,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
-        edge_index_dict = to_edge_index_dict(ontology.network, nodes=go_nodes, metapaths=edge_types,
-                                             # reverse=not self.use_reverse,
-                                             format="pyg", d_ntype=go_ntype)
+        edge_index_dict = get_edge_index_dict(ontology.network, nodes=go_nodes, metapaths=edge_types,
+                                              # reverse=not self.use_reverse,
+                                              format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 200: continue
             self.G[metapath].edge_index = edge_index
@@ -509,8 +509,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Edges between GO terms
         edge_types = {e for u, v, e in ontology.network.edges}
-        edge_index_dict = to_edge_index_dict(graph=ontology.network, nodes=go_nodes, metapaths=edge_types,
-                                             format="pyg", d_ntype=go_ntype)
+        edge_index_dict = get_edge_index_dict(graph=ontology.network, nodes=go_nodes, metapaths=edge_types,
+                                              format="pyg", d_ntype=go_ntype)
         for metapath, edge_index in edge_index_dict.items():
             if edge_index.size(1) < 100 or metapaths and metapath not in metapaths and metapath[1] not in metapaths:
                 continue
@@ -616,9 +616,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             else:
                 metapaths = set(self.pred_metapaths)
 
-            edge_index_dict = to_edge_index_dict(nx_graph, nodes=self.nodes,
-                                                 metapaths=metapaths.intersection(self.pred_metapaths),
-                                                 format="pyg")
+            edge_index_dict = get_edge_index_dict(nx_graph, nodes=self.nodes,
+                                                  metapaths=metapaths.intersection(self.pred_metapaths),
+                                                  format="pyg")
             for metapath, edge_index in edge_index_dict.items():
                 if metapath not in self.pred_metapaths: continue
                 relation_ids = torch.tensor([self.pred_metapaths.index(metapath)] * edge_index.size(1))
@@ -637,9 +637,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
             else:
                 metapaths = set(self.pred_metapaths)
-            neg_edge_index_dict = to_edge_index_dict(nx_graph, nodes=self.nodes,
-                                                     metapaths=metapaths.intersection(self.pred_metapaths),
-                                                     format="pyg")
+            neg_edge_index_dict = get_edge_index_dict(nx_graph, nodes=self.nodes,
+                                                      metapaths=metapaths.intersection(self.pred_metapaths),
+                                                      format="pyg")
             for metapath, edge_index in neg_edge_index_dict.items():
                 if metapath not in self.pred_metapaths: continue
                 relation_ids = torch.tensor([self.pred_metapaths.index(metapath)] * edge_index.size(1))

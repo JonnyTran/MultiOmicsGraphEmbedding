@@ -10,6 +10,7 @@ from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
 
 from moge.model.PyG import is_negative
+from moge.model.utils import is_sorted
 
 
 def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dict[str, Tensor]:
@@ -21,10 +22,6 @@ def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dic
     nodes = {ntype: torch.unique(torch.cat(nids, dim=0)) for ntype, nids in nodes.items()}
 
     return nodes
-
-
-def is_sorted(arr: Tensor):
-    return torch.all(arr[:-1] <= arr[1:])
 
 
 def get_relabled_edge_index(triples: Dict[str, Tensor], global_node_index: Dict[str, Tensor],
@@ -98,9 +95,9 @@ def get_relabled_edge_index(triples: Dict[str, Tensor], global_node_index: Dict[
     return edges_pos, edges_neg
 
 
-def to_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
-                       metapaths: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
-                       format="coo", d_ntype="_N") -> Dict[Tuple[str, str, str], Tensor]:
+def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List[str], Dict[str, List[str]]],
+                        metapaths: Union[List[str], Tuple[str, str, str], Set[Tuple[str, str, str]]] = None,
+                        format="coo", d_ntype="_N") -> Dict[Tuple[str, str, str], Tensor]:
     if metapaths is None and isinstance(graph, nx.MultiGraph):
         metapaths = {e for u, v, e in graph.edges}
     if isinstance(graph, nx.Graph):
@@ -151,19 +148,52 @@ def to_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List[
 
         if format == "coo":
             edge_index_dict[metapath] = (biadj.row, biadj.col)
+
         elif format == "pyg":
             import torch
             edge_index_dict[metapath] = torch.stack(
                 [torch.tensor(biadj.row, dtype=torch.long),
                  torch.tensor(biadj.col, dtype=torch.long)])
+
         elif format == "dgl":
             import torch
             edge_index_dict[metapath] = (torch.tensor(biadj.row, dtype=torch.long),
                                          torch.tensor(biadj.col, dtype=torch.long))
-        else:
+        elif format == "nx":
+            edge_index_dict[metapath] = [(nodes_A[u], nodes_B[v]) for u, v in zip(biadj.row, biadj.col)]
+
+        elif format == "csr":
             edge_index_dict[metapath] = biadj
 
     return edge_index_dict
+
+
+def get_edge_index(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
+                   nodes_B: Union[List[str], np.array], edge_attrs: List[str] = None, format="pyg") -> torch.LongTensor:
+    values = {}
+
+    if edge_attrs is None:
+        edge_attrs = [None]
+
+    for edge_attr in edge_attrs:
+        biadj = nx.bipartite.biadjacency_matrix(nx_graph, row_order=nodes_A, column_order=nodes_B, weight=edge_attr,
+                                                format="coo")
+        if hasattr(biadj, 'data') and biadj.data is not None:
+            values[edge_attr] = biadj.data
+
+    if format == "pyg":
+        import torch
+        edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long), torch.tensor(biadj.col, dtype=torch.long)])
+        values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in values.items()}
+    elif format == "dgl":
+        import torch
+        edge_index = (torch.tensor(biadj.row, dtype=torch.long), torch.tensor(biadj.col, dtype=torch.long))
+        values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in values.items()}
+
+    if values:
+        return edge_index, values
+    else:
+        return edge_index
 
 
 def one_hot_encoder(idx: Tensor, embed_dim=None):
@@ -216,7 +246,6 @@ def nonduplicate_indices(edge_index):
     edge_df = pd.DataFrame(edge_index.t().numpy())  # shape: (n_edges, 2)
     return ~edge_df.duplicated(subset=[0, 1])
 
-
 def edge_index_to_adjs(edge_index_dict: Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]],
                        nodes=Dict[str, List[str]]) \
         -> Dict[Tuple[str, str, str], SparseTensor]:
@@ -247,6 +276,7 @@ def edge_index_to_adjs(edge_index_dict: Dict[Tuple[str, str, str], Tuple[Tensor,
 
     return adj_dict
 
+
 def merge_node_index(old_node_index, new_node_index):
     merged = {k: [v] for k, v in old_node_index.items()}
 
@@ -262,24 +292,12 @@ def merge_node_index(old_node_index, new_node_index):
     return merged
 
 
-def get_edge_index(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
-                   nodes_B: Union[List[str], np.array]) -> torch.LongTensor:
-    biadj = nx.bipartite.biadjacency_matrix(nx_graph,
-                                            row_order=nodes_A,
-                                            column_order=nodes_B,
-                                            format="coo")
-    edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long),
-                              torch.tensor(biadj.col, dtype=torch.long)])
-
-    return edge_index
-
-
 def add_reverse_edge_index(edge_index_dict: Dict[Tuple[str], Tensor], num_nodes_dict) -> None:
     reverse_edge_index_dict = {}
     for metapath, edge_index in edge_index_dict.items():
         if is_negative(metapath) or edge_index_dict[metapath] == None: continue
 
-        reverse_metapath = reverse_metapath_name(metapath)
+        reverse_metapath = reverse_metapath(metapath)
 
         if metapath[0] == metapath[-1] and isinstance(edge_index, Tensor) and is_undirected(edge_index):
             print(f"skipping reverse {metapath} because edges are symmetrical")
@@ -295,31 +313,55 @@ def add_reverse_edge_index(edge_index_dict: Dict[Tuple[str], Tensor], num_nodes_
 def get_reverse_metapaths(metapaths) -> List[Tuple[str]]:
     reverse_metapaths = []
     for metapath in metapaths:
-        reverse = reverse_metapath_name(metapath)
+        reverse = reverse_metapath(metapath)
         reverse_metapaths.append(reverse)
     return reverse_metapaths
 
 
-def reverse_metapath_name(metapath: Tuple[str]) -> Tuple[str]:
+def reverse_metapath(metapath: Tuple[str, str, str]) -> Union[Tuple[str, ...], str]:
     if isinstance(metapath, tuple):
         tokens = []
         for i, token in enumerate(reversed(copy.deepcopy(metapath))):
             if i == 1:
-                if len(token) == 2:
-                    reverse_etype = token[::-1]
+                if len(token) == 2:  # 2 letter string etype
+                    rev_etype = token[::-1]
                 else:
-                    reverse_etype = token + "_"
-                tokens.append(reverse_etype)
+                    rev_etype = "rev_" + token
+                tokens.append(rev_etype)
             else:
                 tokens.append(token)
 
-        reverse_metapath = tuple(tokens)
+        rev_metapath = tuple(tokens)
 
     elif isinstance(metapath, str):
-        reverse_metapath = "".join(reversed(metapath))
+        rev_metapath = "".join(reversed(metapath))
 
     elif isinstance(metapath, (int, np.int)):
-        reverse_metapath = str(metapath) + "_"
+        rev_metapath = str(metapath) + "_"
     else:
         raise NotImplementedError(f"{metapath} not supported")
-    return reverse_metapath
+    return rev_metapath
+
+
+def unreverse_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, ...]:
+    if isinstance(metapath, tuple):
+        tokens = []
+        for i, token in enumerate(reversed(copy.deepcopy(metapath))):
+            if i == 1:
+                if len(token) == 2:  # 2 letter string etype
+                    rev_etype = token[::-1]
+                else:
+                    rev_etype = token.removeprefix("rev_")
+                tokens.append(rev_etype)
+            else:
+                tokens.append(token)
+
+        rev_metapath = tuple(tokens)
+
+    else:
+        raise NotImplementedError(f"{metapath} not supported")
+    return rev_metapath
+
+
+def is_reversed(metapath):
+    return any("rev_" in token for token in metapath)

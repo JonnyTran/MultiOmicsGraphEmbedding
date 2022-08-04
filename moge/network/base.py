@@ -1,7 +1,11 @@
 from abc import abstractmethod
 from collections import OrderedDict
+from typing import List, Union, Tuple, Any, Dict
 
 import numpy as np
+
+SEQ_DTYPE = "long"
+SEQUENCE_COL = "sequence"
 
 
 class Network(object):
@@ -15,7 +19,7 @@ class Network(object):
         self.remove_invalid_nodes()
         self.node_list = self.get_node_list()
 
-    def get_node_list(self):
+    def get_node_list(self) -> List[str]:
         if isinstance(self.networks, dict):
             node_list = list(
                 OrderedDict.fromkeys([node for network in self.networks.values() for node in network.nodes]))
@@ -24,11 +28,11 @@ class Network(object):
 
         return node_list
 
-    def get_connected_nodelist(self, layer):
+    def get_connected_nodelist(self, layer: Union[str, Tuple[str, str, str]]):
         degrees = self.networks[layer].degree()
         return [node for node, deg in degrees if deg > 0]
 
-    def remove_invalid_nodes(self):
+    def remove_invalid_nodes(self) -> None:
         bad_nodes = [node for node in self.get_node_list()
                      if node is None or node == np.nan or \
                      type(node) != str or \
@@ -42,19 +46,23 @@ class Network(object):
         raise NotImplementedError
 
     @abstractmethod
-    def add_edges(self, edgelist, **kwargs):
+    def add_nodes(self, nodes: List[str], ntype: str, **kwargs):
         raise NotImplementedError
 
     @abstractmethod
-    def import_edgelist_file(self, file, **kwargs):
+    def add_edges(self, edgelist: List[Union[Tuple[str, str], Tuple[str, str, Dict[str, Any]]]], **kwargs):
         raise NotImplementedError
 
     @abstractmethod
-    def get_edgelist(self, node_list, inclusive=True, **kwargs):
+    def import_edgelist_file(self, filepath, **kwargs):
         raise NotImplementedError
 
     @abstractmethod
-    def get_adjacency_matrix(self, edge_types: list, node_list=None, method="GAT", output="csr", **kwargs):
+    def get_edgelist(self, node_list: List[str], inclusive=True, **kwargs):
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_adjacency_matrix(self, edge_types: List, node_list=None, method="GAT", output="csr", **kwargs):
         """
         Retrieves the adjacency matrix of a subnetwork with `edge_types` edge types  and `node_list` nodes. The adjacency
         matrix is preprocessed for `method`, e.g. adding self-loops in GAT, and is converted to a sparse matrix of `output` type.
@@ -68,7 +76,7 @@ class Network(object):
         raise NotImplementedError
 
     @abstractmethod
-    def get_graph_laplacian(self, edge_types: list, node_list=None, **kwargs):
+    def get_graph_laplacian(self, edge_types: List, node_list=None, **kwargs):
         raise NotImplementedError
 
     @abstractmethod
@@ -89,5 +97,3 @@ class Network(object):
             return adj[idx_A, :][:, idx_B]
 
 
-SEQ_DTYPE = "long"
-SEQUENCE_COL = "sequence"
