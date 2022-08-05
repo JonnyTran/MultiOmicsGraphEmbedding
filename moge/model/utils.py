@@ -151,12 +151,14 @@ def tensor_sizes(input: Any) -> Any:
     if isinstance(input, (dict, MutableMapping)):
         return {metapath: tensor_sizes(v) \
                 for metapath, v in input.items()}
+
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)
     elif isinstance(input, list):
         if isinstance(input[0], str):
             return len(input)
         return [tensor_sizes(v) for v in input]
+
     else:
         if input is not None and hasattr(input, "shape"):
             if isinstance(input, Tensor) and input.dim() == 0:

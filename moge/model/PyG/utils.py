@@ -16,33 +16,6 @@ def max_hops(metapaths: List[Tuple[str, str, str]]):
     return max(len(metapath[1::2]) for metapath in metapaths)
 
 
-def tag_negative(metapath):
-    if isinstance(metapath, tuple):
-        return metapath + ("neg",)
-    elif isinstance(metapath, str):
-        return metapath + "_neg"
-    else:
-        return "neg"
-
-
-def untag_negative(metapath):
-    if isinstance(metapath, tuple) and metapath[-1] == "neg":
-        return metapath[:-1]
-    elif isinstance(metapath, str):
-        return metapath.strip("_neg")
-    else:
-        return metapath
-
-
-def is_negative(metapath):
-    if isinstance(metapath, tuple) and "neg" in metapath:
-        return True
-    elif isinstance(metapath, str) and "_neg" in metapath:
-        return True
-    else:
-        return False
-
-
 def convert_to_nx_edgelist(edge_index_dict: Dict[Tuple[str, str, str], Tensor], node_names: Dict[str, pd.Index],
                            global_node_idx: Dict[str, Tensor] = None) -> Dict[str, List[Tuple[str, str]]]:
     edge_list = {}

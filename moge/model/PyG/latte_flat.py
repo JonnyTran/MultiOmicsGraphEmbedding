@@ -15,8 +15,7 @@ from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.PyG import filter_metapaths
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_hops
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_hops, filter_metapaths
 
 
 class LATTE(nn.Module):

@@ -9,8 +9,7 @@ from ogb.linkproppred import DglLinkPropPredDataset
 from pandas import Index
 
 from .node_generator import DGLNodeSampler
-from ..utils import get_relabled_edge_index
-from ...model.PyG import is_negative
+from ..utils import get_relabled_edge_index, is_negative, is_reversed, unreverse_metapath
 from ...network.base import SEQUENCE_COL
 from ...network.hetero import HeteroNetwork
 
@@ -24,8 +23,10 @@ class DGLLinkSampler(DGLNodeSampler):
                          metapaths=metapaths, head_node_type=head_node_type, edge_dir=edge_dir,
                          reshuffle_train=reshuffle_train, add_reverse_metapaths=add_reverse_metapaths,
                          inductive=inductive, **kwargs)
+
         self.negative_sampling_size = negative_sampling_size
         self.eval_negative_sampling_size = 1000
+
         if negative_sampler.lower() == "uniform".lower():
             self.init_negative_sampler = dgl.dataloading.negative_sampler.Uniform
         elif negative_sampler.lower() == "GlobalUniform".lower():
@@ -34,24 +35,56 @@ class DGLLinkSampler(DGLNodeSampler):
             self.init_negative_sampler = dgl.dataloading.negative_sampler.PerSourceUniform
 
     @classmethod
-    def from_dgl_heterodata(cls, network: HeteroNetwork, target: str = None, min_count: int = None,
-                            attr_cols: List[str] = None,
-                            expression=False, sequence=False, add_reverse=True,
-                            label_subset: Optional[Union[Index, np.ndarray]] = None,
-                            ntype_subset: Optional[List[str]] = None, **kwargs):
-        hetero, classes, nodes = \
-            network.to_dgl_heterograph(target=target, min_count=min_count,
-                                       attr_cols=attr_cols, expression=expression, sequence=sequence,
-                                       add_reverse=add_reverse, label_subset=label_subset, ntype_subset=ntype_subset)
+    def from_heteronetwork(cls, network: HeteroNetwork, target: str = None, min_count: int = None,
+                           node_attr_cols: List[str] = None,
+                           expression=False, sequence=False, add_reverse_metapaths=True,
+                           label_subset: Optional[Union[Index, np.ndarray]] = None,
+                           ntype_subset: Optional[List[str]] = None, **kwargs):
+        hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
+            network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
+                                       expression=expression, sequence=sequence,
+                                       label_subset=label_subset, ntype_subset=ntype_subset)
 
-        self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=False, edge_dir="in", **kwargs)
+        self = cls(dataset=hetero, metapaths=hetero.canonical_etypes, add_reverse_metapaths=add_reverse_metapaths,
+                   edge_dir="in", **kwargs)
         self.network = network
         self.classes = classes
         self.nodes = nodes
         self._name = ""
-        self.use_reverse = True if any("rev_" in metapath[1] for metapath in hetero.edge_types) else False
+        self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx
+
+        self.pred_metapaths = network.pred_metapaths
+        self.neg_pred_metapaths = network.neg_pred_metapaths
+        if self.use_reverse:
+            for metapath in self.G.canonical_etypes:
+                if is_negative(metapath) and is_reversed(metapath) or \
+                        (self.neg_pred_metapaths and unreverse_metapath(metapath) in self.neg_pred_metapaths):
+                    self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
+
+                elif self.pred_metapaths and unreverse_metapath(metapath) in self.pred_metapaths:
+                    self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
+
+            self.metapaths = [metapath for metapath in self.G.canonical_etypes if self.G.num_edges(etype=metapath)]
 
         return self
+
+    def process_dgl_heterodata(self, graph: dgl.DGLHeteroGraph):
+        self.G = graph
+
+        self.node_types = graph.ntypes
+
+        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in graph.ntypes}
+        self.global_node_index = {ntype: torch.arange(graph.num_nodes(ntype)) for ntype in graph.ntypes}
+
+        self.x_dict = graph.ndata["feat"]
+
+        self.y_dict = {}
+        for ntype, labels in self.y_dict.items():
+            if labels.dim() == 2 and labels.shape[1] == 1:
+                labels = labels.squeeze(1)
+            graph.nodes[ntype].data["labels"] = labels
+
+        self.metapaths = graph.canonical_etypes
 
     def process_DglLinkDataset_hetero(self, dataset: DglLinkPropPredDataset):
         graph: dgl.DGLHeteroGraph = dataset[0]
@@ -101,7 +134,7 @@ class DGLLinkSampler(DGLNodeSampler):
             edges_pos, edges_neg = get_relabled_edge_index(triples, global_node_index=self.global_node_index,
                                                            metapaths=self.metapaths, format="dgl")
 
-            # Add valid and test edges to graph
+            # Add valid and test edges to graph, since graph only contains train edges
             for metapath, (src, dst) in edges_pos.items():
                 if triples is not train_triples:
                     graph.add_edges(src, dst, etype=metapath)

@@ -1,4 +1,3 @@
-from argparse import Namespace
 from typing import Dict, Tuple, Union, List, Any, Optional
 
 import dgl
@@ -6,17 +5,16 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
-import torch_geometric.transforms as T
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology
 from openomics.utils.df import concat_uniques
 from pandas import Series, Index
 from torch_geometric.data import HeteroData
 
-from moge.dataset.utils import get_edge_index, get_edge_index_dict
-from moge.network.attributed import AttributedNetwork, MODALITY_COL
+from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath
+from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
-from moge.network.train_test_split import TrainTestSplit, stratify_train_test
+from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import filter_multilabel
 
 
@@ -95,7 +93,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         if isinstance(annotations, pd.DataFrame) and not annotations.empty:
             self.annotations[ntype] = annotations.loc[nodes]
 
-    def add_edges(self, edgelist: List[Tuple[str, str]], etype: Tuple[str, str, str], database: str, directed=True,
+    def add_edges(self, edgelist: List[Union[Tuple[str, str]]], etype: Tuple[str, str, str], database: str,
+                  directed=True,
                   **kwargs):
         src_type, dst_type = etype[0], etype[-1]
         if etype not in self.networks:
@@ -104,19 +103,18 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             else:
                 self.networks[etype] = nx.Graph()
 
-        self.networks[etype].add_edges_from(edgelist, source=src_type, target=dst_type, database=database, etype=etype,
-                                            **kwargs)
-        unq_sources = {u for u, v, *_ in edgelist}
-        unq_targets = {v for u, v, *_ in edgelist}
+        self.networks[etype].add_edges_from(edgelist, source=src_type, target=dst_type, database=database, **kwargs)
+        unq_sources, unq_targets = {u for u, v, *_ in edgelist}, {v for u, v, *_ in edgelist}
 
-        print(
-            f"{etype}: {len(edgelist)} edges added between {len(unq_sources)} {src_type} and {len(unq_targets)} {dst_type}")
+        print(f"{etype}: {len(edgelist)} edges added between "
+              f"{len(unq_sources)} {src_type}'s and {len(unq_targets)} {dst_type}'s.")
 
-    def add_ontology_edges(self, ontology: Ontology, nodes: Optional[List[str]] = None, ntype: str = "GO_term"):
+    def add_ontology_edges(self, ontology: Ontology, nodes: Optional[List[str]] = None, ntype: str = "GO_term",
+                           reverse_edges=True, etypes: List[Tuple[str, str, str]] = []):
         """
 
         Args:
-            ontology ():
+            ontology (Ontology): an openomics.Ontology object that metadata and contains edges among the terms.
             nodes (List[str]): A subset of nodes from ontology to extract edges from
             ntype (str): Name of the ontology node type
         """
@@ -124,65 +122,113 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             nodes = ontology.node_list
 
         # Add ontology nodes
+        if "def" in ontology.data.columns:
+            ontology.data[SEQUENCE_COL] = ontology.data["def"]
         self.add_nodes(nodes=nodes, ntype=ntype, annotations=ontology.data)
 
         # Add ontology edges
         edge_types = {e for u, v, e in ontology.network.edges}
-        edge_index_dict = get_edge_index_dict(ontology.network, nodes=nodes, metapaths=edge_types,
+        graph = ontology.network
+        if reverse_edges:
+            graph = nx.reverse(graph, copy=True)
+
+        edge_index_dict = get_edge_index_dict(graph, nodes=nodes, metapaths=edge_types,
                                               format="nx", d_ntype=ntype)
-        for etype, edgelist in edge_index_dict.items():
+        for metapath, edgelist in edge_index_dict.items():
             if len(edgelist) < 10: continue
-            self.add_edges(edgelist, etype=etype, database=ontology.name(), directed=True)
+            if etypes and (metapath not in etypes and (isinstance(metapath, tuple) and metapath[1] not in etypes)):
+                continue
+            self.add_edges(edgelist, etype=metapath, database=ontology.name(), directed=True)
 
-    def add_ontology_annotations(self, ontology: Ontology, nodes: Optional[List[str]], head_node_type: str,
+    def add_ontology_annotations(self, ontology: Ontology, nodes: Optional[List[str]],
+                                 src_ntype: str, dst_ntype: str,
                                  train_date: str, valid_date: str, test_date: str, split_etype: str = None,
-                                 ntype: str = "GO_term"):
+                                 d_etype="associated", src_node_col="gene_name", use_neg_annotations=False):
+        """
 
-        groupby = ["gene_name", split_etype] if split_etype else ["gene_name"]
-        assert head_node_type in self.node_types
+        Args:
+            ontology (): an openomics.Ontology object that contains annotations data.
+            nodes (): A dict of all nodes in the Hetero network.
+            src_ntype (): The ntype name of annotation source nodes.
+            dst_ntype (): The ntype name of annotation destination nodes.
+            train_date (): A date format "YYYY-MM-DD" to separate all annotations before this date.
+            valid_date (): A date format "YYYY-MM-DD" to separate all annotations before this date and after train_date
+            test_date (): A date format "YYYY-MM-DD" to separate all annotations before this date and after valid_date
+            split_etype (): column name in the annotation which contain the etype values to split edges by.
+            d_etype (): Default etype name for annotation edges when `split_etype` is None.
+            src_node_col (): The column name in the annotation dataframe that contain the src_ntype node names.
+        """
+        groupby = [src_node_col, split_etype] if split_etype else [src_node_col]
+        assert src_ntype in self.node_types
 
-        # Add ontology annotations to existing ntypes
-        train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
+        # Split annotations between genes and GO terms by dates
+        train_ann, valid_ann, test_ann = ontology.annotation_train_val_test_split(
             train_date=train_date, valid_date=valid_date, test_date=test_date,
             groupby=groupby, filter_go_id=nodes)
-        annotations = pd.concat([train_go_ann, valid_go_ann, test_go_ann], axis=0)
 
         if split_etype:
             nx_options = dict(edge_key=split_etype, create_using=nx.MultiGraph, edge_attr=True)
-            self.pred_metapaths = [(head_node_type, etype, ntype) \
-                                   for etype in train_go_ann.reset_index()[split_etype].unique()]
+            self.pred_metapaths = [(src_ntype, etype, dst_ntype) \
+                                   for etype in train_ann.reset_index()[split_etype].unique()]
         else:
             nx_options = dict(edge_key=None, create_using=nx.Graph, edge_attr=None)
-            self.pred_metapaths = [(head_node_type, "associated", ntype)]
+            self.pred_metapaths = [(src_ntype, d_etype, dst_ntype)]
 
-        assert annotations.index.name is not None
-        index_col = ontology.data.index.name
+        dst_node_col = ontology.data.index.name
+        self.neg_pred_metapaths = []
+        node_lists = []
 
         # Process train, validation, and test annotations
-        for go_ann in [train_go_ann, valid_go_ann, test_go_ann]:
-            # True Positive links (undirected)
-            nx_graph = nx.from_pandas_edgelist(go_ann[index_col].explode().to_frame().reset_index().dropna(),
-                                               source="gene_name", target=index_col, **nx_options)
+        for go_ann in [train_ann, valid_ann, test_ann]:
+            # True Positive links
+            pos_annotations = go_ann[dst_node_col].dropna().explode().to_frame().reset_index()
+            pos_graph = nx.from_pandas_edgelist(pos_annotations, source=src_node_col, target=dst_node_col, **nx_options)
             if split_etype:
-                metapaths = {(self.head_node_type, e, self.go_ntype) for u, v, e in nx_graph.edges}
+                metapaths = {(src_ntype, e, dst_ntype) for u, v, e in pos_graph.edges}
             else:
                 metapaths = set(self.pred_metapaths)
 
-            edge_list_dict = get_edge_index_dict(nx_graph, nodes=self.nodes,
-                                                 metapaths=metapaths.intersection(self.pred_metapaths), format="nx")
-            for etype, edgelist in edge_list_dict.items():
-                if len(edgelist) == 0: continue
-                train_mask = np.ones(len(edgelist), dtype=bool) if go_ann is train_go_ann else np.zeros(len(edgelist),
-                                                                                                        dtype=bool)
-                valid_mask = np.ones(len(edgelist), dtype=bool) if go_ann is valid_go_ann else np.zeros(len(edgelist),
-                                                                                                        dtype=bool)
-                test_mask = np.ones(len(edgelist), dtype=bool) if go_ann is test_go_ann else np.zeros(len(edgelist),
-                                                                                                      dtype=bool)
-                edge_attr = [{'train_mask': train, 'valid_mask': valid, 'test_mask': test} \
-                             for train, valid, test in zip(train_mask, valid_mask, test_mask)]
+            pos_edge_list_dict = get_edge_index_dict(pos_graph, nodes=self.nodes,
+                                                     metapaths=metapaths.intersection(self.pred_metapaths), format="nx")
 
-                edgelist = [(u, v, d) for (u, v), d in zip(edgelist, edge_attr)]
-                self.add_edges(edgelist, etype=etype, database=ontology.name(), directed=True, )
+            for etype, edges in pos_edge_list_dict.items():
+                if etype not in self.pred_metapaths or len(edges) == 0: continue
+
+                edges = self.label_edge_trainvalidtest(edges, train=go_ann is train_ann, valid=go_ann is valid_ann,
+                                                       test=go_ann is test_ann)
+                self.add_edges(edges, etype=etype, database=ontology.name(), directed=True, )
+
+            # True Negative links
+            if use_neg_annotations and "neg_go_id" in go_ann.columns:
+                neg_annotations = go_ann["neg_go_id"].dropna().explode().to_frame().reset_index()
+                neg_graph = nx.from_pandas_edgelist(neg_annotations, source=src_node_col, target="neg_go_id",
+                                                    **nx_options)
+                if split_etype:
+                    metapaths = {(src_ntype, e, dst_ntype) for u, v, e in neg_graph.edges}
+                else:
+                    metapaths = set(self.pred_metapaths)
+                neg_edge_list_dict = get_edge_index_dict(neg_graph, nodes=self.nodes,
+                                                         metapaths=metapaths.intersection(self.pred_metapaths),
+                                                         format="nx")
+                for etype, edges in neg_edge_list_dict.items():
+                    if etype not in self.pred_metapaths or len(edges) == 0: continue
+                    if etype not in self.neg_pred_metapaths:
+                        self.neg_pred_metapaths.append(etype)
+
+                    etype = tag_negative_metapath(etype)
+                    edges = self.label_edge_trainvalidtest(edges, train=go_ann is train_ann, valid=go_ann is valid_ann,
+                                                           test=go_ann is test_ann)
+                    self.add_edges(edges, etype=etype, database=ontology.name(), directed=True, )
+
+            # Train/valid/test split of nodes
+            node_lists.append({
+                src_ntype: np.intersect1d(pos_annotations[src_node_col].unique(), self.nodes[src_ntype]),
+                dst_ntype: np.intersect1d(pos_annotations[dst_node_col].unique(), self.nodes[dst_ntype])})
+
+        # Set train/valid/test mask of all nodes on hetero graph
+        train_nodes, valid_nodes, test_nodes = node_lists
+        self.train_nodes, self.valid_nodes, self.test_nodes = self.set_node_traintestvalid_mask(train_nodes,
+                                                                                                valid_nodes, test_nodes)
 
     @property
     def num_nodes_dict(self):
@@ -244,30 +290,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         else:
             raise Exception("Output must be one of {csr, coo, dense}")
 
-    def split_stratified(self, stratify_label: str, stratify_omic=True, test_size=0.2, min_count=100, max_count=2000,
-                         dropna=False, seed=42, verbose=False):
-        y_label = filter_multilabel(self.all_annotations[stratify_label], min_count=min_count,
-                                    max_count=max_count,
-                                    dropna=dropna, delimiter=self.delimiter)
-        if stratify_omic:
-            omic_type_col = self.all_annotations.loc[y_label.index, MODALITY_COL].str.split("\||:")
-            y_label = y_label + omic_type_col
-
-        train_val, test = next(stratify_train_test(y_label=y_label, test_size=test_size, seed=seed))
-
-        if not hasattr(self, "training"):
-            self.training = Namespace()
-        if not hasattr(self, "validation"):
-            self.validation = Namespace()
-        if not hasattr(self, "testing"):
-            self.testing = Namespace()
-
-        train, valid = next(stratify_train_test(y_label=y_label[train_val], test_size=0.10, seed=seed))
-
-        self.training.node_list = train
-        self.validation.node_list = valid
-        self.testing.node_list = test
-
     def get_aggregated_network(self):
         G = nx.compose_all(list(self.networks.values()))
         return G
@@ -277,49 +299,49 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         Create a `nodes` attr containing dict of <node type: node ids> where node ids are nodes with nonnull sequences
         """
         for ntype in self.node_types:
+            if ntype not in self.multiomics.get_omics_list(): continue
+
             nodes_w_seq = self.multiomics[ntype].annotations.index[
                 self.multiomics[ntype].annotations[SEQUENCE_COL].notnull()]
             self.nodes[ntype] = self.nodes[ntype].intersection(nodes_w_seq)
 
-    def merge_annotations(self, node_manifest: pd.DataFrame, ):
-        assert "index" in node_manifest.columns and "ntype" in node_manifest.columns
-
-        node_types = node_manifest["ntype"].unique()
-
-        for ntype in node_types:
-            if ntype not in self.annotations.keys():
-                print(f"No {ntype} in annotations")
-                continue
-
-            node_mask = node_manifest["ntype"] == ntype
-            annotations = self.annotations[ntype].loc[node_manifest.loc[node_mask, "index"]]
-            print(annotations)
-            node_manifest.loc[node_mask] = annotations
-
-        return node_manifest
-
-    def to_dgl_heterograph(self, target="go_id", min_count=10, label_subset=None, sequence=False, **kwargs) \
-            -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]]]:
+    def to_dgl_heterograph(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,
+                           label_subset: Optional[Union[Index, np.ndarray]] = None,
+                           ntype_subset: Optional[List[str]] = None,
+                           sequence=False, expression=False) \
+            -> Tuple[dgl.DGLHeteroGraph, Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
+        node_types = self.node_types
+        if ntype_subset:
+            node_types = [ntype for ntype in node_types if ntype in ntype_subset]
 
         # Edge index
         edge_index_dict = {}
-        for relation, nxgraph in self.networks.items():
-            biadj = nx.bipartite.biadjacency_matrix(nxgraph,
-                                                    row_order=self.nodes[relation[0]],
-                                                    column_order=self.nodes[relation[-1]],
-                                                    format="coo")
-            edge_index_dict[relation] = (biadj.row, biadj.col)
+        edge_attr_dict = {}
+        for metapath, etype_graph in self.networks.items():
+            head_type, tail_type = metapath[0], metapath[-1]
+            if head_type not in node_types or tail_type not in node_types: continue
+
+            edge_index, edge_attr = get_edge_index_values(etype_graph, nodes_A=self.nodes[head_type],
+                                                          nodes_B=self.nodes[tail_type],
+                                                          edge_attrs=["train_mask", "valid_mask", "test_mask"],
+                                                          format="dgl")
+
+            edge_index_dict[metapath] = edge_index
+            if edge_attr:
+                edge_attr_dict[metapath] = edge_attr
 
         G: dgl.DGLHeteroGraph = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
 
         # Add node attributes
         for ntype in G.ntypes:
-            annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
+            annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
 
-            for col in self.all_annotations.columns.drop([target, "omic", SEQUENCE_COL], errors="ignore"):
+            for col in annotations.columns \
+                    .drop([target, "omic", SEQUENCE_COL], errors="ignore") \
+                    .intersection(node_attr_cols if node_attr_cols is not None else []):
                 if col in self.feature_transformer:
                     feat_filtered = filter_multilabel(annotations[col], min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
@@ -327,25 +349,37 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     feat = self.feature_transformer[col].transform(feat_filtered)
                     G.nodes[ntype].data[col] = torch.from_numpy(feat)
 
+            if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
+                                                                                    'expressions'):
+                node_expression = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]].values
+                G[ntype].data['expression'] = torch.tensor(node_expression, dtype=torch.float)
+
             # DNA/RNA sequence
             if sequence and SEQUENCE_COL in annotations:
                 if hasattr(self, "tokenizer"):
                     padded_encoding, seq_lens = self.tokenizer.one_hot_encode(ntype,
                                                                               sequences=annotations[SEQUENCE_COL])
-                    print(f"Added sequences ({padded_encoding.shape}) to {ntype}")
-                # G.nodes[ntype].data["seq_len"] = seq_lens
-                # G.nodes[ntype].data[SEQUENCE_COL] = annotations[SEQUENCE_COL].to_numpy()
+                    G[ntype].data[SEQUENCE_COL] = padded_encoding
+                    print(f"Added {ntype} sequences ({padded_encoding.shape})to G[ntype].data ")
+                else:
+                    if not hasattr(G, 'sequences'):
+                        G.sequences = {}
+                    G.sequences.setdefault(ntype, {})[SEQUENCE_COL] = annotations[SEQUENCE_COL]
+                    print(f"Added {ntype} sequences pd.Series to G.sequences")
 
-        # Labels
+        # Node labels
         self.process_feature_tranformer(filter_label=target, min_count=min_count)
         if label_subset is not None:
             self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
                                                                        label_subset, assume_unique=True)
+            classes = self.feature_transformer[target].classes_
+        else:
+            classes = None
 
         labels = {}
         for ntype in G.ntypes:
-            if target not in self.multiomics[ntype].annotations.columns: continue
-            y_label = filter_multilabel(df=self.multiomics[ntype].annotations.loc[self.nodes[ntype].label_col],
+            if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
+            y_label = filter_multilabel(self.annotations[ntype].loc[self.nodes[ntype].label_col],
                                         min_count=min_count,
                                         label_subset=label_subset, dropna=False, delimiter=self.delimiter)
             labels[ntype] = self.feature_transformer[target].transform(y_label)
@@ -362,14 +396,22 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         # testing_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.testing.node_list)) \
         #                for ntype, ntype_nids in self.nodes.to_dict().items()}
 
-        return G, labels, self.nodes.to_dict()
+        # Get index of train/valid/test edge_id
+        training_idx, validation_idx, testing_idx = {}, {}, {}
+        for key_mask, trainvalidtest_idx in zip(['train_mask', 'valid_mask', 'test_mask'],
+                                                [training_idx, validation_idx, testing_idx]):
+            for metapath, edge_attr in edge_attr_dict.items():
+                src, dst = edge_index_dict[metapath]
+                trainvalidtest_idx[metapath] = G.edge_ids(src[edge_attr[key_mask]], dst[edge_attr[key_mask]],
+                                                          etype=metapath)
 
-    def to_pyg_heterodata(self, target="go_id", min_count=10,
+        return G, classes, dict(self.nodes), training_idx, validation_idx, testing_idx
+
+    def to_pyg_heterodata(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,
                           label_subset: Optional[Union[Index, np.ndarray]] = None,
                           ntype_subset: Optional[List[str]] = None,
-                          sequence=False, attr_cols: List[str] = [],
-                          expression=True, add_reverse=True) \
-            -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]]]:
+                          sequence=False, expression=False) \
+            -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
@@ -384,31 +426,34 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             head_type, tail_type = metapath[0], metapath[-1]
             if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
 
-            hetero[metapath].edge_index = get_edge_index(nxgraph, self.nodes[head_type], self.nodes[tail_type])
+            hetero[metapath].edge_index, edge_attrs = get_edge_index_values(nxgraph, self.nodes[head_type],
+                                                                            self.nodes[tail_type],
+                                                                            edge_attrs=["train_mask", "valid_mask",
+                                                                                        "test_mask"])
+            for edge_attr, edge_value in edge_attrs.items():
+                hetero[metapath][edge_attr] = edge_value
 
         # Add node attributes
-        node_attr_cols = self.all_annotations.columns.drop([target, "omic", SEQUENCE_COL], errors="ignore")
-        node_attr_cols = node_attr_cols.intersection(attr_cols if attr_cols is not None else [])
-
         for ntype in node_types:
-            annotations = self.multiomics[ntype].annotations.loc[self.nodes[ntype]]
+            annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
 
-            node_feats = []
-            for col in node_attr_cols:
+            for col in annotations.columns \
+                    .drop([target, "omic", SEQUENCE_COL], errors="ignore") \
+                    .intersection(node_attr_cols if node_attr_cols is not None else []):
+
                 if col in self.feature_transformer:
                     feat_filtered = filter_multilabel(annotations[col], min_count=None,
                                                       dropna=False, delimiter=self.delimiter)
                     feat: np.ndarray = self.feature_transformer[col].transform(feat_filtered)
-                    # data[ntype][col] = feat
-                    print(ntype, col)
-                    node_feats.append(torch.tensor(feat, dtype=torch.float))
+                    hetero[ntype][col] = torch.tensor(feat, dtype=torch.float)
+                else:
+                    hetero[ntype][col] = annotations[col].to_numpy()
 
-            if expression:
+            if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],
+                                                                                    'expressions'):
                 node_expression = self.multiomics[ntype].expressions.T.loc[self.nodes[ntype]].values
-                node_feats.append(torch.tensor(node_expression, dtype=torch.float))
+                hetero[ntype].expression = torch.tensor(node_expression, dtype=torch.float)
 
-            if node_feats:
-                hetero[ntype].x = torch.cat(node_feats, dim=1)
             hetero[ntype]['nid'] = torch.arange(len(self.nodes[ntype]), dtype=torch.long)
 
             # DNA/RNA sequence
@@ -443,35 +488,37 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         else:
             classes = None
 
-        # Add reverse metapaths to allow reverse message passing for directed edges
-        if add_reverse:
-            transform = T.ToUndirected(merge=True)
-            hetero = transform(hetero)
-
         # Train test split (from previously saved node train/test split)
-        train_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \
-                     for ntype, ntype_nids in self.nodes.items()}
-        valid_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.validation.node_list)) \
-                     for ntype, ntype_nids in self.nodes.items()}
-        test_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.testing.node_list)) \
-                    for ntype, ntype_nids in self.nodes.items()}
+        if hasattr(self, "train_nodes") and self.train_nodes:
+            train_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.train_nodes[ntype])) \
+                         for ntype, nodelist in self.nodes.items() if ntype in self.train_nodes}
+            valid_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.valid_nodes[ntype])) \
+                         for ntype, nodelist in self.nodes.items() if ntype in self.valid_nodes}
+            test_idx = {ntype: nodelist.get_indexer_for(nodelist.intersection(self.test_nodes[ntype])) \
+                        for ntype, nodelist in self.nodes.items() if ntype in self.test_nodes}
 
-        for ntype in node_types:
-            hetero[ntype].num_nodes = len(self.nodes[ntype])
+            for ntype in node_types:
+                hetero[ntype].num_nodes = len(self.nodes[ntype])
 
-            if ntype in train_idx:
-                mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
-                mask[train_idx[ntype]] = 1
-                hetero[ntype].train_mask = mask
+                if ntype in train_idx:
+                    mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
+                    mask[train_idx[ntype]] = 1
+                    hetero[ntype].train_mask = mask
+                else:
+                    hetero[ntype].train_mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
 
-            if ntype in valid_idx:
-                mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
-                mask[valid_idx[ntype]] = 1
-                hetero[ntype].valid_mask = mask
+                if ntype in valid_idx:
+                    mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
+                    mask[valid_idx[ntype]] = 1
+                    hetero[ntype].valid_mask = mask
+                else:
+                    hetero[ntype].valid_mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
 
-            if ntype in test_idx:
-                mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
-                mask[test_idx[ntype]] = 1
-                hetero[ntype].test_mask = mask
+                if ntype in test_idx:
+                    mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
+                    mask[test_idx[ntype]] = 1
+                    hetero[ntype].test_mask = mask
+                else:
+                    hetero[ntype].test_mask = torch.zeros(hetero[ntype].num_nodes, dtype=torch.bool)
 
-        return hetero, classes, self.nodes.to_dict()
+        return hetero, classes, self.nodes.to_dict(), train_idx, valid_idx, test_idx

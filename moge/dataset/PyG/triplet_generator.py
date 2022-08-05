@@ -8,8 +8,7 @@ from torch import Tensor
 
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.graph import HeteroGraphDataset
-from moge.dataset.utils import merge_node_index, get_relabled_edge_index
-from moge.model.PyG.utils import is_negative
+from moge.dataset.utils import merge_node_index, get_relabled_edge_index, is_negative
 
 
 class TripletDataset(HeteroGraphDataset):

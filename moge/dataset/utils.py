@@ -9,7 +9,6 @@ from torch import Tensor
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
 
-from moge.model.PyG import is_negative
 from moge.model.utils import is_sorted
 
 
@@ -111,14 +110,14 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
     edge_index_dict = {}
     for etype in metapaths:
         if isinstance(graph, nx.MultiGraph) and isinstance(etype, str):
-            assert not isinstance(nodes, dict)
+            assert not isinstance(nodes, (dict, pd.Series))
             subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
             nodes_A = nodes
             nodes_B = nodes
             metapath = (d_ntype, etype, d_ntype)
 
         elif isinstance(graph, nx.MultiGraph) and isinstance(etype, tuple):
-            assert isinstance(nodes, dict)
+            assert isinstance(nodes, (dict, pd.Series))
             metapath: Tuple[str, str, str] = etype
             head, etype, tail = metapath
             subgraph = graph.edge_subgraph([(u, v, e) for u, v, e in graph.edges if e == etype])
@@ -129,7 +128,7 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
             subgraph = graph
 
             if isinstance(etype, str):
-                assert not isinstance(nodes, dict)
+                assert not isinstance(nodes, (dict, pd.Series))
                 nodes_A = nodes_B = nodes
                 metapath = (d_ntype, etype, d_ntype)
             elif isinstance(etype, tuple):
@@ -143,7 +142,10 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
             biadj = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
                                                     format="coo")
         except Exception as e:
-            print(etype, e)
+            print(e, etype, )
+            # "\n", subgraph, list(subgraph.edges())[:2],
+            # '\n', f"nodes_A {len(nodes_A)} {nodes_A[:5]}", f"nodes_A {len(nodes_A)} {nodes_A[:5]}"
+            # traceback.print_exc()
             continue
 
         if format == "coo":
@@ -168,8 +170,9 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
     return edge_index_dict
 
 
-def get_edge_index(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
-                   nodes_B: Union[List[str], np.array], edge_attrs: List[str] = None, format="pyg") -> torch.LongTensor:
+def get_edge_index_values(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
+                          nodes_B: Union[List[str], np.array], edge_attrs: List[str] = None, format="pyg") \
+        -> Tuple[Union[torch.LongTensor, Tuple[Tensor]], Optional[Dict[str, Tensor]]]:
     values = {}
 
     if edge_attrs is None:
@@ -178,7 +181,7 @@ def get_edge_index(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
     for edge_attr in edge_attrs:
         biadj = nx.bipartite.biadjacency_matrix(nx_graph, row_order=nodes_A, column_order=nodes_B, weight=edge_attr,
                                                 format="coo")
-        if hasattr(biadj, 'data') and biadj.data is not None:
+        if hasattr(biadj, 'data') and biadj.data is not None and not (biadj.data == 1).all():
             values[edge_attr] = biadj.data
 
     if format == "pyg":
@@ -187,13 +190,10 @@ def get_edge_index(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
         values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in values.items()}
     elif format == "dgl":
         import torch
-        edge_index = (torch.tensor(biadj.row, dtype=torch.long), torch.tensor(biadj.col, dtype=torch.long))
+        edge_index = (torch.tensor(biadj.row, dtype=torch.int64), torch.tensor(biadj.col, dtype=torch.int64))
         values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in values.items()}
 
-    if values:
-        return edge_index, values
-    else:
-        return edge_index
+    return edge_index, values
 
 
 def one_hot_encoder(idx: Tensor, embed_dim=None):
@@ -342,7 +342,6 @@ def reverse_metapath(metapath: Tuple[str, str, str]) -> Union[Tuple[str, ...], s
         raise NotImplementedError(f"{metapath} not supported")
     return rev_metapath
 
-
 def unreverse_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, ...]:
     if isinstance(metapath, tuple):
         tokens = []
@@ -365,3 +364,27 @@ def unreverse_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, ...]:
 
 def is_reversed(metapath):
     return any("rev_" in token for token in metapath)
+
+
+def tag_negative_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
+    if isinstance(metapath, tuple):
+        tokens = []
+        for i, token in enumerate(copy.deepcopy(metapath)):
+            if i == 1:
+                if len(token) == 2:  # 2 letter string etype
+                    rev_etype = token[::-1]
+                else:
+                    rev_etype = f"neg_{token}"
+                tokens.append(rev_etype)
+            else:
+                tokens.append(token)
+
+        rev_metapath = tuple(tokens)
+
+    else:
+        raise NotImplementedError(f"{metapath} not supported")
+    return rev_metapath
+
+
+def is_negative(metapath):
+    return any("neg" in token for token in metapath)

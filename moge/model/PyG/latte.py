@@ -12,8 +12,9 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
 from moge.model.sampling import negative_sample
-from .utils import is_negative, get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, \
-    tag_negative, untag_negative
+from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes
+from ..dgl.latte import tag_negative, untag_negative
+from ...dataset.utils import is_negative
 
 
 class LATTE(nn.Module):

@@ -74,9 +74,9 @@ class DGLNodeSampler(HeteroGraphDataset):
             self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
 
     @classmethod
-    def from_dgl_heterograph(cls, g: dgl.DGLHeteroGraph, labels: Union[Tensor, Dict[str, Tensor]],
-                             num_classes: int, train_idx: Dict[str, Tensor], val_idx, test_idx,
-                             **kwargs):
+    def from_heteronetwork(cls, g: dgl.DGLHeteroGraph, labels: Union[Tensor, Dict[str, Tensor]],
+                           num_classes: int, train_idx: Dict[str, Tensor], val_idx, test_idx,
+                           **kwargs):
         if "classes" in kwargs:
             classes = kwargs.pop("classes")
         else:
@@ -166,16 +166,16 @@ class DGLNodeSampler(HeteroGraphDataset):
         # Labels
         labels = dataset.y_dict[dataset.head_node_type][g.nodes(dataset.head_node_type)]
 
-        self = cls.from_dgl_heterograph(g=g, labels=labels,
-                                        num_classes=dataset.n_classes,
-                                        train_idx=dataset.training_idx,
-                                        val_idx=dataset.validation_idx,
-                                        test_idx=dataset.testing_idx,
-                                        sampler=kwargs["sampler"],
-                                        neighbor_sizes=kwargs["neighbor_sizes"],
-                                        head_node_type=dataset.head_node_type,
-                                        add_reverse_metapaths=kwargs["add_reverse_metapaths"],
-                                        inductive=kwargs["inductive"])
+        self = cls.from_heteronetwork(g=g, labels=labels,
+                                      num_classes=dataset.n_classes,
+                                      train_idx=dataset.training_idx,
+                                      val_idx=dataset.validation_idx,
+                                      test_idx=dataset.testing_idx,
+                                      sampler=kwargs["sampler"],
+                                      neighbor_sizes=kwargs["neighbor_sizes"],
+                                      head_node_type=dataset.head_node_type,
+                                      add_reverse_metapaths=kwargs["add_reverse_metapaths"],
+                                      inductive=kwargs["inductive"])
         return self
 
     def transform_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,

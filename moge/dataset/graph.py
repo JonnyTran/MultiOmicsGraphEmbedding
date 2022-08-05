@@ -118,9 +118,12 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                 self.process_DglGraphDataset_hetero(dataset)
             else:
                 self.process_DglGraphDataset_homo(dataset)
+
         elif isinstance(dataset, dgl.DGLGraph):
-            self.G = dataset
-            self.num_nodes_dict = {ntype: self.G.num_nodes(ntype) for ntype in self.G.ntypes}
+            if isinstance(dataset, dgl.DGLHeteroGraph):
+                self.process_dgl_heterodata(dataset)
+            elif isinstance(dataset, dgl.DGLGraph):
+                raise NotImplementedError(type(dataset))
 
         # PyG datasets
         elif isinstance(dataset, PygLinkPropPredDataset) and hasattr(dataset[0], "edge_reltype") and \

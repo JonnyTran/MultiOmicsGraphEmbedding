@@ -31,11 +31,11 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         use_reverse = True
 
     if "ogbn" in name and method == "NARS":
-        dataset = DGLNodeSampler.from_dgl_heterograph(*load_mag(args=args),
-                                                      inductive=args.inductive,
-                                                      neighbor_sizes=args.neighbor_sizes, head_node_type="paper",
-                                                      add_reverse_metapaths=False,
-                                                      reshuffle_train=train_ratio if train_ratio else False)
+        dataset = DGLNodeSampler.from_heteronetwork(*load_mag(args=args),
+                                                    inductive=args.inductive,
+                                                    neighbor_sizes=args.neighbor_sizes, head_node_type="paper",
+                                                    add_reverse_metapaths=False,
+                                                    reshuffle_train=train_ratio if train_ratio else False)
 
     elif "ogbn" in name:
 
@@ -61,7 +61,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
 
         min_count = 0.01
         label_col = 'go_id'
-        dataset = DGLNodeSampler.from_dgl_heterograph(
+        dataset = DGLNodeSampler.from_heteronetwork(
             *network.to_dgl_heterograph(target=label_col,
                                         min_count=min_count,
                                         sequence=False,
@@ -93,7 +93,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
             args.cls_graph = dgl.heterograph(edge_index_dict)
 
     elif name == "ACM":
-        dataset = DGLNodeSampler.from_dgl_heterograph(
+        dataset = DGLNodeSampler.from_heteronetwork(
             *load_acm(use_emb=os.path.join(args.use_emb, "TransE_acm/")),
             sampler="MultiLayerNeighborSampler",
             neighbor_sizes=args.neighbor_sizes,
@@ -157,16 +157,16 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
             sequence_tokenizers = None
             use_sequence = False
 
-        hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, expression=False,
-                                                           sequence=use_sequence, add_reverse=args.use_reverse, )
+        hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, sequence=use_sequence,
+                                                           expression=False, add_reverse=args.use_reverse)
 
         n_neighbors = args.n_neighbors if args.neighbor_loader == "HGTLoader" else args.n_neighbors // 8
 
-        dataset = HeteroNodeClfDataset.from_pyg_heterodata(hetero, classes, nodes,
-                                                           head_node_type=args.head_node_type,
-                                                           neighbor_loader=args.neighbor_loader,
-                                                           neighbor_sizes=[n_neighbors] * args.t_order,
-                                                           seq_tokenizer=sequence_tokenizers)
+        dataset = HeteroNodeClfDataset.from_heteronetwork(hetero, classes, nodes,
+                                                          head_node_type=args.head_node_type,
+                                                          neighbor_loader=args.neighbor_loader,
+                                                          neighbor_sizes=[n_neighbors] * args.t_order,
+                                                          seq_tokenizer=sequence_tokenizers)
 
         geneontology = GeneOntology(
             file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"})
@@ -227,17 +227,17 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
             sequence_tokenizers = None
             use_sequence = False
 
-        hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, expression=False,
-                                                           sequence=use_sequence, add_reverse=hparams.use_reverse, )
+        hetero, classes, nodes = network.to_pyg_heterodata(target=None, min_count=None, sequence=use_sequence,
+                                                           expression=False, add_reverse=hparams.use_reverse)
 
         n_neighbors = hparams.n_neighbors if hparams.neighbor_loader == "HGTLoader" else hparams.n_neighbors // 8
-        dataset = HeteroLinkPredDataset.from_pyg_heterodata(hetero, classes, nodes,
-                                                            negative_sampling_size=1000,
-                                                            pred_metapaths=[],
-                                                            head_node_type=hparams.head_node_type,
-                                                            neighbor_loader=hparams.neighbor_loader,
-                                                            neighbor_sizes=[n_neighbors] * hparams.t_order,
-                                                            seq_tokenizer=sequence_tokenizers)
+        dataset = HeteroLinkPredDataset.from_heteronetwork(hetero, classes, nodes,
+                                                           negative_sampling_size=1000,
+                                                           pred_metapaths=[],
+                                                           head_node_type=hparams.head_node_type,
+                                                           neighbor_loader=hparams.neighbor_loader,
+                                                           neighbor_sizes=[n_neighbors] * hparams.t_order,
+                                                           seq_tokenizer=sequence_tokenizers)
 
         train_date = hparams.train_date
         valid_date = pd.to_datetime(train_date) + pd.to_timedelta(52, "W")
@@ -245,7 +245,7 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
             file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"} \
                 if "mlm" in name else None)
 
-        dataset.add_ontology_edges(geneontology, metapaths=["is_a", "part_of"], train_date=train_date,
+        dataset.add_ontology_edges(geneontology, etypes=["is_a", "part_of"], train_date=train_date,
                                    valid_date=valid_date, test_date="2021-12-31")
         dataset._name = "_".join([name, train_date])
 
