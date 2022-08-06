@@ -4,12 +4,13 @@ from typing import Dict, Union, List
 
 import torch
 import torch.nn.functional as F
-from moge.dataset import HeteroNodeClfDataset
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
 from torch import nn, Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from transformers import BertConfig, BertForSequenceClassification
+
+from moge.dataset import HeteroNodeClfDataset
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 
@@ -38,7 +39,7 @@ class HeteroNodeFeatureEncoder(nn.Module):
             for ntype in proj_node_types})
         print("model.encoder.feature_projection: ", self.feature_projection)
 
-        if hparams.batchnorm:
+        if "batchnorm" in hparams and hparams.batchnorm:
             self.batchnorm: Dict[str, nn.BatchNorm1d] = nn.ModuleDict({
                 ntype: nn.BatchNorm1d(input_size) \
                 for ntype, input_size in dataset.node_attr_shape.items()})

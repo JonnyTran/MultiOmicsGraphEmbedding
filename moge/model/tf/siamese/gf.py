@@ -1,9 +1,70 @@
+from typing import Union, Tuple, List
+
 import networkx as nx
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from moge.model.static_graph_embedding import ImportedGraphEmbedding
+from moge.model.tf.static_graph_embedding import ImportedGraphEmbedding
+from moge.network.hetero import HeteroNetwork
+
+
+def get_adjacency_matrix(network: HeteroNetwork, edge_types: Union[Tuple[str], List[Tuple[str]]],
+                         node_list=None, method="GAT", output="dense"):
+    """
+
+    :param edge_types: either a tuple(str, ...) or [tuple(str, ...), tuple(str, ...)]
+    :param node_list (list):
+    :return:
+    """
+    if node_list is None:
+        node_list = network.node_list
+
+    if isinstance(edge_types, tuple):
+        assert edge_types in network.networks
+        adj = network.get_layer_adjacency_matrix(edge_types, node_list, method=method, output=output)
+
+    elif isinstance(edge_types, list) and isinstance(edge_types[0], tuple):
+        assert network.networks.issuperset(edge_types)
+        adj = {}
+        for layer in edge_types:
+            adj[layer] = network.get_layer_adjacency_matrix(layer, node_list)
+    else:
+        raise Exception("edge_types '{}' must be one of {}".format(edge_types, network.node_types))
+
+    return adj
+
+
+def get_layer_adjacency_matrix(network: HeteroNetwork, edge_type, node_list=None, method="GAT", output="csr"):
+    if edge_type in network.layers_adj:
+        adjacency_matrix = network.layers_adj[edge_type]
+
+    # Get adjacency and caches the matrix
+    else:
+        adjacency_matrix = nx.adjacency_matrix(network.networks[edge_type],
+                                               nodelist=network.node_list)
+        # if method == "GAT":
+        #     adjacency_matrix = adjacency_matrix + sps.csr_matrix(
+        #         np.eye(adjacency_matrix.shape[0]))  # Add self-loops
+
+        network.layers_adj[edge_type] = adjacency_matrix
+
+    if node_list is None or node_list == network.node_list:
+        pass
+    elif set(node_list) <= set(network.node_list):
+        adjacency_matrix = network.slice_adj(adjacency_matrix, node_list, None)
+    elif set(node_list) > set(network.node_list):
+        raise Exception(f"A node in node_l is not in self.node_list : {set(node_list) - set(network.node_list)}")
+
+    if output == "csr":
+        return adjacency_matrix.astype(float)
+    elif output == "coo":
+        adjacency_matrix = adjacency_matrix.tocoo(copy=True)
+        return np.vstack((adjacency_matrix.row, adjacency_matrix.col)).astype("long")
+    elif output == "dense":
+        return adjacency_matrix.todense()
+    else:
+        raise Exception("Output must be one of {csr, coo, dense}")
 
 
 class GraphFactorization(ImportedGraphEmbedding):

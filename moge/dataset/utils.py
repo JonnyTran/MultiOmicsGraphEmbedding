@@ -363,7 +363,10 @@ def unreverse_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, ...]:
 
 
 def is_reversed(metapath):
-    return any("rev_" in token for token in metapath)
+    if isinstance(metapath, tuple):
+        return any("rev_" in token for token in metapath)
+    elif isinstance(metapath, str):
+        return "rev" in metapath
 
 
 def tag_negative_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -386,5 +389,23 @@ def tag_negative_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, str, str
     return rev_metapath
 
 
+def untag_negative_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
+    if isinstance(metapath, tuple):
+        tokens = []
+        for i, token in enumerate(copy.deepcopy(metapath)):
+            if i == 1:
+                rev_etype = token.removeprefix("neg_")
+                tokens.append(rev_etype)
+            else:
+                tokens.append(token)
+
+        rev_metapath = tuple(tokens)
+
+    return rev_metapath
+
+
 def is_negative(metapath):
-    return any("neg" in token for token in metapath)
+    if isinstance(metapath, tuple):
+        return any("neg" in token for token in metapath)
+    elif isinstance(metapath, str):
+        return "neg" in metapath

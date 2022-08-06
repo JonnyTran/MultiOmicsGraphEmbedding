@@ -1,11 +1,14 @@
 import random
 from abc import abstractmethod
+from collections import defaultdict
 from typing import List, Tuple, Dict, Any
 
 import networkx as nx
 import numpy as np
 import pandas as pd
+import tqdm
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
+from networkx.classes.reportviews import EdgeView
 from sklearn.preprocessing import MultiLabelBinarizer
 
 
@@ -114,21 +117,31 @@ class TrainTestSplit():
         edges = [(u, v, d) for (u, v), d in zip(edges, edge_attr)]
         return edges
 
-    def label_node_trainvalidtest(self, node_dict: Dict[str, List[str]], train=False, valid=False, test=False) \
-            -> Dict[str, Dict[str, Dict[str, Any]]]:
-        mask = {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
-        # node_attr_dict = {node: {'train_mask': train, 'valid_mask': valid, 'test_mask': test} \
-        #                   for ntype, node_list in node_dict.items() for node in node_list}
-        node_attr_dict = {key: {node: mask[key] \
+    def get_all_nodes_mask(self, train_nodes: Dict[str, List[str]], valid_nodes: Dict[str, List[str]],
+                           test_nodes: Dict[str, List[str]]) \
+            -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]:
+        """
+        Given a subset of nodes in train/valid/test, mark all nodes in the HeteroNetwork to be either train/valid/test.
+        Args:
+            train_nodes ():
+            valid_nodes ():
+            test_nodes ():
+
+        Returns:
+
+        """
+
+        def get_node_mask(node_dict: Dict[str, List[str]], train=False, valid=False, test=False) \
+                -> Dict[str, Dict[str, Dict[str, Any]]]:
+            mask = {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
+
+            node_attrs = {key: {node: mask[key] \
                                 for ntype, node_list in node_dict.items() \
                                 for node in node_list} \
                           for key in ["train_mask", "valid_mask", "test_mask"]}
 
-        return node_attr_dict
+            return node_attrs
 
-    def set_node_traintestvalid_mask(self, train_nodes: Dict[str, List[str]], valid_nodes: Dict[str, List[str]],
-                                     test_nodes: Dict[str, List[str]]) \
-            -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]:
         incident_nodes = {ntype: list(set(train_nodes[ntype] if ntype in train_nodes else []) |
                                       set(valid_nodes[ntype] if ntype in valid_nodes else []) |
                                       set(test_nodes[ntype] if ntype in test_nodes else [])) \
@@ -148,9 +161,9 @@ class TrainTestSplit():
 
         for metapath in self.networks.keys():
             for nodes_dict in [train_nodes, valid_nodes, test_nodes]:
-                node_attr_dict = self.label_node_trainvalidtest(nodes_dict, train=nodes_dict is train_nodes,
-                                                                valid=nodes_dict is valid_nodes,
-                                                                test=nodes_dict is test_nodes)
+                node_attr_dict = get_node_mask(nodes_dict, train=nodes_dict is train_nodes,
+                                               valid=nodes_dict is valid_nodes,
+                                               test=nodes_dict is test_nodes)
                 for mask_name, node_mask in node_attr_dict.items():
                     nx.set_node_attributes(self.networks[metapath], values=node_mask, name=mask_name)
 
@@ -159,6 +172,41 @@ class TrainTestSplit():
               "test nodes", sum(len(nids) for nids in test_nodes.values()))
 
         return train_nodes, valid_nodes, test_nodes
+
+    def get_all_edges_mask(self, edgelist: EdgeView, metapath: Tuple[str, str, str],
+                           train_nodes: Dict[str, List[str]], valid_nodes: Dict[str, List[str]],
+                           test_nodes: Dict[str, List[str]]) \
+            -> Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]]:
+        """
+
+        Args:
+            edgelist ():
+            metapath ():
+            train_nodes ():
+            valid_nodes ():
+            test_nodes ():
+
+        Returns:
+
+        """
+        train_nodes = defaultdict(set, train_nodes)
+        valid_nodes = defaultdict(set, valid_nodes)
+        test_nodes = defaultdict(set, test_nodes)
+
+        def get_edge_mask(u: str, v: str) -> Dict[str, Any]:
+            head_type, tail_type = metapath[0], metapath[-1]
+            train = u in train_nodes[head_type] and v in train_nodes[tail_type]
+            valid = u in valid_nodes[head_type] or v in valid_nodes[tail_type]
+            test = u in test_nodes[head_type] or v in test_nodes[tail_type]
+            if not valid and not test:
+                train = True
+            return {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
+
+        edge_attrs = {edge_tup: get_edge_mask(edge_tup[0], edge_tup[1]) \
+                      for edge_tup, _ in tqdm.tqdm(edgelist.items(), desc=str(metapath))}
+
+        return edge_attrs
+
 
 def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_frac=0.0,
                              seed=0, verbose=False):

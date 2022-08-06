@@ -46,7 +46,7 @@ class ClassificationLoss(nn.Module):
         else:
             raise TypeError(f"Unsupported loss type:{loss_type}")
 
-    def forward(self, logits: Tensor, targets: Tensor, weights: Optional[Tensor] = None):
+    def forward(self, logits: Tensor, targets: Tensor, weights: Optional[Tensor] = None) -> Tensor:
         """
 
         Args:

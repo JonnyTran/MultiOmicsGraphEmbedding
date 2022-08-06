@@ -15,7 +15,7 @@ from ...network.hetero import HeteroNetwork
 
 
 class DGLLinkSampler(DGLNodeSampler):
-    def __init__(self, dataset: DglLinkPropPredDataset, sampler: str, neighbor_sizes=None,
+    def __init__(self, dataset: Union[DglLinkPropPredDataset, dgl.DGLHeteroGraph], sampler: str, neighbor_sizes=None,
                  negative_sampler="uniform", negative_sampling_size=100,
                  node_types=None, metapaths=None, head_node_type=None, edge_dir=True, reshuffle_train: float = None,
                  add_reverse_metapaths=True, inductive=True, **kwargs):
@@ -35,30 +35,29 @@ class DGLLinkSampler(DGLNodeSampler):
             self.init_negative_sampler = dgl.dataloading.negative_sampler.PerSourceUniform
 
     @classmethod
-    def from_heteronetwork(cls, network: HeteroNetwork, target: str = None, min_count: int = None,
-                           node_attr_cols: List[str] = None,
+    def from_heteronetwork(cls, network: HeteroNetwork, node_attr_cols: List[str] = None,
+                           target: str = None, min_count: int = None,
                            expression=False, sequence=False, add_reverse_metapaths=True,
                            label_subset: Optional[Union[Index, np.ndarray]] = None,
                            ntype_subset: Optional[List[str]] = None, **kwargs):
-        hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
+        G, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                        expression=expression, sequence=sequence,
                                        label_subset=label_subset, ntype_subset=ntype_subset)
 
-        self = cls(dataset=hetero, metapaths=hetero.canonical_etypes, add_reverse_metapaths=add_reverse_metapaths,
+        self = cls(dataset=G, metapaths=G.canonical_etypes, add_reverse_metapaths=add_reverse_metapaths,
                    edge_dir="in", **kwargs)
         self.network = network
         self.classes = classes
         self.nodes = nodes
-        self._name = ""
+        self._name = network._name if hasattr(network, '_name') else ""
         self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx
 
-        self.pred_metapaths = network.pred_metapaths
-        self.neg_pred_metapaths = network.neg_pred_metapaths
+        self.pred_metapaths = network.pred_metapaths if hasattr(network, 'pred_metapaths') else []
+        self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, 'neg_pred_metapaths') else []
         if self.use_reverse:
             for metapath in self.G.canonical_etypes:
-                if is_negative(metapath) and is_reversed(metapath) or \
-                        (self.neg_pred_metapaths and unreverse_metapath(metapath) in self.neg_pred_metapaths):
+                if is_negative(metapath) and is_reversed(metapath):
                     self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
 
                 elif self.pred_metapaths and unreverse_metapath(metapath) in self.pred_metapaths:

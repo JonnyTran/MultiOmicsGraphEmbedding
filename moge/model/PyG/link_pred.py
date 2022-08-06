@@ -20,7 +20,7 @@ from ..trainer import LinkPredTrainer
 from ...dataset import HeteroLinkPredDataset
 
 
-class LinkPred(torch.nn.Module):
+class EdgePredictor(torch.nn.Module):
     def __init__(self, embedding_dim: int, pred_metapaths: List[Tuple[str, str, str]],
                  scoring: str = "DistMult",
                  loss_type: str = "CONTRASTIVE_LOSS",
@@ -31,7 +31,7 @@ class LinkPred(torch.nn.Module):
             embedding_dim (): dimension of node embeddings.
             pred_metapaths (): List of metapaths to predict
         """
-        super(LinkPred, self).__init__()
+        super(EdgePredictor, self).__init__()
         self.pred_metapaths = list({edge_type for head_type, edge_type, tail_type in pred_metapaths})
         self.embedding_dim = embedding_dim
         self.head_batch = "head_batch"
@@ -166,7 +166,56 @@ class LinkPred(torch.nn.Module):
         return edge_pred_dict
 
 
-class LATTELinkPred(LinkPredTrainer):
+class PyGLinkPredTrainer(LinkPredTrainer):
+    def update_pr_metrics(self, pos_scores: Tensor,
+                          neg_scores: Union[Tensor, Dict[Tuple[str, str, str], Tensor]],
+                          metrics: Metrics,
+                          subset=["precision", "recall", "aupr"]):
+        if isinstance(neg_scores, dict):
+            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in neg_scores.items()])
+        else:
+            edge_neg_score = neg_scores
+
+        # randomly select |e_neg| positive edges to balance precision/recall scores
+        pos_edge_idx = np.random.choice(pos_scores.size(0), size=edge_neg_score.shape,
+                                        replace=False if pos_scores.size(0) > edge_neg_score.size(0) else True)
+        pos_scores = pos_scores[pos_edge_idx]
+
+        y_pred = torch.cat([pos_scores, edge_neg_score]).unsqueeze(-1).detach()
+        y_true = torch.cat([torch.ones_like(pos_scores), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
+
+        metrics.update_metrics(y_pred, y_true, weights=None, subset=subset)
+
+    def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
+                                 pos_edge_scores: Dict[Tuple[str, str, str], Tensor],
+                                 neg_edge_scores: Dict[Tuple[str, str, str], Tensor],
+                                 neg_head_batch: Dict[Tuple[str, str, str], Tensor],
+                                 neg_tail_batch: Dict[Tuple[str, str, str], Tensor],
+                                 pos_scores: Tensor,
+                                 neg_batch_scores: Tensor):
+
+        if isinstance(metrics, dict):
+            for metapath in pos_edge_scores:
+                go_type = "BPO" if metapath[-1] == 'biological_process' else \
+                    "CCO" if metapath[-1] == 'cellular_component' else \
+                        "MFO" if metapath[-1] == 'molecular_function' else None
+
+                neg_batch = torch.concat([neg_head_batch[metapath], neg_tail_batch[metapath]], dim=1)
+                metrics[go_type].update_metrics(pos_edge_scores[metapath].detach(), neg_batch.detach(),
+                                                weights=None, subset=["ogbl-biokg"])
+
+                if metapath in pos_edge_scores and neg_edge_scores and metapath in neg_edge_scores:
+                    self.update_pr_metrics(pos_scores=pos_edge_scores[metapath],
+                                           neg_scores=neg_edge_scores[metapath],
+                                           metrics=metrics[go_type])
+
+        else:
+            metrics.update_metrics(pos_scores.detach(), neg_batch_scores.detach(),
+                                   weights=None, subset=["ogbl-biokg"])
+            self.update_pr_metrics(pos_scores=pos_scores, neg_scores=neg_edge_scores, metrics=metrics)
+
+
+class LATTELinkPred(PyGLinkPredTrainer):
     def __init__(self, hparams: Namespace, dataset: HeteroLinkPredDataset,
                  metrics: Dict[str, List[str]] = ["obgl-biokg"],
                  collate_fn=None) -> None:
@@ -213,11 +262,12 @@ class LATTELinkPred(LinkPredTrainer):
         if "negative_sampling_size" in hparams:
             self.dataset.negative_sampling_size = hparams.negative_sampling_size
 
-        self.classifier = LinkPred(embedding_dim=hparams.embedding_dim,
-                                   pred_metapaths=dataset.pred_metapaths,
-                                   scoring=hparams.scoring if "scoring" in hparams else "DistMult",
-                                   loss_type=hparams.loss_type,
-                                   ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
+        self.classifier = EdgePredictor(embedding_dim=hparams.embedding_dim,
+                                        pred_metapaths=dataset.pred_metapaths,
+                                        scoring=hparams.scoring if "scoring" in hparams else "DistMult",
+                                        loss_type=hparams.loss_type,
+                                        ntype_mapping=dataset.ntype_mapping if hasattr(dataset,
+                                                                                       "ntype_mapping") else None)
 
         self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
 
@@ -272,45 +322,6 @@ class LATTELinkPred(LinkPredTrainer):
 
         return embeddings, edges_pred
 
-    def training_step(self, batch, batch_nb):
-        X, edge_true, edge_weights = batch
-        embeddings, edge_pred_dict = self.forward(X, edge_true)
-
-        pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(pos_edges, neg_batch)
-
-        self.update_link_pred_metrics(self.train_metrics, edge_pred_dict, pos_edges, neg_batch)
-
-        logs = {'loss': loss}
-        self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
-
-        return loss
-
-    def validation_step(self, batch, batch_nb):
-        X, edge_true, edge_weights = batch
-        embeddings, edge_pred_dict = self.forward(X, edge_true, save_betas=True)
-
-        pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(pos_edges, neg_batch)
-
-        self.update_link_pred_metrics(self.valid_metrics, edge_pred_dict, pos_edges, neg_batch)
-
-        self.log("val_loss", loss, prog_bar=True)
-
-        return loss
-
-    def test_step(self, batch, batch_nb):
-        X, edge_true, edge_weights = batch
-        embeddings, edge_pred_dict = self.forward(X, edge_true)
-
-        pos_edges, neg_batch, e_weights = self.stack_pos_head_tail_batch(edge_pred_dict, edge_weights)
-        loss = self.criterion.forward(pos_edges, neg_batch)
-
-        self.update_link_pred_metrics(self.test_metrics, edge_pred_dict, pos_edges, neg_batch)
-
-        self.log("test_loss", loss)
-        return loss
-
     def on_validation_end(self) -> None:
         try:
             if self.current_epoch % 5 == 1:
@@ -343,48 +354,65 @@ class LATTELinkPred(LinkPredTrainer):
         finally:
             super().on_test_end()
 
-    def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                 edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                                 e_pos: Tensor, e_neg: Tensor):
-        if isinstance(metrics, dict):
-            for metapath in edge_pred_dict["edge_pos"]:
-                go_type = "BPO" if metapath[-1] == 'biological_process' else \
-                    "CCO" if metapath[-1] == 'cellular_component' else \
-                        "MFO" if metapath[-1] == 'molecular_function' else None
+    def training_step(self, batch, batch_nb):
+        X, edge_true, edge_weights = batch
+        embeddings, edge_batch_dict = self.forward(X, edge_true)
 
-                neg_batch = torch.concat([edge_pred_dict["head_batch"][metapath],
-                                          edge_pred_dict["tail_batch"][metapath]], dim=1)
-                metrics[go_type].update_metrics(edge_pred_dict["edge_pos"][metapath].detach(),
-                                                neg_batch.detach(),
-                                                weights=None, subset=["ogbl-biokg"])
+        pos_scores, neg_batch_scores, e_weights = self.stack_pos_head_tail_batch(edge_batch_dict, edge_weights)
+        loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
-                if metapath in edge_pred_dict["edge_pos"] and "edge_neg" in edge_pred_dict and metapath in \
-                        edge_pred_dict["edge_neg"]:
-                    self.update_pr_metrics(e_pos=edge_pred_dict["edge_pos"][metapath],
-                                           edge_pred=edge_pred_dict["edge_neg"][metapath],
-                                           metrics=metrics[go_type])
+        self.update_link_pred_metrics(self.train_metrics,
+                                      pos_edge_scores=edge_batch_dict["edge_pos"],
+                                      neg_edge_scores=edge_batch_dict["edge_neg"] if hasattr(edge_batch_dict,
+                                                                                             "edge_neg") else {},
+                                      neg_head_batch=edge_batch_dict["head_batch"],
+                                      neg_tail_batch=edge_batch_dict["tail_batch"],
+                                      pos_scores=pos_scores,
+                                      neg_batch_scores=neg_batch_scores)
 
-        else:
-            metrics.update_metrics(e_pos.detach(), e_neg.detach(),
-                                   weights=None, subset=["ogbl-biokg"])
-            self.update_pr_metrics(e_pos=e_pos, edge_pred=edge_pred_dict["edge_neg"],
-                                   metrics=metrics)
+        logs = {'loss': loss}
+        self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
-    def update_pr_metrics(self, e_pos: Tensor, edge_pred: Union[Tensor, Dict[Tuple[str, str, str], Tensor]],
-                          metrics: Metrics, subset=["precision", "recall", "aupr"]):
-        if isinstance(edge_pred, dict):
-            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in edge_pred.items()])
-        else:
-            edge_neg_score = edge_pred
+        return loss
 
-        # randomly select |e_neg| positive edges to balance precision/recall scores
-        e_pos = e_pos[np.random.choice(e_pos.size(0), size=edge_neg_score.shape,
-                                       replace=False if e_pos.size(0) > edge_neg_score.size(0) else True)]
+    def validation_step(self, batch, batch_nb):
+        X, edge_true, edge_weights = batch
+        embeddings, edge_batch_dict = self.forward(X, edge_true, save_betas=True)
 
-        y_pred = torch.cat([e_pos, edge_neg_score]).unsqueeze(-1).detach()
-        y_true = torch.cat([torch.ones_like(e_pos), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
+        pos_scores, neg_batch_scores, e_weights = self.stack_pos_head_tail_batch(edge_batch_dict, edge_weights)
+        loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
-        metrics.update_metrics(y_pred, y_true, weights=None, subset=subset)
+        self.update_link_pred_metrics(self.valid_metrics,
+                                      pos_edge_scores=edge_batch_dict["edge_pos"],
+                                      neg_edge_scores=edge_batch_dict["edge_neg"] if hasattr(edge_batch_dict,
+                                                                                             "edge_neg") else {},
+                                      neg_head_batch=edge_batch_dict["head_batch"],
+                                      neg_tail_batch=edge_batch_dict["tail_batch"],
+                                      pos_scores=pos_scores,
+                                      neg_batch_scores=neg_batch_scores)
+
+        self.log("val_loss", loss, prog_bar=True)
+
+        return loss
+
+    def test_step(self, batch, batch_nb):
+        X, edge_true, edge_weights = batch
+        embeddings, edge_batch_dict = self.forward(X, edge_true)
+
+        pos_scores, neg_batch_scores, e_weights = self.stack_pos_head_tail_batch(edge_batch_dict, edge_weights)
+        loss = self.criterion.forward(pos_scores, neg_batch_scores)
+
+        self.update_link_pred_metrics(self.test_metrics,
+                                      pos_edge_scores=edge_batch_dict["edge_pos"],
+                                      neg_edge_scores=edge_batch_dict["edge_neg"] if hasattr(edge_batch_dict,
+                                                                                             "edge_neg") else {},
+                                      neg_head_batch=edge_batch_dict["head_batch"],
+                                      neg_tail_batch=edge_batch_dict["tail_batch"],
+                                      pos_scores=pos_scores,
+                                      neg_batch_scores=neg_batch_scores)
+
+        self.log("test_loss", loss)
+        return loss
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())
@@ -443,9 +471,10 @@ class HGTLinkPred(LATTELinkPred):
                             num_heads=hparams.attn_heads,
                             node_types=dataset.G.node_types, metadata=dataset.G.metadata())
 
-        self.classifier = LinkPred(embedding_dim=hparams.embedding_dim,
-                                   pred_metapaths=dataset.pred_metapaths,
-                                   ntype_mapping=dataset.ntype_mapping if hasattr(dataset, "ntype_mapping") else None)
+        self.classifier = EdgePredictor(embedding_dim=hparams.embedding_dim,
+                                        pred_metapaths=dataset.pred_metapaths,
+                                        ntype_mapping=dataset.ntype_mapping if hasattr(dataset,
+                                                                                       "ntype_mapping") else None)
 
         self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
 

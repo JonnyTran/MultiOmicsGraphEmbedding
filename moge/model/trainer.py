@@ -476,7 +476,7 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
-    def stack_pos_head_tail_batch(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+    def stack_pos_head_tail_batch(self, edge_batch_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                                   edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None,
                                   activation: Optional[Callable] = None) -> \
             Tuple[Tensor, Tensor, Optional[Tensor]]:
@@ -484,7 +484,7 @@ class LinkPredTrainer(NodeClfTrainer):
         neg_batch = []
         e_weights = []
 
-        for metapath, edge_pred in edge_pred_dict["edge_pos"].items():
+        for metapath, edge_pred in edge_batch_dict["edge_pos"].items():
             num_edges = edge_pred.shape[0]
 
             # Positive edges
@@ -494,16 +494,16 @@ class LinkPredTrainer(NodeClfTrainer):
                 e_weights.append(edge_weights_dict[metapath])
 
             # Negative sampling
-            if "head_batch" in edge_pred_dict or "tail_batch" in edge_pred_dict:
-                e_pred_head = edge_pred_dict["head_batch"][metapath].view(num_edges, -1)
-                e_pred_tail = edge_pred_dict["tail_batch"][metapath].view(num_edges, -1)
+            if "head_batch" in edge_batch_dict or "tail_batch" in edge_batch_dict:
+                e_pred_head = edge_batch_dict["head_batch"][metapath].view(num_edges, -1)
+                e_pred_tail = edge_batch_dict["tail_batch"][metapath].view(num_edges, -1)
                 neg_batch.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
 
             # True negatives
-            elif "edge_neg" in edge_pred_dict:
-                neg_batch.append(edge_pred_dict["edge_neg"][metapath].view(num_edges, -1))
+            elif "edge_neg" in edge_batch_dict:
+                neg_batch.append(edge_batch_dict["edge_neg"][metapath].view(num_edges, -1))
             else:
-                raise Exception(f"No negative edges in {edge_pred_dict.keys()}")
+                raise Exception(f"No negative edges in {edge_batch_dict.keys()}")
 
         pos_edges = torch.cat(pos_edges, dim=0)
         neg_batch = torch.cat(neg_batch, dim=0)
@@ -597,9 +597,6 @@ class LinkPredTrainer(NodeClfTrainer):
                     for m, (eid, _) in e_pred.items()}
 
         return e_losses
-
-    def stack_edge_index_values(self, edge_index_dict):
-        pass
 
     def train_dataloader(self, **kwargs):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
