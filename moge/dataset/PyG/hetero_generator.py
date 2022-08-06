@@ -52,11 +52,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            expression=False, sequence=False,
                            label_subset: Optional[Union[Index, np.ndarray]] = None,
                            ntype_subset: Optional[List[str]] = None,
-                           add_reverse_metapaths=True, go_ntype=None, **kwargs):
+                           add_reverse_metapaths=True, go_ntype=None, exclude_metapaths=None, **kwargs):
         hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_pyg_heterodata(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                       label_subset=label_subset, ntype_subset=ntype_subset, sequence=sequence,
-                                      expression=expression)
+                                      expression=expression, exclude_metapaths=exclude_metapaths)
 
         # Add reverse metapaths to allow reverse message passing for directed edges
         if add_reverse_metapaths:
@@ -410,11 +410,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def from_heteronetwork(cls, network: HeteroNetwork, node_attr_cols: List[str] = None, target: str = None,
                            min_count: int = None, expression=False, sequence=False,
                            label_subset: Optional[Union[Index, np.ndarray]] = None,
-                           ntype_subset: Optional[List[str]] = None, add_reverse_metapaths=True,
+                           ntype_subset: Optional[List[str]] = None, exclude_metapaths=None,
+                           add_reverse_metapaths=True,
                            split_namespace=False,
                            **kwargs):
-        self = super().from_heteronetwork(network, node_attr_cols, target, min_count, expression, sequence,
-                                          label_subset, ntype_subset, add_reverse_metapaths, **kwargs)
+        self = super().from_heteronetwork(network, node_attr_cols=node_attr_cols,
+                                          target=target, min_count=min_count, expression=expression, sequence=sequence,
+                                          label_subset=label_subset, ntype_subset=ntype_subset,
+                                          exclude_metapaths=network.pred_metapaths,
+                                          add_reverse_metapaths=add_reverse_metapaths, **kwargs)
 
         # Whether to use split_namespace of GO_term's
         self.split_namespace = split_namespace

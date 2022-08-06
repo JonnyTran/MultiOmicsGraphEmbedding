@@ -104,22 +104,23 @@ class HGTLayer(nn.Module):
 
         return {"h": trans_out}
 
-    def forward(self, G: DGLBlock, feat):
+    def forward(self, G: DGLBlock, feat: Dict[str, Tensor]):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=G)
         # print(G)
         with G.local_scope():
-            for srctype in set(srctype for srctype, etype, dsttype in G.canonical_etypes):
+            for srctype in set(srctype for srctype, etype, dsttype in G.canonical_etypes if G.num_edges(etype=etype)):
                 k_linear = self.k_linears[self.node_dict[srctype]]
                 v_linear = self.v_linears[self.node_dict[srctype]]
                 G.srcnodes[srctype].data['k'] = k_linear(feat_src[srctype]).view(-1, self.n_heads, self.d_k)
                 G.srcnodes[srctype].data['v'] = v_linear(feat_src[srctype]).view(-1, self.n_heads, self.d_k)
 
-            for dsttype in set(dsttype for srctype, etype, dsttype in G.canonical_etypes):
+            for dsttype in set(dsttype for srctype, etype, dsttype in G.canonical_etypes if G.num_edges(etype=etype)):
                 q_linear = self.q_linears[self.node_dict[dsttype]]
                 G.dstnodes[dsttype].data['q'] = q_linear(feat_dst[dsttype]).view(-1, self.n_heads, self.d_k)
 
             funcs = {}
             for srctype, etype, dsttype in G.canonical_etypes:
+                if G.num_edges(etype=etype) == 0: continue
                 G.apply_edges(func=self.edge_attention, etype=etype)
 
                 if G.batch_num_edges(etype=etype).item() > 0:
@@ -130,6 +131,7 @@ class HGTLayer(nn.Module):
 
             new_h = {}
             for ntype in G.ntypes:
+                if ntype not in feat: continue
                 '''
                     Step 3: Target-specific Aggregation
                     x = norm( W[node_type] * gelu( Agg(x) ) + x )
@@ -141,7 +143,9 @@ class HGTLayer(nn.Module):
                     trans_out = self.dropout(self.a_linears[nty_id].forward(G.dstnodes[ntype].data['t']))
                 else:
                     trans_out = self.dropout(feat_dst[ntype])
+
                 trans_out = trans_out * alpha + feat_dst[ntype] * (1 - alpha)
+
                 if self.use_norm:
                     new_h[ntype] = self.norms[nty_id](trans_out)
                 else:
@@ -167,10 +171,13 @@ class HGT(nn.Module):
 
         self.layers = nn.ModuleList()
         for _ in range(n_layers):
+            # self.layers.append(HGTConv(n_hid, n_hid, num_heads=n_heads, num_ntypes=len(node_dict),
+            #                            num_etypes=len(edge_dict), use_norm=use_norm))
             self.layers.append(HGTLayer(n_hid, n_hid, node_dict, edge_dict, n_heads, use_norm=use_norm))
 
     def forward(self, G: Union[DGLBlock, List[DGLBlock]], feat: Dict[str, Tensor]):
         h = {}
+
         for ntype in feat:
             if hasattr(self, "linear_inp"):
                 n_id = self.node_dict[ntype]

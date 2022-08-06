@@ -1,5 +1,4 @@
 from argparse import Namespace
-from argparse import Namespace
 from pprint import pprint
 from typing import Dict, List, Union, Tuple
 
@@ -256,6 +255,7 @@ class EdgePredictor(nn.Module):
         with g.local_scope():
             g.ndata['h'] = h
             for etype in g.canonical_etypes:
+                if g.num_edges(etype=etype) == 0: continue
                 g.apply_edges(
                     fn.u_dot_v('h', 'h', 'score'), etype=etype)
 

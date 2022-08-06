@@ -1,7 +1,7 @@
 import random
 from abc import abstractmethod
 from collections import defaultdict
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Set
 
 import networkx as nx
 import numpy as np
@@ -117,8 +117,8 @@ class TrainTestSplit():
         edges = [(u, v, d) for (u, v), d in zip(edges, edge_attr)]
         return edges
 
-    def get_all_nodes_mask(self, train_nodes: Dict[str, List[str]], valid_nodes: Dict[str, List[str]],
-                           test_nodes: Dict[str, List[str]]) \
+    def get_all_nodes_mask(self, train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
+                           test_nodes: Dict[str, Set[str]]) \
             -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]:
         """
         Given a subset of nodes in train/valid/test, mark all nodes in the HeteroNetwork to be either train/valid/test.
@@ -131,7 +131,7 @@ class TrainTestSplit():
 
         """
 
-        def get_node_mask(node_dict: Dict[str, List[str]], train=False, valid=False, test=False) \
+        def get_mask(node_dict: Dict[str, Set[str]], train=False, valid=False, test=False) \
                 -> Dict[str, Dict[str, Dict[str, Any]]]:
             mask = {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
 
@@ -142,28 +142,27 @@ class TrainTestSplit():
 
             return node_attrs
 
-        incident_nodes = {ntype: list(set(train_nodes[ntype] if ntype in train_nodes else []) |
-                                      set(valid_nodes[ntype] if ntype in valid_nodes else []) |
-                                      set(test_nodes[ntype] if ntype in test_nodes else [])) \
-                          for ntype, nodelist in self.nodes.items()}
-        nonincident_nodes = {ntype: np.setdiff1d(nodelist, incident_nodes[ntype]) \
+        incident_nodes = {ntype: set(train_nodes[ntype] if ntype in train_nodes else []) |
+                                 set(valid_nodes[ntype] if ntype in valid_nodes else []) |
+                                 set(test_nodes[ntype] if ntype in test_nodes else []) \
+                          for ntype in self.nodes.keys()}
+        nonincident_nodes = {ntype: set(nodelist).difference(incident_nodes[ntype]) \
                              for ntype, nodelist in self.nodes.items()}
 
         # Add non-incident nodes to the train nodes, since they do not belong in the valid_nodes or test_nodes
-        train_nodes = {ntype: np.union1d(nids, nonincident_nodes[ntype]) \
+        train_nodes = {ntype: nids.difference(nonincident_nodes[ntype]) \
                        for ntype, nids in train_nodes.items()}
-        train_nodes = train_nodes | {ntype: train_ids for ntype, train_ids in nonincident_nodes.items() \
+        train_nodes = train_nodes | {ntype: nodes for ntype, nodes in nonincident_nodes.items() \
                                      if ntype not in train_nodes}
-        valid_nodes = {ntype: np.setdiff1d(nids, train_nodes[ntype]) \
+        valid_nodes = {ntype: nids.difference(train_nodes[ntype]) \
                        for ntype, nids in valid_nodes.items()}
-        test_nodes = {ntype: np.setdiff1d(np.setdiff1d(nids, train_nodes[ntype]), valid_nodes[ntype]) \
+        test_nodes = {ntype: nids.difference(train_nodes[ntype]).difference(valid_nodes[ntype]) \
                       for ntype, nids in test_nodes.items()}
 
         for metapath in self.networks.keys():
             for nodes_dict in [train_nodes, valid_nodes, test_nodes]:
-                node_attr_dict = get_node_mask(nodes_dict, train=nodes_dict is train_nodes,
-                                               valid=nodes_dict is valid_nodes,
-                                               test=nodes_dict is test_nodes)
+                node_attr_dict = get_mask(nodes_dict, train=nodes_dict is train_nodes,
+                                          valid=nodes_dict is valid_nodes, test=nodes_dict is test_nodes)
                 for mask_name, node_mask in node_attr_dict.items():
                     nx.set_node_attributes(self.networks[metapath], values=node_mask, name=mask_name)
 

@@ -255,8 +255,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             # Train/valid/test split of nodes
             node_lists.append({
-                src_ntype: np.intersect1d(pos_annotations[src_node_col].unique(), self.nodes[src_ntype]),
-                dst_ntype: np.intersect1d(pos_annotations[dst_node_col].unique(), self.nodes[dst_ntype])})
+                src_ntype: set(pos_annotations[src_node_col].unique()).intersection(self.nodes[src_ntype]),
+                dst_ntype: set(pos_annotations[dst_node_col].unique()).intersection(self.nodes[dst_ntype]),
+            })
 
         # Set train/valid/test mask of all nodes on hetero graph
         train_nodes, valid_nodes, test_nodes = node_lists
@@ -449,9 +450,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         return G, classes, dict(self.nodes), training_idx, validation_idx, testing_idx
 
-    def to_pyg_heterodata(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,
-                          label_subset: Optional[Union[Index, np.ndarray]] = None,
+    def to_pyg_heterodata(self, node_attr_cols: List[str] = [],
+                          target="go_id", min_count=10, label_subset: Optional[Union[Index, np.ndarray]] = None,
                           ntype_subset: Optional[List[str]] = None,
+                          exclude_metapaths: List[Tuple[str, str, str]] = None,
                           sequence=False, expression=False) \
             -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
@@ -467,7 +469,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         for metapath, nxgraph in self.networks.items():
             head_type, tail_type = metapath[0], metapath[-1]
             if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
-            if metapath in self.pred_metapaths or untag_negative_metapath(metapath) in self.neg_pred_metapaths: continue
+            if exclude_metapaths and (
+                    metapath in exclude_metapaths or untag_negative_metapath(metapath) in exclude_metapaths): continue
 
             hetero[metapath].edge_index, edge_attrs = get_edge_index_values(nxgraph, self.nodes[head_type],
                                                                             self.nodes[tail_type],
