@@ -1,6 +1,5 @@
 import copy
 from argparse import Namespace
-from pprint import pprint
 from typing import List, Dict, Tuple, Union, Optional, Any
 
 import numpy as np
@@ -15,7 +14,8 @@ from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_hops, filter_metapaths
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
 
 
 class LATTE(nn.Module):
@@ -78,7 +78,7 @@ class LATTE(nn.Module):
                               use_proximity=use_proximity,
                               neg_sampling_ratio=neg_sampling_ratio,
                               verbose=hparams.verbose if "verbose" in hparams else False)
-            if l + 1 < n_layers and max_hops(l_layer_metapaths) < len(layer_t_orders[l]):
+            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
                 higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
 
             layers.append(layer)
@@ -206,9 +206,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.verbose = verbose
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
-        print(f"LATTE {self.layer + 1} layer") if verbose else None
-        pprint({ntype: [m for m in self.metapaths if m[-1] == ntype] \
-                for ntype in {m[-1] for m in self.metapaths}}, width=200) if verbose else None
+        print(f"LATTE {self.layer + 1}, metapaths {len(metapaths)}, max_order {max_num_hops(metapaths)}")
+        # pprint({ntype: [m[1::2] for m in self.metapaths if m[-1] == ntype] \
+        #         for ntype in {m[-1] for m in self.metapaths}}, width=500)
 
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = output_dim

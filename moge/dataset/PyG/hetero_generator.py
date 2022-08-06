@@ -422,10 +422,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             for ntype in self.G.node_types:
                 if "namespace" in self.G[ntype]:
                     self.go_namespace = self.G[ntype]["namespace"]
-
-            # unq_namespaces = np.unique(self.go_namespace)
-            # self.pred_metapaths = [metapath[:-1] + tuple([namespace]) \
-            #                        for metapath in self.pred_metapaths for namespace in unq_namespaces]
+                    self.ntype_mapping = {namespace: ntype for namespace in np.unique(self.go_namespace)}
 
         # Train/valid/test positive annotations
         self.triples, self.training_idx, self.validation_idx, self.testing_idx = \
@@ -510,8 +507,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             query_edges = {
                 metapath: torch.cat(
                     [edge_pos[metapath] if metapath in edge_pos else torch.tensor([], dtype=torch.long),
-                     edge_neg[metapath] if metapath in edge_neg else torch.tensor([], dtype=torch.long)],
-                    dim=1) \
+                     edge_neg[metapath] if metapath in edge_neg else torch.tensor([], dtype=torch.long)], dim=1) \
                 for metapath in set(edge_pos).union(set(edge_neg))}
         else:
             query_edges = edge_pos

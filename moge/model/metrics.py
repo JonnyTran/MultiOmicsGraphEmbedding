@@ -1,3 +1,4 @@
+import traceback
 from typing import Optional, Any, Callable, List, Dict, Union, Tuple
 
 import numpy as np
@@ -186,6 +187,7 @@ class Metrics(torch.nn.Module):
 
             except Exception as e:
                 print(f"Had problem with metric {metric}, {str(e)}\r")
+                traceback.print_exc()
 
         # Needed for Precision(average=False) metrics
         logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v for k, v in logs.items()}

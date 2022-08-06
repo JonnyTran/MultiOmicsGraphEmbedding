@@ -207,6 +207,13 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             is_valid = go_ann is valid_ann
             is_test = go_ann is test_ann
 
+            if is_train:
+                print("Train:")
+            elif is_valid:
+                print("Valid:")
+            elif is_test:
+                print("Test:")
+
             # True Positive links
             pos_annotations = go_ann[dst_node_col].dropna().explode().to_frame().reset_index()
             pos_graph = nx.from_pandas_edgelist(pos_annotations, source=src_node_col, target=dst_node_col, **nx_options)

@@ -2,7 +2,7 @@ import itertools
 import logging
 import os
 from collections import defaultdict
-from typing import Union, Iterable, Dict, Tuple, Optional, List, Callable, Any
+from typing import Union, Iterable, Dict, Tuple, List, Callable, Any
 
 import numpy as np
 import pandas as pd
@@ -475,49 +475,6 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
-
-    def stack_pos_head_tail_batch(self, edge_batch_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                                  edge_weights_dict: Dict[Tuple[str, str, str], Tensor] = None,
-                                  activation: Optional[Callable] = None) -> \
-            Tuple[Tensor, Tensor, Optional[Tensor]]:
-        pos_edges = []
-        neg_batch = []
-        e_weights = []
-
-        for metapath, edge_pred in edge_batch_dict["edge_pos"].items():
-            num_edges = edge_pred.shape[0]
-
-            # Positive edges
-            pos_edges.append(edge_pred)
-
-            if edge_weights_dict:
-                e_weights.append(edge_weights_dict[metapath])
-
-            # Negative sampling
-            if "head_batch" in edge_batch_dict or "tail_batch" in edge_batch_dict:
-                e_pred_head = edge_batch_dict["head_batch"][metapath].view(num_edges, -1)
-                e_pred_tail = edge_batch_dict["tail_batch"][metapath].view(num_edges, -1)
-                neg_batch.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
-
-            # True negatives
-            elif "edge_neg" in edge_batch_dict:
-                neg_batch.append(edge_batch_dict["edge_neg"][metapath].view(num_edges, -1))
-            else:
-                raise Exception(f"No negative edges in {edge_batch_dict.keys()}")
-
-        pos_edges = torch.cat(pos_edges, dim=0)
-        neg_batch = torch.cat(neg_batch, dim=0)
-
-        if e_weights:
-            e_weights = torch.cat(e_weights, dim=0)
-        else:
-            e_weights = None
-
-        if callable(activation):
-            pos_edges = activation(pos_edges)
-            neg_batch = activation(neg_batch)
-
-        return pos_edges, neg_batch, e_weights
 
     def get_node_loss(self, edge_pred: Dict[str, Dict[Tuple[str, str, str], Tensor]],
                       edge_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
