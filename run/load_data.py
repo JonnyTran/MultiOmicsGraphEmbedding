@@ -245,8 +245,8 @@ def load_link_dataset(name: str, hparams: Namespace, path="~/Bioinformatics_Exte
             file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"} \
                 if "mlm" in name else None)
 
-        dataset.add_ontology_edges(geneontology, etypes=["is_a", "part_of"], train_date=train_date,
-                                   valid_date=valid_date, test_date="2021-12-31")
+        dataset.add_edges_from_ontology(geneontology, etypes=["is_a", "part_of"], train_date=train_date,
+                                        valid_date=valid_date, test_date="2021-12-31")
         dataset._name = "_".join([name, train_date])
 
         dataset.pred_metapaths = [(hparams.head_node_type, 'associated', 'biological_process'),

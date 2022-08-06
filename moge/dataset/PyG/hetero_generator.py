@@ -17,8 +17,8 @@ from umap import UMAP
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
-from moge.dataset.utils import get_edge_index_values, edge_index_to_adjs, get_edge_index_dict, gather_node_dict, \
-    get_relabled_edge_index, is_negative, is_reversed, unreverse_metapath, untag_negative_metapath
+from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
+    get_relabled_edge_index, is_negative
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
@@ -58,6 +58,11 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                                       label_subset=label_subset, ntype_subset=ntype_subset, sequence=sequence,
                                       expression=expression)
 
+        # Add reverse metapaths to allow reverse message passing for directed edges
+        if add_reverse_metapaths:
+            transform = T.ToUndirected(merge=False)
+            hetero: HeteroData = transform(hetero)
+
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
                    edge_dir="in", **kwargs)
         self.network = network
@@ -66,34 +71,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.pred_metapaths = network.pred_metapaths if hasattr(network, 'pred_metapaths') else []
         self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, 'neg_pred_metapaths') else []
 
-        # Add reverse metapaths to allow reverse message passing for directed edges
-        if self.use_reverse:
-            transform = T.ToUndirected(merge=False)
-            hetero: HeteroData = transform(hetero)
-            for metapath in hetero.edge_types:
-                if is_negative(metapath) and is_reversed(metapath):
-                    print("Deleted", metapath)
-                    hetero.edge_stores.pop(hetero.edge_types.index(metapath))
-                    del hetero[metapath]
-                    # hetero.edge_types.remove(metapath)
-                    continue
 
-                if hasattr(self, "pred_metapaths"):
-                    if metapath in self.pred_metapaths or unreverse_metapath(metapath) in self.pred_metapaths:
-                        print("Deleted", metapath)
-                        hetero.edge_stores.pop(hetero.edge_types.index(metapath))
-                        del hetero[metapath]
-                        # hetero.edge_types.remove(metapath)
-
-                elif hasattr(self, "neg_pred_metapaths"):
-                    if untag_negative_metapath(metapath) in self.neg_pred_metapaths or \
-                            untag_negative_metapath(unreverse_metapath(metapath)) in self.neg_pred_metapaths:
-                        print("Deleted", metapath)
-                        hetero.edge_stores.pop(hetero.edge_types.index(metapath))
-                        del hetero[metapath]
-                        # hetero.edge_types.remove(metapath)
-
-            self.metapaths = [metapath for metapath in hetero.edge_types if hetero[metapath].num_edges > 0]
 
         self.classes = classes
         self.nodes = nodes
@@ -113,51 +91,6 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         self.metapaths = hetero.edge_types
         self.edge_index_dict = {etype: etype_dict["edge_index"] \
                                 for etype, etype_dict in zip(hetero.edge_types, hetero.edge_stores)}
-
-    def add_ontology_edges(self, ontology, train_date='2017-06-15', valid_date='2017-11-15', test_date='2021-12-31',
-                           go_ntype="GO_term", **kwargs):
-        all_go = set(ontology.network.nodes).intersection(ontology.data.index)
-        self.go_ntype = go_ntype
-
-        # Order nodes with classes nodes first
-        if self.classes is not None:
-            go_nodes = np.concatenate([self.classes, np.array(list(set(all_go) - set(self.classes)))])
-        else:
-            go_nodes = np.array(list(all_go))
-
-        # Edges between GO terms
-        edge_types = {e for u, v, e in ontology.network.edges}
-        edge_index_dict = get_edge_index_dict(ontology.network, nodes=go_nodes, metapaths=edge_types,
-                                              # reverse=not self.use_reverse,
-                                              format="pyg", d_ntype=go_ntype)
-        for metapath, edge_index in edge_index_dict.items():
-            if edge_index.size(1) < 200: continue
-            self.G[metapath].edge_index = edge_index
-            self.edge_index_dict[metapath] = edge_index
-            self.metapaths.append(metapath)
-
-        # Cls node attrs
-        for attr, values in ontology.data.loc[go_nodes][["name", "namespace", "def"]].iteritems():
-            self.G[go_ntype][attr] = values.to_numpy()
-
-        self.G[go_ntype]['nid'] = torch.arange(len(go_nodes), dtype=torch.long)
-        self.G[go_ntype].num_nodes = len(go_nodes)
-        self.num_nodes_dict[go_ntype] = len(go_nodes)
-        self.node_types.append(go_ntype)
-
-        # Save GO nodes & annotation data
-        self.nodes[go_ntype] = pd.Index(go_nodes)
-        self.network.annotations[go_ntype] = ontology.data
-
-        # Edges between RNA nodes and GO terms
-        train_go_ann, valid_go_ann, test_go_ann = ontology.annotation_train_val_test_split(
-            train_date=train_date, valid_date=valid_date, test_date=test_date, groupby=["gene_name"], **kwargs)
-        go_ann = pd.concat([train_go_ann, valid_go_ann, test_go_ann], axis=0)
-        nx_graph = nx.from_pandas_edgelist(go_ann["go_id"].explode().to_frame().reset_index().dropna(),
-                                           source="gene_name", target="go_id", create_using=nx.DiGraph)
-        metapath = (self.head_node_type, "associated", go_ntype)
-        self.G[metapath].edge_index = get_edge_index_values(nx_graph,
-                                                            nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
 
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
@@ -482,15 +415,25 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                            **kwargs):
         self = super().from_heteronetwork(network, node_attr_cols, target, min_count, expression, sequence,
                                           label_subset, ntype_subset, add_reverse_metapaths, **kwargs)
+
+        # Whether to use split_namespace of GO_term's
         self.split_namespace = split_namespace
+        if split_namespace:
+            for ntype in self.G.node_types:
+                if "namespace" in self.G[ntype]:
+                    self.go_namespace = self.G[ntype]["namespace"]
+
+            # unq_namespaces = np.unique(self.go_namespace)
+            # self.pred_metapaths = [metapath[:-1] + tuple([namespace]) \
+            #                        for metapath in self.pred_metapaths for namespace in unq_namespaces]
 
         # Train/valid/test positive annotations
         self.triples, self.training_idx, self.validation_idx, self.testing_idx = \
-            network.get_triples(self.pred_metapaths, pos_edges=True)
+            network.get_triples(self.pred_metapaths, positive=True)
 
         # Train/valid/test negative annotations
         self.triples_neg, self.training_idx_neg, self.validation_idx_neg, self.testing_idx_neg = \
-            network.get_triples(self.neg_pred_metapaths, neg_edges=True)
+            network.get_triples(self.neg_pred_metapaths, negative=True)
 
         self.triples.update(self.triples_neg)
 
@@ -503,6 +446,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         self.triples_adj: Dict[Tuple[str, str, str], SparseTensor] = edge_index_to_adjs(edge_index_dict,
                                                                                         nodes=self.nodes)
+
         return self
 
 
@@ -630,8 +574,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
     # def query(self):
 
-    def get_edge_index_dict_from_triples(self, edge_idx: Tensor,
-                                         neg_edge_idx: Tensor = None, metapaths=None):
+    def get_edge_index_dict_from_triples(self, edge_idx: Tensor, neg_edge_idx: Tensor = None, metapaths=None):
         triples = {k: v[edge_idx] for k, v in self.triples.items() if not is_negative(k)}
 
         # If ensures same number of true neg edges to true pos edges

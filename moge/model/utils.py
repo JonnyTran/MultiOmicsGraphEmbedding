@@ -148,9 +148,6 @@ def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
 
 
 def tensor_sizes(input: Any) -> Any:
-    if input is None:
-        print("None")
-
     if isinstance(input, (dict, MutableMapping)):
         return {metapath: tensor_sizes(v) \
                 for metapath, v in input.items()}

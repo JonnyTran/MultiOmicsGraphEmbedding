@@ -11,7 +11,7 @@ from torch_geometric.loader.neighbor_loader import NumNeighbors, get_input_node_
     get_input_node_indices
 from torch_geometric.loader.neighbor_sampler import EdgeIndex, Adj
 from torch_geometric.loader.utils import filter_data, to_hetero_csc, filter_node_store_, \
-    edge_type_to_str, filter_edge_store_, to_csc
+    edge_type_to_str, filter_edge_store_, to_csc, filter_hetero_data
 from torch_geometric.typing import InputNodes, NodeType, OptTensor
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from torch_sparse import SparseTensor
@@ -248,13 +248,13 @@ class NeighborLoader(BaseDataLoader):
 
         elif isinstance(self.G, HeteroData):
             node_dict, row_dict, col_dict, edge_dict, batch_size = out
-            print({"edge_types": (len(self.G.edge_types), len(self.G.edge_stores)), "node_dict": len(node_dict),
-                   "row_dict": len(row_dict), "col_dict": len(col_dict),
-                   "edge_dict": len(edge_dict), 'perm_dict': len(self.neighbor_sampler.perm_dict)})
+            # print({"edge_types": (len(self.G.edge_types), len(self.G.edge_stores)), "node_dict": len(node_dict),
+            #        "row_dict": len(row_dict), "col_dict": len(col_dict),
+            #        "edge_dict": len(edge_dict), 'perm_dict': len(self.neighbor_sampler.perm_dict)})
 
-            data = self.filter_hetero_data(self.G, node_dict, row_dict, col_dict,
-                                           edge_dict,
-                                           perm_dict=self.neighbor_sampler.perm_dict)
+            data = filter_hetero_data(self.G, node_dict, row_dict, col_dict,
+                                      edge_dict,
+                                      perm_dict=self.neighbor_sampler.perm_dict)
             data[self.neighbor_sampler.input_node_type].batch_size = batch_size
         else:
             print(len(self.G))

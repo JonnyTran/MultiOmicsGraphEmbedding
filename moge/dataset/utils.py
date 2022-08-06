@@ -181,7 +181,7 @@ def get_edge_index_values(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array
     for edge_attr in edge_attrs:
         biadj = nx.bipartite.biadjacency_matrix(nx_graph, row_order=nodes_A, column_order=nodes_B, weight=edge_attr,
                                                 format="coo")
-        if hasattr(biadj, 'data') and biadj.data is not None and not (biadj.data == 1).all():
+        if hasattr(biadj, 'data') and biadj.data is not None:
             values[edge_attr] = biadj.data
 
     if format == "pyg":
@@ -196,7 +196,7 @@ def get_edge_index_values(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array
     return edge_index, values
 
 
-def one_hot_encoder(idx: Tensor, embed_dim=None):
+def one_hot_encoder(idx: Tensor):
     """
     Get one hot embedding of the input tensor.
     Args:

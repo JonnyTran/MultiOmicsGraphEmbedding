@@ -13,7 +13,8 @@ from pandas import Series, Index
 from torch import Tensor
 from torch_geometric.data import HeteroData
 
-from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath
+from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
+    untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
@@ -111,8 +112,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         print(f"{etype}: {len(edgelist)} edges added between "
               f"{len(unq_sources)} {src_type}'s and {len(unq_targets)} {dst_type}'s.")
 
-    def add_ontology_edges(self, ontology: Ontology, nodes: Optional[List[str]] = None, ntype: str = "GO_term",
-                           reverse_edges=True, etypes: List[Tuple[str, str, str]] = []):
+    def add_edges_from_ontology(self, ontology: Ontology, nodes: Optional[List[str]] = None, ntype: str = "GO_term",
+                                reverse_edges=True, etypes: List[Tuple[str, str, str]] = []):
         """
 
         Args:
@@ -142,10 +143,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 continue
             self.add_edges(edgelist, etype=metapath, database=ontology.name(), directed=True)
 
-    def add_ontology_annotations(self, ontology: Ontology, nodes: Optional[List[str]],
-                                 src_ntype: str, dst_ntype: str,
-                                 train_date: str, valid_date: str, test_date: str, split_etype: str = None,
-                                 d_etype="associated", src_node_col="gene_name", use_neg_annotations=False):
+    def add_edges_from_annotations(self, ontology: Ontology, nodes: Optional[List[str]],
+                                   src_ntype: str, dst_ntype: str,
+                                   train_date: str, valid_date: str, test_date: str, split_etype: str = None,
+                                   d_etype="associated", src_node_col="gene_name", use_neg_annotations=False):
         """
 
         Args:
@@ -202,6 +203,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Process train, validation, and test annotations
         for go_ann in [train_ann, valid_ann, test_ann]:
+            is_train = go_ann is train_ann
+            is_valid = go_ann is valid_ann
+            is_test = go_ann is test_ann
+
             # True Positive links
             pos_annotations = go_ann[dst_node_col].dropna().explode().to_frame().reset_index()
             pos_graph = nx.from_pandas_edgelist(pos_annotations, source=src_node_col, target=dst_node_col, **nx_options)
@@ -213,11 +218,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             pos_edge_list_dict = get_edge_index_dict(pos_graph, nodes=self.nodes,
                                                      metapaths=metapaths.intersection(self.pred_metapaths), format="nx")
 
+
             for etype, edges in pos_edge_list_dict.items():
                 if etype not in self.pred_metapaths or len(edges) == 0: continue
 
-                edges = self.label_edge_trainvalidtest(edges, train=go_ann is train_ann, valid=go_ann is valid_ann,
-                                                       test=go_ann is test_ann)
+                edges = self.label_edge_trainvalidtest(edges, train=is_train, valid=is_valid, test=is_test)
                 self.add_edges(edges, etype=etype, database=ontology.name(), directed=True, )
 
             # True Negative links
@@ -238,8 +243,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                         self.neg_pred_metapaths.append(etype)
 
                     etype = tag_negative_metapath(etype)
-                    edges = self.label_edge_trainvalidtest(edges, train=go_ann is train_ann, valid=go_ann is valid_ann,
-                                                           test=go_ann is test_ann)
+                    edges = self.label_edge_trainvalidtest(edges, train=is_train, valid=is_valid, test=is_test)
                     self.add_edges(edges, etype=etype, database=ontology.name(), directed=True, )
 
             # Train/valid/test split of nodes
@@ -260,33 +264,32 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         #                                          valid_nodes=self.valid_nodes, test_nodes=self.test_nodes)
         #     nx.set_edge_attributes(nxgraph, edge_attrs)
 
-    def get_triples(self, metapaths: List[Tuple[str, str, str]], pos_edges: bool = False, neg_edges: bool = False) \
+    def get_triples(self, metapaths: List[Tuple[str, str, str]], positive: bool = False, negative: bool = False) \
             -> Tuple[Dict[str, Tensor], Tensor, Tensor, Tensor]:
         """
 
         Args:
             metapaths (): External metapath list where the triple's `relation` field gets its ordinal ID from.
-            pos_edges ():
-            neg_edges ():
+            positive (): Whether to only retrieve positive edge types
+            negative (): Whether to only retrieve negative edge types
 
         Returns:
 
         """
-        assert pos_edges != neg_edges
+        assert positive != negative
         triples = defaultdict(lambda: [])
         training_idx, validation_idx, testing_idx = [], [], []
 
-        pred_metapaths = self.pred_metapaths if pos_edges else self.neg_pred_metapaths
-        print(pred_metapaths)
+        pred_metapaths = self.pred_metapaths if positive else self.neg_pred_metapaths
 
         for metapath in pred_metapaths:
             head_type, tail_type = metapath[0], metapath[-1]
-            if neg_edges:
+            if negative:
                 if metapaths and metapath not in metapaths: continue
                 metapath_idx = metapaths.index(metapath)
                 metapath = tag_negative_metapath(metapath)
 
-            elif pos_edges:
+            elif positive:
                 if metapaths and metapath not in metapaths: continue
                 metapath_idx = metapaths.index(metapath)
 
@@ -297,9 +300,9 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                           format="pyg")
             num_edges = edge_index.size(1)
 
-            triples["head" if pos_edges else "head_neg"].append(edge_index[0])
-            triples["tail" if pos_edges else "tail_neg"].append(edge_index[1])
-            triples["relation" if pos_edges else "relation_neg"].append(torch.tensor([metapath_idx] * num_edges))
+            triples["head" if positive else "head_neg"].append(edge_index[0])
+            triples["tail" if positive else "tail_neg"].append(edge_index[1])
+            triples["relation" if positive else "relation_neg"].append(torch.tensor([metapath_idx] * num_edges))
             # triples["head_type"].extend([head_type] * num_edges)
             # triples["tail_type"].extend([tail_type] * num_edges)
 
@@ -310,7 +313,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         triples = {key: torch.cat(values, dim=0) if isinstance(values[0], Tensor) else values \
                    for key, values in triples.items()}
 
-        edge_idx = torch.arange(len(triples['head' if pos_edges else "head_neg"]))
+        edge_idx = torch.arange(len(triples['head' if positive else "head_neg"]))
         training_idx, validation_idx, testing_idx = edge_idx[torch.cat(training_idx)], \
                                                     edge_idx[torch.cat(validation_idx)], \
                                                     edge_idx[torch.cat(testing_idx)]
@@ -457,6 +460,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         for metapath, nxgraph in self.networks.items():
             head_type, tail_type = metapath[0], metapath[-1]
             if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
+            if metapath in self.pred_metapaths or untag_negative_metapath(metapath) in self.neg_pred_metapaths: continue
 
             hetero[metapath].edge_index, edge_attrs = get_edge_index_values(nxgraph, self.nodes[head_type],
                                                                             self.nodes[tail_type],

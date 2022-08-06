@@ -189,17 +189,17 @@ class TrainTestSplit():
         Returns:
 
         """
-        train_nodes = defaultdict(set, train_nodes)
-        valid_nodes = defaultdict(set, valid_nodes)
-        test_nodes = defaultdict(set, test_nodes)
+        train_nodes = defaultdict(set, {ntype: set(nodes) for ntype, nodes in train_nodes.items()})
+        valid_nodes = defaultdict(set, {ntype: set(nodes) for ntype, nodes in valid_nodes.items()})
+        test_nodes = defaultdict(set, {ntype: set(nodes) for ntype, nodes in test_nodes.items()})
 
         def get_edge_mask(u: str, v: str) -> Dict[str, Any]:
             head_type, tail_type = metapath[0], metapath[-1]
             train = u in train_nodes[head_type] and v in train_nodes[tail_type]
             valid = u in valid_nodes[head_type] or v in valid_nodes[tail_type]
             test = u in test_nodes[head_type] or v in test_nodes[tail_type]
-            if not valid and not test:
-                train = True
+            if not valid and not test and not train:
+                train, valid, test = True, True, True
             return {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
 
         edge_attrs = {edge_tup: get_edge_mask(edge_tup[0], edge_tup[1]) \
