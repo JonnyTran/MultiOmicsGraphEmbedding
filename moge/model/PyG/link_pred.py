@@ -60,32 +60,34 @@ class PyGLinkPredTrainer(LinkPredTrainer):
         return pos_scores, neg_batch_scores, neg_scores
 
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                 pos_edge_scores: Dict[Tuple[str, str, str], Tensor],
-                                 neg_edge_scores: Dict[Tuple[str, str, str], Tensor],
+                                 pos_edge_score: Dict[Tuple[str, str, str], Tensor],
+                                 neg_edge_score: Dict[Tuple[str, str, str], Tensor],
                                  neg_head_batch: Dict[Tuple[str, str, str], Tensor] = None,
                                  neg_tail_batch: Dict[Tuple[str, str, str], Tensor] = None,
                                  pos_scores: Tensor = None,
                                  neg_scores: Tensor = None):
 
         if isinstance(metrics, dict):
-            for metapath in pos_edge_scores:
+            for metapath in pos_edge_score:
                 go_type = "BPO" if metapath[-1] == 'biological_process' else \
                     "CCO" if metapath[-1] == 'cellular_component' else \
                         "MFO" if metapath[-1] == 'molecular_function' else None
 
                 neg_batch = torch.concat([neg_head_batch[metapath], neg_tail_batch[metapath]], dim=1)
-                metrics[go_type].update_metrics(pos_edge_scores[metapath].detach(), neg_batch.detach(),
+                metrics[go_type].update_metrics(pos_edge_score[metapath].detach(), neg_batch.detach(),
                                                 weights=None, subset=["ogbl-biokg"])
 
-                if metapath in pos_edge_scores and neg_edge_scores and metapath in neg_edge_scores:
-                    self.update_pr_metrics(pos_scores=pos_edge_scores[metapath],
-                                           neg_scores=neg_edge_scores[metapath],
+                if metapath in pos_edge_score and neg_edge_score and metapath in neg_edge_score:
+                    self.update_pr_metrics(pos_scores=pos_edge_score[metapath],
+                                           neg_scores=neg_edge_score[metapath],
                                            metrics=metrics[go_type])
 
         elif pos_scores is not None and neg_scores is not None:
-            metrics.update_metrics(pos_scores.detach(), neg_scores.detach(),
+            metapath = list(pos_edge_score.keys())[0]
+            neg_batch = torch.concat([neg_head_batch[metapath], neg_tail_batch[metapath]], dim=1)
+            metrics.update_metrics(pos_edge_score[metapath].detach(), neg_batch.detach(),
                                    weights=None, subset=["ogbl-biokg"])
-            self.update_pr_metrics(pos_scores=pos_scores, neg_scores=neg_edge_scores, metrics=metrics)
+            self.update_pr_metrics(pos_scores=pos_scores, neg_scores=neg_scores, metrics=metrics)
 
     def update_pr_metrics(self, pos_scores: Tensor,
                           neg_scores: Tensor,
@@ -365,8 +367,8 @@ class LATTELinkPred(PyGLinkPredTrainer):
         loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
         self.update_link_pred_metrics(self.train_metrics,
-                                      pos_edge_scores=edge_batch_dict["edge_pos"],
-                                      neg_edge_scores=edge_batch_dict["edge_neg"],
+                                      pos_edge_score=edge_batch_dict["edge_pos"],
+                                      neg_edge_score=edge_batch_dict["edge_neg"],
                                       neg_head_batch=edge_batch_dict["head_batch"],
                                       neg_tail_batch=edge_batch_dict["tail_batch"],
                                       pos_scores=pos_scores,
@@ -387,8 +389,8 @@ class LATTELinkPred(PyGLinkPredTrainer):
         loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
         self.update_link_pred_metrics(self.valid_metrics,
-                                      pos_edge_scores=edge_batch_dict["edge_pos"],
-                                      neg_edge_scores=edge_batch_dict["edge_neg"],
+                                      pos_edge_score=edge_batch_dict["edge_pos"],
+                                      neg_edge_score=edge_batch_dict["edge_neg"],
                                       neg_head_batch=edge_batch_dict["head_batch"],
                                       neg_tail_batch=edge_batch_dict["tail_batch"],
                                       pos_scores=pos_scores,
@@ -408,8 +410,8 @@ class LATTELinkPred(PyGLinkPredTrainer):
         loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
         self.update_link_pred_metrics(self.test_metrics,
-                                      pos_edge_scores=edge_batch_dict["edge_pos"],
-                                      neg_edge_scores=edge_batch_dict["edge_neg"],
+                                      pos_edge_score=edge_batch_dict["edge_pos"],
+                                      neg_edge_score=edge_batch_dict["edge_neg"],
                                       neg_head_batch=edge_batch_dict["head_batch"],
                                       neg_tail_batch=edge_batch_dict["tail_batch"],
                                       pos_scores=pos_scores,

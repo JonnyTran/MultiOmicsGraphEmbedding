@@ -377,7 +377,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         G: dgl.DGLHeteroGraph = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
 
-
         # Add node attributes
         for ntype in G.ntypes:
             annotations: pd.DataFrame = self.annotations[ntype].loc[self.nodes[ntype]]
@@ -390,6 +389,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                       dropna=False, delimiter=self.delimiter)
 
                     feat = self.feature_transformer[col].transform(feat_filtered)
+                    print(f"{ntype} added {col}")
                     G.nodes[ntype].data[col] = torch.from_numpy(feat)
 
             if expression and ntype in self.multiomics.get_omics_list() and hasattr(self.multiomics[ntype],

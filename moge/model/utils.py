@@ -2,8 +2,10 @@ from collections import OrderedDict
 from collections.abc import MutableMapping
 from typing import Dict, Any, Tuple, Optional, Union, List
 
+import dgl
 import numpy as np
 import torch
+from dgl.heterograph import DGLBlock
 from torch import Tensor
 
 
@@ -23,6 +25,9 @@ def activation(y_pred: Tensor, loss_type: str):
 
 def to_device(obj: Union[Dict, List, Tensor], device: str):
     if torch.is_tensor(obj):
+        return obj.to(device)
+
+    elif isinstance(obj, (dgl.DGLHeteroGraph, dgl.DGLGraph, DGLBlock)):
         return obj.to(device)
 
     elif isinstance(obj, dict):

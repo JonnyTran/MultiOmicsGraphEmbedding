@@ -7,6 +7,7 @@ from dgl.dataloading import EdgePredictionSampler
 from dgl.heterograph import DGLBlock
 from ogb.linkproppred import DglLinkPropPredDataset
 from pandas import Index
+from torch import Tensor
 
 from .node_generator import DGLNodeSampler
 from ..utils import get_relabled_edge_index, is_negative, is_reversed, unreverse_metapath
@@ -33,13 +34,15 @@ class DGLLinkSampler(DGLNodeSampler):
             self.init_negative_sampler = dgl.dataloading.negative_sampler.GlobalUniform
         elif negative_sampler.lower() == "PerSourceUniform".lower():
             self.init_negative_sampler = dgl.dataloading.negative_sampler.PerSourceUniform
+        else:
+            raise Exception(negative_sampler)
 
     @classmethod
     def from_heteronetwork(cls, network: HeteroNetwork, node_attr_cols: List[str] = None,
                            target: str = None, min_count: int = None,
                            expression=False, sequence=False, add_reverse_metapaths=True,
                            label_subset: Optional[Union[Index, np.ndarray]] = None,
-                           ntype_subset: Optional[List[str]] = None, **kwargs):
+                           ntype_subset: Optional[List[str]] = None, split_namespace=False, **kwargs):
         G, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                        expression=expression, sequence=sequence,
@@ -51,6 +54,14 @@ class DGLLinkSampler(DGLNodeSampler):
         self.classes = classes
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
+
+        self.split_namespace = split_namespace
+        if split_namespace:
+            for ntype in self.G.node_types:
+                if "namespace" in self.G[ntype]:
+                    self.go_namespace = self.G[ntype]["namespace"]
+                    self.ntype_mapping = {namespace: ntype for namespace in np.unique(self.go_namespace)}
+
         self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx
 
         self.pred_metapaths = network.pred_metapaths if hasattr(network, 'pred_metapaths') else []
@@ -157,7 +168,26 @@ class DGLLinkSampler(DGLNodeSampler):
     def sample(self, iloc, mode):
         raise NotImplementedError()
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def full_batch(self, edge_idx: Tensor = None, mode="test", device="cpu"):
+        if edge_idx is None:
+            edge_idx = {m: torch.cat([self.training_idx[m], self.validation_idx[m], self.testing_idx[m]]) \
+                        for m in self.training_idx.keys()}
+
+        total_batch_size = sum(eid.numel() for eid in edge_idx.values())
+
+        if mode == "test":
+            loader = self.test_dataloader(batch_size=total_batch_size, indices=edge_idx)
+        else:
+            loader = self.train_dataloader(batch_size=total_batch_size, indices=edge_idx)
+
+        if device != "cpu":
+            pass
+        return next(iter(loader))
+
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, **kwargs):
+        if indices is None:
+            indices = self.training_idx
+
         # if self.inductive:
         #     edge_ids = {}
         #     if self.use_reverse:
@@ -178,13 +208,16 @@ class DGLLinkSampler(DGLNodeSampler):
         sampler = dgl.dataloading.as_edge_prediction_sampler(**args)
         # sampler = LinkPredPyGCollator(**args)
 
-        dataloader = dgl.dataloading.DataLoader(graph, indices=self.training_idx, graph_sampler=sampler,
+        dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=sampler,
                                                 batch_size=batch_size, shuffle=True, drop_last=False,
                                                 num_workers=num_workers)
 
         return dataloader
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, **kwargs):
+        if indices is None:
+            indices = self.validation_idx
+
         graph = self.G
 
         args = dict(sampler=self.neighbor_sampler,
@@ -195,12 +228,15 @@ class DGLLinkSampler(DGLNodeSampler):
 
         sampler = dgl.dataloading.as_edge_prediction_sampler(**args)
 
-        dataloader = dgl.dataloading.DataLoader(graph, indices=self.validation_idx, graph_sampler=sampler,
+        dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=sampler,
                                                 batch_size=batch_size, shuffle=False, drop_last=False,
                                                 num_workers=num_workers)
         return dataloader
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, indices=None, **kwargs):
+        if indices is None:
+            indices = self.testing_idx
+
         graph = self.G
 
         args = dict(sampler=self.neighbor_sampler,
@@ -211,7 +247,7 @@ class DGLLinkSampler(DGLNodeSampler):
 
         sampler = dgl.dataloading.as_edge_prediction_sampler(**args)
 
-        dataloader = dgl.dataloading.DataLoader(graph, indices=self.training_idx, graph_sampler=sampler,
+        dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=sampler,
                                                 batch_size=batch_size, shuffle=False, drop_last=False,
                                                 num_workers=num_workers)
         return dataloader
