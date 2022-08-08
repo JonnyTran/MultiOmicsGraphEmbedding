@@ -20,6 +20,7 @@ from moge.model.utils import tensor_sizes
 from moge.network.hetero import HeteroNetwork
 from moge.network.sequence import BertSequenceTokenizer
 from .samplers import ImportanceSampler
+from .utils import copy_ndata
 from .. import HeteroNeighborGenerator
 from ..utils import one_hot_encoder, reverse_metapath
 from ...network.base import SEQUENCE_COL
@@ -37,7 +38,9 @@ class DGLNodeSampler(HeteroGraphDataset):
                  reshuffle_train: float = None,
                  add_reverse_metapaths=True,
                  init_embeddings=False,
-                 inductive=False, **kwargs):
+                 inductive=False, decompose_etypes=True, **kwargs):
+        self.sampler = sampler
+        self.edge_dir = edge_dir
         self.neighbor_sizes = neighbor_sizes
         self.embedding_dim = embedding_dim
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
@@ -47,31 +50,34 @@ class DGLNodeSampler(HeteroGraphDataset):
 
         if add_reverse_metapaths:
             self.G = self.transform_heterograph(self.G, add_reverse=True)
-        elif "feat" in self.G.edata and self.G.edata["feat"]:
-            self.G = self.transform_heterograph(self.G, decompose_etypes=True, add_reverse=add_reverse_metapaths)
+        elif decompose_etypes and "feat" in self.G.edata and self.G.edata["feat"]:
+            self.G = self.transform_heterograph(self.G, decompose_etypes=decompose_etypes,
+                                                add_reverse=add_reverse_metapaths)
 
         if init_embeddings:
             self.init_node_embeddings(self.G)
 
-        self.degree_counts = self.compute_node_degrees(add_reverse_metapaths)
+        self.neighbor_sampler = self.get_neighbor_sampler(self.G, neighbor_sizes=neighbor_sizes, sampler=sampler,
+                                                          edge_dir=edge_dir)
 
+    def get_neighbor_sampler(self, G, neighbor_sizes, sampler: str = "MultiLayerNeighborSampler", edge_dir="in"):
         fanouts = []
-        for layer, fanout in enumerate(self.neighbor_sizes):
-            fanouts.append({etype: fanout for etype in self.G.canonical_etypes})
-
+        for layer, fanout in enumerate(neighbor_sizes):
+            fanouts.append({etype: fanout for etype in G.canonical_etypes})
         if sampler == "MultiLayerNeighborSampler":
             print("Using MultiLayerNeighborSampler")
-            self.neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
+            neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
 
         elif sampler == "ImportanceSampler":
             print("Using ImportanceSampler", )
-            self.neighbor_sampler = ImportanceSampler(fanouts=fanouts,
-                                                      metapaths=self.get_metapaths(),  # Original metapaths only
-                                                      degree_counts=self.degree_counts,
-                                                      edge_dir=edge_dir)
+            neighbor_sampler = ImportanceSampler(fanouts=fanouts,
+                                                 metapaths=self.get_metapaths(),  # Original metapaths only
+                                                 degree_counts=self.degree_counts,
+                                                 edge_dir=edge_dir)
         else:
             print("Using MultiLayerFullNeighborSampler")
-            self.neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
+            neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
+        return neighbor_sampler
 
     @classmethod
     def from_heteronetwork(cls, g: dgl.DGLHeteroGraph, labels: Union[Tensor, Dict[str, Tensor]],
@@ -178,49 +184,70 @@ class DGLNodeSampler(HeteroGraphDataset):
                                       inductive=kwargs["inductive"])
         return self
 
-    def transform_heterograph(self, g: dgl.DGLHeteroGraph, add_reverse=False,
-                              decompose_etypes=False, nodes_subset: Dict[str, Tensor] = None) -> dgl.DGLHeteroGraph:
+    def transform_heterograph(self, G: dgl.DGLHeteroGraph, add_reverse=False,
+                              decompose_etypes=False,
+                              nodes_subset: Dict[str, Tensor] = None,
+                              edge_mask: Dict[str, Tensor] = None, drop_empty_etypes=True) -> dgl.DGLHeteroGraph:
         if decompose_etypes:
-            relations = {}
-            for metapath in g.canonical_etypes:
+            edge_index_dict = {}
+            for metapath in G.canonical_etypes:
                 # Original edges
-                src, dst, eid = g.all_edges(etype=metapath[1], form="all")
-                relations[metapath] = (src, dst)
+                src, dst, eid = G.all_edges(etype=metapath[1], form="all")
+                edge_index_dict[metapath] = (src, dst)
 
                 # Separate edge types by each non-zero entry in the `g.edata["feat"]` vector, with length = number of etypes
                 if decompose_etypes:
-                    relations = {}
-                    edge_reltype = g.edata["feat"].argmax(1)
+                    edge_index_dict = {}
+                    edge_reltype = G.edata["feat"].argmax(1)
                     assert src.size(0) == edge_reltype.size(0)
 
-                    for edge_type in range(g.edata["feat"].size(1)):
+                    for edge_type in range(G.edata["feat"].size(1)):
                         mask = edge_reltype == edge_type
                         metapath = (self.head_node_type, str(edge_type), self.head_node_type)
-                        relations[metapath] = (src[mask], dst[mask])
+                        edge_index_dict[metapath] = (src[mask], dst[mask])
 
-            g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict)
+            G = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
+
+        if edge_mask:
+            edge_index_dict = {}
+            for metapath in G.canonical_etypes:
+                src, dst, eid = self.filter_edges(G.all_edges(etype=metapath[1], form="all"), metapath=metapath,
+                                                  edge_mask=edge_mask)
+                if drop_empty_etypes and len(src) == 0: continue
+                edge_index_dict[metapath] = (src, dst)
+
+            new_g = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
+            num_edges_removed = {etype: G.num_edges(etype=etype) - new_g.num_edges(etype=etype) \
+                                 for etype in new_g.etypes if (G.num_edges(etype=etype) - new_g.num_edges(etype=etype))}
+
+            new_g = copy_ndata(old_g=G, new_g=new_g)
+            print(f"Removed edges: {num_edges_removed}")
 
         if nodes_subset:
-            relations = {}
-            for metapath in g.canonical_etypes:
-                src, dst, eid = g.all_edges(etype=metapath[1], form="all")
-                src, dst, _ = self.filter_edges(src, dst, nodes_subset=nodes_subset, metapath=metapath)
-                relations[metapath] = (src, dst)
+            edge_index_dict = {}
+            for metapath in G.canonical_etypes:
+                src, dst, eid = self.filter_edges(G.all_edges(etype=metapath[1], form="all"), metapath=metapath,
+                                                  nids_subset=nodes_subset)
+                if drop_empty_etypes and len(src) == 0: continue
 
-            num_nodes_old = {ntype: g.num_nodes(ntype) for ntype in g.ntypes}
-            g = dgl.heterograph(relations, num_nodes_dict=self.num_nodes_dict)
-            num_nodes_removed = dict(num_nodes - g.num_nodes(ntype) \
-                                         if ntype in g.ntypes else 0 \
+                edge_index_dict[metapath] = (src, dst)
+
+            num_nodes_old = {ntype: G.num_nodes(ntype) for ntype in G.ntypes}
+            new_g = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
+            num_nodes_removed = dict(num_nodes - G.num_nodes(ntype) \
+                                         if ntype in G.ntypes else 0 \
                                      for ntype, num_nodes in num_nodes_old.items())
-            print(f"Removed {num_nodes_removed} nodes")
+
+            new_g = copy_ndata(old_g=G, new_g=new_g)
+            print(f"Removed nodes: {num_nodes_removed}")
 
         if add_reverse:
             self.reverse_etypes, self.reverse_eids = {}, {}
             transform = AddReverse(copy_edata=True, sym_new_etype=True)
-            new_g: dgl.DGLHeteroGraph = transform(g)
+            new_g: dgl.DGLHeteroGraph = transform(G)
 
             # Get mapping between orig eid to reversed eid
-            for metapath in g.canonical_etypes:
+            for metapath in G.canonical_etypes:
                 rev_metapath = reverse_metapath(metapath)
                 src_rev, dst_rev, eid_rev = new_g.all_edges(etype=rev_metapath[1], form="all")
                 # print(metapath, eid[:10], (src[0], dst[0]))
@@ -228,21 +255,32 @@ class DGLNodeSampler(HeteroGraphDataset):
                 self.reverse_eids[metapath] = eid_rev
                 self.reverse_etypes[metapath] = rev_metapath
 
-            assert new_g.num_nodes() == g.num_nodes() and len(new_g.canonical_etypes) > len(g.canonical_etypes)
-            print(f"Added reverse edges with {len(new_g.canonical_etypes) - len(g.canonical_etypes)} new etypes")
+            assert new_g.num_nodes() == G.num_nodes() and len(new_g.canonical_etypes) > len(G.canonical_etypes)
+            print(f"Added reverse edges with {len(new_g.canonical_etypes) - len(G.canonical_etypes)} new etypes")
 
         return new_g
 
-    def filter_edges(self, src: Tensor, dst: Tensor,
-                     nodes_subset: Dict[str, Tensor], metapath: Tuple[str, str, str],
-                     eid: Optional[Tensor] = None) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+    def filter_edges(self, edges: Tuple[Tensor, Tensor, Optional[Tensor]], metapath: Tuple[str, str, str],
+                     nids_subset: Dict[str, Tensor] = None, edge_mask: Dict[str, Tensor] = None) \
+            -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        src, dst, eid = edges
+
+        if edge_mask is not None:
+            mask = edge_mask[metapath] if isinstance(edge_mask, dict) else edge_mask
+            assert len(mask) == len(src), f"{metapath}, edges {len(src)}, mask {len(mask)}"
+
+            src = src[mask]
+            dst = dst[mask]
+            if eid is not None:
+                eid = eid[mask]
+
         for i, ntype in enumerate([metapath[0], metapath[-1]]):
-            if ntype in nodes_subset and \
-                    nodes_subset[ntype].size(0) < (src if i == 0 else dst).unique().size(0):
+            if nids_subset and ntype in nids_subset and \
+                    nids_subset[ntype].size(0) < (src if i == 0 else dst).unique().size(0):
                 if i == 0:
-                    mask = np.isin(src, nodes_subset[ntype]) & np.isin(src, [-1], invert=True)
+                    mask = np.isin(src, nids_subset[ntype]) & np.isin(src, [-1], invert=True)
                 elif i == 1:
-                    mask = np.isin(dst, nodes_subset[ntype]) & np.isin(dst, [-1], invert=True)
+                    mask = np.isin(dst, nids_subset[ntype]) & np.isin(dst, [-1], invert=True)
 
                 src = src[mask]
                 dst = dst[mask]
@@ -251,11 +289,13 @@ class DGLNodeSampler(HeteroGraphDataset):
 
         return src, dst, eid
 
-    def compute_node_degrees(self, add_reverse_metapaths):
+    def compute_node_degrees(self, undirected):
         dfs = []
+        metapaths = self.G.canonical_etypes
+
         for metapath in self.G.canonical_etypes:
             head_type, tail_type = metapath[0], metapath[-1]
-            relation = self.get_metapaths().index(metapath)
+            relation = metapaths.index(metapath)
 
             src, dst = self.G.all_edges(etype=metapath)
 
@@ -272,7 +312,7 @@ class DGLNodeSampler(HeteroGraphDataset):
 
         head_counts = df.groupby(["head", "relation", "head_type"])["tail"].count().astype(float)
 
-        if add_reverse_metapaths:
+        if undirected:
             head_counts.index = head_counts.index.set_names(["nid", "relation", "ntype"])
             return head_counts
 

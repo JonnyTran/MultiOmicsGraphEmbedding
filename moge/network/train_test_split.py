@@ -117,9 +117,9 @@ class TrainTestSplit():
         edges = [(u, v, d) for (u, v), d in zip(edges, edge_attr)]
         return edges
 
-    def get_all_nodes_mask(self, train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
-                           test_nodes: Dict[str, Set[str]]) \
-            -> Tuple[Mapping[str, List[str]], Mapping[str, List[str]], Mapping[str, List[str]]]:
+    def get_all_nodes_split(self, train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
+                            test_nodes: Dict[str, Set[str]]) \
+            -> Tuple[Mapping[str, Set[str]], Mapping[str, Set[str]], Mapping[str, Set[str]]]:
         """
         Given a subset of nodes in train/valid/test, mark all nodes in the HeteroNetwork to be either train/valid/test.
         Args:
@@ -149,14 +149,20 @@ class TrainTestSplit():
                              for ntype, nodelist in self.nodes.items()}
 
         # Add non-incident nodes to the train nodes, since they do not belong in the valid_nodes or test_nodes
-        train_nodes = {ntype: nids.difference(nonincident_nodes[ntype]) \
-                       for ntype, nids in train_nodes.items()}
+        train_nodes = {ntype: train_nodes[ntype].difference(nonincident_nodes[ntype]) \
+                       for ntype in train_nodes}
         train_nodes = train_nodes | {ntype: nodes for ntype, nodes in nonincident_nodes.items() \
                                      if ntype not in train_nodes}
+
         valid_nodes = {ntype: nids.difference(train_nodes[ntype]) \
                        for ntype, nids in valid_nodes.items()}
+        valid_nodes = valid_nodes | {ntype: nodes for ntype, nodes in nonincident_nodes.items() \
+                                     if ntype not in valid_nodes}
+
         test_nodes = {ntype: nids.difference(train_nodes[ntype]).difference(valid_nodes[ntype]) \
                       for ntype, nids in test_nodes.items()}
+        test_nodes = test_nodes | {ntype: nodes for ntype, nodes in nonincident_nodes.items() \
+                                   if ntype not in test_nodes}
 
         for metapath in self.networks.keys():
             for nodes_dict in [train_nodes, valid_nodes, test_nodes]:
@@ -169,14 +175,13 @@ class TrainTestSplit():
               "valid nodes", sum(len(nids) for nids in valid_nodes.values()),
               "test nodes", sum(len(nids) for nids in test_nodes.values()))
 
-        train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), defaultdict(set,
-                                                                                          valid_nodes), defaultdict(set,
-                                                                                                                    test_nodes)
+        train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), \
+                                               defaultdict(set, valid_nodes), defaultdict(set, test_nodes)
         return train_nodes, valid_nodes, test_nodes
 
     def get_all_edges_mask(self, edgelist: EdgeView, metapath: Tuple[str, str, str],
-                           train_nodes: Dict[str, List[str]], valid_nodes: Dict[str, List[str]],
-                           test_nodes: Dict[str, List[str]]) \
+                           train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
+                           test_nodes: Dict[str, Set[str]]) \
             -> Dict[Tuple[str, str, str], Dict[str, Dict[str, Any]]]:
         """
 
@@ -200,11 +205,12 @@ class TrainTestSplit():
             valid = u in valid_nodes[head_type] or v in valid_nodes[tail_type]
             test = u in test_nodes[head_type] or v in test_nodes[tail_type]
             if not valid and not test and not train:
-                train, valid, test = True, True, True
+                train = valid = test = True
             return {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
 
         edge_attrs = {edge_tup: get_edge_mask(edge_tup[0], edge_tup[1]) \
-                      for edge_tup, _ in tqdm.tqdm(edgelist.items(), desc=str(metapath))}
+                      for edge_tup, _ in tqdm.tqdm(edgelist.items(),
+                                                   desc=f"Set train/valid/test_mask on {metapath} edges:")}
 
         return edge_attrs
 

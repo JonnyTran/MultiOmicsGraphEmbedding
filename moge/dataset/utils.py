@@ -1,4 +1,5 @@
 import copy
+import itertools
 from typing import List, Union, Dict, Tuple, Set, Optional
 
 import networkx as nx
@@ -170,24 +171,30 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
     return edge_index_dict
 
 
+def get_edge_attr_keys(nx_graph) -> Set[str]:
+    u, v, d = next(itertools.islice(nx_graph.edges(data=True), 1))
+    return d.keys()
+
+
 def get_edge_index_values(nx_graph: nx.Graph, nodes_A: Union[List[str], np.array],
                           nodes_B: Union[List[str], np.array], edge_attrs: List[str] = None, format="pyg") \
         -> Tuple[Union[torch.LongTensor, Tuple[Tensor]], Optional[Dict[str, Tensor]]]:
     values = {}
 
-    if edge_attrs is None:
+    if edge_attrs is None or len(edge_attrs) == 0:
         edge_attrs = [None]
 
     for edge_attr in edge_attrs:
         biadj = nx.bipartite.biadjacency_matrix(nx_graph, row_order=nodes_A, column_order=nodes_B, weight=edge_attr,
                                                 format="coo")
-        if hasattr(biadj, 'data') and biadj.data is not None and not (biadj.data == 1).all():
+        if hasattr(biadj, 'data') and isinstance(biadj.data, np.ndarray) and edge_attr in get_edge_attr_keys(nx_graph):
             values[edge_attr] = biadj.data
 
     if format == "pyg":
         import torch
         edge_index = torch.stack([torch.tensor(biadj.row, dtype=torch.long), torch.tensor(biadj.col, dtype=torch.long)])
         values = {edge_attr: torch.tensor(edge_value) for edge_attr, edge_value in values.items()}
+
     elif format == "dgl":
         import torch
         edge_index = (torch.tensor(biadj.row, dtype=torch.int64), torch.tensor(biadj.col, dtype=torch.int64))

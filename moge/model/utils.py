@@ -154,8 +154,8 @@ def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
 
 def tensor_sizes(input: Any) -> Any:
     if isinstance(input, (dict, MutableMapping)):
-        return {metapath: tensor_sizes(v) \
-                for metapath, v in input.items()}
+        return {key: tensor_sizes(v) \
+                for key, v in input.items()}
 
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)
@@ -163,6 +163,10 @@ def tensor_sizes(input: Any) -> Any:
         if isinstance(input[0], str):
             return len(input)
         return [tensor_sizes(v) for v in input]
+    elif isinstance(input, set):
+        if isinstance(list(input)[0], str):
+            return len(input)
+        return {tensor_sizes(v) for v in input}
 
     else:
         if input is not None and hasattr(input, "shape"):

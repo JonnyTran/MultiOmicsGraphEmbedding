@@ -228,7 +228,7 @@ class GcnNet(nn.Module):
         return self.output(nf.layers[-1].data['h'])
 
 
-class Model(object):
+class DeepGraphGO(object):
     """
 
     """

@@ -261,16 +261,16 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         # Set train/valid/test mask of all nodes on hetero graph
         train_nodes, valid_nodes, test_nodes = node_lists
-        self.train_nodes, self.valid_nodes, self.test_nodes = self.get_all_nodes_mask(train_nodes,
-                                                                                      valid_nodes, test_nodes)
+        self.train_nodes, self.valid_nodes, self.test_nodes = self.get_all_nodes_split(train_nodes,
+                                                                                       valid_nodes, test_nodes)
 
         # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
-        # for metapath, nxgraph in self.networks.items():
-        #     if metapath in self.pred_metapaths or metapath in self.neg_pred_metapaths:
-        #         continue
-        #     edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=self.train_nodes,
-        #                                          valid_nodes=self.valid_nodes, test_nodes=self.test_nodes)
-        #     nx.set_edge_attributes(nxgraph, edge_attrs)
+        for metapath, nxgraph in self.networks.items():
+            if metapath in self.pred_metapaths or metapath in self.neg_pred_metapaths:
+                continue
+            edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=self.train_nodes,
+                                                 valid_nodes=self.valid_nodes, test_nodes=self.test_nodes)
+            nx.set_edge_attributes(nxgraph, edge_attrs)
 
     def get_triples(self, metapaths: List[Tuple[str, str, str]], positive: bool = False, negative: bool = False) \
             -> Tuple[Dict[str, Tensor], Tensor, Tensor, Tensor]:
@@ -372,10 +372,19 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                           format="dgl")
 
             edge_index_dict[metapath] = edge_index
-            if edge_attr:
+            if len(edge_attr) == 3:
                 edge_attr_dict[metapath] = edge_attr
+            else:
+                edge_attr_dict[metapath] = {
+                    key: torch.ones_like(edge_index[0], dtype=torch.bool) \
+                    for key in {"train_mask", "valid_mask", "test_mask"}.difference(edge_attr.keys())}
 
         G: dgl.DGLHeteroGraph = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
+
+        # Edge attributes
+        for metapath, edge_attr in edge_attr_dict.items():
+            for key, values in edge_attr.items():
+                G.edges[metapath].data[key] = values
 
         # Add node attributes
         for ntype in G.ntypes:
