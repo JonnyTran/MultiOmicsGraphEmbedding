@@ -66,6 +66,7 @@ class DGLLinkSampler(DGLNodeSampler):
 
         self.pred_metapaths = network.pred_metapaths if hasattr(network, 'pred_metapaths') else []
         self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, 'neg_pred_metapaths') else []
+
         if self.use_reverse:
             for metapath in self.G.canonical_etypes:
                 if is_negative(metapath) and is_reversed(metapath):

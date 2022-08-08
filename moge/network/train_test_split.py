@@ -1,7 +1,7 @@
 import random
 from abc import abstractmethod
 from collections import defaultdict
-from typing import List, Tuple, Dict, Any, Set
+from typing import List, Tuple, Dict, Any, Set, Mapping
 
 import networkx as nx
 import numpy as np
@@ -119,7 +119,7 @@ class TrainTestSplit():
 
     def get_all_nodes_mask(self, train_nodes: Dict[str, Set[str]], valid_nodes: Dict[str, Set[str]],
                            test_nodes: Dict[str, Set[str]]) \
-            -> Tuple[Dict[str, List[str]], Dict[str, List[str]], Dict[str, List[str]]]:
+            -> Tuple[Mapping[str, List[str]], Mapping[str, List[str]], Mapping[str, List[str]]]:
         """
         Given a subset of nodes in train/valid/test, mark all nodes in the HeteroNetwork to be either train/valid/test.
         Args:
@@ -130,7 +130,6 @@ class TrainTestSplit():
         Returns:
 
         """
-
         def get_mask(node_dict: Dict[str, Set[str]], train=False, valid=False, test=False) \
                 -> Dict[str, Dict[str, Dict[str, Any]]]:
             mask = {'train_mask': train, 'valid_mask': valid, 'test_mask': test}
@@ -170,6 +169,9 @@ class TrainTestSplit():
               "valid nodes", sum(len(nids) for nids in valid_nodes.values()),
               "test nodes", sum(len(nids) for nids in test_nodes.values()))
 
+        train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), defaultdict(set,
+                                                                                          valid_nodes), defaultdict(set,
+                                                                                                                    test_nodes)
         return train_nodes, valid_nodes, test_nodes
 
     def get_all_edges_mask(self, edgelist: EdgeView, metapath: Tuple[str, str, str],

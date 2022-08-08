@@ -1,5 +1,5 @@
 from argparse import Namespace
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, Optional
 
 import dgl
 import dgl.function as fn
@@ -15,22 +15,35 @@ from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import LinkPredTrainer
+from moge.model.utils import tensor_sizes
 
 
 class DglLinkPredTrainer(LinkPredTrainer):
-    def stack_edge_index_values(self, pos_edge_score: Dict[Tuple[str, str, str], Tensor],
-                                neg_edge_score: Dict[Tuple[str, str, str], Tensor] = None):
-        pos_stack, neg_stack = [], []
-        for metapath in pos_edge_score.keys():
-            num_pos_edges = pos_edge_score[metapath].size(0)
-            num_neg_samples = neg_edge_score[metapath].numel() // num_pos_edges
+    def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
+        super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
-            pos_stack.append(pos_edge_score[metapath])
-            neg_stack.append(neg_edge_score[metapath].view(num_pos_edges, num_neg_samples))
+        self.pred_metapaths = dataset.pred_metapaths
+        self.neg_pred_metapaths = dataset.neg_pred_metapaths
+
+    def stack_edge_index_values(self, pos_edge_score: Dict[Tuple[str, str, str], Tensor],
+                                neg_edge_score: Dict[Tuple[str, str, str], Tensor] = None) \
+            -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        pos_stack, neg_batch_stack, neg_stack = [], [], []
+        for metapath in pos_edge_score.keys():
+            if metapath in self.pred_metapaths:
+                num_pos_edges = pos_edge_score[metapath].size(0)
+                num_neg_samples = neg_edge_score[metapath].numel() // num_pos_edges
+
+                pos_stack.append(pos_edge_score[metapath])
+                neg_batch_stack.append(neg_edge_score[metapath].view(num_pos_edges, num_neg_samples))
+
+            elif metapath in self.neg_pred_metapaths:
+                neg_stack.append(pos_edge_score[metapath])
 
         pos_scores = torch.cat(pos_stack, dim=0)
-        neg_batch_scores = torch.cat(neg_stack, dim=0)
-        return pos_scores, neg_batch_scores
+        neg_batch_scores = torch.cat(neg_batch_stack, dim=0)
+        neg_scores = torch.cat(neg_stack, dim=0) if neg_stack else None
+        return pos_scores, neg_batch_scores, neg_scores
 
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
                                  pos_edge_score: Dict[Tuple[str, str, str], Tensor],
@@ -127,16 +140,13 @@ class HGTLinkPred(DglLinkPredTrainer):
 
     def training_step(self, batch, batch_nb):
         input_nodes, pos_graph, neg_graph, blocks = batch
-        # for i, block in enumerate(blocks):
-        #     blocks[i] = block.to(self.device)
 
         input_features = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
 
         pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, input_features)
-        pos_scores, neg_batch_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
+        pos_scores, neg_batch_scores, neg_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
         loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
-        neg_scores = neg_batch_scores[:, torch.randint(neg_batch_scores.size(1), size=[1]).item()]
         self.update_link_pred_metrics(self.train_metrics,
                                       pos_edge_score=pos_edge_scores,
                                       neg_edge_score=neg_edge_scores,
@@ -152,18 +162,15 @@ class HGTLinkPred(DglLinkPredTrainer):
 
     def validation_step(self, batch, batch_nb):
         input_nodes, pos_graph, neg_graph, blocks = batch
-        # for i, block in enumerate(blocks):
-        #     blocks[i] = block.to(self.device)
 
         input_features = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
 
         pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, input_features)
-        pos_scores, neg_batch_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
+        pos_scores, neg_batch_scores, neg_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
 
-        # print(tensor_sizes(dict(pos_scores=pos_scores, neg_batch_scores=neg_batch_scores)))
+        print(tensor_sizes(dict(pos_scores=pos_scores, neg_batch_scores=neg_batch_scores, neg_scores=neg_scores)))
         loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
-        neg_scores = neg_batch_scores[:, torch.randint(neg_batch_scores.size(1), size=[1]).item()]
         self.update_link_pred_metrics(self.valid_metrics,
                                       pos_edge_score=pos_edge_scores,
                                       neg_edge_score=neg_edge_scores,
@@ -175,16 +182,13 @@ class HGTLinkPred(DglLinkPredTrainer):
 
     def test_step(self, batch, batch_nb):
         input_nodes, pos_graph, neg_graph, blocks = batch
-        # for i, block in enumerate(blocks):
-        #     blocks[i] = block.to(self.device)
 
         input_features = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
 
         pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, input_features)
-        pos_scores, neg_batch_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
+        pos_scores, neg_batch_scores, neg_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
         loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
-        neg_scores = neg_batch_scores[:, torch.randint(neg_batch_scores.size(1), size=[1]).item()]
         self.update_link_pred_metrics(self.test_metrics,
                                       pos_edge_score=pos_edge_scores,
                                       neg_edge_score=neg_edge_scores,

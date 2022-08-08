@@ -182,7 +182,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         #             print(rev_metapath, nx_graph.number_of_edges())
         groupby = [src_node_col, split_etype] if split_etype else [src_node_col]
         assert src_ntype in self.node_types
-        self._name = f"{src_ntype}-{dst_ntype}-{train_date}"
+        self._name = f"{src_ntype}-{dst_ntype}_{train_date}-{test_date}"
 
         # Split annotations between genes and GO terms by dates
         train_ann, valid_ann, test_ann = ontology.annotation_train_val_test_split(
@@ -246,12 +246,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                                                          format="nx")
                 for etype, edges in neg_edge_list_dict.items():
                     if etype not in self.pred_metapaths or len(edges) == 0: continue
-                    if etype not in self.neg_pred_metapaths:
-                        self.neg_pred_metapaths.append(etype)
+                    neg_etype = tag_negative_metapath(etype)
+                    if neg_etype not in self.neg_pred_metapaths:
+                        self.neg_pred_metapaths.append(neg_etype)
 
-                    etype = tag_negative_metapath(etype)
                     edges = self.label_edge_trainvalidtest(edges, train=is_train, valid=is_valid, test=is_test)
-                    self.add_edges(edges, etype=etype, database=ontology.name(), directed=True, )
+                    self.add_edges(edges, etype=neg_etype, database=ontology.name(), directed=True, )
 
             # Train/valid/test split of nodes
             node_lists.append({
@@ -350,21 +350,21 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
     def to_dgl_heterograph(self, node_attr_cols: List[str] = [], target="go_id", min_count=10,
                            label_subset: Optional[Union[Index, np.ndarray]] = None,
                            ntype_subset: Optional[List[str]] = None,
-                           sequence=False, expression=False) \
+                           exclude_metapaths: List[Tuple[str, str, str]] = None,
+                           sequence=False, expression=False, train_test_split="edge_id") \
             -> Tuple[dgl.DGLHeteroGraph, Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
         if sequence:
             self.filter_sequence_nodes()
-        node_types = self.node_types
-        if ntype_subset:
-            node_types = [ntype for ntype in node_types if ntype in ntype_subset]
 
         # Edge index
         edge_index_dict = {}
         edge_attr_dict = {}
         for metapath, etype_graph in self.networks.items():
             head_type, tail_type = metapath[0], metapath[-1]
-            if head_type not in node_types or tail_type not in node_types: continue
+            if ntype_subset and (head_type not in ntype_subset or tail_type not in ntype_subset): continue
+            if exclude_metapaths and (
+                    metapath in exclude_metapaths or untag_negative_metapath(metapath) in exclude_metapaths): continue
 
             edge_index, edge_attr = get_edge_index_values(etype_graph, nodes_A=self.nodes[head_type],
                                                           nodes_B=self.nodes[tail_type],
@@ -410,6 +410,18 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     G.sequences.setdefault(ntype, {})[SEQUENCE_COL] = annotations[SEQUENCE_COL]
                     print(f"Added {ntype} sequences pd.Series to G.sequences")
 
+            # Get train_mask, valid_mask, test_mask for each node of ntype
+            if hasattr(self, "train_nodes") and self.train_nodes:
+                for key_mask, trainvalidtest_nodes in zip(["train_mask", "valid_mask", "test_mask"],
+                                                          [self.train_nodes[ntype], self.valid_nodes[ntype],
+                                                           self.test_nodes[ntype]]):
+                    if trainvalidtest_nodes is None or len(trainvalidtest_nodes) == 0: continue
+                    nodelist_idx = self.nodes[ntype].get_indexer_for(
+                        self.nodes[ntype].intersection(trainvalidtest_nodes))
+                    mask = torch.zeros(G.num_nodes(ntype), dtype=torch.bool)
+                    mask[nodelist_idx] = 1
+                    G.nodes[ntype].data[key_mask] = mask
+
         # Node labels
         self.process_feature_tranformer(filter_label=target, min_count=min_count)
         if label_subset is not None:
@@ -431,30 +443,33 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             G.nodes[ntype].data["label"] = labels[ntype]
             num_classes = labels[ntype].shape[1]
 
-        # Train test split
-        # training_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.training.node_list)) \
-        #                 for ntype, ntype_nids in self.nodes.to_dict().items()}
-        # validation_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.validation.node_list)) \
-        #                   for ntype, ntype_nids in self.nodes.to_dict().items()}
-        # testing_idx = {ntype: ntype_nids.get_indexer_for(ntype_nids.intersection(self.testing.node_list)) \
-        #                for ntype, ntype_nids in self.nodes.to_dict().items()}
-
         # Get index of train/valid/test edge_id
-        training_idx, validation_idx, testing_idx = {}, {}, {}
-        for key_mask, trainvalidtest_idx in zip(['train_mask', 'valid_mask', 'test_mask'],
-                                                [training_idx, validation_idx, testing_idx]):
-            for metapath, edge_attr in edge_attr_dict.items():
-                src, dst = edge_index_dict[metapath]
-                trainvalidtest_idx[metapath] = G.edge_ids(src[edge_attr[key_mask]], dst[edge_attr[key_mask]],
-                                                          etype=metapath)
+        training, validation, testing = {}, {}, {}
 
-        return G, classes, dict(self.nodes), training_idx, validation_idx, testing_idx
+        if train_test_split == "edge_id":
+            for key_mask, trainvalidtest_idx in zip(['train_mask', 'valid_mask', 'test_mask'],
+                                                    [training, validation, testing]):
+                for metapath, edge_attr in edge_attr_dict.items():
+                    src, dst = edge_index_dict[metapath]
+                    trainvalidtest_idx[metapath] = G.edge_ids(src[edge_attr[key_mask]], dst[edge_attr[key_mask]],
+                                                              etype=metapath)
+        elif train_test_split == "node_mask":
+            for key_mask, trainvalidtest_idx in zip(['train_mask', 'valid_mask', 'test_mask'],
+                                                    [training, validation, testing]):
+                for ntype in G.ntypes:
+                    if key_mask not in G.nodes[ntype].data: continue
+                    trainvalidtest_idx[key_mask] = G.nodes[ntype].data[key_mask]
+        else:
+            raise Exception(
+                f"Invalid `train_test_split` argument {train_test_split}. Must be one of [edge_id, node_mask]")
+
+        return G, classes, dict(self.nodes), training, validation, testing
 
     def to_pyg_heterodata(self, node_attr_cols: List[str] = [],
                           target="go_id", min_count=10, label_subset: Optional[Union[Index, np.ndarray]] = None,
                           ntype_subset: Optional[List[str]] = None,
                           exclude_metapaths: List[Tuple[str, str, str]] = None,
-                          sequence=False, expression=False) \
+                          sequence=False, expression=False, train_test_split="node_mask") \
             -> Tuple[Union[HeteroData, Any], Union[List[str], Series, np.array], Dict[str, List[str]], Any, Any, Any]:
         # Filter node that doesn't have a sequence
         if sequence:
