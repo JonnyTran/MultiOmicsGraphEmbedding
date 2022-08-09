@@ -162,7 +162,7 @@ class NodeEmbeddingEvaluator(LightningModule):
                              columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> Tensor:
         node_losses = self.get_node_loss(targets, y_pred, global_node_index=X["global_node_index"])
 
-        df = self.dataset.get_projection_pos(X, embeddings, weights=weights, losses=node_losses)
+        df = self.dataset.get_node_metadata(X["global_nodes_index"], embeddings, weights=weights, losses=node_losses)
 
         # Log_table
         df_filter = df.reset_index().filter(columns, axis="columns")

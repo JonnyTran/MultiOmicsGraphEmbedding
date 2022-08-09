@@ -60,6 +60,11 @@ class DGLNodeSampler(HeteroGraphDataset):
         self.neighbor_sampler = self.get_neighbor_sampler(self.G, neighbor_sizes=neighbor_sizes, sampler=sampler,
                                                           edge_dir=edge_dir)
 
+    @property
+    def edge_index_dict(self):
+        return {etype: torch.stack(self.G.edges(etype=etype, form="uv"), dim=0) \
+                for etype in self.G.canonical_etypes}
+
     def get_neighbor_sampler(self, G, neighbor_sizes, sampler: str = "MultiLayerNeighborSampler", edge_dir="in"):
         if G is None:
             G = self.G

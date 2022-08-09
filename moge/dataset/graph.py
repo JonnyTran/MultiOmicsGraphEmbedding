@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Dict, Any, Optional
 
 import dgl
 import networkx as nx
@@ -10,6 +10,7 @@ import torch_sparse
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
+from pandas import DataFrame, Series
 from torch import Tensor
 from torch.utils import data
 from torch_geometric.data import HeteroData
@@ -19,6 +20,7 @@ from torch_geometric.utils import is_undirected
 import moge.model.PyG.utils
 from moge.dataset.utils import get_reverse_metapaths
 from moge.model.PyG.utils import get_edge_index_values
+from moge.network.hetero import HeteroNetwork
 
 
 class Graph:
@@ -66,10 +68,53 @@ class Graph:
         self.node_degrees = df
         return df
 
-    def get_projection_pos(self, node_embs, UMAP: classmethod, n_components=2):
-        pos = UMAP(n_components=n_components).fit_transform(node_embs)
-        pos = {node_embs.index[i]: pair for i, pair in enumerate(pos)}
-        return pos
+    @abstractmethod
+    def get_node_metadata(self, X: Dict[str, Any], weigths: Optional, losses: Optional) -> DataFrame:
+        raise NotImplementedError()
+
+    def create_node_metadata(
+            self, network: HeteroNetwork,
+            nodes: Dict[str, List[str]],
+            columns: List[str] = None,
+            rename_mapper: Dict[str, str] = None) \
+            -> DataFrame:
+        if columns is None:
+            columns = ["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
+                       "gene_biotype", "transcript_biotype", "seqname", "length"]
+        if rename_mapper is None:
+            rename_mapper = {"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}
+
+        def _process_int_values(s: Series) -> Series:
+            if s.str.contains("|").any():
+                s = s.str.split("|", expand=True)[0]
+            return s.fillna(0).astype(int)
+
+        dfs = []
+        for ntype, node_list in nodes.items():
+            df: DataFrame = network.annotations[ntype].loc[nodes[ntype]].reset_index()
+            if "start" in df.columns and "end" in df.columns:
+                df["length"] = _process_int_values(df["end"]) - _process_int_values(df["start"]) + 1
+
+            df = df.rename(columns=rename_mapper).filter(columns, axis="columns")
+
+            for col in df.columns.intersection(["class", "disease_associations"]):
+                if df[col].str.contains("\||, ", regex=True).any():
+                    df[col] = df[col].str.split("\||, ", regex=True, expand=True)[0]
+                elif df[col].apply(lambda x: isinstance(x, (tuple, list))).any():
+                    df[col] = df[col].apply(
+                        lambda li: li[0] if isinstance(li, (tuple, list)) else None)
+
+            df["ntype"] = ntype
+            df["nid"] = range(len(node_list))
+
+            dfs.append(df)
+
+        dfs = pd.concat(dfs, axis=0)
+        if "namespace" in dfs.columns:
+            dfs["namespace"].fillna(dfs["ntype"], inplace=True)
+        self.node_metadata = dfs.set_index(["ntype", "nid"]).dropna(axis=1, how="all")
+
+        return self.node_metadata
 
 
 class HeteroGraphDataset(torch.utils.data.Dataset, Graph):

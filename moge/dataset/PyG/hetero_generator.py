@@ -175,53 +175,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
     def full_batch(self):
         return self.transform_heterograph(self.G)
 
-    def create_node_metadata(
-            self, network: HeteroNetwork,
-            nodes: Dict[str, List[str]],
-            columns: List[str] = None,
-            rename_mapper: Dict[str, str] = None) \
-            -> DataFrame:
-        if columns is None:
-            columns = ["ntype", "nid", "name", "namespace", "def", "is_a", "go_id", "disease_associations", "class",
-                       "gene_biotype", "transcript_biotype", "seqname", "length"]
-        if rename_mapper is None:
-            rename_mapper = {"name": "node", "gene_name": "node", "Chromosome": "seqname", "Protein class": "class"}
-
-        def _process_int_values(s: Series) -> Series:
-            if s.str.contains("|").any():
-                s = s.str.split("|", expand=True)[0]
-            return s.fillna(0).astype(int)
-
-        dfs = []
-        for ntype, node_list in nodes.items():
-            df: DataFrame = network.annotations[ntype].loc[nodes[ntype]].reset_index()
-            if "start" in df.columns and "end" in df.columns:
-                df["length"] = _process_int_values(df["end"]) - _process_int_values(df["start"]) + 1
-
-            df = df.rename(columns=rename_mapper).filter(columns, axis="columns")
-
-            for col in df.columns.intersection(["class", "disease_associations"]):
-                if df[col].str.contains("\||, ", regex=True).any():
-                    df[col] = df[col].str.split("\||, ", regex=True, expand=True)[0]
-                elif df[col].apply(lambda x: isinstance(x, (tuple, list))).any():
-                    df[col] = df[col].apply(
-                        lambda li: li[0] if isinstance(li, (tuple, list)) else None)
-
-            df["ntype"] = ntype
-            df["nid"] = range(len(node_list))
-
-            dfs.append(df)
-
-        dfs = pd.concat(dfs, axis=0)
-        if "namespace" in dfs.columns:
-            dfs["namespace"].fillna(dfs["ntype"], inplace=True)
-        self.node_metadata = dfs.set_index(["ntype", "nid"]).dropna(axis=1, how="all")
-        return self.node_metadata
-
-    def get_projection_pos(self, batch: Dict[str, Dict[str, Tensor]],
-                           embeddings: Dict[str, Tensor],
-                           weights: Optional[Dict[str, Series]] = None,
-                           losses: Dict[str, Tensor] = None) -> DataFrame:
+    def get_node_metadata(self, global_node_index: Dict[str, Tensor],
+                          embeddings: Dict[str, Tensor],
+                          weights: Optional[Dict[str, Series]] = None,
+                          losses: Dict[str, Tensor] = None) -> DataFrame:
         """
         Collect node metadata for all nodes in X["global_node_index"]
         Args:
@@ -236,7 +193,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         if not hasattr(self, "node_metadata"):
             self.create_node_metadata(self.network, nodes=self.nodes)
 
-        global_node_index = {ntype: nids.numpy() for ntype, nids in batch["global_node_index"].items() \
+        global_node_index = {ntype: nids.numpy() for ntype, nids in global_node_index.items() \
                              if ntype in embeddings}
 
         # Concatenated list of node embeddings and other metadata

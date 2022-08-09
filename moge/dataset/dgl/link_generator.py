@@ -1,14 +1,16 @@
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Dict
 
 import dgl
 import numpy as np
+import pandas as pd
 import torch
 from dgl.dataloading import EdgePredictionSampler, Sampler
 from dgl.heterograph import DGLBlock, DGLHeteroGraph
 from dgl.utils import to_device
 from ogb.linkproppred import DglLinkPropPredDataset
-from pandas import Index
+from pandas import Index, DataFrame, Series
 from torch import Tensor
+from umap import UMAP
 
 from .node_generator import DGLNodeSampler
 from ..utils import get_relabled_edge_index, is_negative, is_reversed, unreverse_metapath
@@ -230,6 +232,89 @@ class DGLLinkSampler(DGLNodeSampler):
             outputs = to_device(outputs, device)
 
         return outputs
+
+    def get_node_metadata(self, global_nodes_index: Dict[str, Tensor],
+                          embeddings: Dict[str, Tensor],
+                          weights: Optional[Dict[str, Series]] = None,
+                          losses: Dict[str, Tensor] = None) -> DataFrame:
+        """
+        Collect node metadata for all nodes in X["global_node_index"]
+        Args:
+            batch (): a batch's dict of data
+            embeddings (): Embeddings of nodes in the `X` batch
+            weights (Optional[Dict[str, Series]]): A Dict of ntype and a Pandas Series same same as number of nodes
+                where entries > 0 are returned.
+
+        Returns:
+            node_metadata (DataFrame)
+        """
+        if not hasattr(self, "node_metadata"):
+            self.create_node_metadata(self.network, nodes=self.nodes)
+
+        global_node_index = {ntype: nids.numpy() for ntype, nids in global_nodes_index.items() \
+                             if ntype in embeddings}
+
+        # Concatenated list of node embeddings and other metadata
+        nodes_emb = {ntype: embeddings[ntype].detach().numpy() for ntype in embeddings}
+        nodes_emb = np.concatenate([nodes_emb[ntype] for ntype in global_node_index])
+
+        nodes_train_valid_test = np.vstack([
+            np.concatenate([self.G.nodes[ntype].data['train_mask'][nids].numpy() \
+                            for ntype, nids in global_node_index.items()]),
+            np.concatenate([self.G.nodes[ntype].data['valid_mask'][nids].numpy() \
+                            for ntype, nids in global_node_index.items()]),
+            np.concatenate([self.G.nodes[ntype].data['test_mask'][nids].numpy() \
+                            for ntype, nids in global_node_index.items()])],
+        ).T
+        nodes_train_valid_test = np.array(["Train", "Valid", "Test"])[nodes_train_valid_test.argmax(1)]
+
+        if losses:
+            node_losses = np.concatenate([losses[ntype] if ntype in losses else \
+                                              [None] * global_node_index[ntype].size \
+                                          for ntype in global_node_index])
+        else:
+            node_losses = None
+
+        # Metadata
+        # Build node metadata dataframe from concatenated lists of node metadata for multiple ntypes
+        df = pd.DataFrame(
+            {"node": np.concatenate([self.nodes[ntype][global_node_index[ntype]] for ntype in global_node_index]),
+             "ntype": np.concatenate([[ntype] * global_node_index[ntype].shape[0] for ntype in global_node_index]),
+             "train_valid_test": nodes_train_valid_test,
+             "loss": node_losses},
+            index=pd.Index(np.concatenate([global_node_index[ntype] for ntype in global_node_index]), name="nid"))
+
+        tsne = UMAP(n_components=2, n_jobs=-1)
+        # tsne = MulticoreTSNE.MulticoreTSNE(n_components=2, n_jobs=-1)
+        nodes_pos = tsne.fit_transform(nodes_emb)
+        nodes_pos = {node_name: pos for node_name, pos in zip(df.index, nodes_pos)}
+        df[['pos1', 'pos2']] = np.vstack(df.index.map(nodes_pos))
+
+        # Reset index
+        df = df.reset_index()
+        df["nx_node"] = df["ntype"] + "-" + df["node"]
+        df = df.set_index(["ntype", "nid"])
+
+        # Update all nodes embeddings with self.node_metadata
+        for col in set(self.node_metadata.columns) - set(df.columns):
+            df[col] = None
+        df.update(self.node_metadata, overwrite=False)
+        df.dropna(axis=1, how="all", inplace=True)
+
+        # Update self.node_metadata with df
+        for col in set(df.columns) - set(self.node_metadata.columns):
+            self.node_metadata[col] = None
+        self.node_metadata.update(df[~df.index.duplicated()], )
+
+        # return only nodes that have > 0 weights (used for visualization of node clf models)
+        if weights is not None:
+            nodes_weight = {ntype: weights[ntype].detach().numpy() \
+                if isinstance(weights[ntype], Tensor) else weights[ntype] for ntype in weights}
+            nodes_weight = np.concatenate([nodes_weight[ntype] for ntype in global_node_index]).astype(bool)
+
+            return df.loc[nodes_weight]
+
+        return df
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False, **kwargs):
         if self.inductive:
