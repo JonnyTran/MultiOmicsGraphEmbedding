@@ -5,6 +5,7 @@ import torch
 import torchmetrics
 from ignite.exceptions import NotComputableError
 from ignite.metrics import Precision, Recall, TopKCategoricalAccuracy
+from logzero import logger
 from ogb.graphproppred import Evaluator as GraphEvaluator
 from ogb.linkproppred import Evaluator as LinkEvaluator
 from ogb.nodeproppred import Evaluator as NodeEvaluator
@@ -426,8 +427,8 @@ class AveragePrecision(torchmetrics.Metric):
 
     def compute(self, prefix=None) -> Union[float, Dict[str, float]]:
         if len(self._scores) == 0:
-            raise NotComputableError("AveragePrecision must have at"
-                                     "least one example before it can be computed.")
+            logger.warn("AveragePrecision must have at"
+                        "least one example before it can be computed.")
 
         weighted_avg_score = np.average(self._scores, weights=self._n_samples)
         return weighted_avg_score if prefix is None else {f"{prefix}avg_precision": weighted_avg_score}

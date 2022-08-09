@@ -261,10 +261,10 @@ class LATTEConv(MessagePassing, pl.LightningModule):
             self.alpha_activation = None
 
         if layernorm:
-            self.layernorm = nn.LayerNorm(output_dim)
+            self.layernorm = {ntype: nn.LayerNorm(output_dim) for ntype in self.node_types}
 
         if batchnorm:
-            self.batchnorm = nn.LayerNorm(output_dim)
+            self.batchnorm = {ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types}
 
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
@@ -379,9 +379,9 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 embedding = self.activation(embedding)
 
             if hasattr(self, "layernorm"):
-                embedding = self.layernorm(embedding)
+                embedding = self.layernorm[ntype](embedding)
             elif hasattr(self, "batchnorm"):
-                embedding = self.batchnorm(embedding)
+                embedding = self.batchnorm[ntype](embedding)
 
             if hasattr(self, "dropout"):
                 embedding = self.dropout(embedding)

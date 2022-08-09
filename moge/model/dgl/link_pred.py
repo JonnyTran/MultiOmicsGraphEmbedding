@@ -10,7 +10,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dgl import DGLHeteroGraph
-from logzero import logger
 from pandas import Series
 from torch import Tensor
 from torch.nn import functional as F
@@ -39,6 +38,8 @@ class DglLinkPredTrainer(LinkPredTrainer):
             self.go_namespace: Dict[str, np.ndarray] = dataset.go_namespace
         if hasattr(dataset, "ntype_mapping"):
             self.ntype_mapping: Dict[str, str] = dataset.ntype_mapping
+
+        self.lr = self.hparams.lr
 
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
                                  pos_edge_scores: Dict[Tuple[str, str, str], Tensor],
@@ -300,7 +301,6 @@ class DglLinkPredTrainer(LinkPredTrainer):
                 self.cleanup_artifacts()
 
         except Exception as e:
-            logger.error(e)
             traceback.print_exc()
 
         finally:
@@ -342,9 +342,9 @@ class DglLinkPredTrainer(LinkPredTrainer):
         lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
 
         if optimizer.lower() == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=weight_decay)
         elif optimizer.lower() == 'sgd':
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, weight_decay=weight_decay)
         else:
             raise ValueError(f"wrong value for optimizer {optimizer}!")
 
@@ -352,14 +352,14 @@ class DglLinkPredTrainer(LinkPredTrainer):
         if lr_annealing == "cosine":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                    T_max=self.num_training_steps,
-                                                                   eta_min=self.hparams.lr / 100)
+                                                                   eta_min=self.lr / 100)
 
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
             print("Using CosineAnnealingLR", scheduler.state_dict())
 
         elif lr_annealing == "restart":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50, T_mult=1,
-                                                                             eta_min=self.hparams.lr / 100)
+                                                                             eta_min=self.lr / 100)
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
             print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
 

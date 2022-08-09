@@ -161,7 +161,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
     def plot_embeddings_tsne(self, global_node_index: Dict[str, Tensor], embeddings: Dict[str, Tensor],
                              targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
-                             columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> Tensor:
+                             columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> DataFrame:
         node_losses = self.get_node_loss(targets, y_pred, global_node_index=global_node_index)
         df = self.dataset.get_node_metadata(global_node_index, embeddings, weights=weights, losses=node_losses)
 
@@ -172,7 +172,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         table = wandb.Table(data=df_filter)
         wandb.log({self.embedding_plot_name: table})
-        print("Logging node_emb_umap_plot")
+        logging.info("Logging node_emb_umap_plot")
 
         return df
 
@@ -204,8 +204,7 @@ class NodeEmbeddingEvaluator(LightningModule):
             fig = plot_sankey_flow(nodes, links, width=width, height=height)
 
             path_to_plotly_html = f"./wandb_fig_run_{run_id}_{ntype}.html"
-            fig.write_html(path_to_plotly_html, auto_play=False,
-                           include_plotlyjs=True, full_html=True,
+            fig.write_html(path_to_plotly_html, auto_play=False, include_plotlyjs=True, full_html=True,
                            config=dict(displayModeBar=False))
             plotly_htmls.append(wandb.Html(path_to_plotly_html))
 
@@ -214,19 +213,28 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         # Log Table
         wandb.log({self.attn_plot_name: table})
-        print("Logging sankey_flow")
+        logging.info("Logging sankey_flow")
         os.system(f"rm -f ./wandb_fig_run_{run_id}*.html")
 
-    def log_score_averages(self, edge_scores_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> Tensor:
-        score_avgs = pd.DataFrame({pos: {m: f"{edges.mean().item():.4f} ± {edges.std().item():.2f}" \
-                                         for m, edges in eid.items()} \
-                                   for pos, eid in edge_scores_dict.items()})
-        score_avgs.index.names = ("head", "relation", "tail")
+    def log_score_averages(self, edge_scores_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> DataFrame:
+        if isinstance(edge_scores_dict, dict) and isinstance(list(edge_scores_dict.keys())[0], str):
+            score_avgs = pd.DataFrame({key: {metapath: f"{values.mean().item():.4f} ± {values.std().item():.2f}" \
+                                             for metapath, values in edge_index_dict.items()} \
+                                       for key, edge_index_dict in edge_scores_dict.items()})
+
+            score_avgs.index.names = ("head", "relation", "tail")
+
+        elif isinstance(edge_scores_dict, dict) and isinstance(list(edge_scores_dict.keys())[0], tuple):
+            score_avgs = pd.DataFrame.from_dict({m: f"{values.mean().item():.4f} ± {values.std().item():.2f}"
+                                                 for m, values in edge_scores_dict.items()}, orient="index")
+            score_avgs.columns = ["score"]
+            score_avgs.index = pd.MultiIndex.from_tuples(score_avgs.index, names=("head", "relation", "tail"))
+
         try:
             table = wandb.Table(dataframe=score_avgs.reset_index())
 
             wandb.log({self.score_avg_table_name: table})
-            print("Logging log_score_averages")
+            logging.info("Logging log_score_averages")
         except:
             pass
         finally:
@@ -260,7 +268,7 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         try:
             wandb.log({self.beta_degree_corr_table_name: layers_corr.reset_index()})
-            print("Logging beta_degree_correlation")
+            logging.info("Logging beta_degree_correlation")
         except:
             pass
 
@@ -485,7 +493,7 @@ class LinkPredTrainer(NodeClfTrainer):
                           Dict[Tuple[str, str, str], Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]],
                       edge_true: Union[
                           Dict[Tuple[str, str, str], Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]],
-                      global_node_index: Optional[Dict[str, Tensor]] = None):
+                      global_node_index: Optional[Dict[str, Tensor]] = None) -> Dict[str, Tensor]:
         edge_index_loss = self.get_edge_index_loss(edge_pred, edge_true, global_node_index)
 
         adj_losses = edge_index_to_adjs(edge_index_loss, nodes=self.dataset.nodes)

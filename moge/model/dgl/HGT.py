@@ -68,17 +68,14 @@ class HGTLayer(nn.Module):
         relation_pri = self.relation_pri[etype_id]
         key = torch.bmm(edges.src['k'].transpose(1, 0), relation_att).transpose(1, 0)
         att = (edges.dst['q'] * key).sum(dim=-1) * relation_pri / self.sqrt_dk
-
         '''
             Step 2: Heterogeneous Message Passing
         '''
         relation_msg = self.relation_msg[etype_id]
         val = torch.bmm(edges.src['v'].transpose(1, 0), relation_msg).transpose(1, 0)
-        # print("att", att.shape, "val", val.shape)
         return {'a': att, 'v': val}
 
     def message_func(self, edges: EdgeBatch):
-        # print("edges msg", edges.canonical_etype, edges.data['v'].device, edges.data['a'].device)
         return {'v': edges.data['v'], 'a': edges.data['a']}
 
     def reduce_func(self, nodes: NodeBatch):
@@ -104,7 +101,7 @@ class HGTLayer(nn.Module):
 
         return {"h": trans_out}
 
-    def forward(self, G: DGLBlock, feat: Dict[str, Tensor]):
+    def forward(self, G: DGLBlock, feat: Dict[str, Tensor], **kwargs):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=G)
         # print(G)
         with G.local_scope():
@@ -177,18 +174,18 @@ class HGT(nn.Module):
             self.layers.append(
                 HGTLayer(n_hid, n_hid, node_dict, edge_dict, n_heads, dropout=dropout, use_norm=use_norm))
 
-    def forward(self, G: Union[DGLBlock, List[DGLBlock]], feat: Dict[str, Tensor]):
+    def forward(self, G: Union[DGLBlock, List[DGLBlock]], feat: Dict[str, Tensor], **kwargs):
         h = {}
 
         for ntype in feat:
             if hasattr(self, "linear_inp"):
-                n_id = self.node_dict[ntype]
-                h[ntype] = F.gelu(self.linear_inp[n_id].forward(feat[ntype]))
+                nty_id = self.node_dict[ntype]
+                h[ntype] = F.gelu(self.linear_inp[nty_id].forward(feat[ntype]))
             else:
                 h[ntype] = feat[ntype]
 
         for i in range(self.n_layers):
             h = self.layers[i].forward(G=G[i] if isinstance(G, (list, tuple)) else G,
-                                       feat=h)
+                                       feat=h, **kwargs)
 
         return h
