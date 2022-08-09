@@ -4,9 +4,10 @@ import dgl
 import numpy as np
 import pandas as pd
 import torch
-from dgl.dataloading import EdgePredictionSampler, Sampler
+from dgl.dataloading import EdgePredictionSampler, Sampler, as_edge_prediction_sampler
 from dgl.heterograph import DGLBlock, DGLHeteroGraph
 from dgl.utils import to_device
+from logzero import logger
 from ogb.linkproppred import DglLinkPropPredDataset
 from pandas import Index, DataFrame, Series
 from torch import Tensor
@@ -22,9 +23,9 @@ class DGLLinkSampler(DGLNodeSampler):
     def __init__(self, dataset: Union[DglLinkPropPredDataset, DGLHeteroGraph], sampler: str, neighbor_sizes=None,
                  negative_sampler="uniform", negative_sampling_size=100, pred_metapaths=None, neg_pred_metapaths=None,
                  node_types=None, metapaths=None, head_node_type=None, edge_dir=True, reshuffle_train: float = None,
-                 add_reverse_metapaths=True, inductive=True, **kwargs):
+                 add_reverse_metapaths=True, inductive=True, exclude="all_pred", **kwargs):
         super().__init__(dataset, sampler=sampler, neighbor_sizes=neighbor_sizes, node_types=node_types,
-                         metapaths=metapaths, head_node_type=head_node_type, edge_dir=edge_dir,
+                         metapaths=metapaths, head_node_type=head_node_type, edge_dir=edge_dir, exclude=exclude,
                          reshuffle_train=reshuffle_train, add_reverse_metapaths=add_reverse_metapaths,
                          inductive=inductive, **kwargs)
 
@@ -35,12 +36,14 @@ class DGLLinkSampler(DGLNodeSampler):
         self.neg_pred_metapaths = neg_pred_metapaths if neg_pred_metapaths else []
 
         self.negative_sampler = negative_sampler
+        self.exclude = exclude
         self.link_sampler = self.get_link_sampler(self.G, negative_sampling_size=negative_sampling_size,
                                                   negative_sampler=negative_sampler, neighbor_sizes=neighbor_sizes,
-                                                  neighbor_sampler=sampler, edge_dir=edge_dir)
+                                                  neighbor_sampler=sampler, edge_dir=edge_dir, exclude=exclude)
 
     def get_link_sampler(self, G: DGLHeteroGraph, negative_sampling_size: int, negative_sampler: str,
-                         neighbor_sizes: List[str], neighbor_sampler: str, edge_dir="in") -> Sampler:
+                         neighbor_sizes: List[str], neighbor_sampler: str, edge_dir="in",
+                         exclude="all_pred") -> Sampler:
         if G is None:
             G = self.G
         if negative_sampling_size is None:
@@ -66,11 +69,18 @@ class DGLLinkSampler(DGLNodeSampler):
         else:
             raise Exception(f"{negative_sampler} must be in one of [Uniform, GlobalUniform, PerSourceUniform]")
 
-        link_sampler = EdgePredictionSampler(sampler=neighbor_sampler,
-                                             exclude="reverse_types" if self.use_reverse else "self",
-                                             reverse_etypes=self.reverse_etypes if self.use_reverse else None,
-                                             reverse_eids=self.reverse_eids if self.use_reverse else None,
-                                             negative_sampler=negative_sampler)
+        if exclude is None:
+            # exclude = "reverse_id" if self.use_reverse else "self"
+            pass
+        elif exclude == "all_pred":
+            exclude = lambda x: {etype: self.G.edges(etype=self.pred_metapaths[0], form="eid") \
+                                 for etype in self.pred_metapaths + self.neg_pred_metapaths}
+
+        link_sampler = as_edge_prediction_sampler(sampler=neighbor_sampler,
+                                                  exclude=exclude,
+                                                  reverse_etypes=self.reverse_etypes if self.use_reverse else None,
+                                                  reverse_eids=self.reverse_eids if self.use_reverse else None,
+                                                  negative_sampler=negative_sampler)
 
         return link_sampler
 
@@ -318,7 +328,7 @@ class DGLLinkSampler(DGLNodeSampler):
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False, **kwargs):
         if self.inductive:
-            print("Train dataset inductive setting")
+            logger.info("Train dataset inductive setting")
             graph = self.transform_heterograph(self.G, edge_mask=self.G.edata["train_mask"])
             if indices is None:
                 indices = {etype: torch.arange(graph.num_edges(etype=etype)) for etype in
@@ -327,7 +337,8 @@ class DGLLinkSampler(DGLNodeSampler):
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
                                                   neighbor_sizes=self.neighbor_sizes,
-                                                  neighbor_sampler=self.sampler, edge_dir=self.edge_dir)
+                                                  neighbor_sampler=self.sampler,
+                                                  edge_dir=self.edge_dir, exclude=self.exclude)
         else:
             graph = self.G
             if indices is None:
@@ -343,7 +354,7 @@ class DGLLinkSampler(DGLNodeSampler):
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False, **kwargs):
         if self.inductive:
-            print("Valid dataset inductive setting")
+            logger.info("Valid dataset inductive setting")
             edge_mask = {etype: valid_mask | self.G.edata["train_mask"][etype] \
                          for etype, valid_mask in self.G.edata["valid_mask"].items()}
             graph = self.transform_heterograph(self.G, edge_mask=edge_mask)
@@ -354,7 +365,8 @@ class DGLLinkSampler(DGLNodeSampler):
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
                                                   neighbor_sizes=self.neighbor_sizes,
-                                                  neighbor_sampler=self.sampler, edge_dir=self.edge_dir)
+                                                  neighbor_sampler=self.sampler,
+                                                  edge_dir=self.edge_dir, exclude=self.exclude)
         else:
             graph = self.G
             if indices is None:
@@ -368,7 +380,7 @@ class DGLLinkSampler(DGLNodeSampler):
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, indices=None, drop_last=False, **kwargs):
         if self.inductive:
-            print("Test dataset inductive setting")
+            logger.info("Test dataset inductive setting")
             edge_mask = {etype: test_mask | self.G.edata["train_mask"][etype] | self.G.edata["valid_mask"][etype] \
                          for etype, test_mask in self.G.edata["test_mask"].items()}
             graph = self.transform_heterograph(self.G, edge_mask=edge_mask)
@@ -379,7 +391,8 @@ class DGLLinkSampler(DGLNodeSampler):
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
                                                   neighbor_sizes=self.neighbor_sizes,
-                                                  neighbor_sampler=self.sampler, edge_dir=self.edge_dir)
+                                                  neighbor_sampler=self.sampler,
+                                                  edge_dir=self.edge_dir, exclude=self.exclude)
         else:
             graph = self.G
             if indices is None:

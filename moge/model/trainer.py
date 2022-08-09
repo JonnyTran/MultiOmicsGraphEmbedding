@@ -102,7 +102,8 @@ class ClusteringEvaluator(LightningModule):
         metrics = res_df.mean(0).to_dict()
         return metrics
 
-    def get_embeddings_labels(self, h_dict: Dict[str, Tensor], global_node_index: Dict[str, Tensor], cache: bool = True) \
+    def get_embeddings_labels(self, embeddings: Dict[str, Tensor], global_node_index: Dict[str, Tensor],
+                              cache: bool = True) \
             -> Tuple[DataFrame, Series, Series]:
         if cache and hasattr(self, "_embeddings") and hasattr(self, "_node_types") and hasattr(self, "_labels"):
             return self._embeddings, self._node_types, self._labels
@@ -113,10 +114,10 @@ class ClusteringEvaluator(LightningModule):
             nid = global_node_index[node_type].cpu().numpy().astype(str)
             n_type_id = np.core.defchararray.add(node_type[0], nid)
 
-            if isinstance(h_dict[node_type], Tensor):
-                df = pd.DataFrame(h_dict[node_type].detach().cpu().numpy(), index=n_type_id)
+            if isinstance(embeddings[node_type], Tensor):
+                df = pd.DataFrame(embeddings[node_type].detach().cpu().numpy(), index=n_type_id)
             else:
-                df = pd.DataFrame(h_dict[node_type], index=n_type_id)
+                df = pd.DataFrame(embeddings[node_type], index=n_type_id)
             emb_df_list.append(df)
 
         embeddings = pd.concat(emb_df_list, axis=0)

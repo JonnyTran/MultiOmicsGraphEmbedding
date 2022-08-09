@@ -1,4 +1,5 @@
 import itertools
+import traceback
 from argparse import Namespace
 from typing import Dict, List, Union, Tuple, Optional
 
@@ -247,17 +248,53 @@ class DglLinkPredTrainer(LinkPredTrainer):
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=None, batch_size=self.hparams.batch_size, num_workers=0)
 
-    def configure_optimizers(self):
-        if not hasattr(self.hparams, "optimizer") or self.hparams['optimizer'] == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['lr'],
-                                         weight_decay=self.hparams['weight_decay'])
-        elif self.hparams['optimizer'] == 'sgd':
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['lr'],
-                                        weight_decay=self.hparams['weight_decay'])
-        else:
-            raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
+    def on_test_end(self):
+        try:
+            if self.wandb_experiment is not None:
+                input_nodes, pos_graph, neg_graph, blocks = next(iter(self.dataset.train_dataloader(batch_size=1000)))
+                feats = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
+                embeddings, pos_edge_scores, neg_edge_scores = self.cpu().forward(pos_graph, neg_graph, blocks, feats,
+                                                                                  return_embeddings=True)
 
-        return {"optimizer": optimizer}
+                self.log_score_averages(edge_pred_dict=e_pred)
+                self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+                self.plot_embeddings_tsne(X, embeddings, targets=e_true, y_pred=e_pred)
+                self.cleanup_artifacts()
+
+        except Exception as e:
+            traceback.print_exc()
+
+        finally:
+            super().on_test_end()
+
+    def configure_optimizers(self):
+        weight_decay = self.hparams['weight_decay'] if 'weight_decay' in self.hparams else 0.0
+        optimizer = self.hparams['optimizer'] if hasattr(self.hparams, "optimizer") else "adam"
+        lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
+
+        if optimizer.lower() == 'adam':
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=weight_decay)
+        elif optimizer.lower() == 'sgd':
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, weight_decay=weight_decay)
+        else:
+            raise ValueError(f"wrong value for optimizer {optimizer}!")
+
+        extra = {}
+        if lr_annealing == "cosine":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+                                                                   T_max=self.num_training_steps,
+                                                                   eta_min=self.lr / 100)
+
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using CosineAnnealingLR", scheduler.state_dict())
+
+        elif lr_annealing == "restart":
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50, T_mult=1,
+                                                                             eta_min=self.lr / 100)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
+
+        return {"optimizer": optimizer, **extra}
 
 
 class HGTLinkPred(DglLinkPredTrainer):

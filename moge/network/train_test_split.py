@@ -8,8 +8,11 @@ import numpy as np
 import pandas as pd
 import tqdm
 from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
+from logzero import logger
 from networkx.classes.reportviews import EdgeView
 from sklearn.preprocessing import MultiLabelBinarizer
+
+from moge.model.utils import tensor_sizes
 
 
 def stratify_train_test(y_label: pd.DataFrame, test_size: float, seed=42):
@@ -171,9 +174,7 @@ class TrainTestSplit():
                 for mask_name, node_mask in node_attr_dict.items():
                     nx.set_node_attributes(self.networks[metapath], values=node_mask, name=mask_name)
 
-        print("train nodes", sum(len(nids) for nids in train_nodes.values()),
-              "valid nodes", sum(len(nids) for nids in valid_nodes.values()),
-              "test nodes", sum(len(nids) for nids in test_nodes.values()))
+        logger.info(tensor_sizes(dict(train_nodes=train_nodes, valid_nodes=valid_nodes, test_nodes=test_nodes)))
 
         train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), \
                                                defaultdict(set, valid_nodes), defaultdict(set, test_nodes)

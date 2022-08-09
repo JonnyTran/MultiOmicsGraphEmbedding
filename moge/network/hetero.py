@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from logzero import logger
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology
 from openomics.utils.df import concat_uniques
@@ -68,8 +69,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             self.annotations[modality] = annotation
 
         self.annotations = pd.Series(self.annotations)
-        print("All annotation columns (union):",
-              {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
+        logger.info("All annotation columns (union):",
+                    {col for _, annotations in self.annotations.items() for col in annotations.columns.tolist()})
 
     def process_feature_tranformer(self, delimiter="\||;", filter_label=None, min_count=0, verbose=False):
         self.delimiter = delimiter
@@ -85,7 +86,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             self.all_annotations = self.all_annotations.groupby(self.all_annotations.index).agg(
                 {k: concat_uniques for k in self.all_annotations.columns})
 
-        print("Annotation columns:", self.all_annotations.columns.tolist()) if verbose else None
+        logger.info("Annotation columns:", self.all_annotations.columns.tolist()) if verbose else None
         self.feature_transformer = self.get_feature_transformers(self.all_annotations, self.node_list, filter_label,
                                                                  min_count, delimiter, verbose=verbose)
 
@@ -109,8 +110,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.networks[etype].add_edges_from(edgelist, source=src_type, target=dst_type, database=database, **kwargs)
         unq_sources, unq_targets = {u for u, v, *_ in edgelist}, {v for u, v, *_ in edgelist}
 
-        print(f"{etype}: {len(edgelist)} edges added between "
-              f"{len(unq_sources)} {src_type}'s and {len(unq_targets)} {dst_type}'s.")
+        logger.info(f"{etype}: {len(edgelist)} edges added between "
+                    f"{len(unq_sources)} {src_type}'s and {len(unq_targets)} {dst_type}'s.")
 
     def add_edges_from_ontology(self, ontology: Ontology, nodes: Optional[List[str]] = None, ntype: str = "GO_term",
                                 reverse_edges=True, etypes: List[Tuple[str, str, str]] = []):
@@ -209,11 +210,11 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             is_test = go_ann is test_ann
 
             if is_train:
-                print("Train:")
+                logger.info("Train:")
             elif is_valid:
-                print("Valid:")
+                logger.info("Valid:")
             elif is_test:
-                print("Test:")
+                logger.info("Test:")
 
             # True Positive links
             pos_annotations = go_ann[dst_node_col].dropna().explode().to_frame().reset_index()

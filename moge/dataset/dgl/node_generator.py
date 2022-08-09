@@ -7,9 +7,9 @@ import pandas as pd
 import torch
 from dgl import AddReverse
 from dgl import utils as dglutils
-from dgl.init import zero_initializer
 from dgl.sampling import RandomWalkNeighborSampler
 from dgl.utils import prepare_tensor_dict, prepare_tensor
+from logzero import logger
 from ogb.nodeproppred import DglNodePropPredDataset
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
@@ -22,14 +22,13 @@ from moge.network.sequence import BertSequenceTokenizer
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
 from .. import HeteroNeighborGenerator
-from ..utils import one_hot_encoder, reverse_metapath
+from ..utils import reverse_metapath
 from ...network.base import SEQUENCE_COL
 
 
 class DGLNodeSampler(HeteroGraphDataset):
     def __init__(self, dataset: DglNodePropPredDataset,
                  sampler: str = "MultiLayerNeighborSampler",
-                 embedding_dim=None,
                  neighbor_sizes=None,
                  node_types=None,
                  metapaths=None,
@@ -37,12 +36,10 @@ class DGLNodeSampler(HeteroGraphDataset):
                  edge_dir=True,
                  reshuffle_train: float = None,
                  add_reverse_metapaths=True,
-                 init_embeddings=False,
                  inductive=False, decompose_etypes=True, **kwargs):
         self.sampler = sampler
         self.edge_dir = edge_dir
         self.neighbor_sizes = neighbor_sizes
-        self.embedding_dim = embedding_dim
         super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
                          edge_dir=edge_dir, reshuffle_train=reshuffle_train,
                          add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
@@ -53,9 +50,6 @@ class DGLNodeSampler(HeteroGraphDataset):
         elif decompose_etypes and "feat" in self.G.edata and self.G.edata["feat"]:
             self.G = self.transform_heterograph(self.G, decompose_etypes=decompose_etypes,
                                                 add_reverse=add_reverse_metapaths)
-
-        if init_embeddings:
-            self.init_node_embeddings(self.G)
 
         self.neighbor_sampler = self.get_neighbor_sampler(self.G, neighbor_sizes=neighbor_sizes, sampler=sampler,
                                                           edge_dir=edge_dir)
@@ -232,7 +226,7 @@ class DGLNodeSampler(HeteroGraphDataset):
                                  for etype in new_g.etypes if (G.num_edges(etype=etype) - new_g.num_edges(etype=etype))}
 
             new_g = copy_ndata(old_g=G, new_g=new_g)
-            print(f"Removed edges: {num_edges_removed}")
+            logger.info(f"Removed edges: {num_edges_removed}")
 
         if nodes_subset:
             edge_index_dict = {}
@@ -250,7 +244,7 @@ class DGLNodeSampler(HeteroGraphDataset):
                                      for ntype, num_nodes in num_nodes_old.items())
 
             new_g = copy_ndata(old_g=G, new_g=new_g)
-            print(f"Removed nodes: {num_nodes_removed}")
+            logger.info(f"Removed nodes: {num_nodes_removed}")
 
         if add_reverse:
             self.reverse_etypes, self.reverse_eids = {}, {}
@@ -267,7 +261,7 @@ class DGLNodeSampler(HeteroGraphDataset):
                 self.reverse_etypes[metapath] = rev_metapath
 
             assert new_g.num_nodes() == G.num_nodes() and len(new_g.canonical_etypes) > len(G.canonical_etypes)
-            print(f"Added reverse edges with {len(new_g.canonical_etypes) - len(G.canonical_etypes)} new etypes")
+            logger.info(f"Added reverse edges with {len(new_g.canonical_etypes) - len(G.canonical_etypes)} new etypes")
 
         return new_g
 
@@ -406,36 +400,6 @@ class DGLNodeSampler(HeteroGraphDataset):
         self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
             "test"]
 
-    def init_node_embeddings(self, graph: dgl.DGLHeteroGraph, ntype_key="species"):
-        if self.node_attr_size:
-            embedding_dim = self.node_attr_size
-        else:
-            embedding_dim = self.embedding_dim
-
-        for ntype in graph.ntypes:
-            graph.set_n_initializer(zero_initializer, field="feat", ntype=ntype)
-
-            if ntype_key in graph.nodes[ntype].data and "feat" not in graph.nodes[ntype].data:
-                onehot = one_hot_encoder(graph.nodes[ntype].data[ntype_key])
-                print("onehot", onehot.shape, onehot)
-                graph.nodes[ntype].data["feat"] = onehot.requires_grad_(True)
-
-            # elif "feat" not in graph.nodes[ntype].data:
-            #     self.node_embedding = torch.nn.Embedding(graph.num_nodes(ntype), embedding_dim)
-            #     print(f"Initialized Embedding({graph.num_nodes(ntype)}, {embedding_dim}) for ntype: {ntype}")
-            #     graph.nodes[ntype].data["feat"] = self.node_embedding.weight
-            #
-            #     assert graph.nodes[ntype].data["feat"].requires_grad
-
-            # if ntype_key in graph.nodes[ntype].data:
-            #     species = graph.nodes[ntype].data[ntype_key].unique()
-            #     self.ntype_embedding = torch.nn.Embedding(species.size(0), embedding_dim)
-            #     print(f"Initialized ntype_embedding({species.size(0)}, {embedding_dim}) for ntype: {ntype}")
-            #     for species_id in species:
-            #         nmask = (graph.nodes[ntype].data[ntype_key] == species_id).squeeze(-1)
-            #         graph.nodes[ntype].data["feat"][nmask, :] = \
-            #             graph.nodes[ntype].data["feat"][nmask, :] + self.ntype_embedding.weight[(species == species_id).nonzero().item()].unsqueeze(0)
-
     @property
     def node_attr_shape(self):
         if "feat" not in self.G.ndata:
@@ -466,8 +430,8 @@ class DGLNodeSampler(HeteroGraphDataset):
         nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
         graph = self.transform_heterograph(self.G, nodes_subset=nodes)
 
-        print("Removed edges incident to test nodes from the training subgraph for inductive node classification: \n",
-              graph)
+        logger.info(f"Removed edges incident to test nodes from the training subgraph for inductive node classification"
+                    f": \n{graph}")
         return graph
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):

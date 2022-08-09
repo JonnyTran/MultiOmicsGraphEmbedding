@@ -420,6 +420,21 @@ class LATTELinkPred(PyGLinkPredTrainer):
         self.log("test_loss", loss)
         return loss
 
+    def on_validation_end(self) -> None:
+        try:
+            if self.current_epoch % 5 == 1:
+                X, e_true, _ = self.dataset.full_batch(
+                    edge_idx=np.random.choice(self.dataset.validation_idx, size=10, replace=False), device=self.device)
+                embeddings, e_pred = self.forward(X, e_true, save_betas=True)
+
+                self.log_beta_degree_correlation(global_node_index=X["global_node_index"], batch_size=X["batch_size"])
+                self.log_score_averages(edge_pred_dict=e_pred)
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+            super().on_validation_end()
+
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
@@ -436,21 +451,6 @@ class LATTELinkPred(PyGLinkPredTrainer):
 
         finally:
             super().on_test_end()
-
-    def on_validation_end(self) -> None:
-        try:
-            if self.current_epoch % 5 == 1:
-                X, e_true, _ = self.dataset.full_batch(
-                    edge_idx=np.random.choice(self.dataset.validation_idx, size=10, replace=False), device=self.device)
-                embeddings, e_pred = self.forward(X, e_true, save_betas=True)
-
-                self.log_beta_degree_correlation(global_node_index=X["global_node_index"], batch_size=X["batch_size"])
-                self.log_score_averages(edge_pred_dict=e_pred)
-        except Exception as e:
-            traceback.print_exc()
-        finally:
-            self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-            super().on_validation_end()
 
     def configure_optimizers(self):
         param_optimizer = list(self.named_parameters())

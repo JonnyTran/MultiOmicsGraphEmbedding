@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from argparse import Namespace
 from typing import Union, List, Tuple, Dict, Any, Optional
 
 import dgl
@@ -24,7 +25,12 @@ from moge.network.hetero import HeteroNetwork
 
 
 class Graph:
-    def get_networkx(self):
+    edge_index_dict: Dict[Tuple[str, str, str], Tensor]
+    num_nodes_dict: Dict[str, Tensor]
+    node_degrees: DataFrame
+    node_metadata: DataFrame
+
+    def to_networkx(self):
         if not hasattr(self, "G"):
             G = nx.Graph()
             for metapath in self.edge_index_dict:
@@ -120,14 +126,19 @@ class Graph:
 class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
     def __init__(self,
                  dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
-                                DglNodePropPredDataset, DglLinkPropPredDataset],
+                                DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],
                  node_types: List[str] = None,
                  metapaths: List[Tuple[str, str, str]] = None,
                  head_node_type: str = None,
                  edge_dir: str = "in",
                  reshuffle_train: float = None,
                  add_reverse_metapaths: bool = True,
-                 inductive: bool = False, ):
+                 inductive: bool = False, hparams: Namespace = None):
+        if hparams:
+            if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+                hparams = Namespace(**hparams)
+            self.hparams = hparams
+
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths

@@ -1,4 +1,5 @@
 from pprint import pprint
+from pprint import pprint
 from typing import List, Tuple, Union, Dict, Optional
 
 import networkx as nx
@@ -38,8 +39,9 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                  node_types: List[str] = None, metapaths: List[Tuple[str, str, str]] = None, head_node_type: str = None,
                  edge_dir: str = "in", reshuffle_train: float = None, add_reverse_metapaths: bool = False,
                  inductive: bool = False, **kwargs):
-        super().__init__(dataset, node_types, metapaths, head_node_type, edge_dir, reshuffle_train,
-                         add_reverse_metapaths, inductive, **kwargs)
+        super().__init__(dataset, node_types=node_types, metapaths=metapaths, head_node_type=head_node_type,
+                         edge_dir=edge_dir, reshuffle_train=reshuffle_train,
+                         add_reverse_metapaths=add_reverse_metapaths, inductive=inductive, **kwargs)
         if seq_tokenizer:
             self.seq_tokenizer = seq_tokenizer
 
