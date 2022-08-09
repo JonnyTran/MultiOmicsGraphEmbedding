@@ -15,6 +15,7 @@ from torch import Tensor
 from moge.dataset import DGLLinkSampler
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.model.dgl.HGT import HGT
+from moge.model.dgl.latte import LATTE
 from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
@@ -30,10 +31,10 @@ class DglLinkPredTrainer(LinkPredTrainer):
         self.pred_metapaths = dataset.pred_metapaths
         self.neg_pred_metapaths = dataset.neg_pred_metapaths
 
-        if hasattr(self.dataset, "go_namespace"):
-            self.go_namespace: Dict[str, np.ndarray] = self.dataset.go_namespace
-        if hasattr(self.dataset, "ntype_mapping"):
-            self.ntype_mapping: Dict[str, str] = self.dataset.ntype_mapping
+        if hasattr(dataset, "go_namespace"):
+            self.go_namespace: Dict[str, np.ndarray] = dataset.go_namespace
+        if hasattr(dataset, "ntype_mapping"):
+            self.ntype_mapping: Dict[str, str] = dataset.ntype_mapping
 
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
                                  pos_edge_scores: Dict[Tuple[str, str, str], Tensor],
@@ -301,6 +302,51 @@ class HGTLinkPred(DglLinkPredTrainer):
             x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
 
         x = self.conv(blocks, x)
+
+        pos_edge_score = self.classifier.forward(pos_graph, x)
+        neg_edge_score = self.classifier.forward(neg_graph, x)
+
+        if return_embeddings:
+            return x, pos_edge_score, neg_edge_score
+        return pos_edge_score, neg_edge_score
+
+
+class LATTELinkPred(DglLinkPredTrainer):
+    def __init__(self, args: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
+        if not isinstance(args, Namespace) and isinstance(args, dict):
+            args = Namespace(**args)
+        super().__init__(args, dataset, metrics)
+        self.dataset = dataset
+
+        if "node_neighbors_min_num" in args:
+            fanouts = [args["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
+            self.set_fanouts(self.dataset, fanouts)
+
+        if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
+            non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
+            print("non_seq_ntypes", non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(args, dataset, select_ntypes=non_seq_ntypes)
+
+        self.conv = LATTE(t_order=args.t_order,
+                          embedding_dim=args.embedding_dim,
+                          num_nodes_dict=dataset.num_nodes_dict,
+                          metapaths=dataset.get_metapaths())
+
+        self.classifier = MLPPredictor(in_dim=args.embedding_dim, loss_type=args.loss_type)
+        self.criterion = ClassificationLoss(loss_type=args.loss_type, multilabel=False)
+
+        args.n_params = self.get_n_params()
+        print(f'Model #Params: {self.get_n_params()}')
+
+        print(f'Configuration: {args}')
+        self._set_hparams(args)
+
+    def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False) \
+            -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
+        if len(x) == 0 or sum(a.numel() for a in x) == 0:
+            x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
+
+        x = self.conv.forward(blocks, x)
 
         pos_edge_score = self.classifier.forward(pos_graph, x)
         neg_edge_score = self.classifier.forward(neg_graph, x)
