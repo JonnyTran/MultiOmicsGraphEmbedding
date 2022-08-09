@@ -256,10 +256,29 @@ class DglLinkPredTrainer(LinkPredTrainer):
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=None, batch_size=self.hparams.batch_size, num_workers=0)
 
+    def on_validation_end(self) -> None:
+        try:
+            if self.current_epoch % 5 == 1:
+                input_nodes, pos_graph, neg_graph, blocks = next(
+                    iter(self.dataset.valid_dataloader(batch_size=self.hparams.batch_size)))
+                feats = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
+                embeddings, pos_edge_scores, neg_edge_scores = self.cpu().forward(pos_graph, neg_graph, blocks, feats,
+                                                                                  return_embeddings=True)
+                global_node_index = {ntype: blocks[-1].dstnodes[ntype].data["_ID"] \
+                                     for ntype in blocks[-1].ntypes if blocks[-1].num_dst_nodes(ntype)}
+
+                self.log_score_averages(edge_scores_dict=pos_edge_scores | tag_negative_metapath({
+                    k: v for k, v in neg_edge_scores.items() if not is_negative(k)}))
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            # self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+            super().on_validation_end()
+
     def on_test_end(self):
         try:
             if self.wandb_experiment is not None:
-                input_nodes, pos_graph, neg_graph, blocks = next(iter(self.dataset.train_dataloader(batch_size=1000)))
+                input_nodes, pos_graph, neg_graph, blocks = next(iter(self.dataset.test_dataloader(batch_size=1000)))
                 feats = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
                 embeddings, pos_edge_scores, neg_edge_scores = self.cpu().forward(pos_graph, neg_graph, blocks, feats,
                                                                                   return_embeddings=True)
@@ -268,14 +287,14 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
                 # self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
 
-                self.log_score_averages(edge_scores_dict=pos_edge_scores | tag_negative_metapath(
-                    {k: v for k, v in neg_edge_scores.items() if not is_negative(k)}))
+                self.log_score_averages(edge_scores_dict=pos_edge_scores | tag_negative_metapath({
+                    k: v for k, v in neg_edge_scores.items() if not is_negative(k)}))
 
                 edge_index_dict = dgl_to_edge_index_dict(
-                    pos_graph, edge_values=pos_edge_scores, global_ids=False) | tag_negative_metapath(
-                    {k: v for k, v in
-                     dgl_to_edge_index_dict(neg_graph, edge_values=neg_edge_scores, global_ids=False).items() \
-                     if not is_negative(k)})
+                    pos_graph, edge_values=pos_edge_scores, global_ids=False) | tag_negative_metapath({
+                    k: v for k, v in dgl_to_edge_index_dict(
+                        neg_graph, edge_values=neg_edge_scores, global_ids=False).items() \
+                    if not is_negative(k)})
                 self.plot_embeddings_tsne(global_node_index=global_node_index, embeddings=embeddings,
                                           targets=edge_index_dict, y_pred=edge_index_dict)
                 self.cleanup_artifacts()
