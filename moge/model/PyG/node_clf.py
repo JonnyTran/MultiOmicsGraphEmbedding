@@ -819,9 +819,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                 X, y_true, weights = self.dataset.full_batch()
                 embs, logits = self.cpu().forward(X, return_embeddings=True, return_score=True, save_betas=True)
 
-                self.plot_embeddings_tsne(X, embs, weights=weights,
-                                          targets=y_true[self.head_node_type],
-                                          y_pred=activation(logits, loss_type=self.hparams.loss_type))
+                self.plot_embeddings_tsne(X, embs, targets=y_true[self.head_node_type],
+                                          y_pred=activation(logits, loss_type=self.hparams.loss_type), weights=weights)
                 self.plot_sankey_flow(layer=-1)
                 self.cleanup_artifacts()
 

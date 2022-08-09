@@ -1,7 +1,9 @@
 import math
+from typing import Tuple, Dict, Union
 
 import dgl
 from dgl import utils, DGLHeteroGraph
+from torch import Tensor
 
 
 def copy_ndata(old_g: dgl.DGLHeteroGraph, new_g: dgl.DGLHeteroGraph) -> dgl.DGLHeteroGraph:
@@ -16,7 +18,8 @@ def copy_ndata(old_g: dgl.DGLHeteroGraph, new_g: dgl.DGLHeteroGraph) -> dgl.DGLH
     return new_g
 
 
-def dgl_to_edge_index_dict(g: DGLHeteroGraph, global_ids):
+def dgl_to_edge_index_dict(g: DGLHeteroGraph, edge_values: Dict[Tuple[str, str, str], Tensor] = None, global_ids=True) \
+        -> Dict[Tuple[str, str, str], Union[Tuple[Tensor, Tensor], Tuple[Tuple[Tensor, Tensor], Tensor]]]:
     edge_index_dict = {}
     for metapath in g.canonical_etypes:
         head_type, etype, tail_type = metapath
@@ -27,7 +30,11 @@ def dgl_to_edge_index_dict(g: DGLHeteroGraph, global_ids):
             u = g.nodes[head_type].data["_ID"][u]
             v = g.nodes[tail_type].data["_ID"][v]
 
-        edge_index_dict[metapath] = (u, v)
+        if edge_values and metapath in edge_values:
+            assert edge_values[metapath].size(0) == len(u)
+            edge_index_dict[metapath] = ((u, v), edge_values[metapath])
+        else:
+            edge_index_dict[metapath] = (u, v)
 
     return edge_index_dict
 

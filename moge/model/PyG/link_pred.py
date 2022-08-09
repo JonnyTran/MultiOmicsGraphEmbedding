@@ -2,6 +2,7 @@ import logging
 import math
 import traceback
 from argparse import Namespace
+from collections import defaultdict
 from typing import List, Tuple, Dict, Any, Union, Optional, Callable
 
 import numpy as np
@@ -9,11 +10,12 @@ import torch
 from fairscale.nn import auto_wrap
 from pandas import DataFrame
 from torch import nn, Tensor
+from torch.nn import functional as F
 
 from moge.model.PyG.latte_flat import LATTE
 from moge.model.losses import ClassificationLoss
 from .conv import HGT
-from .utils import get_edge_index_from_neg_batch
+from .utils import get_edge_index_from_neg_batch, batch2global_edge_index
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
@@ -90,18 +92,78 @@ class PyGLinkPredTrainer(LinkPredTrainer):
             self.update_pr_metrics(pos_scores=pos_scores, neg_scores=neg_scores, metrics=metrics)
 
     def update_pr_metrics(self, pos_scores: Tensor,
-                          neg_scores: Tensor,
+                          neg_scores: Union[Tensor, Dict[Tuple[str, str, str], Tuple]],
                           metrics: Metrics,
                           subset=["precision", "recall", "aupr"]):
+        if isinstance(neg_scores, dict):
+            edge_neg_score = torch.cat([edge_scores.detach() for m, edge_scores in neg_scores.items()])
+        else:
+            edge_neg_score = neg_scores
+
         # randomly select |e_neg| positive edges to balance precision/recall scores
-        pos_edge_idx = np.random.choice(pos_scores.size(0), size=neg_scores.shape,
-                                        replace=False if pos_scores.size(0) > neg_scores.size(0) else True)
+        pos_edge_idx = np.random.choice(pos_scores.size(0), size=edge_neg_score.shape,
+                                        replace=False if pos_scores.size(0) > edge_neg_score.size(0) else True)
         pos_scores = pos_scores[pos_edge_idx]
 
-        y_pred = torch.cat([pos_scores, neg_scores]).unsqueeze(-1).detach()
-        y_true = torch.cat([torch.ones_like(pos_scores), torch.zeros_like(neg_scores)]).unsqueeze(-1)
+        y_pred = torch.cat([pos_scores, edge_neg_score]).unsqueeze(-1).detach()
+        y_true = torch.cat([torch.ones_like(pos_scores), torch.zeros_like(edge_neg_score)]).unsqueeze(-1)
 
         metrics.update_metrics(y_pred, y_true, weights=None, subset=subset)
+
+    def get_edge_index_loss(self, edge_pred: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+                            edge_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
+                            global_node_index: Dict[str, Tensor],
+                            loss_fn: Callable = F.binary_cross_entropy) \
+            -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
+
+        e_pred, e_true = defaultdict(list), defaultdict(list)
+
+        ntype_mapping = self.dataset.ntype_mapping if hasattr(self.dataset, "ntype_mapping") else None
+        for metapath, edge_pos_pred in edge_pred["edge_pos"].items():
+            corrected_metapath = tuple(ntype_mapping[i] if i in ntype_mapping else i for i in metapath) \
+                if ntype_mapping else metapath
+            edge_index = batch2global_edge_index(edge_true["edge_pos"][metapath], metapath=corrected_metapath,
+                                                 global_node_index=global_node_index)
+            e_pred[corrected_metapath].append((edge_index, edge_pos_pred.view(-1).detach()))
+            e_true[corrected_metapath].append((edge_index, torch.ones_like(edge_pos_pred.view(-1))))
+
+        for metapath, edge_neg_pred in edge_pred["edge_neg"].items():
+            corrected_metapath = tuple(ntype_mapping[i] if i in ntype_mapping else i for i in metapath) \
+                if ntype_mapping else metapath
+            edge_index = batch2global_edge_index(edge_true["edge_neg"][metapath], metapath=corrected_metapath,
+                                                 global_node_index=global_node_index)
+            e_pred[corrected_metapath].append((edge_index, edge_neg_pred.view(-1).detach()))
+            e_true[corrected_metapath].append((edge_index, torch.zeros_like(edge_neg_pred.view(-1))))
+
+        head_batch_edge_index_dict, _ = get_edge_index_from_neg_batch(edge_true["head_batch"],
+                                                                      edge_pos=edge_true["edge_pos"], mode="head_batch")
+        for metapath, edge_neg_pred in edge_pred["head_batch"].items():
+            corrected_metapath = tuple(ntype_mapping[i] if i in ntype_mapping else i for i in metapath) \
+                if ntype_mapping else metapath
+            edge_index = batch2global_edge_index(head_batch_edge_index_dict[metapath], metapath=corrected_metapath,
+                                                 global_node_index=global_node_index)
+            e_pred[corrected_metapath].append((edge_index, edge_neg_pred.view(-1).detach()))
+            e_true[corrected_metapath].append((edge_index, torch.zeros_like(edge_neg_pred.view(-1))))
+        tail_batch_edge_index_dict, _ = get_edge_index_from_neg_batch(edge_true["tail_batch"],
+                                                                      edge_pos=edge_true["edge_pos"], mode="tail_batch")
+
+        for metapath, edge_neg_pred in edge_pred["tail_batch"].items():
+            corrected_metapath = tuple(ntype_mapping[i] if i in ntype_mapping else i for i in metapath) \
+                if ntype_mapping else metapath
+            edge_index = batch2global_edge_index(tail_batch_edge_index_dict[metapath], metapath=corrected_metapath,
+                                                 global_node_index=global_node_index)
+            e_pred[corrected_metapath].append((edge_index, edge_neg_pred.view(-1).detach()))
+            e_true[corrected_metapath].append((edge_index, torch.zeros_like(edge_neg_pred.view(-1))))
+
+        e_pred = {m: (torch.cat([eid for eid, v in li_eid_v], dim=1),
+                      torch.cat([v for eid, v in li_eid_v], dim=0)) for m, li_eid_v in e_pred.items()}
+        e_true = {m: (torch.cat([eid for eid, v in li_eid_v], dim=1),
+                      torch.cat([v for eid, v in li_eid_v], dim=0)) for m, li_eid_v in e_true.items()}
+
+        e_losses = {m: (eid, loss_fn(e_pred[m][1], target=e_true[m][1], reduce=False)) \
+                    for m, (eid, _) in e_pred.items()}
+
+        return e_losses
 
 
 class EdgePredictor(torch.nn.Module):
@@ -428,7 +490,7 @@ class LATTELinkPred(PyGLinkPredTrainer):
                 embeddings, e_pred = self.forward(X, e_true, save_betas=True)
 
                 self.log_beta_degree_correlation(global_node_index=X["global_node_index"], batch_size=X["batch_size"])
-                self.log_score_averages(edge_pred_dict=e_pred)
+                self.log_score_averages(edge_scores_dict=e_pred)
         except Exception as e:
             traceback.print_exc()
         finally:
@@ -441,9 +503,10 @@ class LATTELinkPred(PyGLinkPredTrainer):
                 X, e_true, _ = self.dataset.full_batch(device="cpu")
                 embeddings, e_pred = self.cpu().forward(X, e_true, save_betas=True)
 
-                self.log_score_averages(edge_pred_dict=e_pred)
+                self.log_score_averages(edge_scores_dict=e_pred)
                 self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-                self.plot_embeddings_tsne(X, embeddings, targets=e_true, y_pred=e_pred)
+                self.plot_embeddings_tsne(global_node_index=X['global_node_index'], embeddings=embeddings,
+                                          targets=e_true, y_pred=e_pred)
                 self.cleanup_artifacts()
 
         except Exception as e:

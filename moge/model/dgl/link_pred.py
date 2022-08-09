@@ -1,20 +1,23 @@
 import itertools
 import traceback
 from argparse import Namespace
-from typing import Dict, List, Union, Tuple, Optional
+from collections import defaultdict
+from typing import Dict, List, Union, Tuple, Optional, Callable
 
 import dgl
 import dgl.function as fn
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from dgl import DGLHeteroGraph
+from logzero import logger
 from pandas import Series
 from torch import Tensor
+from torch.nn import functional as F
 
 from moge.dataset import DGLLinkSampler
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
+from moge.dataset.utils import tag_negative_metapath, is_negative
 from moge.model.dgl.HGT import HGT
 from moge.model.dgl.latte import LATTE
 from moge.model.encoder import HeteroNodeFeatureEncoder
@@ -24,10 +27,10 @@ from moge.model.trainer import LinkPredTrainer
 
 
 class DglLinkPredTrainer(LinkPredTrainer):
+    dataset: DGLLinkSampler
     def __init__(self, hparams, dataset: DGLLinkSampler, metrics: Union[List[str], Dict[str, List[str]]], *args,
                  **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
-        self.dataset: DGLLinkSampler
 
         self.pred_metapaths = dataset.pred_metapaths
         self.neg_pred_metapaths = dataset.neg_pred_metapaths
@@ -53,20 +56,25 @@ class DglLinkPredTrainer(LinkPredTrainer):
                 metrics[go_type].update_metrics(pos_edge_scores[metapath].detach(), neg_batch_scores[metapath].detach(),
                                                 weights=None, subset=["ogbl-biokg"])
 
-                if metapath in pos_edge_scores and neg_edge_scores is not None and metapath in neg_edge_scores:
+                if neg_edge_scores and tag_negative_metapath(metapath) in neg_edge_scores:
                     self.update_pr_metrics(pos_scores=pos_edge_scores[metapath],
-                                           neg_scores=neg_edge_scores[metapath],
+                                           true_neg_scores=neg_edge_scores[tag_negative_metapath(metapath)],
                                            metrics=metrics[go_type])
 
         else:
             metapath = list(pos_edge_scores.keys())[0]
-            metrics.update_metrics(pos_edge_scores[metapath].detach(), neg_edge_scores[metapath].detach(),
+            metrics.update_metrics(pos_edge_scores[metapath].detach(), neg_batch_scores[metapath].detach(),
                                    weights=None, subset=["ogbl-biokg"])
-            if pos_stack is not None and neg_stack is not None:
-                self.update_pr_metrics(pos_scores=pos_stack, neg_scores=neg_stack, metrics=metrics)
+            if pos_stack is not None and neg_edge_scores:
+                self.update_pr_metrics(pos_scores=pos_stack, true_neg_scores=neg_edge_scores, metrics=metrics)
 
-    def update_pr_metrics(self, pos_scores: Tensor, neg_scores: Tensor, metrics: Metrics,
-                          subset=["precision", "recall", "aupr"]):
+    def update_pr_metrics(self, pos_scores: Tensor, true_neg_scores: Union[Tensor, Dict[Tuple[str, str, str], Tuple]],
+                          metrics: Metrics, subset=["precision", "recall", "aupr"]):
+        if isinstance(true_neg_scores, dict):
+            neg_scores = torch.cat([edge_scores.detach() for m, edge_scores in true_neg_scores.items()])
+        else:
+            neg_scores = true_neg_scores
+
         # randomly select |e_neg| positive edges to balance precision/recall scores
         pos_edge_idx = np.random.choice(pos_scores.size(0), size=neg_scores.shape,
                                         replace=False if pos_scores.size(0) > neg_scores.size(0) else True)
@@ -129,7 +137,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
                 pos_scores[metapath] = pos_edge_score[metapath]
                 neg_batch_scores[metapath] = neg_edge_score[metapath].view(num_pos_edges, num_neg_samples)
 
-            elif metapath in self.neg_pred_metapaths:
+            if metapath in self.neg_pred_metapaths:
                 neg_scores[metapath] = pos_edge_score[metapath]
 
         if hasattr(self, 'go_namespace') and pos_graph is not None and neg_graph is not None:
@@ -255,27 +263,69 @@ class DglLinkPredTrainer(LinkPredTrainer):
                 feats = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
                 embeddings, pos_edge_scores, neg_edge_scores = self.cpu().forward(pos_graph, neg_graph, blocks, feats,
                                                                                   return_embeddings=True)
+                global_node_index = {ntype: blocks[-1].dstnodes[ntype].data["_ID"] \
+                                     for ntype in blocks[-1].ntypes if blocks[-1].num_dst_nodes(ntype)}
 
-                self.log_score_averages(edge_pred_dict=e_pred)
-                self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-                self.plot_embeddings_tsne(X, embeddings, targets=e_true, y_pred=e_pred)
+                # self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+
+                self.log_score_averages(edge_scores_dict=pos_edge_scores | tag_negative_metapath(
+                    {k: v for k, v in neg_edge_scores.items() if not is_negative(k)}))
+
+                edge_index_dict = dgl_to_edge_index_dict(
+                    pos_graph, edge_values=pos_edge_scores, global_ids=False) | tag_negative_metapath(
+                    {k: v for k, v in
+                     dgl_to_edge_index_dict(neg_graph, edge_values=neg_edge_scores, global_ids=False).items() \
+                     if not is_negative(k)})
+                self.plot_embeddings_tsne(global_node_index=global_node_index, embeddings=embeddings,
+                                          targets=edge_index_dict, y_pred=edge_index_dict)
                 self.cleanup_artifacts()
 
         except Exception as e:
+            logger.error(e)
             traceback.print_exc()
 
         finally:
             super().on_test_end()
 
+    def get_edge_index_loss(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+                            edge_index_scores: Dict[Tuple[str, str, str], Tensor],
+                            global_node_index: Dict[str, Tensor] = None,
+                            loss_fn: Callable = F.binary_cross_entropy) \
+            -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
+
+        e_pred, e_true = defaultdict(list), defaultdict(list)
+
+        for metapath, (edge_index, edge_value) in edge_index_dict.items():
+            head_type, tail_type = metapath[0], metapath[-1]
+            edge_index = torch.stack(edge_index, dim=0) if isinstance(edge_index, tuple) else edge_index
+            if global_node_index:
+                edge_index[0] = global_node_index[head_type][edge_index[0]]
+                edge_index[1] = global_node_index[tail_type][edge_index[1]]
+
+            true_edge_score = torch.ones_like(edge_value.view(-1)) if is_negative(metapath) else \
+                torch.ones_like(edge_value.view(-1))
+
+            e_pred[metapath].append((edge_index, edge_value.view(-1).detach()))
+            e_true[metapath].append((edge_index, true_edge_score))
+
+        e_pred = {m: (torch.cat([eid for eid, v in li_eid_v], dim=1),
+                      torch.cat([v for eid, v in li_eid_v], dim=0)) for m, li_eid_v in e_pred.items()}
+        e_true = {m: (torch.cat([eid for eid, v in li_eid_v], dim=1),
+                      torch.cat([v for eid, v in li_eid_v], dim=0)) for m, li_eid_v in e_true.items()}
+
+        e_losses = {m: (eid, loss_fn(e_pred[m][1], target=e_true[m][1], reduce=False)) \
+                    for m, (eid, _) in e_pred.items()}
+        return e_losses
+
     def configure_optimizers(self):
-        weight_decay = self.hparams['weight_decay'] if 'weight_decay' in self.hparams else 0.0
-        optimizer = self.hparams['optimizer'] if hasattr(self.hparams, "optimizer") else "adam"
+        weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
+        optimizer = self.hparams.optimizer if 'optimizer' in self.hparams else "adam"
         lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
 
         if optimizer.lower() == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=weight_decay)
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
         elif optimizer.lower() == 'sgd':
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, weight_decay=weight_decay)
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams.lr, weight_decay=weight_decay)
         else:
             raise ValueError(f"wrong value for optimizer {optimizer}!")
 
@@ -283,14 +333,14 @@ class DglLinkPredTrainer(LinkPredTrainer):
         if lr_annealing == "cosine":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
                                                                    T_max=self.num_training_steps,
-                                                                   eta_min=self.lr / 100)
+                                                                   eta_min=self.hparams.lr / 100)
 
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
             print("Using CosineAnnealingLR", scheduler.state_dict())
 
         elif lr_annealing == "restart":
             scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50, T_mult=1,
-                                                                             eta_min=self.lr / 100)
+                                                                             eta_min=self.hparams.lr / 100)
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
             print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
 
@@ -298,47 +348,46 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
 
 class HGTLinkPred(DglLinkPredTrainer):
-    def __init__(self, args: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
-        if not isinstance(args, Namespace) and isinstance(args, dict):
-            args = Namespace(**args)
-        super().__init__(args, dataset, metrics)
+    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(hparams, dataset, metrics)
         self.dataset = dataset
 
-        if "node_neighbors_min_num" in args:
-            fanouts = [args["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
+        if "node_neighbors_min_num" in hparams:
+            fanouts = [hparams["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
             self.set_fanouts(self.dataset, fanouts)
 
         if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
             non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
             print("non_seq_ntypes", non_seq_ntypes)
-            self.encoder = HeteroNodeFeatureEncoder(args, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
-        self.conv = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                        edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                        n_inp=list(self.dataset.node_attr_shape.values())[0] \
-                            if self.dataset.node_attr_shape else args.embedding_dim,
-                        n_hid=args.embedding_dim,
-                        n_out=args.embedding_dim,
-                        n_layers=args.n_layers,
-                        n_heads=args.attn_heads,
-                        dropout=args.dropout,
-                        use_norm=args.use_norm)
+        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
+                            n_inp=hparams.embedding_dim,
+                            n_hid=hparams.embedding_dim,
+                            n_out=hparams.embedding_dim,
+                            n_layers=hparams.n_layers,
+                            n_heads=hparams.attn_heads,
+                            dropout=hparams.dropout,
+                            use_norm=hparams.use_norm)
 
-        self.classifier = MLPPredictor(in_dim=args.embedding_dim, loss_type=args.loss_type)
-        self.criterion = ClassificationLoss(loss_type=args.loss_type, multilabel=False)
+        self.classifier = MLPPredictor(in_dim=hparams.embedding_dim, loss_type=hparams.loss_type)
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
 
-        args.n_params = self.get_n_params()
+        hparams.n_params = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
 
-        print(f'Configuration: {args}')
-        self._set_hparams(args)
+        print(f'Configuration: {hparams}')
+        self._set_hparams(hparams)
 
     def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False) \
             -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         if len(x) == 0 or sum(a.numel() for a in x) == 0:
             x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
 
-        x = self.conv(blocks, x)
+        x = self.embedder(blocks, x)
 
         pos_edge_score = self.classifier.forward(pos_graph, x)
         neg_edge_score = self.classifier.forward(neg_graph, x)
@@ -349,41 +398,41 @@ class HGTLinkPred(DglLinkPredTrainer):
 
 
 class LATTELinkPred(DglLinkPredTrainer):
-    def __init__(self, args: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
-        if not isinstance(args, Namespace) and isinstance(args, dict):
-            args = Namespace(**args)
-        super().__init__(args, dataset, metrics)
+    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(hparams, dataset, metrics)
         self.dataset = dataset
 
-        if "node_neighbors_min_num" in args:
-            fanouts = [args["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
+        if "node_neighbors_min_num" in hparams:
+            fanouts = [hparams["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
             self.set_fanouts(self.dataset, fanouts)
 
         if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
             non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
             print("non_seq_ntypes", non_seq_ntypes)
-            self.encoder = HeteroNodeFeatureEncoder(args, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
-        self.conv = LATTE(t_order=args.t_order,
-                          embedding_dim=args.embedding_dim,
-                          num_nodes_dict=dataset.num_nodes_dict,
-                          metapaths=dataset.get_metapaths())
+        self.embedder = LATTE(t_order=hparams.t_order,
+                              embedding_dim=hparams.embedding_dim,
+                              num_nodes_dict=dataset.num_nodes_dict,
+                              metapaths=dataset.get_metapaths())
 
-        self.classifier = MLPPredictor(in_dim=args.embedding_dim, loss_type=args.loss_type)
-        self.criterion = ClassificationLoss(loss_type=args.loss_type, multilabel=False)
+        self.classifier = MLPPredictor(in_dim=hparams.embedding_dim, loss_type=hparams.loss_type)
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
 
-        args.n_params = self.get_n_params()
+        hparams.n_params = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
 
-        print(f'Configuration: {args}')
-        self._set_hparams(args)
+        print(f'Configuration: {hparams}')
+        self._set_hparams(hparams)
 
     def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False) \
             -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         if len(x) == 0 or sum(a.numel() for a in x) == 0:
             x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
 
-        x = self.conv.forward(blocks, x)
+        x = self.embedder.forward(blocks, x)
 
         pos_edge_score = self.classifier.forward(pos_graph, x)
         neg_edge_score = self.classifier.forward(neg_graph, x)
@@ -394,40 +443,40 @@ class LATTELinkPred(DglLinkPredTrainer):
 
 
 class DeepGraphGOLinkPred(DglLinkPredTrainer):
-    def __init__(self, args: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
-        if not isinstance(args, Namespace) and isinstance(args, dict):
-            args = Namespace(**args)
-        super().__init__(args, dataset, metrics)
+    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(hparams, dataset, metrics)
         self.dataset = dataset
 
-        if "node_neighbors_min_num" in args:
-            fanouts = [args["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
+        if "node_neighbors_min_num" in hparams:
+            fanouts = [hparams["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
             self.set_fanouts(self.dataset, fanouts)
 
         if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
             non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
             print("non_seq_ntypes", non_seq_ntypes)
-            self.encoder = HeteroNodeFeatureEncoder(args, dataset, select_ntypes=non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
         self.conv = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                         edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
                         n_inp=list(self.dataset.node_attr_shape.values())[0] \
-                            if self.dataset.node_attr_shape else args.embedding_dim,
-                        n_hid=args.embedding_dim,
-                        n_out=args.embedding_dim,
-                        n_layers=args.n_layers,
-                        n_heads=args.attn_heads,
-                        dropout=args.dropout,
-                        use_norm=args.use_norm)
+                            if self.dataset.node_attr_shape else hparams.embedding_dim,
+                        n_hid=hparams.embedding_dim,
+                        n_out=hparams.embedding_dim,
+                        n_layers=hparams.n_layers,
+                        n_heads=hparams.attn_heads,
+                        dropout=hparams.dropout,
+                        use_norm=hparams.use_norm)
 
-        self.classifier = MLPPredictor(in_dim=args.embedding_dim, loss_type=args.loss_type)
-        self.criterion = ClassificationLoss(loss_type=args.loss_type, multilabel=False)
+        self.classifier = MLPPredictor(in_dim=hparams.embedding_dim, loss_type=hparams.loss_type)
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
 
-        args.n_params = self.get_n_params()
+        hparams.n_params = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
 
-        print(f'Configuration: {args}')
-        self._set_hparams(args)
+        print(f'Configuration: {hparams}')
+        self._set_hparams(hparams)
 
     def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False):
         if len(x) == 0 or sum(a.numel() for a in x) == 0:

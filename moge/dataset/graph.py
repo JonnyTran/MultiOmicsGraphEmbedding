@@ -1,6 +1,5 @@
 from abc import abstractmethod
-from argparse import Namespace
-from typing import Union, List, Tuple, Dict, Any, Optional
+from typing import Union, List, Tuple, Dict, Optional
 
 import dgl
 import networkx as nx
@@ -75,7 +74,8 @@ class Graph:
         return df
 
     @abstractmethod
-    def get_node_metadata(self, X: Dict[str, Any], weigths: Optional, losses: Optional) -> DataFrame:
+    def get_node_metadata(self, global_nodes_index: Dict[str, Tensor], embeddings: Dict[str, Tensor],
+                          weights: Optional, losses: Optional[DataFrame]) -> DataFrame:
         raise NotImplementedError()
 
     def create_node_metadata(
@@ -133,12 +133,7 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
                  edge_dir: str = "in",
                  reshuffle_train: float = None,
                  add_reverse_metapaths: bool = True,
-                 inductive: bool = False, hparams: Namespace = None):
-        if hparams:
-            if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
-                hparams = Namespace(**hparams)
-            self.hparams = hparams
-
+                 inductive: bool = False, **kwargs):
         self.dataset = dataset
         self.edge_dir = edge_dir
         self.use_reverse = add_reverse_metapaths

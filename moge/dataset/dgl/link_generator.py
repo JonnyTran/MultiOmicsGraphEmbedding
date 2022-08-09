@@ -15,6 +15,7 @@ from umap import UMAP
 
 from .node_generator import DGLNodeSampler
 from ..utils import get_relabled_edge_index, is_negative, is_reversed, unreverse_metapath
+from ...model.utils import tensor_sizes
 from ...network.base import SEQUENCE_COL
 from ...network.hetero import HeteroNetwork
 
@@ -243,7 +244,7 @@ class DGLLinkSampler(DGLNodeSampler):
 
         return outputs
 
-    def get_node_metadata(self, global_nodes_index: Dict[str, Tensor],
+    def get_node_metadata(self, global_node_index: Dict[str, Tensor],
                           embeddings: Dict[str, Tensor],
                           weights: Optional[Dict[str, Series]] = None,
                           losses: Dict[str, Tensor] = None) -> DataFrame:
@@ -261,7 +262,7 @@ class DGLLinkSampler(DGLNodeSampler):
         if not hasattr(self, "node_metadata"):
             self.create_node_metadata(self.network, nodes=self.nodes)
 
-        global_node_index = {ntype: nids.numpy() for ntype, nids in global_nodes_index.items() \
+        global_node_index = {ntype: nids.numpy() for ntype, nids in global_node_index.items() \
                              if ntype in embeddings}
 
         # Concatenated list of node embeddings and other metadata
@@ -328,11 +329,10 @@ class DGLLinkSampler(DGLNodeSampler):
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False, **kwargs):
         if self.inductive:
-            logger.info("Train dataset inductive setting")
             graph = self.transform_heterograph(self.G, edge_mask=self.G.edata["train_mask"])
             if indices is None:
-                indices = {etype: torch.arange(graph.num_edges(etype=etype)) for etype in
-                           self.pred_metapaths + self.neg_pred_metapaths}
+                indices = {etype: torch.arange(graph.num_edges(etype=etype)) \
+                           for etype in self.pred_metapaths + self.neg_pred_metapaths}
 
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
@@ -342,9 +342,10 @@ class DGLLinkSampler(DGLNodeSampler):
         else:
             graph = self.G
             if indices is None:
-                indices = self.training_idx
+                indices = {etype: self.training_idx[etype] for etype in self.pred_metapaths + self.neg_pred_metapaths}
             graph_sampler = self.link_sampler
 
+        logger.info(f"Train dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
         # sampler = LinkPredPyGCollator(**args)
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
                                                 batch_size=batch_size, shuffle=True, drop_last=drop_last,
@@ -354,13 +355,12 @@ class DGLLinkSampler(DGLNodeSampler):
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False, **kwargs):
         if self.inductive:
-            logger.info("Valid dataset inductive setting")
             edge_mask = {etype: valid_mask | self.G.edata["train_mask"][etype] \
                          for etype, valid_mask in self.G.edata["valid_mask"].items()}
             graph = self.transform_heterograph(self.G, edge_mask=edge_mask)
             if indices is None:
-                indices = {etype: torch.arange(graph.num_edges(etype=etype)) for etype in
-                           self.pred_metapaths + self.neg_pred_metapaths}
+                indices = {etype: torch.arange(graph.num_edges(etype=etype)) \
+                           for etype in self.pred_metapaths + self.neg_pred_metapaths}
 
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
@@ -370,23 +370,24 @@ class DGLLinkSampler(DGLNodeSampler):
         else:
             graph = self.G
             if indices is None:
-                indices = self.validation_idx
+                indices = {etype: self.validation_idx[etype] for etype in self.pred_metapaths + self.neg_pred_metapaths}
             graph_sampler = self.link_sampler
 
+        logger.info(f"Valid dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
+
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
-                                                batch_size=batch_size, shuffle=False, drop_last=drop_last,
+                                                batch_size=batch_size, shuffle=True, drop_last=drop_last,
                                                 num_workers=num_workers)
         return dataloader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, indices=None, drop_last=False, **kwargs):
         if self.inductive:
-            logger.info("Test dataset inductive setting")
             edge_mask = {etype: test_mask | self.G.edata["train_mask"][etype] | self.G.edata["valid_mask"][etype] \
                          for etype, test_mask in self.G.edata["test_mask"].items()}
             graph = self.transform_heterograph(self.G, edge_mask=edge_mask)
             if indices is None:
-                indices = {etype: torch.arange(graph.num_edges(etype=etype)) for etype in
-                           self.pred_metapaths + self.neg_pred_metapaths}
+                indices = {etype: torch.arange(graph.num_edges(etype=etype)) \
+                           for etype in self.pred_metapaths + self.neg_pred_metapaths}
 
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
@@ -396,11 +397,13 @@ class DGLLinkSampler(DGLNodeSampler):
         else:
             graph = self.G
             if indices is None:
-                indices = self.testing_idx
+                indices = {etype: self.testing_idx[etype] for etype in self.pred_metapaths + self.neg_pred_metapaths}
             graph_sampler = self.link_sampler
 
+        logger.info(f"Test dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
+
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
-                                                batch_size=batch_size, shuffle=False, drop_last=drop_last,
+                                                batch_size=batch_size, shuffle=True, drop_last=drop_last,
                                                 num_workers=num_workers)
         return dataloader
 

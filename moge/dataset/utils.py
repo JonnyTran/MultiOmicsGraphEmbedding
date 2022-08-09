@@ -1,6 +1,6 @@
 import copy
 import itertools
-from typing import List, Union, Dict, Tuple, Set, Optional
+from typing import List, Union, Dict, Tuple, Set, Optional, Any
 
 import networkx as nx
 import numpy as np
@@ -325,7 +325,14 @@ def get_reverse_metapaths(metapaths) -> List[Tuple[str]]:
     return reverse_metapaths
 
 
-def reverse_metapath(metapath: Tuple[str, str, str]) -> Union[Tuple[str, ...], str]:
+def reverse_metapath(metapath: Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]) \
+        -> Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]:
+    if isinstance(metapath, list):
+        return [reverse_metapath(m) for m in metapath]
+
+    elif isinstance(metapath, dict):
+        return {reverse_metapath(m): eid for m, eid in metapath.items()}
+
     if isinstance(metapath, tuple):
         tokens = []
         for i, token in enumerate(reversed(copy.deepcopy(metapath))):
@@ -340,6 +347,8 @@ def reverse_metapath(metapath: Tuple[str, str, str]) -> Union[Tuple[str, ...], s
 
         rev_metapath = tuple(tokens)
 
+        return rev_metapath
+
     elif isinstance(metapath, str):
         rev_metapath = "".join(reversed(metapath))
 
@@ -347,9 +356,16 @@ def reverse_metapath(metapath: Tuple[str, str, str]) -> Union[Tuple[str, ...], s
         rev_metapath = str(metapath) + "_"
     else:
         raise NotImplementedError(f"{metapath} not supported")
-    return rev_metapath
 
-def unreverse_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, ...]:
+
+def unreverse_metapath(metapath: Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]) \
+        -> Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]:
+    if isinstance(metapath, list):
+        return [unreverse_metapath(m) for m in metapath]
+
+    elif isinstance(metapath, dict):
+        return {unreverse_metapath(m): eid for m, eid in metapath.items()}
+
     if isinstance(metapath, tuple):
         tokens = []
         for i, token in enumerate(reversed(copy.deepcopy(metapath))):
@@ -363,10 +379,10 @@ def unreverse_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, ...]:
                 tokens.append(token)
 
         rev_metapath = tuple(tokens)
+        return rev_metapath
 
     else:
         raise NotImplementedError(f"{metapath} not supported")
-    return rev_metapath
 
 
 def is_reversed(metapath):
@@ -376,8 +392,15 @@ def is_reversed(metapath):
         return "rev" in metapath
 
 
-def tag_negative_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
-    if isinstance(metapath, tuple):
+def tag_negative_metapath(metapath: Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]) \
+        -> Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]:
+    if isinstance(metapath, list):
+        return [tag_negative_metapath(m) for m in metapath]
+
+    elif isinstance(metapath, dict):
+        return {tag_negative_metapath(m): eid for m, eid in metapath.items()}
+
+    elif isinstance(metapath, tuple):
         tokens = []
         for i, token in enumerate(copy.deepcopy(metapath)):
             if i == 1:
@@ -391,13 +414,20 @@ def tag_negative_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, str, str
 
         rev_metapath = tuple(tokens)
 
+        return rev_metapath
     else:
         raise NotImplementedError(f"{metapath} not supported")
-    return rev_metapath
 
 
-def untag_negative_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
-    if isinstance(metapath, tuple):
+def untag_negative_metapath(metapath: Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]) \
+        -> Union[Tuple[str, str, str], List[Tuple], Dict[Tuple, Any]]:
+    if isinstance(metapath, list):
+        return [untag_negative_metapath(m) for m in metapath]
+
+    elif isinstance(metapath, dict):
+        return {untag_negative_metapath(m): eid for m, eid in metapath.items()}
+
+    elif isinstance(metapath, tuple):
         tokens = []
         for i, token in enumerate(copy.deepcopy(metapath)):
             if i == 1:
@@ -408,10 +438,12 @@ def untag_negative_metapath(metapath: Tuple[str, str, str]) -> Tuple[str, str, s
 
         rev_metapath = tuple(tokens)
 
-    return rev_metapath
+        return rev_metapath
+    else:
+        raise NotImplementedError(f"{metapath} not supported")
 
 
-def is_negative(metapath):
+def is_negative(metapath: Union[Tuple[str, str, str], str]):
     if isinstance(metapath, tuple):
         return any("neg" in token for token in metapath)
     elif isinstance(metapath, str):

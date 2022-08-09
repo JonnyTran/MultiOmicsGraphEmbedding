@@ -2,7 +2,7 @@ import itertools
 import logging
 import os
 from collections import defaultdict
-from typing import Union, Iterable, Dict, Tuple, List, Callable, Any
+from typing import Union, Iterable, Dict, Tuple, List, Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -18,8 +18,8 @@ from torch.utils.data.distributed import DistributedSampler
 
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
+from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import edge_index_to_adjs
-from moge.model.PyG.utils import get_edge_index_from_neg_batch, batch2global_edge_index
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
@@ -150,6 +150,7 @@ class ClusteringEvaluator(LightningModule):
 
 
 class NodeEmbeddingEvaluator(LightningModule):
+    dataset: HeteroGraphDataset
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -158,12 +159,11 @@ class NodeEmbeddingEvaluator(LightningModule):
         self.score_avg_table_name = "score_avgs"
         self.beta_degree_corr_table_name = "beta_degree_correlation"
 
-    def plot_embeddings_tsne(self, X: Dict[str, Any], embeddings: Dict[str, Tensor], weights: Dict[str, Tensor] = None,
-                             targets: Tensor = None, y_pred: Tensor = None,
+    def plot_embeddings_tsne(self, global_node_index: Dict[str, Tensor], embeddings: Dict[str, Tensor],
+                             targets: Any = None, y_pred: Any = None, weights: Dict[str, Tensor] = None,
                              columns=["node", "ntype", "pos1", "pos2", "loss"], n_samples: int = 1000) -> Tensor:
-        node_losses = self.get_node_loss(targets, y_pred, global_node_index=X["global_node_index"])
-
-        df = self.dataset.get_node_metadata(X["global_nodes_index"], embeddings, weights=weights, losses=node_losses)
+        node_losses = self.get_node_loss(targets, y_pred, global_node_index=global_node_index)
+        df = self.dataset.get_node_metadata(global_node_index, embeddings, weights=weights, losses=node_losses)
 
         # Log_table
         df_filter = df.reset_index().filter(columns, axis="columns")
@@ -176,8 +176,8 @@ class NodeEmbeddingEvaluator(LightningModule):
 
         return df
 
-    def get_node_loss(self, targets: Union[Tensor, Dict], y_pred: Union[Tensor, Dict],
-                      global_node_index: Dict[str, Tensor], ):
+    def get_node_loss(self, targets: Union[Tensor, Dict[Any, Any]], y_pred: Union[Tensor, Dict[Any, Any]],
+                      global_node_index: Dict[str, Tensor], ) -> DataFrame:
         """
         Compute the loss for each nodes given targets and predicted values for either node_clf or link_pred tasks.
         Args:
@@ -217,10 +217,10 @@ class NodeEmbeddingEvaluator(LightningModule):
         print("Logging sankey_flow")
         os.system(f"rm -f ./wandb_fig_run_{run_id}*.html")
 
-    def log_score_averages(self, edge_pred_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> Tensor:
+    def log_score_averages(self, edge_scores_dict: Dict[str, Dict[Tuple[str, str, str], Tensor]]) -> Tensor:
         score_avgs = pd.DataFrame({pos: {m: f"{edges.mean().item():.4f} ± {edges.std().item():.2f}" \
                                          for m, edges in eid.items()} \
-                                   for pos, eid in edge_pred_dict.items()})
+                                   for pos, eid in edge_scores_dict.items()})
         score_avgs.index.names = ("head", "relation", "tail")
         try:
             table = wandb.Table(dataframe=score_avgs.reset_index())
@@ -480,15 +480,18 @@ class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
-    def get_node_loss(self, edge_pred: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                      edge_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                      global_node_index: Dict[str, Tensor], ):
+    def get_node_loss(self,
+                      edge_pred: Union[
+                          Dict[Tuple[str, str, str], Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]],
+                      edge_true: Union[
+                          Dict[Tuple[str, str, str], Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]],
+                      global_node_index: Optional[Dict[str, Tensor]] = None):
         edge_index_loss = self.get_edge_index_loss(edge_pred, edge_true, global_node_index)
 
         adj_losses = edge_index_to_adjs(edge_index_loss, nodes=self.dataset.nodes)
 
         # Aggregate loss from adj_losses to all nodes of each ntype
-        ntypes = {ntype for metapath in adj_losses.keys() for ntype in metapath if ntype in global_node_index}
+        ntypes = {ntype for metapath in adj_losses.keys() for ntype in metapath[0::2] if ntype in global_node_index}
 
         ntype_losses = {ntype: torch.zeros(len(self.dataset.nodes[ntype])) for ntype in ntypes}
         ntype_counts = defaultdict(lambda: 0)
@@ -503,61 +506,6 @@ class LinkPredTrainer(NodeClfTrainer):
                         for ntype, loss in ntype_losses.items()}
 
         return ntype_losses
-
-    def get_edge_index_loss(self, edge_pred: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                            edge_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                            global_node_index: Dict[str, Tensor],
-                            loss_fn: Callable = F.binary_cross_entropy) \
-            -> Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]]:
-
-        e_pred, e_true = defaultdict(list), defaultdict(list)
-
-        ntype_mapping = self.dataset.ntype_mapping if hasattr(self.dataset, "ntype_mapping") else None
-        for metapath, edge_pos_pred in edge_pred["edge_pos"].items():
-            corrected_metapath = tuple(ntype_mapping[i] if i in ntype_mapping else i for i in metapath) \
-                if ntype_mapping else metapath
-            edge_index = batch2global_edge_index(edge_true["edge_pos"][metapath], metapath=corrected_metapath,
-                                                 global_node_index=global_node_index)
-            e_pred[corrected_metapath].append((edge_index, edge_pos_pred.view(-1).detach()))
-            e_true[corrected_metapath].append((edge_index, torch.ones_like(edge_pos_pred.view(-1))))
-
-        for metapath, edge_neg_pred in edge_pred["edge_neg"].items():
-            corrected_metapath = tuple(ntype_mapping[i] if i in ntype_mapping else i for i in metapath) \
-                if ntype_mapping else metapath
-            edge_index = batch2global_edge_index(edge_true["edge_neg"][metapath], metapath=corrected_metapath,
-                                                 global_node_index=global_node_index)
-            e_pred[corrected_metapath].append((edge_index, edge_neg_pred.view(-1).detach()))
-            e_true[corrected_metapath].append((edge_index, torch.zeros_like(edge_neg_pred.view(-1))))
-
-        head_batch_edge_index_dict, _ = get_edge_index_from_neg_batch(edge_true["head_batch"],
-                                                                      edge_pos=edge_true["edge_pos"], mode="head_batch")
-        for metapath, edge_neg_pred in edge_pred["head_batch"].items():
-            corrected_metapath = tuple(ntype_mapping[i] if i in ntype_mapping else i for i in metapath) \
-                if ntype_mapping else metapath
-            edge_index = batch2global_edge_index(head_batch_edge_index_dict[metapath], metapath=corrected_metapath,
-                                                 global_node_index=global_node_index)
-            e_pred[corrected_metapath].append((edge_index, edge_neg_pred.view(-1).detach()))
-            e_true[corrected_metapath].append((edge_index, torch.zeros_like(edge_neg_pred.view(-1))))
-        tail_batch_edge_index_dict, _ = get_edge_index_from_neg_batch(edge_true["tail_batch"],
-                                                                      edge_pos=edge_true["edge_pos"], mode="tail_batch")
-
-        for metapath, edge_neg_pred in edge_pred["tail_batch"].items():
-            corrected_metapath = tuple(ntype_mapping[i] if i in ntype_mapping else i for i in metapath) \
-                if ntype_mapping else metapath
-            edge_index = batch2global_edge_index(tail_batch_edge_index_dict[metapath], metapath=corrected_metapath,
-                                                 global_node_index=global_node_index)
-            e_pred[corrected_metapath].append((edge_index, edge_neg_pred.view(-1).detach()))
-            e_true[corrected_metapath].append((edge_index, torch.zeros_like(edge_neg_pred.view(-1))))
-
-        e_pred = {m: (torch.cat([eid for eid, v in li_eid_v], dim=1),
-                      torch.cat([v for eid, v in li_eid_v], dim=0)) for m, li_eid_v in e_pred.items()}
-        e_true = {m: (torch.cat([eid for eid, v in li_eid_v], dim=1),
-                      torch.cat([v for eid, v in li_eid_v], dim=0)) for m, li_eid_v in e_true.items()}
-
-        e_losses = {m: (eid, loss_fn(e_pred[m][1], target=e_true[m][1], reduce=False)) \
-                    for m, (eid, _) in e_pred.items()}
-
-        return e_losses
 
     def train_dataloader(self, **kwargs):
         return self.dataset.train_dataloader(collate_fn=self.collate_fn,
