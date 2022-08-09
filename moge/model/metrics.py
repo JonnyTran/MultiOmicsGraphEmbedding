@@ -1,4 +1,3 @@
-import traceback
 from typing import Optional, Any, Callable, List, Dict, Union, Tuple
 
 import numpy as np
@@ -109,12 +108,6 @@ class Metrics(torch.nn.Module):
         y_pred, y_true = filter_samples(y_pred, y_true, weights=weights)
         y_pred_act = activation(y_pred, loss_type=self.loss_type)
 
-        # if self.multilabel and any([m in self.metrics \
-        #                             for m in ["auroc", "aupr", "precision", "recall", "micro_f1", "macro_f1"]]):
-        #     mask_labels = y_pred.sum(0) != 0
-        #     # y_pred_full, y_true_full = y_pred, y_true
-        #     y_pred, y_true = y_pred[:, mask_labels], y_true[:, mask_labels]
-
         if subset is None:
             metrics = self.metrics.keys()
         else:
@@ -187,7 +180,7 @@ class Metrics(torch.nn.Module):
 
             except Exception as e:
                 print(f"Had problem with metric {metric}, {str(e)}\r")
-                traceback.print_exc()
+                # traceback.print_exc()
 
         # Needed for Precision(average=False) metrics
         logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v for k, v in logs.items()}

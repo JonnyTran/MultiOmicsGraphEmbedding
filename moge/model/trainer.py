@@ -331,6 +331,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
             return self.__class__.__name__.replace("_", "-")
 
     def training_epoch_end(self, outputs):
+        metrics_dict = {}
         if isinstance(self.train_metrics, Metrics):
             metrics_dict = self.train_metrics.compute_metrics()
             self.train_metrics.reset_metrics()
@@ -346,6 +347,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         return None
 
     def validation_epoch_end(self, outputs):
+        metrics_dict = {}
         if isinstance(self.valid_metrics, Metrics):
             metrics_dict = self.valid_metrics.compute_metrics()
 
@@ -365,6 +367,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         return None
 
     def test_epoch_end(self, outputs):
+        metrics_dict = {}
         if isinstance(self.test_metrics, Metrics):
             metrics_dict = self.test_metrics.compute_metrics()
             self.test_metrics.reset_metrics()

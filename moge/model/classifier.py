@@ -50,6 +50,7 @@ class LabelGraphNodeClassifier(nn.Module):
                             n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
                             n_layers=2,
                             n_heads=self.n_heads,
+                            dropout=hparams.dropout,
                             use_norm=True)
 
         self.embedder.cls_graph_nodes = hparams.classes

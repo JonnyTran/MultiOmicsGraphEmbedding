@@ -18,31 +18,13 @@ from moge.model.trainer import LinkPredTrainer
 
 
 class DglLinkPredTrainer(LinkPredTrainer):
-    def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
+    def __init__(self, hparams, dataset: DGLLinkSampler, metrics: Union[List[str], Dict[str, List[str]]], *args,
+                 **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
+        self.dataset: DGLLinkSampler
 
         self.pred_metapaths = dataset.pred_metapaths
         self.neg_pred_metapaths = dataset.neg_pred_metapaths
-
-    def stack_edge_index_values(self, pos_edge_score: Dict[Tuple[str, str, str], Tensor],
-                                neg_edge_score: Dict[Tuple[str, str, str], Tensor] = None) \
-            -> Tuple[Tensor, Tensor, Optional[Tensor]]:
-        pos_stack, neg_batch_stack, neg_stack = [], [], []
-        for metapath in pos_edge_score.keys():
-            if metapath in self.pred_metapaths:
-                num_pos_edges = pos_edge_score[metapath].size(0)
-                num_neg_samples = neg_edge_score[metapath].numel() // num_pos_edges
-
-                pos_stack.append(pos_edge_score[metapath])
-                neg_batch_stack.append(neg_edge_score[metapath].view(num_pos_edges, num_neg_samples))
-
-            elif metapath in self.neg_pred_metapaths:
-                neg_stack.append(pos_edge_score[metapath])
-
-        pos_scores = torch.cat(pos_stack, dim=0)
-        neg_batch_scores = torch.cat(neg_batch_stack, dim=0)
-        neg_scores = torch.cat(neg_stack, dim=0) if neg_stack else None
-        return pos_scores, neg_batch_scores, neg_scores
 
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
                                  pos_edge_score: Dict[Tuple[str, str, str], Tensor],
@@ -88,6 +70,26 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         metrics.update_metrics(y_pred, y_true, weights=None, subset=subset)
 
+    def stack_edge_index_values(self, pos_edge_score: Dict[Tuple[str, str, str], Tensor],
+                                neg_edge_score: Dict[Tuple[str, str, str], Tensor] = None) \
+            -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        pos_stack, neg_batch_stack, neg_stack = [], [], []
+        for metapath in pos_edge_score.keys():
+            if metapath in self.pred_metapaths:
+                num_pos_edges = pos_edge_score[metapath].size(0)
+                num_neg_samples = neg_edge_score[metapath].numel() // num_pos_edges
+
+                pos_stack.append(pos_edge_score[metapath])
+                neg_batch_stack.append(neg_edge_score[metapath].view(num_pos_edges, num_neg_samples))
+
+            elif metapath in self.neg_pred_metapaths:
+                neg_stack.append(pos_edge_score[metapath])
+
+        pos_scores = torch.cat(pos_stack, dim=0) if pos_stack else torch.tensor([])
+        neg_batch_scores = torch.cat(neg_batch_stack, dim=0) if neg_batch_stack else torch.tensor([])
+        neg_scores = torch.cat(neg_stack, dim=0) if neg_stack else None
+        return pos_scores, neg_batch_scores, neg_scores
+
     def training_step(self, batch, batch_nb):
         input_nodes, pos_graph, neg_graph, blocks = batch
 
@@ -95,6 +97,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, input_features)
         pos_scores, neg_batch_scores, neg_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
+
         loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
         self.update_link_pred_metrics(self.train_metrics,
@@ -109,18 +112,6 @@ class DglLinkPredTrainer(LinkPredTrainer):
             self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
         return loss
-
-    def configure_optimizers(self):
-        if not hasattr(self.hparams, "optimizer") or self.hparams['optimizer'] == 'adam':
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['lr'],
-                                         weight_decay=self.hparams['weight_decay'])
-        elif self.hparams['optimizer'] == 'sgd':
-            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['lr'],
-                                        weight_decay=self.hparams['weight_decay'])
-        else:
-            raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
-
-        return {"optimizer": optimizer}
 
     def validation_step(self, batch, batch_nb):
         input_nodes, pos_graph, neg_graph, blocks = batch
@@ -148,6 +139,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, input_features)
         pos_scores, neg_batch_scores, neg_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
+
         loss = self.criterion.forward(pos_scores, neg_batch_scores)
 
         self.update_link_pred_metrics(self.test_metrics,
@@ -166,6 +158,18 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=None, batch_size=self.hparams.batch_size, num_workers=0)
+
+    def configure_optimizers(self):
+        if not hasattr(self.hparams, "optimizer") or self.hparams['optimizer'] == 'adam':
+            optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams['lr'],
+                                         weight_decay=self.hparams['weight_decay'])
+        elif self.hparams['optimizer'] == 'sgd':
+            optimizer = torch.optim.SGD(self.parameters(), lr=self.hparams['lr'],
+                                        weight_decay=self.hparams['weight_decay'])
+        else:
+            raise ValueError(f"wrong value for optimizer {self.hparams['optimizer']}!")
+
+        return {"optimizer": optimizer}
 
 
 class HGTLinkPred(DglLinkPredTrainer):
@@ -192,6 +196,7 @@ class HGTLinkPred(DglLinkPredTrainer):
                         n_out=args.embedding_dim,
                         n_layers=args.n_layers,
                         n_heads=args.attn_heads,
+                        dropout=args.dropout,
                         use_norm=args.use_norm)
 
         self.classifier = MLPPredictor(in_dim=args.embedding_dim, loss_type=args.loss_type)
@@ -240,6 +245,7 @@ class DeepGraphGOLinkPred(DglLinkPredTrainer):
                         n_out=args.embedding_dim,
                         n_layers=args.n_layers,
                         n_heads=args.attn_heads,
+                        dropout=args.dropout,
                         use_norm=args.use_norm)
 
         self.classifier = MLPPredictor(in_dim=args.embedding_dim, loss_type=args.loss_type)

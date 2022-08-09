@@ -61,21 +61,27 @@ class DGLNodeSampler(HeteroGraphDataset):
                                                           edge_dir=edge_dir)
 
     def get_neighbor_sampler(self, G, neighbor_sizes, sampler: str = "MultiLayerNeighborSampler", edge_dir="in"):
+        if G is None:
+            G = self.G
+        if neighbor_sizes is None:
+            neighbor_sizes = self.neighbor_sizes
+        if sampler is None:
+            sampler = self.sampler
+        if edge_dir is None:
+            edge_dir = self.edge_dir
+
         fanouts = []
         for layer, fanout in enumerate(neighbor_sizes):
             fanouts.append({etype: fanout for etype in G.canonical_etypes})
         if sampler == "MultiLayerNeighborSampler":
-            print("Using MultiLayerNeighborSampler")
             neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
 
         elif sampler == "ImportanceSampler":
-            print("Using ImportanceSampler", )
             neighbor_sampler = ImportanceSampler(fanouts=fanouts,
                                                  metapaths=self.get_metapaths(),  # Original metapaths only
                                                  degree_counts=self.degree_counts,
                                                  edge_dir=edge_dir)
         else:
-            print("Using MultiLayerFullNeighborSampler")
             neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
         return neighbor_sampler
 

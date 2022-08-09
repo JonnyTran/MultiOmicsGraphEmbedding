@@ -210,7 +210,7 @@ class TrainTestSplit():
 
         edge_attrs = {edge_tup: get_edge_mask(edge_tup[0], edge_tup[1]) \
                       for edge_tup, _ in tqdm.tqdm(edgelist.items(),
-                                                   desc=f"Set train/valid/test_mask on {metapath} edges:")}
+                                                   desc=f"Set train/valid/test_mask on edges {metapath}")}
 
         return edge_attrs
 

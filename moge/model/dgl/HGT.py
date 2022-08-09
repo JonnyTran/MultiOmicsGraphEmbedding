@@ -155,7 +155,8 @@ class HGTLayer(nn.Module):
 
 class HGT(nn.Module):
     def __init__(self, node_dict: Dict[str, int], edge_dict: Dict[str, int],
-                 n_inp: int, n_hid: int, n_out: int, n_layers: int, n_heads: int, use_norm: bool = True):
+                 n_inp: int, n_hid: int, n_out: int, n_layers: int, n_heads: int, dropout: float,
+                 use_norm: bool = True):
         super().__init__()
         self.node_dict = node_dict
         self.edge_dict = edge_dict
@@ -173,7 +174,8 @@ class HGT(nn.Module):
         for _ in range(n_layers):
             # self.layers.append(HGTConv(n_hid, n_hid, num_heads=n_heads, num_ntypes=len(node_dict),
             #                            num_etypes=len(edge_dict), use_norm=use_norm))
-            self.layers.append(HGTLayer(n_hid, n_hid, node_dict, edge_dict, n_heads, use_norm=use_norm))
+            self.layers.append(
+                HGTLayer(n_hid, n_hid, node_dict, edge_dict, n_heads, dropout=dropout, use_norm=use_norm))
 
     def forward(self, G: Union[DGLBlock, List[DGLBlock]], feat: Dict[str, Tensor]):
         h = {}
