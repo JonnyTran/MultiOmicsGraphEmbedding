@@ -1,3 +1,4 @@
+import itertools
 from argparse import Namespace
 from typing import Dict, List, Union, Tuple, Optional
 
@@ -8,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from dgl import DGLHeteroGraph
+from pandas import Series
 from torch import Tensor
 
 from moge.dataset import DGLLinkSampler
@@ -28,36 +30,40 @@ class DglLinkPredTrainer(LinkPredTrainer):
         self.pred_metapaths = dataset.pred_metapaths
         self.neg_pred_metapaths = dataset.neg_pred_metapaths
 
+        if hasattr(self.dataset, "go_namespace"):
+            self.go_namespace: Dict[str, np.ndarray] = self.dataset.go_namespace
+        if hasattr(self.dataset, "ntype_mapping"):
+            self.ntype_mapping: Dict[str, str] = self.dataset.ntype_mapping
+
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                 pos_edge_score: Dict[Tuple[str, str, str], Tensor],
+                                 pos_edge_scores: Dict[Tuple[str, str, str], Tensor],
                                  neg_batch_scores: Dict[Tuple[str, str, str], Tensor],
-                                 neg_edge_score: Dict[Tuple[str, str, str], Tensor],
-                                 pos_scores: Tensor = None,
-                                 neg_scores: Tensor = None):
+                                 neg_edge_scores: Dict[Tuple[str, str, str], Tensor] = {},
+                                 pos_stack: Tensor = None,
+                                 neg_stack: Tensor = None):
 
         if isinstance(metrics, dict):
-            for metapath in pos_edge_score:
+            for metapath in pos_edge_scores:
                 go_type = "BPO" if metapath[-1] == 'biological_process' else \
                     "CCO" if metapath[-1] == 'cellular_component' else \
                         "MFO" if metapath[-1] == 'molecular_function' else None
 
-                metrics[go_type].update_metrics(pos_edge_score[metapath].detach(), neg_batch_scores[metapath].detach(),
+                metrics[go_type].update_metrics(pos_edge_scores[metapath].detach(), neg_batch_scores[metapath].detach(),
                                                 weights=None, subset=["ogbl-biokg"])
 
-                if metapath in pos_edge_score and neg_edge_score and metapath in neg_edge_score:
-                    self.update_pr_metrics(pos_scores=pos_edge_score[metapath],
-                                           neg_scores=neg_edge_score[metapath],
+                if metapath in pos_edge_scores and neg_edge_scores is not None and metapath in neg_edge_scores:
+                    self.update_pr_metrics(pos_scores=pos_edge_scores[metapath],
+                                           neg_scores=neg_edge_scores[metapath],
                                            metrics=metrics[go_type])
 
-        elif pos_scores is not None and neg_scores is not None:
-            metapath = list(pos_edge_score.keys())[0]
-            metrics.update_metrics(pos_edge_score[metapath].detach(), neg_edge_score[metapath].detach(),
+        else:
+            metapath = list(pos_edge_scores.keys())[0]
+            metrics.update_metrics(pos_edge_scores[metapath].detach(), neg_edge_scores[metapath].detach(),
                                    weights=None, subset=["ogbl-biokg"])
-            self.update_pr_metrics(pos_scores=pos_scores, neg_scores=neg_scores, metrics=metrics)
+            if pos_stack is not None and neg_stack is not None:
+                self.update_pr_metrics(pos_scores=pos_stack, neg_scores=neg_stack, metrics=metrics)
 
-    def update_pr_metrics(self, pos_scores: Tensor,
-                          neg_scores: Tensor,
-                          metrics: Metrics,
+    def update_pr_metrics(self, pos_scores: Tensor, neg_scores: Tensor, metrics: Metrics,
                           subset=["precision", "recall", "aupr"]):
         # randomly select |e_neg| positive edges to balance precision/recall scores
         pos_edge_idx = np.random.choice(pos_scores.size(0), size=neg_scores.shape,
@@ -69,35 +75,44 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         metrics.update_metrics(y_pred, y_true, weights=None, subset=subset)
 
-    def split_by_namespace(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
-                           edge_values: Dict[Tuple[str, str, str], Tensor] = None, ) \
+    def split_by_namespace(self, nodes_namespace: Dict[str, Union[np.ndarray, Series]],
+                           edge_index_dict: Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]],
+                           edge_values: Dict[Tuple[str, str, str], Tensor]) \
             -> Tuple[Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]], Dict[Tuple[str, str, str], Tensor]]:
-        if not hasattr(self.dataset, "go_namespace") or not hasattr(self.dataset, "ntype_mapping"):
-            return edge_index_dict, edge_values
-        else:
-            go_namespace: np.ndarray = self.dataset.go_namespace
-
         split_edge_index_dict = {}
         split_edge_values = {}
 
-        for metapath, (u, v) in edge_index_dict.items():
+        for metapath, (src, dst) in edge_index_dict.items():
             if edge_values and metapath not in edge_values: continue
+            head_type, tail_type = metapath[0], metapath[-1]
 
-            # Pos or neg edges
-            for namespace in np.unique(go_namespace):
-                mask = go_namespace[v.detach().cpu().numpy()] == namespace
-                new_metapath = metapath[:-1] + (namespace,)
+            unique_heads = np.unique(nodes_namespace[head_type]) if head_type in nodes_namespace else [None]
+            unique_tails = np.unique(nodes_namespace[tail_type]) if tail_type in nodes_namespace else [None]
 
-                if not isinstance(mask, bool) and mask.sum():
-                    split_edge_index_dict[new_metapath] = (u[mask], v[mask])
+            for head_namespace, tail_namespace in itertools.product(unique_heads, unique_tails):
+                if head_namespace is not None and tail_namespace is not None:
+                    new_metapath = (head_namespace,) + metapath[1] + (tail_namespace,)
+                    mask = (nodes_namespace[head_type][src.detach().cpu().numpy()] == head_namespace) & \
+                           (nodes_namespace[tail_type][dst.detach().cpu().numpy()] == tail_namespace)
+                elif tail_namespace is not None:
+                    new_metapath = metapath[:-1] + (tail_namespace,)
+                    mask = nodes_namespace[tail_type][dst.detach().cpu().numpy()] == tail_namespace
+                elif head_namespace is not None:
+                    new_metapath = (head_namespace,) + metapath[1:]
+                    mask = nodes_namespace[head_type][src.detach().cpu().numpy()] == head_namespace
+                else:
+                    continue
+
+                if isinstance(mask, np.ndarray) and mask.sum():
+                    split_edge_index_dict[new_metapath] = (src[mask], dst[mask])
                     if edge_values:
                         split_edge_values[new_metapath] = edge_values[metapath].view(-1)[mask]
-                elif isinstance(mask, bool):
-                    split_edge_index_dict[new_metapath] = (u, v)
+                else:
+                    split_edge_index_dict[new_metapath] = (src, dst)
                     if edge_values:
                         split_edge_values[new_metapath] = edge_values[metapath].view(-1)
 
-        return split_edge_index_dict, split_edge_values if split_edge_values else None
+        return split_edge_index_dict, split_edge_values if split_edge_values else {}
 
     def split_edge_scores(self, pos_edge_score: Dict[Tuple[str, str, str], Tensor],
                           neg_edge_score: Dict[Tuple[str, str, str], Tensor],
@@ -115,16 +130,20 @@ class DglLinkPredTrainer(LinkPredTrainer):
             elif metapath in self.neg_pred_metapaths:
                 neg_scores[metapath] = pos_edge_score[metapath]
 
-        if pos_graph is not None and neg_graph is not None:
-            _, pos_scores = self.split_by_namespace(dgl_to_edge_index_dict(pos_graph, global_ids=True),
+        if hasattr(self, 'go_namespace') and pos_graph is not None and neg_graph is not None:
+            _, pos_scores = self.split_by_namespace(nodes_namespace=self.go_namespace,
+                                                    edge_index_dict=dgl_to_edge_index_dict(pos_graph, global_ids=True),
                                                     edge_values=pos_scores)
-            _, neg_batch_scores = self.split_by_namespace(dgl_to_edge_index_dict(neg_graph, global_ids=True),
+            _, neg_batch_scores = self.split_by_namespace(nodes_namespace=self.go_namespace,
+                                                          edge_index_dict=dgl_to_edge_index_dict(neg_graph,
+                                                                                                 global_ids=True),
                                                           edge_values=neg_batch_scores)
-            _, neg_scores = self.split_by_namespace(dgl_to_edge_index_dict(pos_graph, global_ids=True),
+            _, neg_scores = self.split_by_namespace(nodes_namespace=self.go_namespace,
+                                                    edge_index_dict=dgl_to_edge_index_dict(pos_graph, global_ids=True),
                                                     edge_values=neg_scores)
 
             neg_batch_scores = {
-                m: scores[torch.arange(round_to_multiple(scores.numel(), pos_scores[m].size(0)))] \
+                m: scores[torch.arange(round_to_multiple(scores.numel(), multiple=pos_scores[m].size(0)))] \
                     .view(pos_scores[m].size(0), -1).detach() \
                     if scores.dim() != 2 else scores \
                 for m, scores in neg_batch_scores.items()}
@@ -166,12 +185,9 @@ class DglLinkPredTrainer(LinkPredTrainer):
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
             pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
 
-        self.update_link_pred_metrics(self.train_metrics,
-                                      pos_edge_score=pos_edge_scores,
-                                      neg_batch_scores=neg_batch_scores,
-                                      neg_edge_score=neg_edge_scores,
-                                      pos_scores=pos_stack,
-                                      neg_scores=neg_stack)
+        self.update_link_pred_metrics(self.train_metrics, pos_edge_scores=pos_edge_scores,
+                                      neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
+                                      pos_stack=pos_stack, neg_stack=neg_stack)
 
         self.log("loss", loss, logger=True, on_step=True)
         if batch_nb % 25 == 0 and isinstance(self.train_metrics, Metrics):
@@ -194,12 +210,9 @@ class DglLinkPredTrainer(LinkPredTrainer):
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
             pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
 
-        self.update_link_pred_metrics(self.valid_metrics,
-                                      pos_edge_score=pos_edge_scores,
-                                      neg_batch_scores=neg_batch_scores,
-                                      neg_edge_score=neg_edge_scores,
-                                      pos_scores=pos_stack,
-                                      neg_scores=neg_stack)
+        self.update_link_pred_metrics(self.valid_metrics, pos_edge_scores=pos_edge_scores,
+                                      neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
+                                      pos_stack=pos_stack, neg_stack=neg_stack)
 
         self.log("val_loss", loss, prog_bar=True, logger=True)
         return loss
@@ -218,12 +231,9 @@ class DglLinkPredTrainer(LinkPredTrainer):
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
             pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
 
-        self.update_link_pred_metrics(self.test_metrics,
-                                      pos_edge_score=pos_edge_scores,
-                                      neg_batch_scores=neg_batch_scores,
-                                      neg_edge_score=neg_edge_scores,
-                                      pos_scores=pos_stack,
-                                      neg_scores=neg_stack)
+        self.update_link_pred_metrics(self.test_metrics, pos_edge_scores=pos_edge_scores,
+                                      neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
+                                      pos_stack=pos_stack, neg_stack=neg_stack)
         self.log("test_loss", loss, logger=True)
         return loss
 

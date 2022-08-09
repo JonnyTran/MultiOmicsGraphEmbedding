@@ -3,8 +3,9 @@ from typing import List, Union, Optional
 import dgl
 import numpy as np
 import torch
-from dgl.dataloading import EdgePredictionSampler
+from dgl.dataloading import EdgePredictionSampler, Sampler
 from dgl.heterograph import DGLBlock, DGLHeteroGraph
+from dgl.utils import to_device
 from ogb.linkproppred import DglLinkPropPredDataset
 from pandas import Index
 from torch import Tensor
@@ -37,7 +38,7 @@ class DGLLinkSampler(DGLNodeSampler):
                                                   neighbor_sampler=sampler, edge_dir=edge_dir)
 
     def get_link_sampler(self, G: DGLHeteroGraph, negative_sampling_size: int, negative_sampler: str,
-                         neighbor_sizes: List[str], neighbor_sampler: str, edge_dir="in"):
+                         neighbor_sizes: List[str], neighbor_sampler: str, edge_dir="in") -> Sampler:
         if G is None:
             G = self.G
         if negative_sampling_size is None:
@@ -91,10 +92,12 @@ class DGLLinkSampler(DGLNodeSampler):
 
         self.split_namespace = split_namespace
         if split_namespace:
+            self.go_namespace = {}
+            self.ntype_mapping = {}
             for ntype, df in network.annotations.items():
                 if "namespace" in df.columns:
-                    self.go_namespace = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]].to_numpy()
-                    self.ntype_mapping = {namespace: ntype for namespace in np.unique(self.go_namespace)}
+                    self.go_namespace[ntype] = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]].to_numpy()
+                    self.ntype_mapping.update({namespace: ntype for namespace in np.unique(self.go_namespace[ntype])})
 
         self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx
 
@@ -209,24 +212,24 @@ class DGLLinkSampler(DGLNodeSampler):
     def get_collate_fn(self, collate_fn: str, mode=None):
         raise NotImplementedError()
 
-    def sample(self, iloc, mode):
-        raise NotImplementedError()
-
-    def full_batch(self, edge_idx: Tensor = None, mode="test", device="cpu"):
+    def full_batch(self, edge_idx: Tensor = None, mode="test", batch_size=None, device="cpu"):
         if edge_idx is None:
             edge_idx = {m: torch.cat([self.training_idx[m], self.validation_idx[m], self.testing_idx[m]]) \
                         for m in self.training_idx.keys()}
 
-        total_batch_size = sum(eid.numel() for eid in edge_idx.values())
+        if not batch_size:
+            batch_size = sum(eid.numel() for eid in edge_idx.values())
 
         if mode == "test":
-            loader = self.test_dataloader(batch_size=total_batch_size, indices=edge_idx)
+            loader = self.test_dataloader(batch_size=batch_size, indices=edge_idx)
         else:
-            loader = self.train_dataloader(batch_size=total_batch_size, indices=edge_idx)
+            loader = self.train_dataloader(batch_size=batch_size, indices=edge_idx)
 
+        outputs = next(iter(loader))
         if device != "cpu":
-            pass
-        return next(iter(loader))
+            outputs = to_device(outputs, device)
+
+        return outputs
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False, **kwargs):
         if self.inductive:
