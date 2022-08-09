@@ -91,9 +91,9 @@ class DGLLinkSampler(DGLNodeSampler):
 
         self.split_namespace = split_namespace
         if split_namespace:
-            for ntype in self.G.node_types:
-                if "namespace" in self.G[ntype]:
-                    self.go_namespace = self.G[ntype]["namespace"]
+            for ntype, df in network.annotations.items():
+                if "namespace" in df.columns:
+                    self.go_namespace = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]].to_numpy()
                     self.ntype_mapping = {namespace: ntype for namespace in np.unique(self.go_namespace)}
 
         self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx

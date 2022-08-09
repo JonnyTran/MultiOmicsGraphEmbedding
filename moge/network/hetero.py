@@ -9,7 +9,7 @@ import torch
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology
 from openomics.utils.df import concat_uniques
-from pandas import Series, Index
+from pandas import Series, Index, DataFrame
 from torch import Tensor
 from torch_geometric.data import HeteroData
 
@@ -62,7 +62,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.node_to_modality = pd.Series(self.node_to_modality)
 
     def process_annotations(self):
-        self.annotations = {}
+        self.annotations: Dict[str, DataFrame] = {}
         for modality in self.node_types:
             annotation = self.multiomics[modality].get_annotations()
             self.annotations[modality] = annotation
@@ -146,7 +146,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
     def add_edges_from_annotations(self, ontology: Ontology, nodes: Optional[List[str]],
                                    src_ntype: str, dst_ntype: str,
                                    train_date: str, valid_date: str, test_date: str, split_etype: str = None,
-                                   d_etype="associated", src_node_col="gene_name", use_neg_annotations=False):
+                                   d_etype="associated", src_node_col="gene_name",
+                                   use_neg_annotations=True):
         """
 
         Args:

@@ -7,9 +7,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from dgl import DGLHeteroGraph
 from torch import Tensor
 
 from moge.dataset import DGLLinkSampler
+from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.model.dgl.HGT import HGT
 from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
@@ -28,12 +30,10 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
     def update_link_pred_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
                                  pos_edge_score: Dict[Tuple[str, str, str], Tensor],
+                                 neg_batch_scores: Dict[Tuple[str, str, str], Tensor],
                                  neg_edge_score: Dict[Tuple[str, str, str], Tensor],
                                  pos_scores: Tensor = None,
                                  neg_scores: Tensor = None):
-
-        neg_edge_score = {m: scores.view(pos_edge_score[m].size(0), -1) if scores.dim() == 1 else scores \
-                          for m, scores in neg_edge_score.items()}
 
         if isinstance(metrics, dict):
             for metapath in pos_edge_score:
@@ -41,7 +41,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
                     "CCO" if metapath[-1] == 'cellular_component' else \
                         "MFO" if metapath[-1] == 'molecular_function' else None
 
-                metrics[go_type].update_metrics(pos_edge_score[metapath].detach(), neg_edge_score[metapath].detach(),
+                metrics[go_type].update_metrics(pos_edge_score[metapath].detach(), neg_batch_scores[metapath].detach(),
                                                 weights=None, subset=["ogbl-biokg"])
 
                 if metapath in pos_edge_score and neg_edge_score and metapath in neg_edge_score:
@@ -51,7 +51,6 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         elif pos_scores is not None and neg_scores is not None:
             metapath = list(pos_edge_score.keys())[0]
-
             metrics.update_metrics(pos_edge_score[metapath].detach(), neg_edge_score[metapath].detach(),
                                    weights=None, subset=["ogbl-biokg"])
             self.update_pr_metrics(pos_scores=pos_scores, neg_scores=neg_scores, metrics=metrics)
@@ -70,25 +69,88 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         metrics.update_metrics(y_pred, y_true, weights=None, subset=subset)
 
-    def stack_edge_index_values(self, pos_edge_score: Dict[Tuple[str, str, str], Tensor],
-                                neg_edge_score: Dict[Tuple[str, str, str], Tensor] = None) \
-            -> Tuple[Tensor, Tensor, Optional[Tensor]]:
-        pos_stack, neg_batch_stack, neg_stack = [], [], []
+    def split_by_namespace(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+                           edge_values: Dict[Tuple[str, str, str], Tensor] = None, ) \
+            -> Tuple[Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]], Dict[Tuple[str, str, str], Tensor]]:
+        if not hasattr(self.dataset, "go_namespace") or not hasattr(self.dataset, "ntype_mapping"):
+            return edge_index_dict, edge_values
+        else:
+            go_namespace: np.ndarray = self.dataset.go_namespace
+
+        split_edge_index_dict = {}
+        split_edge_values = {}
+
+        for metapath, (u, v) in edge_index_dict.items():
+            if edge_values and metapath not in edge_values: continue
+
+            # Pos or neg edges
+            for namespace in np.unique(go_namespace):
+                mask = go_namespace[v.detach().cpu().numpy()] == namespace
+                new_metapath = metapath[:-1] + (namespace,)
+
+                if not isinstance(mask, bool) and mask.sum():
+                    split_edge_index_dict[new_metapath] = (u[mask], v[mask])
+                    if edge_values:
+                        split_edge_values[new_metapath] = edge_values[metapath].view(-1)[mask]
+                elif isinstance(mask, bool):
+                    split_edge_index_dict[new_metapath] = (u, v)
+                    if edge_values:
+                        split_edge_values[new_metapath] = edge_values[metapath].view(-1)
+
+        return split_edge_index_dict, split_edge_values if split_edge_values else None
+
+    def split_edge_scores(self, pos_edge_score: Dict[Tuple[str, str, str], Tensor],
+                          neg_edge_score: Dict[Tuple[str, str, str], Tensor],
+                          pos_graph: DGLHeteroGraph = None, neg_graph: DGLHeteroGraph = None):
+        pos_scores, neg_batch_scores, neg_scores = {}, {}, {}
+
         for metapath in pos_edge_score.keys():
             if metapath in self.pred_metapaths:
                 num_pos_edges = pos_edge_score[metapath].size(0)
                 num_neg_samples = neg_edge_score[metapath].numel() // num_pos_edges
 
-                pos_stack.append(pos_edge_score[metapath])
-                neg_batch_stack.append(neg_edge_score[metapath].view(num_pos_edges, num_neg_samples))
+                pos_scores[metapath] = pos_edge_score[metapath]
+                neg_batch_scores[metapath] = neg_edge_score[metapath].view(num_pos_edges, num_neg_samples)
 
             elif metapath in self.neg_pred_metapaths:
-                neg_stack.append(pos_edge_score[metapath])
+                neg_scores[metapath] = pos_edge_score[metapath]
 
-        pos_scores = torch.cat(pos_stack, dim=0) if pos_stack else torch.tensor([])
-        neg_batch_scores = torch.cat(neg_batch_stack, dim=0) if neg_batch_stack else torch.tensor([])
-        neg_scores = torch.cat(neg_stack, dim=0) if neg_stack else None
+        if pos_graph is not None and neg_graph is not None:
+            _, pos_scores = self.split_by_namespace(dgl_to_edge_index_dict(pos_graph, global_ids=True),
+                                                    edge_values=pos_scores)
+            _, neg_batch_scores = self.split_by_namespace(dgl_to_edge_index_dict(neg_graph, global_ids=True),
+                                                          edge_values=neg_batch_scores)
+            _, neg_scores = self.split_by_namespace(dgl_to_edge_index_dict(pos_graph, global_ids=True),
+                                                    edge_values=neg_scores)
+
+            neg_batch_scores = {
+                m: scores[torch.arange(round_to_multiple(scores.numel(), pos_scores[m].size(0)))] \
+                    .view(pos_scores[m].size(0), -1).detach() \
+                    if scores.dim() != 2 else scores \
+                for m, scores in neg_batch_scores.items()}
+
         return pos_scores, neg_batch_scores, neg_scores
+
+    def stack_edge_scores(self, pos_scores: Dict[Tuple[str, str, str], Tensor],
+                          neg_batch_scores: Dict[Tuple[str, str, str], Tensor],
+                          neg_scores: Dict[Tuple[str, str, str], Tensor] = None) \
+            -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        if neg_scores is None:
+            neg_scores = {}
+
+        metapaths = list(pos_scores | neg_batch_scores | neg_scores)
+
+        pos_stack, neg_batch_stack, neg_stack = [], [], []
+        for metapath in metapaths:
+            pos_stack.append(pos_scores[metapath]) if metapath in pos_scores else None
+            neg_batch_stack.append(neg_batch_scores[metapath]) if metapath in neg_batch_scores else None
+            neg_stack.append(neg_scores[metapath]) if metapath in neg_scores else None
+
+        pos_stack = torch.cat(pos_stack, dim=0) if pos_stack else torch.tensor([])
+        neg_batch_stack = torch.cat(neg_batch_stack, dim=0) if neg_batch_stack else torch.tensor([])
+        neg_stack = torch.cat(neg_stack, dim=0) if neg_stack else None
+
+        return pos_stack, neg_batch_stack, neg_stack
 
     def training_step(self, batch, batch_nb):
         input_nodes, pos_graph, neg_graph, blocks = batch
@@ -96,18 +158,23 @@ class DglLinkPredTrainer(LinkPredTrainer):
         input_features = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
 
         pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, input_features)
-        pos_scores, neg_batch_scores, neg_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
+        pos_stack, neg_batch_stack, neg_stack = self.stack_edge_scores(
+            *self.split_edge_scores(pos_edge_scores, neg_edge_scores))
 
-        loss = self.criterion.forward(pos_scores, neg_batch_scores)
+        loss = self.criterion.forward(pos_stack, neg_batch_stack)
+
+        pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
+            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
 
         self.update_link_pred_metrics(self.train_metrics,
                                       pos_edge_score=pos_edge_scores,
+                                      neg_batch_scores=neg_batch_scores,
                                       neg_edge_score=neg_edge_scores,
-                                      pos_scores=pos_scores,
-                                      neg_scores=neg_scores)
+                                      pos_scores=pos_stack,
+                                      neg_scores=neg_stack)
 
         self.log("loss", loss, logger=True, on_step=True)
-        if batch_nb % 25 == 0:
+        if batch_nb % 25 == 0 and isinstance(self.train_metrics, Metrics):
             logs = self.train_metrics.compute_metrics()
             self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
 
@@ -119,15 +186,20 @@ class DglLinkPredTrainer(LinkPredTrainer):
         input_features = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
 
         pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, input_features)
-        pos_scores, neg_batch_scores, neg_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
+        pos_stack, neg_batch_stack, neg_stack = self.stack_edge_scores(
+            *self.split_edge_scores(pos_edge_scores, neg_edge_scores))
 
-        loss = self.criterion.forward(pos_scores, neg_batch_scores)
+        loss = self.criterion.forward(pos_stack, neg_batch_stack)
+
+        pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
+            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
 
         self.update_link_pred_metrics(self.valid_metrics,
                                       pos_edge_score=pos_edge_scores,
+                                      neg_batch_scores=neg_batch_scores,
                                       neg_edge_score=neg_edge_scores,
-                                      pos_scores=pos_scores,
-                                      neg_scores=neg_scores)
+                                      pos_scores=pos_stack,
+                                      neg_scores=neg_stack)
 
         self.log("val_loss", loss, prog_bar=True, logger=True)
         return loss
@@ -138,15 +210,20 @@ class DglLinkPredTrainer(LinkPredTrainer):
         input_features = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
 
         pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, input_features)
-        pos_scores, neg_batch_scores, neg_scores = self.stack_edge_index_values(pos_edge_scores, neg_edge_scores)
+        pos_stack, neg_batch_stack, neg_stack = self.stack_edge_scores(
+            *self.split_edge_scores(pos_edge_scores, neg_edge_scores))
 
-        loss = self.criterion.forward(pos_scores, neg_batch_scores)
+        loss = self.criterion.forward(pos_stack, neg_batch_stack)
+
+        pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
+            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
 
         self.update_link_pred_metrics(self.test_metrics,
                                       pos_edge_score=pos_edge_scores,
+                                      neg_batch_scores=neg_batch_scores,
                                       neg_edge_score=neg_edge_scores,
-                                      pos_scores=pos_scores,
-                                      neg_scores=neg_scores)
+                                      pos_scores=pos_stack,
+                                      neg_scores=neg_stack)
         self.log("test_loss", loss, logger=True)
         return loss
 
@@ -208,14 +285,16 @@ class HGTLinkPred(DglLinkPredTrainer):
         print(f'Configuration: {args}')
         self._set_hparams(args)
 
-    def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False):
+    def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False) \
+            -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         if len(x) == 0 or sum(a.numel() for a in x) == 0:
             x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
 
         x = self.conv(blocks, x)
 
-        pos_edge_score = self.classifier(pos_graph, x)
-        neg_edge_score = self.classifier(neg_graph, x)
+        pos_edge_score = self.classifier.forward(pos_graph, x)
+        neg_edge_score = self.classifier.forward(neg_graph, x)
+
         if return_embeddings:
             return x, pos_edge_score, neg_edge_score
         return pos_edge_score, neg_edge_score
@@ -332,7 +411,7 @@ class MLPPredictor(nn.Module):
         h = torch.cat([edges.src['h'], edges.dst['h']], 1)
         return {'score': self.W2(F.relu(self.W1(h))).squeeze(1)}
 
-    def forward(self, g: dgl.DGLHeteroGraph, h: Dict[str, Tensor]):
+    def forward(self, g: dgl.DGLHeteroGraph, h: Dict[str, Tensor]) -> Dict[Tuple[str, str, str], Tensor]:
         with g.local_scope():
             g.ndata['h'] = h
             for etype in g.canonical_etypes:
