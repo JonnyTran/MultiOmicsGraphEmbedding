@@ -92,13 +92,13 @@ class DGLNodeSampler(HeteroGraphDataset):
         self.network = network
         self.classes = classes
         self.n_classes = len(classes)
-        self.multilabel = len(classes) > 1
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
         self.y_dict = G.ndata["label"]
-        self.pred_metapaths = network.pred_metapaths if hasattr(network, "pred_metapaths") else []
-        self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, "neg_pred_metapaths") else []
+        self.multilabel = any(label.sum(1).mean() > 1 if label.dim() == 2 else False \
+                              for label in self.y_dict.values())
 
+        # Whether to use split namespace
         self.split_namespace = split_namespace
         if split_namespace:
             self.go_namespace = {}
@@ -110,6 +110,9 @@ class DGLNodeSampler(HeteroGraphDataset):
 
         self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx
 
+        # Remove metapaths that have information in the predictions
+        self.pred_metapaths = network.pred_metapaths if hasattr(network, "pred_metapaths") else []
+        self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, "neg_pred_metapaths") else []
         if hasattr(network, 'pred_metapaths') and not set(network.pred_metapaths).issubset(self.pred_metapaths):
             self.pred_metapaths.extend(network.pred_metapaths)
         if hasattr(network, 'neg_pred_metapaths') and \
@@ -342,7 +345,8 @@ class DGLNodeSampler(HeteroGraphDataset):
     def transform_heterograph(self, G: dgl.DGLHeteroGraph, add_reverse=False,
                               decompose_etypes=False,
                               nodes_subset: Dict[str, Tensor] = None,
-                              edge_mask: Dict[str, Tensor] = None, drop_empty_etypes=True) -> dgl.DGLHeteroGraph:
+                              edge_mask: Dict[str, Tensor] = None, drop_empty_etypes=True,
+                              verbose=True) -> dgl.DGLHeteroGraph:
         if decompose_etypes:
             edge_index_dict = {}
             for metapath in G.canonical_etypes:
@@ -376,7 +380,7 @@ class DGLNodeSampler(HeteroGraphDataset):
                                  for etype in new_g.etypes if (G.num_edges(etype=etype) - new_g.num_edges(etype=etype))}
 
             new_g = copy_ndata(old_g=G, new_g=new_g)
-            logger.info(f"Removed edges: {num_edges_removed}")
+            logger.info(f"Removed edges: {num_edges_removed}") if verbose else None
 
         if nodes_subset:
             edge_index_dict = {}
@@ -394,7 +398,7 @@ class DGLNodeSampler(HeteroGraphDataset):
                                      for ntype, num_nodes in num_nodes_old.items())
 
             new_g = copy_ndata(old_g=G, new_g=new_g)
-            logger.info(f"Removed nodes: {num_nodes_removed}")
+            logger.info(f"Removed nodes: {num_nodes_removed}") if verbose else None
 
         if add_reverse:
             self.reverse_etypes, self.reverse_eids = {}, {}
@@ -411,7 +415,8 @@ class DGLNodeSampler(HeteroGraphDataset):
                 self.reverse_etypes[metapath] = rev_metapath
 
             assert new_g.num_nodes() == G.num_nodes() and len(new_g.canonical_etypes) > len(G.canonical_etypes)
-            logger.info(f"Added reverse edges with {len(new_g.canonical_etypes) - len(G.canonical_etypes)} new etypes")
+            logger.info(
+                f"Added reverse edges with {len(new_g.canonical_etypes) - len(G.canonical_etypes)} new etypes") if verbose else None
 
         return new_g
 

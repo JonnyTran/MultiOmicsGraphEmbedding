@@ -102,7 +102,7 @@ class DGLLinkSampler(DGLNodeSampler):
                    edge_dir="in", **kwargs)
         self.network = network
         self.classes = classes
-        self.n_classes = len(classes)
+        self.n_classes = len(classes) if classes is not None else None
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
 
@@ -126,15 +126,15 @@ class DGLLinkSampler(DGLNodeSampler):
         if self.use_reverse:
             for metapath in self.G.canonical_etypes:
                 if is_negative(metapath) and is_reversed(metapath):
-                    print("removed", metapath)
+                    logger.info(f"Removed {metapath}")
                     self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
 
                 elif self.pred_metapaths and unreverse_metapath(metapath) in self.pred_metapaths:
-                    print("removed", metapath)
+                    logger.info(f"Removed {metapath}")
                     self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
 
                 elif self.neg_pred_metapaths and unreverse_metapath(metapath) in self.pred_metapaths:
-                    print("removed", metapath)
+                    logger.info(f"Removed {metapath}")
                     self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
 
             self.metapaths = [metapath for metapath in self.G.canonical_etypes if self.G.num_edges(etype=metapath)]
@@ -313,9 +313,9 @@ class DGLLinkSampler(DGLNodeSampler):
         return df
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False,
-                         device=None, **kwargs):
+                         device=None, verbose=True, **kwargs):
         if self.inductive:
-            graph = self.transform_heterograph(self.G, edge_mask=self.G.edata["train_mask"])
+            graph = self.transform_heterograph(self.G, edge_mask=self.G.edata["train_mask"], verbose=verbose)
             if indices is None:
                 indices = {etype: torch.arange(graph.num_edges(etype=etype)) \
                            for etype in self.pred_metapaths + self.neg_pred_metapaths}
@@ -331,7 +331,8 @@ class DGLLinkSampler(DGLNodeSampler):
                 indices = {etype: self.training_idx[etype] for etype in self.pred_metapaths + self.neg_pred_metapaths}
             graph_sampler = self.link_sampler
 
-        logger.info(f"Train dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
+        logger.info(
+            f"Train dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}") if verbose else None
         # sampler = LinkPredPyGCollator(**args)
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
                                                 batch_size=batch_size, shuffle=True, drop_last=drop_last, device=device,
@@ -340,11 +341,11 @@ class DGLLinkSampler(DGLNodeSampler):
         return dataloader
 
     def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False,
-                         device=None, **kwargs):
+                         device=None, verbose=True, **kwargs):
         if self.inductive:
             edge_mask = {etype: valid_mask | self.G.edata["train_mask"][etype] \
                          for etype, valid_mask in self.G.edata["valid_mask"].items()}
-            graph = self.transform_heterograph(self.G, edge_mask=edge_mask)
+            graph = self.transform_heterograph(self.G, edge_mask=edge_mask, verbose=verbose)
             if indices is None:
                 indices = {etype: torch.arange(graph.num_edges(etype=etype)) \
                            for etype in self.pred_metapaths + self.neg_pred_metapaths}
@@ -360,7 +361,8 @@ class DGLLinkSampler(DGLNodeSampler):
                 indices = {etype: self.validation_idx[etype] for etype in self.pred_metapaths + self.neg_pred_metapaths}
             graph_sampler = self.link_sampler
 
-        logger.info(f"Valid dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
+        logger.info(
+            f"Valid dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}") if verbose else None
 
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
                                                 batch_size=batch_size, shuffle=True, drop_last=drop_last, device=device,
@@ -368,11 +370,11 @@ class DGLLinkSampler(DGLNodeSampler):
         return dataloader
 
     def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, indices=None, drop_last=False,
-                        device=None, **kwargs):
+                        device=None, verbose=True, **kwargs):
         if self.inductive:
             edge_mask = {etype: test_mask | self.G.edata["train_mask"][etype] | self.G.edata["valid_mask"][etype] \
                          for etype, test_mask in self.G.edata["test_mask"].items()}
-            graph = self.transform_heterograph(self.G, edge_mask=edge_mask)
+            graph = self.transform_heterograph(self.G, edge_mask=edge_mask, verbose=verbose)
             if indices is None:
                 indices = {etype: torch.arange(graph.num_edges(etype=etype)) \
                            for etype in self.pred_metapaths + self.neg_pred_metapaths}
@@ -388,7 +390,8 @@ class DGLLinkSampler(DGLNodeSampler):
                 indices = {etype: self.testing_idx[etype] for etype in self.pred_metapaths + self.neg_pred_metapaths}
             graph_sampler = self.link_sampler
 
-        logger.info(f"Test dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
+        logger.info(
+            f"Test dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}") if verbose else None
 
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
                                                 batch_size=batch_size, shuffle=True, drop_last=drop_last, device=device,

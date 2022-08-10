@@ -6,11 +6,70 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from pandas import Series
 from torch import Tensor
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
 
 from moge.model.utils import is_sorted
+
+
+def split_edge_index_by_namespace(nodes_namespace: Dict[str, Union[np.ndarray, Series]],
+                                  edge_index_dict: Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]],
+                                  edge_values: Dict[Tuple[str, str, str], Tensor]) \
+        -> Tuple[Dict[Tuple[str, str, str], Tuple[Tensor, Tensor]], Dict[Tuple[str, str, str], Tensor]]:
+    """
+    Split edges in `edge_index_dict` and values in `edge_values` by the node namespace given in `nodes_namespace`.
+    When `nodes_namespace` is given as a Dict of ntype keys and the node's namespace values, each metapath will
+    split into multiple metapaths on either its src and/or dst nodes if the src_type and dst_type matches the
+    `nodes_namespace`'s ntypes.
+
+    Args:
+        nodes_namespace (): A Dict of ntype keys and the node's namespace values, where node's namespace values is
+            of the same length as all nodes in self.nodes[ntype].
+        edge_index_dict (): A Dict of metapath keys and edge index tuple, where the edge index uses global index.
+        edge_values (): A Dict of metapath keys and edge values, where the edge values's number of elements equals
+            the number of edges in `edge_index_dict[metapath]`
+
+    Returns:
+        split_edge_index_dict, split_edge_values
+    """
+    split_edge_index_dict = {}
+    split_edge_values = {}
+
+    for metapath, (src, dst) in edge_index_dict.items():
+        if edge_values and metapath not in edge_values: continue
+        assert src.size(0) == edge_values[
+            metapath].numel(), f"num edges {src.size(0)} != values {edge_values[metapath].numel()}"
+        head_type, tail_type = metapath[0], metapath[-1]
+
+        unique_heads = np.unique(nodes_namespace[head_type]) if head_type in nodes_namespace else [None]
+        unique_tails = np.unique(nodes_namespace[tail_type]) if tail_type in nodes_namespace else [None]
+
+        for head_namespace, tail_namespace in itertools.product(unique_heads, unique_tails):
+            if head_namespace is not None and tail_namespace is not None:
+                new_metapath = (head_namespace,) + metapath[1] + (tail_namespace,)
+                mask = (nodes_namespace[head_type][src.detach().cpu().numpy()] == head_namespace) & \
+                       (nodes_namespace[tail_type][dst.detach().cpu().numpy()] == tail_namespace)
+            elif tail_namespace is not None:
+                new_metapath = metapath[:-1] + (tail_namespace,)
+                mask = nodes_namespace[tail_type][dst.detach().cpu().numpy()] == tail_namespace
+            elif head_namespace is not None:
+                new_metapath = (head_namespace,) + metapath[1:]
+                mask = nodes_namespace[head_type][src.detach().cpu().numpy()] == head_namespace
+            else:
+                continue
+
+            if isinstance(mask, np.ndarray) and mask.sum():
+                split_edge_index_dict[new_metapath] = (src[mask], dst[mask])
+                if edge_values:
+                    split_edge_values[new_metapath] = edge_values[metapath].view(-1)[mask]
+            else:
+                split_edge_index_dict[new_metapath] = (src, dst)
+                if edge_values:
+                    split_edge_values[new_metapath] = edge_values[metapath].view(-1)
+
+    return split_edge_index_dict, split_edge_values if split_edge_values else {}
 
 
 def gather_node_dict(edge_index_dict: Dict[Tuple[str, str, str], Tensor]) -> Dict[str, Tensor]:

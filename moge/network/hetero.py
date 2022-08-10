@@ -453,6 +453,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 labels[ntype] = torch.tensor(labels[ntype])
 
                 G.nodes[ntype].data["label"] = labels[ntype]
+        else:
+            classes = None
 
         # Get index of train/valid/test edge_id
         training, validation, testing = {}, {}, {}
