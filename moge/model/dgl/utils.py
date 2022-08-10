@@ -61,38 +61,34 @@ def metapath_reachable_blocks(src_block: DGLBlock, dst_block: DGLBlock,
                               metapath_chain: List[Tuple[str, str, str]]):
     adj: csr_matrix = 1
     for block, etype in zip([src_block, dst_block], metapath_chain):
-        adj = adj * block.adj(etype=etype, scipy_fmt='csr', transpose=False)
+        next_adj = block.adj(etype=etype, scipy_fmt='csr', transpose=False)
+
+        if isinstance(adj, csr_matrix) and adj.shape[1] > next_adj.shape[0]:
+            adj = adj[:, :next_adj.shape[0]]
+        adj = adj * next_adj
 
     adj = (adj != 0).tocsr()
     srctype = src_block.to_canonical_etype(metapath_chain[0])[0]
     dsttype = dst_block.to_canonical_etype(metapath_chain[-1])[2]
 
-    num_nodes_dict = {srctype: max(src_block.num_nodes(srctype), dst_block.num_nodes(srctype)),
-                      dsttype: max(src_block.num_nodes(dsttype), dst_block.num_nodes(dsttype))}
-    src_feats = get_larger_block(src_block, dst_block, srctype).nodes[srctype].data
-    dst_feats = get_larger_block(src_block, dst_block, dsttype).nodes[dsttype].data
+    num_nodes_dict = {srctype: src_block.num_nodes(srctype), dsttype: src_block.num_nodes(dsttype)}
+    src_feats = src_block.nodes[srctype].data
 
     new_g: DGLHeteroGraph = convert.heterograph({(srctype, '_E', dsttype): adj.nonzero()},
                                                 num_nodes_dict=num_nodes_dict,
-                                                idtype=dst_block.idtype, device=dst_block.device)
-
-    # print({"src_"+ntype: src_block.num_nodes(ntype) for ntype in [srctype]},
-    #       {"dst_"+ntype: dst_block.num_nodes(ntype) for ntype in [dsttype]})
-    # print("adj", adj.shape)
-    # print({"new_"+ntype: new_g.num_nodes(ntype) for ntype in [srctype,dsttype]})
-    # pprint(tensor_sizes(dict(feats_dsttype=dst_feats, feats_srctype=src_feats)))
-
+                                                idtype=src_block.idtype, device=src_block.device)
     # copy srcnode features
     new_g.nodes[srctype].data.update(src_feats)
     # copy dstnode features
     if srctype != dsttype:
+        dst_feats = src_block.nodes[dsttype].data
         new_g.nodes[dsttype].data.update(dst_feats)
 
     return new_g
 
 
 class ChainMetaPaths(BaseTransform):
-    def __init__(self, metapaths: Dict[str, List[Tuple[str, str, str]]], keep_orig_edges=True):
+    def __init__(self, metapaths: Dict[str, List[Tuple[str, str, str]]], keep_orig_edges=False):
         self.metapaths = metapaths
         self.keep_orig_edges = keep_orig_edges
 
@@ -100,17 +96,15 @@ class ChainMetaPaths(BaseTransform):
         data_dict = dict()
 
         for meta_etype, metapath_chain in self.metapaths.items():
-            # print('\n', meta_etype, metapath_chain)
             meta_g = metapath_reachable_blocks(src_block, dst_block, metapath_chain)
             u_type = metapath_chain[0][0]
             v_type = metapath_chain[-1][-1]
             data_dict[(u_type, meta_etype, v_type)] = meta_g.edges()
 
-        # new_g = T.compact_graphs([src_block,dst_block])
         if self.keep_orig_edges:
             for c_etype in src_block.canonical_etypes:
-                data_dict[c_etype] = dst_block.edges(etype=c_etype)
-            new_g = update_graph_structure(src_block, data_dict, copy_edata=True)
+                data_dict[c_etype] = src_block.edges(etype=c_etype)
+            new_g = update_graph_structure(src_block, data_dict, copy_edata=False)
         else:
             new_g = update_graph_structure(src_block, data_dict, copy_edata=False)
 
