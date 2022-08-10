@@ -17,7 +17,7 @@ from torch import Tensor
 from torch.utils.data.distributed import DistributedSampler
 
 from moge.criterion.clustering import clustering_metrics
-from moge.dataset import DGLNodeSampler, HeteroNeighborGenerator
+from moge.dataset import DGLNodeGenerator, HeteroNeighborGenerator
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import edge_index_to_adjs
 from moge.model.metrics import Metrics
@@ -467,10 +467,10 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
         effective_accum = self.trainer.accumulate_grad_batches * num_devices
         return (batches // effective_accum) * self.trainer.max_epochs
 
-    def set_fanouts(self, dataset: Union[DGLNodeSampler, HeteroNeighborGenerator], fanouts: Iterable):
+    def set_fanouts(self, dataset: Union[DGLNodeGenerator, HeteroNeighborGenerator], fanouts: Iterable):
         dataset.neighbor_sizes = fanouts
 
-        if isinstance(dataset, DGLNodeSampler):
+        if isinstance(dataset, DGLNodeGenerator):
             dataset.neighbor_sampler.fanouts = fanouts
             dataset.neighbor_sampler.num_layers = len(fanouts)
         elif isinstance(dataset, HeteroNeighborGenerator):

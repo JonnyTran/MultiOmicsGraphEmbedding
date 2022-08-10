@@ -10,7 +10,7 @@ from dgl.heterograph import DGLBlock
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 
-from moge.dataset import DGLNodeSampler
+from moge.dataset import DGLNodeGenerator
 from moge.dataset.dgl.node_generator import HANSampler
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
@@ -28,7 +28,7 @@ from ..utils import tensor_sizes, stack_tensor_dicts, filter_samples_weights
 
 
 class LATTENodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
+    def __init__(self, hparams, dataset: DGLNodeGenerator, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
@@ -210,7 +210,7 @@ class LATTENodeClf(NodeClfTrainer):
 
 
 class HGConv(NodeClfTrainer):
-    def __init__(self, hparams: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+    def __init__(self, hparams: Dict, dataset: DGLNodeGenerator, metrics: List[str]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(Namespace(**hparams), dataset, metrics)
@@ -349,7 +349,7 @@ class HGConv(NodeClfTrainer):
 
 
 class R_HGNN(NodeClfTrainer):
-    def __init__(self, hparams: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+    def __init__(self, hparams: Dict, dataset: DGLNodeGenerator, metrics: List[str]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(Namespace(**hparams), dataset, metrics)
@@ -499,7 +499,7 @@ class R_HGNN(NodeClfTrainer):
 
 
 class NARSNodeCLf(NodeClfTrainer):
-    def __init__(self, hparams: Namespace, dataset: DGLNodeSampler, metrics: List[str]):
+    def __init__(self, hparams: Namespace, dataset: DGLNodeGenerator, metrics: List[str]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         hparams.loss_type = "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
@@ -661,7 +661,7 @@ class NARSNodeCLf(NodeClfTrainer):
 
 
 class HANNodeClf(NodeClfTrainer):
-    def __init__(self, hparams: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+    def __init__(self, hparams: Dict, dataset: DGLNodeGenerator, metrics: List[str]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(Namespace(**hparams), dataset, metrics)
@@ -790,7 +790,7 @@ class HANNodeClf(NodeClfTrainer):
 
 
 class HGTNodeClf(NodeClfTrainer):
-    def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"]) -> None:
+    def __init__(self, hparams, dataset: DGLNodeGenerator, metrics=["accuracy"]) -> None:
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)

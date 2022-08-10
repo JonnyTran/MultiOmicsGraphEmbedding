@@ -9,7 +9,7 @@ import dill
 import torch
 import yaml
 
-from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler
+from moge.dataset import HeteroNeighborGenerator, DGLNodeGenerator
 from moge.model.utils import preprocess_input
 
 
@@ -54,7 +54,7 @@ def select_empty_gpu():
     return best_gpu
 
 
-def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeSampler], path: str, skip_ntype: str = None,
+def add_node_embeddings(dataset: Union[HeteroNeighborGenerator, DGLNodeGenerator], path: str, skip_ntype: str = None,
                         args: Namespace = None):
     node_emb = {}
     if os.path.exists(path) and os.path.isdir(path):

@@ -14,7 +14,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 
-from moge.dataset import DGLLinkSampler
+from moge.dataset import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace
 from moge.model.dgl.HGT import HGT
@@ -26,8 +26,9 @@ from moge.model.trainer import LinkPredTrainer
 
 
 class DglLinkPredTrainer(LinkPredTrainer):
-    dataset: DGLLinkSampler
-    def __init__(self, hparams, dataset: DGLLinkSampler, metrics: Union[List[str], Dict[str, List[str]]], *args,
+    dataset: DGLLinkGenerator
+
+    def __init__(self, hparams, dataset: DGLLinkGenerator, metrics: Union[List[str], Dict[str, List[str]]], *args,
                  **kwargs):
         super().__init__(hparams, dataset, metrics, *args, **kwargs)
 
@@ -172,18 +173,19 @@ class DglLinkPredTrainer(LinkPredTrainer):
             if metapath in self.neg_pred_metapaths:
                 neg_scores[metapath] = pos_edge_score[metapath]
 
-        _, pos_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
-                                                      edge_index_dict=dgl_to_edge_index_dict(pos_graph,
-                                                                                             global_ids=True),
-                                                      edge_values=pos_scores)
-        _, neg_batch_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
-                                                            edge_index_dict=dgl_to_edge_index_dict(neg_graph,
-                                                                                                   global_ids=True),
-                                                            edge_values=neg_batch_scores)
-        _, neg_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
-                                                      edge_index_dict=dgl_to_edge_index_dict(pos_graph,
-                                                                                             global_ids=True),
-                                                      edge_values=neg_scores)
+        if hasattr(self, 'go_namespace'):
+            _, pos_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
+                                                          edge_index_dict=dgl_to_edge_index_dict(pos_graph,
+                                                                                                 global_ids=True),
+                                                          edge_values=pos_scores)
+            _, neg_batch_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
+                                                                edge_index_dict=dgl_to_edge_index_dict(neg_graph,
+                                                                                                       global_ids=True),
+                                                                edge_values=neg_batch_scores)
+            _, neg_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
+                                                          edge_index_dict=dgl_to_edge_index_dict(pos_graph,
+                                                                                                 global_ids=True),
+                                                          edge_values=neg_scores)
 
         neg_batch_scores = {
             m: scores[torch.arange(round_to_multiple(scores.numel(), multiple=pos_scores[m].size(0)))] \
@@ -384,7 +386,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
 
 class HGTLinkPred(DglLinkPredTrainer):
-    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
+    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkGenerator, metrics: List[str]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(hparams, dataset, metrics)
@@ -435,7 +437,7 @@ class HGTLinkPred(DglLinkPredTrainer):
 
 
 class LATTELinkPred(DglLinkPredTrainer):
-    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
+    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkGenerator, metrics: List[str]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(hparams, dataset, metrics)
@@ -480,7 +482,7 @@ class LATTELinkPred(DglLinkPredTrainer):
 
 
 class DeepGraphGOLinkPred(DglLinkPredTrainer):
-    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkSampler, metrics: List[str]):
+    def __init__(self, hparams: Union[Namespace, Dict], dataset: DGLLinkGenerator, metrics: List[str]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__(hparams, dataset, metrics)

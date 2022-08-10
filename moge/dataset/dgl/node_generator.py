@@ -27,7 +27,7 @@ from ..utils import reverse_metapath, is_negative, is_reversed, unreverse_metapa
 from ...network.base import SEQUENCE_COL
 
 
-class DGLNodeSampler(HeteroGraphDataset):
+class DGLNodeGenerator(HeteroGraphDataset):
     def __init__(self, dataset: Union[DglNodePropPredDataset, dgl.DGLHeteroGraph],
                  sampler: str = "MultiLayerNeighborSampler",
                  neighbor_sizes=None,
@@ -414,7 +414,9 @@ class DGLNodeSampler(HeteroGraphDataset):
                 self.reverse_eids[metapath] = eid_rev
                 self.reverse_etypes[metapath] = rev_metapath
 
+            self.metapaths = new_g.canonical_etypes
             assert new_g.num_nodes() == G.num_nodes() and len(new_g.canonical_etypes) > len(G.canonical_etypes)
+
             logger.info(
                 f"Added reverse edges with {len(new_g.canonical_etypes) - len(G.canonical_etypes)} new etypes") if verbose else None
 

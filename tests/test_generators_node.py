@@ -6,7 +6,7 @@ from cogdl.datasets.han_data import DBLP_HANDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
 
 from moge.dataset import HeteroNeighborGenerator
-from moge.dataset.dgl.node_generator import DGLNodeSampler
+from moge.dataset.dgl.node_generator import DGLNodeGenerator
 from moge.dataset.utils import edge_dict_intersection, edge_dict_sizes
 from moge.dataset.utils import nonduplicate_indices
 from moge.model.utils import tensor_sizes
@@ -40,9 +40,9 @@ def generator_hetero(generate_dataset_hetero):
 
 @pytest.fixture
 def generator_hetero_DGL(generate_dataset_hetero_DGL):
-    dataset = DGLNodeSampler(generate_dataset_hetero_DGL, sampler="ImportanceSampler", neighbor_sizes=[20, 10],
-                             head_node_type="paper", edge_dir="in",
-                             add_reverse_metapaths=True, inductive=False)
+    dataset = DGLNodeGenerator(generate_dataset_hetero_DGL, sampler="ImportanceSampler", neighbor_sizes=[20, 10],
+                               head_node_type="paper", edge_dir="in",
+                               add_reverse_metapaths=True, inductive=False)
     return dataset
 
 

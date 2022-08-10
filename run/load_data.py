@@ -16,7 +16,7 @@ from torch_geometric.datasets import AMiner
 
 import moge
 import moge.dataset.PyG.triplet_generator
-from moge.dataset import HeteroNeighborGenerator, DGLNodeSampler, HeteroLinkPredDataset, HeteroNodeClfDataset
+from moge.dataset import HeteroNeighborGenerator, DGLNodeGenerator, HeteroLinkPredDataset, HeteroNodeClfDataset
 from moge.dataset.dgl.graph_generator import DGLGraphSampler
 from moge.dataset.sequences import SequenceTokenizers
 from moge.model.dgl.NARS.data import load_acm, load_mag
@@ -31,22 +31,22 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         use_reverse = True
 
     if "ogbn" in name and method == "NARS":
-        dataset = DGLNodeSampler.from_heteronetwork(*load_mag(args=args),
-                                                    inductive=args.inductive,
-                                                    neighbor_sizes=args.neighbor_sizes, head_node_type="paper",
-                                                    add_reverse_metapaths=False,
-                                                    reshuffle_train=train_ratio if train_ratio else False)
+        dataset = DGLNodeGenerator.from_heteronetwork(*load_mag(args=args),
+                                                      inductive=args.inductive,
+                                                      neighbor_sizes=args.neighbor_sizes, head_node_type="paper",
+                                                      add_reverse_metapaths=False,
+                                                      reshuffle_train=train_ratio if train_ratio else False)
 
     elif "ogbn" in name:
 
         ogbn = DglNodePropPredDataset(name=name, root=dataset_path)
-        dataset = DGLNodeSampler(ogbn,
-                                 sampler="MultiLayerNeighborSampler",
-                                 neighbor_sizes=args.neighbor_sizes,
-                                 edge_dir="in",
-                                 add_reverse_metapaths=use_reverse,
-                                 inductive=args.inductive,
-                                 reshuffle_train=train_ratio if train_ratio else False)
+        dataset = DGLNodeGenerator(ogbn,
+                                   sampler="MultiLayerNeighborSampler",
+                                   neighbor_sizes=args.neighbor_sizes,
+                                   edge_dir="in",
+                                   add_reverse_metapaths=use_reverse,
+                                   inductive=args.inductive,
+                                   reshuffle_train=train_ratio if train_ratio else False)
 
         if name == "ogbn-mag":
             add_node_embeddings(dataset, path=os.path.join(args.use_emb, "TransE_mag/"), args=args)
@@ -61,7 +61,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
 
         min_count = 0.01
         label_col = 'go_id'
-        dataset = DGLNodeSampler.from_heteronetwork(
+        dataset = DGLNodeGenerator.from_heteronetwork(
             *network.to_dgl_heterograph(target=label_col,
                                         min_count=min_count,
                                         sequence=False,
@@ -93,7 +93,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
             args.cls_graph = dgl.heterograph(edge_index_dict)
 
     elif name == "ACM":
-        dataset = DGLNodeSampler.from_heteronetwork(
+        dataset = DGLNodeGenerator.from_heteronetwork(
             *load_acm(use_emb=os.path.join(args.use_emb, "TransE_acm/")),
             sampler="MultiLayerNeighborSampler",
             neighbor_sizes=args.neighbor_sizes,
@@ -104,30 +104,30 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
         dataset._name = "ACM"
 
     elif name == "DBLP":
-        dataset = DGLNodeSampler.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-dblp"),
-                                                  neighbor_sizes=args.neighbor_sizes,
-                                                  sampler="MultiLayerNeighborSampler",
-                                                  node_types=["P", "A", "C"],
-                                                  head_node_type="A",
-                                                  metapaths=[("P", "PA", "A"), ("A", "AP", "P"), ("P", "PC", "C"),
-                                                             ("C", "CP", "P")],
-                                                  add_reverse_metapaths=False, inductive=args.inductive,
-                                                  reshuffle_train=train_ratio if train_ratio else False)
+        dataset = DGLNodeGenerator.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-dblp"),
+                                                    neighbor_sizes=args.neighbor_sizes,
+                                                    sampler="MultiLayerNeighborSampler",
+                                                    node_types=["P", "A", "C"],
+                                                    head_node_type="A",
+                                                    metapaths=[("P", "PA", "A"), ("A", "AP", "P"), ("P", "PC", "C"),
+                                                               ("C", "CP", "P")],
+                                                    add_reverse_metapaths=False, inductive=args.inductive,
+                                                    reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "DBLP"
 
     elif name == "IMDB":
-        dataset = DGLNodeSampler.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-imdb"),
-                                                  neighbor_sizes=args.neighbor_sizes,
-                                                  sampler="MultiLayerNeighborSampler",
-                                                  node_types=["M", "D", "A"],
-                                                  head_node_type="M",
-                                                  metapaths=[("D", "DM", "M"),
-                                                             ("M", "AM", "D"),
-                                                             ("D", "DA", "A"),
-                                                             ("A", "AD", "D")
-                                                             ],
-                                                  add_reverse_metapaths=False, inductive=args.inductive,
-                                                  reshuffle_train=train_ratio if train_ratio else False)
+        dataset = DGLNodeGenerator.from_cogdl_graph(GTNDataset(root="./data/", name="gtn-imdb"),
+                                                    neighbor_sizes=args.neighbor_sizes,
+                                                    sampler="MultiLayerNeighborSampler",
+                                                    node_types=["M", "D", "A"],
+                                                    head_node_type="M",
+                                                    metapaths=[("D", "DM", "M"),
+                                                               ("M", "AM", "D"),
+                                                               ("D", "DA", "A"),
+                                                               ("A", "AD", "D")
+                                                               ],
+                                                    add_reverse_metapaths=False, inductive=args.inductive,
+                                                    reshuffle_train=train_ratio if train_ratio else False)
         dataset._name = "IMDB"
 
     elif name == "AMiner":
