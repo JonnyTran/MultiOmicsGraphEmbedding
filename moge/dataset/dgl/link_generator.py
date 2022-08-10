@@ -302,8 +302,7 @@ class DGLLinkGenerator(DGLNodeGenerator):
             raise Exception(f"{negative_sampler} must be in one of [Uniform, GlobalUniform, PerSourceUniform]")
 
         if exclude is None:
-            # exclude = "reverse_id" if self.use_reverse else "self"
-            pass
+            exclude = "reverse_id" if self.use_reverse else "self"
         elif exclude == "all_pred":
             exclude = lambda x: {etype: self.G.edges(etype=self.pred_metapaths[0], form="eid") \
                                  for etype in self.pred_metapaths + self.neg_pred_metapaths}

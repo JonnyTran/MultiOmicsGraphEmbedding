@@ -177,13 +177,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         #         edge_index = get_edge_index_values(nx_graph, nodes_A=self.nodes[metapath[0]], nodes_B=go_nodes)
         #         self.G[metapath].edge_index = edge_index
         #         print(metapath, nx_graph.number_of_edges())
-        #
-        #         if self.use_reverse:
-        #             rev_metapath = reverse_metapath_name(metapath)
-        #             self.metapaths.append(rev_metapath)
-        #
-        #             self.G[rev_metapath].edge_index = edge_index[[1, 0], :]
-        #             print(rev_metapath, nx_graph.number_of_edges())
         groupby = [src_node_col, split_etype] if split_etype else [src_node_col]
         assert src_ntype in self.node_types
         self._name = f"{src_ntype}-{dst_ntype}_{train_date}-{test_date}"
@@ -229,7 +222,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             pos_edge_list_dict = get_edge_index_dict(pos_graph, nodes=self.nodes,
                                                      metapaths=metapaths.intersection(self.pred_metapaths), format="nx")
 
-
             for etype, edges in pos_edge_list_dict.items():
                 if etype not in self.pred_metapaths or len(edges) == 0: continue
 
@@ -237,9 +229,10 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 self.add_edges(edges, etype=etype, database=ontology.name(), directed=True, )
 
             # True Negative links
-            if use_neg_annotations and "neg_go_id" in go_ann.columns:
-                neg_annotations = go_ann["neg_go_id"].dropna().explode().to_frame().reset_index()
-                neg_graph = nx.from_pandas_edgelist(neg_annotations, source=src_node_col, target="neg_go_id",
+            neg_dst_node_col = "neg_" + dst_node_col
+            if use_neg_annotations:
+                neg_annotations = go_ann[neg_dst_node_col].dropna().explode().to_frame().reset_index()
+                neg_graph = nx.from_pandas_edgelist(neg_annotations, source=src_node_col, target=neg_dst_node_col,
                                                     **nx_options)
                 if split_etype:
                     metapaths = {(src_ntype, etype, dst_ntype) for u, v, etype in neg_graph.edges}
@@ -257,7 +250,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     edges = self.label_edge_trainvalidtest(edges, train=is_train, valid=is_valid, test=is_test)
                     self.add_edges(edges, etype=neg_etype, database=ontology.name(), directed=True, )
 
-            # Train/valid/test split of nodes
+            # Gather train/valid/test split of nodes
             node_lists.append({
                 src_ntype: set(pos_annotations[src_node_col].unique()).intersection(self.nodes[src_ntype]),
                 dst_ntype: set(pos_annotations[dst_node_col].unique()).intersection(self.nodes[dst_ntype]),
@@ -268,13 +261,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.train_nodes, self.valid_nodes, self.test_nodes = self.get_all_nodes_split(train_nodes,
                                                                                        valid_nodes, test_nodes)
 
-        # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
-        for metapath, nxgraph in self.networks.items():
-            if metapath in self.pred_metapaths or metapath in self.neg_pred_metapaths:
-                continue
-            edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=self.train_nodes,
-                                                 valid_nodes=self.valid_nodes, test_nodes=self.test_nodes)
-            nx.set_edge_attributes(nxgraph, edge_attrs)
+        self.set_edge_traintest_mask(self.train_nodes, self.valid_nodes, self.test_nodes,
+                                     exclude_metapaths=self.pred_metapaths + self.neg_pred_metapaths)
 
     def get_triples(self, metapaths: List[Tuple[str, str, str]], positive: bool = False, negative: bool = False) \
             -> Tuple[Dict[str, Tensor], Tensor, Tensor, Tensor]:

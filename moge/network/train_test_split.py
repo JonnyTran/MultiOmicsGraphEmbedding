@@ -215,6 +215,16 @@ class TrainTestSplit():
 
         return edge_attrs
 
+    def set_edge_traintest_mask(self, train_nodes: Mapping[str, Set[str]], valid_nodes: Mapping[str, Set[str]],
+                                test_nodes: Mapping[str, Set[str]], exclude_metapaths: List[Tuple[str, str, str]]):
+        # Set train/valid/test mask of edges on hetero graph if they're incident to the train/valid/test nodes
+        for metapath, nxgraph in self.networks.items():
+            if metapath in exclude_metapaths:
+                continue
+            edge_attrs = self.get_all_edges_mask(nxgraph.edges, metapath=metapath, train_nodes=train_nodes,
+                                                 valid_nodes=valid_nodes, test_nodes=test_nodes)
+            nx.set_edge_attributes(nxgraph, edge_attrs)
+
 
 def mask_test_edges_by_nodes(network, directed, node_list, test_frac=0.10, val_frac=0.0,
                              seed=0, verbose=False):
