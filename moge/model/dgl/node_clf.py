@@ -856,15 +856,8 @@ class HGTNodeClf(NodeClfTrainer):
 
         y_pred = self.forward(blocks, feats if isinstance(feats, dict) else {self.head_node_type: feats})
 
-        weights = {}
-        for ntype, label in y_true.items():
-            if label.dim() == 2 and label.size(1) == 1:
-                y_true[ntype] = label.squeeze(-1)
-
-            if label.dim() == 1:
-                weights[ntype] = (y_true >= 0).to(torch.float)
-            elif label.dim() == 2:
-                weights[ntype] = (label.sum(1) > 0).to(torch.float)
+        weights = {ntype: (label.sum(1) > 0).to(torch.float) if label.dim() == 2 else (label >= 0).to(torch.float) \
+                   for ntype, label in y_true.items() if label.numel()}
 
         y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights=weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
@@ -886,23 +879,16 @@ class HGTNodeClf(NodeClfTrainer):
 
         y_pred = self.forward(blocks, feats if isinstance(feats, dict) else {self.head_node_type: feats})
 
-        weights = {}
-        for ntype, label in y_true.items():
-            if label.dim() == 2 and label.size(1) == 1:
-                y_true[ntype] = label.squeeze(-1)
+        weights = {ntype: (label.sum(1) > 0).to(torch.float) if label.dim() == 2 else (label >= 0).to(torch.float) \
+                   for ntype, label in y_true.items() if label.numel()}
 
-            if label.dim() == 1:
-                weights[ntype] = (y_true >= 0).to(torch.float)
-            elif label.dim() == 2:
-                weights[ntype] = (label.sum(1) > 0).to(torch.float)
-
-        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true)
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights=weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        val_loss = self.criterion.forward(y_pred, y_true)
+        loss = self.criterion.forward(y_pred, y_true)
 
         self.valid_metrics.update_metrics(y_pred, y_true, weights=None)
-        self.log("val_loss", val_loss, prog_bar=True, logger=True)
-        return val_loss
+        self.log("val_loss", loss, prog_bar=True, logger=True)
+        return loss
 
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
@@ -911,26 +897,16 @@ class HGTNodeClf(NodeClfTrainer):
 
         y_pred = self.forward(blocks, feats if isinstance(feats, dict) else {self.head_node_type: feats})
 
-        weights = {}
-        for ntype, label in y_true.items():
-            if label.dim() == 2 and label.size(1) == 1:
-                y_true[ntype] = label.squeeze(-1)
+        weights = {ntype: (label.sum(1) > 0).to(torch.float) if label.dim() == 2 else (label >= 0).to(torch.float) \
+                   for ntype, label in y_true.items() if label.numel()}
 
-            if label.dim() == 1:
-                weights[ntype] = (y_true >= 0).to(torch.float)
-            elif label.dim() == 2:
-                weights[ntype] = (label.sum(1) > 0).to(torch.float)
-
-        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true)
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights=weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        test_loss = self.criterion.forward(y_pred, y_true)
-
-        # if batch_nb == 0:
-        #     print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+        loss = self.criterion.forward(y_pred, y_true)
 
         self.test_metrics.update_metrics(y_pred, y_true, weights=None)
-        self.log("test_loss", test_loss, logger=True)
-        return test_loss
+        self.log("test_loss", loss, logger=True)
+        return loss
 
     def train_dataloader(self):
         return self.dataset.train_dataloader(collate_fn=None,

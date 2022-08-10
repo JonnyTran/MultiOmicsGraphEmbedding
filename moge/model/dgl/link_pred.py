@@ -202,6 +202,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
                                       pos_stack=pos_stack, neg_stack=neg_stack)
 
         self.log("loss", loss, logger=True, on_step=True)
+
         if batch_nb % 25 == 0 and isinstance(self.train_metrics, Metrics):
             logs = self.train_metrics.compute_metrics()
             self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
