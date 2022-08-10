@@ -368,8 +368,6 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
             for subtype, metrics in self.valid_metrics.items():
                 metrics.reset_metrics()
-        else:
-            print("got here")
 
         self.log_dict(metrics_dict, prog_bar=True)
 
@@ -390,9 +388,6 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         self.log_dict(metrics_dict, prog_bar=True)
         return None
-
-    def predict(self, dataloader, node_names=None, filter_nan_labels=True):
-        raise NotImplementedError()
 
     def get_node_loss(self, targets: Tensor, y_pred: Tensor, global_node_index: Dict[str, Tensor] = None):
         losses = F.binary_cross_entropy(y_pred.detach(),
