@@ -88,9 +88,11 @@ class DGLLinkSampler(DGLNodeSampler):
     @classmethod
     def from_heteronetwork(cls, network: HeteroNetwork, node_attr_cols: List[str] = None,
                            target: str = None, min_count: int = None,
-                           expression=False, sequence=False, add_reverse_metapaths=True,
+                           expression=False, sequence=False,
+                           add_reverse_metapaths=True,
                            label_subset: Optional[Union[Index, np.ndarray]] = None,
-                           ntype_subset: Optional[List[str]] = None, split_namespace=False, **kwargs):
+                           ntype_subset: Optional[List[str]] = None,
+                           split_namespace=False, **kwargs):
         G, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                        expression=expression, sequence=sequence,
@@ -100,6 +102,7 @@ class DGLLinkSampler(DGLNodeSampler):
                    edge_dir="in", **kwargs)
         self.network = network
         self.classes = classes
+        self.n_classes = len(classes)
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
 
@@ -137,24 +140,6 @@ class DGLLinkSampler(DGLNodeSampler):
             self.metapaths = [metapath for metapath in self.G.canonical_etypes if self.G.num_edges(etype=metapath)]
 
         return self
-
-    def process_dgl_heterodata(self, graph: dgl.DGLHeteroGraph):
-        self.G = graph
-
-        self.node_types = graph.ntypes
-
-        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in graph.ntypes}
-        self.global_node_index = {ntype: torch.arange(graph.num_nodes(ntype)) for ntype in graph.ntypes}
-
-        self.x_dict = graph.ndata["feat"]
-
-        self.y_dict = {}
-        for ntype, labels in self.y_dict.items():
-            if labels.dim() == 2 and labels.shape[1] == 1:
-                labels = labels.squeeze(1)
-            graph.nodes[ntype].data["labels"] = labels
-
-        self.metapaths = graph.canonical_etypes
 
     def process_DglLinkDataset_hetero(self, dataset: DglLinkPropPredDataset):
         graph: dgl.DGLHeteroGraph = dataset[0]

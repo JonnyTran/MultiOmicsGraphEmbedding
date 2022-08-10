@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import List, Dict, Union, Iterable, Tuple, Optional
+from typing import List, Dict, Union, Iterable, Tuple, Optional, Callable
 
 import dgl
 import numpy as np
@@ -11,6 +11,7 @@ from dgl.sampling import RandomWalkNeighborSampler
 from dgl.utils import prepare_tensor_dict, prepare_tensor
 from logzero import logger
 from ogb.nodeproppred import DglNodePropPredDataset
+from pandas import Index
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
@@ -22,12 +23,12 @@ from moge.network.sequence import BertSequenceTokenizer
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
 from .. import HeteroNeighborGenerator
-from ..utils import reverse_metapath
+from ..utils import reverse_metapath, is_negative, is_reversed, unreverse_metapath
 from ...network.base import SEQUENCE_COL
 
 
 class DGLNodeSampler(HeteroGraphDataset):
-    def __init__(self, dataset: DglNodePropPredDataset,
+    def __init__(self, dataset: Union[DglNodePropPredDataset, dgl.DGLHeteroGraph],
                  sampler: str = "MultiLayerNeighborSampler",
                  neighbor_sizes=None,
                  node_types=None,
@@ -54,47 +55,93 @@ class DGLNodeSampler(HeteroGraphDataset):
         self.neighbor_sampler = self.get_neighbor_sampler(self.G, neighbor_sizes=neighbor_sizes, sampler=sampler,
                                                           edge_dir=edge_dir)
 
-    @property
-    def edge_index_dict(self):
-        return {etype: torch.stack(self.G.edges(etype=etype, form="uv"), dim=0) \
-                for etype in self.G.canonical_etypes}
+    def process_dgl_heterodata(self, graph: dgl.DGLHeteroGraph):
+        self.G = graph
 
-    def get_neighbor_sampler(self, G, neighbor_sizes, sampler: str = "MultiLayerNeighborSampler", edge_dir="in"):
-        if G is None:
-            G = self.G
-        if neighbor_sizes is None:
-            neighbor_sizes = self.neighbor_sizes
-        if sampler is None:
-            sampler = self.sampler
-        if edge_dir is None:
-            edge_dir = self.edge_dir
+        self.node_types = graph.ntypes
 
-        fanouts = []
-        for layer, fanout in enumerate(neighbor_sizes):
-            fanouts.append({etype: fanout for etype in G.canonical_etypes})
-        if sampler == "MultiLayerNeighborSampler":
-            neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
+        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in graph.ntypes}
+        self.global_node_index = {ntype: torch.arange(graph.num_nodes(ntype)) for ntype in graph.ntypes}
 
-        elif sampler == "ImportanceSampler":
-            neighbor_sampler = ImportanceSampler(fanouts=fanouts,
-                                                 metapaths=self.get_metapaths(),  # Original metapaths only
-                                                 degree_counts=self.degree_counts,
-                                                 edge_dir=edge_dir)
-        else:
-            neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
-        return neighbor_sampler
+        self.x_dict = graph.ndata["feat"]
+
+        self.y_dict = {}
+        for ntype, labels in self.y_dict.items():
+            if labels.dim() == 2 and labels.shape[1] == 1:
+                labels = labels.squeeze(1)
+            graph.nodes[ntype].data["labels"] = labels
+
+        self.metapaths = graph.canonical_etypes
 
     @classmethod
-    def from_heteronetwork(cls, g: dgl.DGLHeteroGraph, labels: Union[Tensor, Dict[str, Tensor]],
-                           num_classes: int, train_idx: Dict[str, Tensor], val_idx, test_idx,
-                           **kwargs):
+    def from_heteronetwork(cls, network: HeteroNetwork, head_node_type, sampler, neighbor_sizes,
+                           node_attr_cols: List[str] = None,
+                           target: str = None, min_count: int = None,
+                           expression=False, sequence=False, add_reverse_metapaths=True,
+                           label_subset: Optional[Union[Index, np.ndarray]] = None,
+                           ntype_subset: Optional[List[str]] = None, split_namespace=False, **kwargs):
+        G, classes, nodes, training_idx, validation_idx, testing_idx = \
+            network.to_dgl_heterograph(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
+                                       expression=expression, sequence=sequence,
+                                       label_subset=label_subset, ntype_subset=ntype_subset,
+                                       train_test_split="node_id", **kwargs)
+
+        self = cls(dataset=G, metapaths=G.canonical_etypes, add_reverse_metapaths=add_reverse_metapaths,
+                   head_node_type=head_node_type, sampler=sampler, neighbor_sizes=neighbor_sizes,
+                   edge_dir="in", **kwargs)
+        self.network = network
+        self.classes = classes
+        self.nodes = nodes
+        self._name = network._name if hasattr(network, '_name') else ""
+        self.y_dict = G.ndata["label"]
+        self.pred_metapaths = network.pred_metapaths if hasattr(network, "pred_metapaths") else []
+        self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, "neg_pred_metapaths") else []
+
+        self.split_namespace = split_namespace
+        if split_namespace:
+            self.go_namespace = {}
+            self.ntype_mapping = {}
+            for ntype, df in network.annotations.items():
+                if "namespace" in df.columns:
+                    self.go_namespace[ntype] = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]].to_numpy()
+                    self.ntype_mapping.update({namespace: ntype for namespace in np.unique(self.go_namespace[ntype])})
+
+        self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx
+
+        if hasattr(network, 'pred_metapaths') and not set(network.pred_metapaths).issubset(self.pred_metapaths):
+            self.pred_metapaths.extend(network.pred_metapaths)
+        if hasattr(network, 'neg_pred_metapaths') and \
+                not set(network.neg_pred_metapaths).issubset(self.neg_pred_metapaths):
+            self.neg_pred_metapaths.extend(network.neg_pred_metapaths)
+
+        if self.use_reverse:
+            for metapath in self.G.canonical_etypes:
+                if is_negative(metapath) and is_reversed(metapath):
+                    print("removed", metapath)
+                    self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
+
+                elif self.pred_metapaths and unreverse_metapath(metapath) in self.pred_metapaths:
+                    print("removed", metapath)
+                    self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
+
+                elif self.neg_pred_metapaths and unreverse_metapath(metapath) in self.pred_metapaths:
+                    print("removed", metapath)
+                    self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
+
+            self.metapaths = [metapath for metapath in self.G.canonical_etypes if self.G.num_edges(etype=metapath)]
+
+        return self
+
+    @classmethod
+    def from_dgl_heterograph(cls, g: dgl.DGLHeteroGraph, labels: Union[Tensor, Dict[str, Tensor]],
+                             num_classes: int, train_idx: Dict[str, Tensor], val_idx, test_idx,
+                             **kwargs):
         if "classes" in kwargs:
             classes = kwargs.pop("classes")
         else:
             classes = None
 
         self = cls(dataset=g, metapaths=g.canonical_etypes, **kwargs)
-
         self.node_types = g.ntypes
 
         self.y_dict = {}
@@ -188,6 +235,105 @@ class DGLNodeSampler(HeteroGraphDataset):
                                       add_reverse_metapaths=kwargs["add_reverse_metapaths"],
                                       inductive=kwargs["inductive"])
         return self
+
+    def process_ogb_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
+        graph, labels = dataset[0]
+        self._name = dataset.name
+        self.G = graph
+
+        if self.node_types is None:
+            self.node_types = graph.ntypes
+
+        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
+        self.y_dict = labels
+
+        # Process labels
+        for ntype, labels in self.y_dict.items():
+            if labels.dim() == 2 and labels.shape[1] == 1:
+                labels = labels.squeeze(1)
+            graph.nodes[ntype].data["label"] = labels
+
+        # Process head_node_type for classification
+        if self.head_node_type is None:
+            if self.y_dict is not None:
+                self.head_node_type = list(self.y_dict.keys())[0]
+            else:
+                self.head_node_type = self.node_types[0]
+
+        # Process node data
+        if "year" in graph.ndata:
+            for ntype in graph.ntypes:
+                if "year" in graph.nodes[ntype].data:
+                    lb = LabelBinarizer()
+                    year_onehot = lb.fit_transform(graph.nodes[ntype].data["year"].numpy())
+                    year_onehot = torch.from_numpy(year_onehot)
+
+                    graph.nodes[ntype].data["feat"] = torch.cat([graph.nodes[ntype].data["feat"],
+                                                                 year_onehot], dim=1)
+
+        self.metapaths = graph.canonical_etypes
+
+        split_idx = dataset.get_idx_split()
+        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
+                                                                   split_idx["valid"][self.head_node_type], \
+                                                                   split_idx["test"][self.head_node_type]
+
+    def process_ogb_DglNodeDataset_homo(self, dataset: DglNodePropPredDataset):
+        graph, labels = dataset[0]
+        self.G = graph
+        self._name = dataset.name
+
+        if self.node_types is None:
+            self.node_types = graph.ntypes
+
+        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
+
+        if self.head_node_type is None:
+            self.head_node_type = self.node_types[0]
+
+        if labels.dim() == 2 and labels.size(1) == 1:
+            labels = labels.squeeze(1)
+
+        self.x_dict = {self.head_node_type: graph.ndata["feat"]} if "feat" in graph.ndata else {}
+
+        graph.nodes[self.head_node_type].data["label"] = labels
+        self.y_dict = {self.head_node_type: labels}
+
+        self.metapaths = graph.canonical_etypes
+
+        split_idx = dataset.get_idx_split()
+        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
+            "test"]
+
+    @property
+    def edge_index_dict(self):
+        return {etype: torch.stack(self.G.edges(etype=etype, form="uv"), dim=0) \
+                for etype in self.G.canonical_etypes}
+
+    def get_neighbor_sampler(self, G, neighbor_sizes, sampler: str = "MultiLayerNeighborSampler", edge_dir="in"):
+        if G is None:
+            G = self.G
+        if neighbor_sizes is None:
+            neighbor_sizes = self.neighbor_sizes
+        if sampler is None:
+            sampler = self.sampler
+        if edge_dir is None:
+            edge_dir = self.edge_dir
+
+        fanouts = []
+        for layer, fanout in enumerate(neighbor_sizes):
+            fanouts.append({etype: fanout for etype in G.canonical_etypes})
+        if sampler == "MultiLayerNeighborSampler":
+            neighbor_sampler = dgl.dataloading.MultiLayerNeighborSampler(fanouts)
+
+        elif sampler == "ImportanceSampler":
+            neighbor_sampler = ImportanceSampler(fanouts=fanouts,
+                                                 metapaths=self.get_metapaths(),  # Original metapaths only
+                                                 degree_counts=self.degree_counts,
+                                                 edge_dir=edge_dir)
+        else:
+            neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(len(self.neighbor_sizes))
+        return neighbor_sampler
 
     def transform_heterograph(self, G: dgl.DGLHeteroGraph, add_reverse=False,
                               decompose_etypes=False,
@@ -331,75 +477,6 @@ class DGLNodeSampler(HeteroGraphDataset):
             tail_counts.index = tail_counts.index.set_names(["nid", "relation", "ntype"])
             return head_counts.append(tail_counts)  # (node_id, relation, ntype): count
 
-    def process_DglNodeDataset_hetero(self, dataset: DglNodePropPredDataset):
-        graph, labels = dataset[0]
-        self._name = dataset.name
-        self.G = graph
-
-        if self.node_types is None:
-            self.node_types = graph.ntypes
-
-        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
-        self.y_dict = labels
-
-        # Process labels
-        for ntype, labels in self.y_dict.items():
-            if labels.dim() == 2 and labels.shape[1] == 1:
-                labels = labels.squeeze(1)
-            graph.nodes[ntype].data["label"] = labels
-
-        # Process head_node_type for classification
-        if self.head_node_type is None:
-            if self.y_dict is not None:
-                self.head_node_type = list(self.y_dict.keys())[0]
-            else:
-                self.head_node_type = self.node_types[0]
-
-        # Process node data
-        if "year" in graph.ndata:
-            for ntype in graph.ntypes:
-                if "year" in graph.nodes[ntype].data:
-                    lb = LabelBinarizer()
-                    year_onehot = lb.fit_transform(graph.nodes[ntype].data["year"].numpy())
-                    year_onehot = torch.from_numpy(year_onehot)
-
-                    graph.nodes[ntype].data["feat"] = torch.cat([graph.nodes[ntype].data["feat"],
-                                                                 year_onehot], dim=1)
-
-        self.metapaths = graph.canonical_etypes
-
-        split_idx = dataset.get_idx_split()
-        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"][self.head_node_type], \
-                                                                   split_idx["valid"][self.head_node_type], \
-                                                                   split_idx["test"][self.head_node_type]
-
-    def process_DglNodeDataset_homo(self, dataset: DglNodePropPredDataset):
-        graph, labels = dataset[0]
-        self.G = graph
-        self._name = dataset.name
-
-        if self.node_types is None:
-            self.node_types = graph.ntypes
-
-        self.num_nodes_dict = {ntype: graph.num_nodes(ntype) for ntype in self.node_types}
-
-        if self.head_node_type is None:
-            self.head_node_type = self.node_types[0]
-
-        if labels.dim() == 2 and labels.size(1) == 1:
-            labels = labels.squeeze(1)
-
-        self.x_dict = {self.head_node_type: graph.ndata["feat"]} if "feat" in graph.ndata else {}
-
-        graph.nodes[self.head_node_type].data["label"] = labels
-        self.y_dict = {self.head_node_type: labels}
-
-        self.metapaths = graph.canonical_etypes
-
-        split_idx = dataset.get_idx_split()
-        self.training_idx, self.validation_idx, self.testing_idx = split_idx["train"], split_idx["valid"], split_idx[
-            "test"]
-
     @property
     def node_attr_shape(self):
         if "feat" not in self.G.ndata:
@@ -425,42 +502,19 @@ class DGLNodeSampler(HeteroGraphDataset):
         # return loader.collate_fn(iloc)
         return next(iter(loader))
 
-    def get_training_subgraph(self):
-        nodes = {ntype: self.G.nodes(ntype) for ntype in self.node_types if ntype != self.head_node_type}
-        nodes[self.head_node_type] = torch.tensor(self.training_idx, dtype=torch.long)
-        graph = self.transform_heterograph(self.G, nodes_subset=nodes)
-
-        logger.info(f"Removed edges incident to test nodes from the training subgraph for inductive node classification"
-                    f": \n{graph}")
-        return graph
-
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
-        if self.inductive:
-            graph = self.get_training_subgraph()
+    def get_node_collator(self, graph: dgl.DGLHeteroGraph, seed_nodes: Dict[str, Tensor], collate_fn: str) \
+            -> Tuple[dgl.dataloading.NodeCollator, Callable]:
+        if collate_fn == NodeClfPyGCollator.__name__:
+            collator = NodeClfPyGCollator(graph, nids=seed_nodes, graph_sampler=self.neighbor_sampler)
         else:
-            graph = self.G
-
-        if isinstance(self.head_node_type, str) and isinstance(self.training_idx, (Tensor, np.ndarray)):
-            seed_nodes = {self.head_node_type: self.training_idx}
-        elif isinstance(self.head_node_type, str) and isinstance(self.training_idx, dict):
-            seed_nodes = {self.head_node_type: self.training_idx[self.head_node_type]}
-        else:
-            assert isinstance(self.training_idx, dict) and len(self.head_node_type) == len(self.training_idx)
-            seed_nodes = self.training_idx
-
-        if collate_fn == "neighbor_sampler":
-            collator = NodeClfPyGCollator(graph, nids=seed_nodes,
-                                          graph_sampler=self.neighbor_sampler)
-        else:
-            collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
-                                                    graph_sampler=self.neighbor_sampler)
+            collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes, graph_sampler=self.neighbor_sampler)
 
         if hasattr(self, "network") and hasattr(self, "tokenizer"):
             self.network: HeteroNetwork
             self.tokenizer: BertSequenceTokenizer
 
             def collate_fn(idx):
-                if collate_fn == "neighbor_sampler":
+                if collate_fn == NodeClfPyGCollator.__name__:
                     X, y_dict, weights = collator.collate(idx)
                     node_names = {ntype: self.network.nodes[ntype][nid.numpy()] \
                                   for ntype, nid in X["global_node_index"][0].items()}
@@ -477,7 +531,6 @@ class DGLNodeSampler(HeteroGraphDataset):
 
                 else:
                     input_nodes, seeds, blocks = collator.collate(idx)
-
                     node_names = {ntype: self.network.nodes[ntype][nid.numpy()] \
                                   for ntype, nid in input_nodes.items()}
 
@@ -492,6 +545,24 @@ class DGLNodeSampler(HeteroGraphDataset):
                     return input_nodes, seeds, blocks
         else:
             collate_fn = collator.collate
+
+        return collator, collate_fn
+
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, **kwargs):
+        if self.inductive:
+            graph = self.transform_heterograph(self.G, nodes_subset=self.training_idx)
+        else:
+            graph = self.G
+
+        if isinstance(self.head_node_type, str) and isinstance(self.training_idx, (Tensor, np.ndarray)):
+            seed_nodes = {self.head_node_type: self.training_idx}
+        elif isinstance(self.head_node_type, str) and isinstance(self.training_idx, dict):
+            seed_nodes = {self.head_node_type: self.training_idx[self.head_node_type]}
+        else:
+            assert isinstance(self.training_idx, dict) and len(self.head_node_type) == len(self.training_idx)
+            seed_nodes = self.training_idx
+
+        collator, collate_fn = self.get_node_collator(graph, seed_nodes, collate_fn)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collate_fn,
                                 batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
@@ -509,15 +580,10 @@ class DGLNodeSampler(HeteroGraphDataset):
             assert isinstance(self.validation_idx, dict) and len(self.head_node_type) == len(self.validation_idx)
             seed_nodes = self.validation_idx
 
-        if collate_fn == "neighbor_sampler":
-            collator = NodeClfPyGCollator(graph, nids=seed_nodes,
-                                          graph_sampler=self.neighbor_sampler)
-        else:
-            collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
-                                                    graph_sampler=self.neighbor_sampler)
+        collator, collate_fn = self.get_node_collator(graph, seed_nodes, collate_fn)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
+                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         return dataloader
 
@@ -532,15 +598,10 @@ class DGLNodeSampler(HeteroGraphDataset):
             assert isinstance(self.testing_idx, dict) and len(self.head_node_type) == len(self.testing_idx)
             seed_nodes = self.testing_idx
 
-        if collate_fn == "neighbor_sampler":
-            collator = NodeClfPyGCollator(graph, nids=seed_nodes,
-                                          graph_sampler=self.neighbor_sampler)
-        else:
-            collator = dgl.dataloading.NodeCollator(graph, nids=seed_nodes,
-                                                    graph_sampler=self.neighbor_sampler)
+        collator, collate_fn = self.get_node_collator(graph, seed_nodes, collate_fn)
 
         dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
-                                batch_size=batch_size, shuffle=False, drop_last=False, num_workers=num_workers)
+                                batch_size=batch_size, shuffle=True, drop_last=False, num_workers=num_workers)
 
         return dataloader
 

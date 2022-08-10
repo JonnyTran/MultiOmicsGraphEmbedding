@@ -248,7 +248,7 @@ def train(hparams):
                      ]
 
     else:
-        raise Exception(f"Unknown model {hparams.model}")
+        raise Exception(f"Unknown model {hparams.embedder}")
 
     if CALLBACKS is None and "patience" in args:
         CALLBACKS = [EarlyStopping(monitor='val_loss', patience=args["patience"], min_delta=0.0001, strict=False)]

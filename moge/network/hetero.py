@@ -97,6 +97,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         if isinstance(annotations, pd.DataFrame) and not annotations.empty:
             self.annotations[ntype] = annotations.loc[nodes]
 
+        logger.info(f"Added {len(nodes)} {ntype} nodes")
+
     def add_edges(self, edgelist: List[Union[Tuple[str, str]]], etype: Tuple[str, str, str], database: str,
                   directed=True,
                   **kwargs):
@@ -423,56 +425,60 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
             # Get train_mask, valid_mask, test_mask for each node of ntype
             if hasattr(self, "train_nodes") and self.train_nodes:
-                for key_mask, trainvalidtest_nodes in zip(["train_mask", "valid_mask", "test_mask"],
-                                                          [self.train_nodes[ntype], self.valid_nodes[ntype],
-                                                           self.test_nodes[ntype]]):
+                for mask_name, trainvalidtest_nodes in zip(["train_mask", "valid_mask", "test_mask"],
+                                                           [self.train_nodes[ntype], self.valid_nodes[ntype],
+                                                            self.test_nodes[ntype]]):
                     if trainvalidtest_nodes is None or len(trainvalidtest_nodes) == 0: continue
                     nodelist_idx = self.nodes[ntype].get_indexer_for(
                         self.nodes[ntype].intersection(trainvalidtest_nodes))
                     mask = torch.zeros(G.num_nodes(ntype), dtype=torch.bool)
                     mask[nodelist_idx] = 1
-                    G.nodes[ntype].data[key_mask] = mask
+                    G.nodes[ntype].data[mask_name] = mask
 
         # Node labels
-        self.process_feature_tranformer(filter_label=target, min_count=min_count)
-        if label_subset is not None:
-            self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
-                                                                       label_subset, assume_unique=True)
+        if target is not None:
+            # Define classes set
+            self.process_feature_tranformer(filter_label=target, min_count=min_count)
+            if label_subset is not None:
+                self.feature_transformer[target].classes_ = np.intersect1d(self.feature_transformer[target].classes_,
+                                                                           label_subset, assume_unique=True)
             classes = self.feature_transformer[target].classes_
-        else:
-            classes = None
 
-        labels = {}
-        for ntype in G.ntypes:
-            if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
-            y_label = filter_multilabel(self.annotations[ntype].loc[self.nodes[ntype].label_col],
-                                        min_count=min_count,
-                                        label_subset=label_subset, dropna=False, delimiter=self.delimiter)
-            labels[ntype] = self.feature_transformer[target].transform(y_label)
-            labels[ntype] = torch.tensor(labels[ntype])
+            labels = {}
+            for ntype in G.ntypes:
+                if ntype not in self.annotations or target not in self.annotations[ntype].columns: continue
+                y_label = filter_multilabel(self.annotations[ntype].loc[self.nodes[ntype], target], min_count=min_count,
+                                            label_subset=label_subset, dropna=False, delimiter=self.delimiter)
+                labels[ntype] = self.feature_transformer[target].transform(y_label)
+                labels[ntype] = torch.tensor(labels[ntype])
 
-            G.nodes[ntype].data["label"] = labels[ntype]
-            num_classes = labels[ntype].shape[1]
+                G.nodes[ntype].data["label"] = labels[ntype]
 
         # Get index of train/valid/test edge_id
         training, validation, testing = {}, {}, {}
 
         if train_test_split == "edge_id":
-            for key_mask, trainvalidtest_idx in zip(['train_mask', 'valid_mask', 'test_mask'],
-                                                    [training, validation, testing]):
+            for mask_name, trainvalidtest in zip(['train_mask', 'valid_mask', 'test_mask'],
+                                                 [training, validation, testing]):
                 for metapath, edge_attr in edge_attr_dict.items():
                     src, dst = edge_index_dict[metapath]
-                    trainvalidtest_idx[metapath] = G.edge_ids(src[edge_attr[key_mask]], dst[edge_attr[key_mask]],
-                                                              etype=metapath)
-        elif train_test_split == "node_mask":
-            for key_mask, trainvalidtest_idx in zip(['train_mask', 'valid_mask', 'test_mask'],
-                                                    [training, validation, testing]):
+                    trainvalidtest[metapath] = G.edge_ids(src[edge_attr[mask_name]], dst[edge_attr[mask_name]],
+                                                          etype=metapath)
+        elif "node" in train_test_split:
+            for mask_name, trainvalidtest in zip(['train_mask', 'valid_mask', 'test_mask'],
+                                                 [training, validation, testing]):
                 for ntype in G.ntypes:
-                    if key_mask not in G.nodes[ntype].data: continue
-                    trainvalidtest_idx[key_mask] = G.nodes[ntype].data[key_mask]
+                    if mask_name not in G.nodes[ntype].data: continue
+
+                    if train_test_split == "node_mask":
+                        trainvalidtest[mask_name] = G.nodes[ntype].data[mask_name]
+                    elif train_test_split == "node_id":
+                        trainvalidtest[ntype] = torch.arange(G.num_nodes(ntype))[G.nodes[ntype].data[mask_name]]
+                    else:
+                        raise ValueError(f"train_test_split {train_test_split}")
         else:
             raise Exception(
-                f"Invalid `train_test_split` argument {train_test_split}. Must be one of [edge_id, node_mask]")
+                f"Invalid `train_test_split` argument {train_test_split}. Must be one of [edge_id, node_id, node_mask]")
 
         return G, classes, dict(self.nodes), training, validation, testing
 

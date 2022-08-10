@@ -13,6 +13,7 @@ from dgl import DGLHeteroGraph
 from pandas import Series
 from torch import Tensor
 from torch.nn import functional as F
+from torch.optim import lr_scheduler
 
 from moge.dataset import DGLLinkSampler
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
@@ -349,18 +350,23 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         extra = {}
         if lr_annealing == "cosine":
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                                   T_max=self.num_training_steps,
-                                                                   eta_min=self.lr / 100)
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer,
+                                                       T_max=self.num_training_steps,
+                                                       eta_min=self.lr / 100)
 
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
             print("Using CosineAnnealingLR", scheduler.state_dict())
 
         elif lr_annealing == "restart":
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50, T_mult=1,
-                                                                             eta_min=self.lr / 100)
+            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50, T_mult=1,
+                                                                 eta_min=self.lr / 100)
             extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
             print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
+
+        elif lr_annealing == "reduce":
+            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            print("Using ReduceLROnPlateau", scheduler.state_dict())
 
         return {"optimizer": optimizer, **extra}
 
@@ -383,7 +389,8 @@ class HGTLinkPred(DglLinkPredTrainer):
 
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
                             edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                            n_inp=hparams.embedding_dim,
+                            n_inp=self.dataset.node_attr_shape[self.head_node_type] \
+                                if self.dataset.node_attr_shape else hparams.embedding_dim,
                             n_hid=hparams.embedding_dim,
                             n_out=hparams.embedding_dim,
                             n_layers=hparams.n_layers,

@@ -2,11 +2,12 @@ import copy
 import logging
 import os
 from argparse import Namespace
-from typing import Dict, List, Iterable
+from typing import Dict, List, Iterable, Tuple
 
 import dgl
 import torch
-from torch import nn
+from dgl.heterograph import DGLBlock
+from torch import nn, Tensor
 from torch.utils.data import DataLoader
 
 from moge.dataset import DGLNodeSampler
@@ -20,6 +21,7 @@ from moge.model.losses import ClassificationLoss
 from .HGConv.model.HGConv import HGConv as Hgconv
 from .HGT import HGT
 from .conv import HAN as Han
+from ..encoder import HeteroNodeFeatureEncoder
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
 from ..utils import tensor_sizes, process_tensor_dicts, filter_samples_weights
@@ -27,7 +29,9 @@ from ..utils import tensor_sizes, process_tensor_dicts, filter_samples_weights
 
 class LATTENodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"], collate_fn="neighbor_sampler") -> None:
-        super(LATTENodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.node_types = dataset.node_types
         self.dataset = dataset
@@ -219,33 +223,35 @@ class LATTENodeClf(NodeClfTrainer):
 
 
 class HGConv(NodeClfTrainer):
-    def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
-        super().__init__(Namespace(**args), dataset, metrics)
+    def __init__(self, hparams: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(Namespace(**hparams), dataset, metrics)
         self.dataset = dataset
 
-        if "node_neighbors_min_num" in args:
-            fanouts = [args["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
+        if "node_neighbors_min_num" in hparams:
+            fanouts = [hparams["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
             self.set_fanouts(self.dataset, fanouts)
 
         hgconv = Hgconv(graph=dataset.G,
                         input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
                                         for ntype in dataset.G.ntypes},
-                        hidden_dim=args['hidden_units'],
+                        hidden_dim=hparams['hidden_units'],
                         num_layers=len(dataset.neighbor_sizes),
-                        n_heads=args['num_heads'],
-                        dropout=args['dropout'],
-                        residual=args['residual'])
+                        n_heads=hparams['num_heads'],
+                        dropout=hparams['dropout'],
+                        residual=hparams['residual'])
 
-        classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
+        classifier = nn.Linear(hparams['hidden_units'] * hparams['num_heads'], dataset.n_classes)
 
         self.model = nn.Sequential(hgconv, classifier)
         self.criterion = nn.BCEWithLogitsLoss() if dataset.multilabel else nn.CrossEntropyLoss()
 
-        args["n_params"] = self.get_n_params()
+        hparams["n_params"] = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
 
-        print(f'configuration is {args}')
-        self._set_hparams(args)
+        print(f'configuration is {hparams}')
+        self._set_hparams(hparams)
 
     def forward(self, blocks, input_features):
         nodes_representation = self.model[0](blocks, copy.deepcopy(input_features))
@@ -355,37 +361,38 @@ class HGConv(NodeClfTrainer):
                 "scheduler": scheduler}
 
 
-
 class R_HGNN(NodeClfTrainer):
-    def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
-        super(R_HGNN, self).__init__(Namespace(**args), dataset, metrics)
+    def __init__(self, hparams: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(Namespace(**hparams), dataset, metrics)
         self.dataset = dataset
 
-        if "node_neighbors_min_num" in args:
-            fanouts = [args["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
+        if "node_neighbors_min_num" in hparams:
+            fanouts = [hparams["node_neighbors_min_num"], ] * len(dataset.neighbor_sizes)
             self.set_fanouts(self.dataset, fanouts)
 
         self.r_hgnn = RHGNN(graph=dataset.G,
                             input_dim_dict={ntype: dataset.G.nodes[ntype].data['feat'].shape[1]
                                             for ntype in dataset.G.ntypes},
-                            hidden_dim=args['hidden_units'],
-                            relation_input_dim=args['relation_hidden_units'],
-                            relation_hidden_dim=args['relation_hidden_units'],
+                            hidden_dim=hparams['hidden_units'],
+                            relation_input_dim=hparams['relation_hidden_units'],
+                            relation_hidden_dim=hparams['relation_hidden_units'],
                             num_layers=len(dataset.neighbor_sizes),
-                            n_heads=args['num_heads'],
-                            dropout=args['dropout'],
-                            residual=args['residual'])
+                            n_heads=hparams['num_heads'],
+                            dropout=hparams['dropout'],
+                            residual=hparams['residual'])
 
-        self.classifier = nn.Linear(args['hidden_units'] * args['num_heads'], dataset.n_classes)
+        self.classifier = nn.Linear(hparams['hidden_units'] * hparams['num_heads'], dataset.n_classes)
 
         self.model = nn.Sequential(self.r_hgnn, self.classifier)
         self.criterion = nn.BCEWithLogitsLoss() if dataset.multilabel else nn.CrossEntropyLoss()
 
-        args["n_params"] = self.get_n_params()
+        hparams["n_params"] = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
 
-        print(f'configuration is {args}')
-        self._set_hparams(args)
+        print(f'configuration is {hparams}')
+        self._set_hparams(hparams)
 
     def forward(self, blocks, input_features):
         nodes_representation, _ = self.model[0](blocks, input_features)
@@ -505,17 +512,19 @@ class R_HGNN(NodeClfTrainer):
 
 
 class NARSNodeCLf(NodeClfTrainer):
-    def __init__(self, args: Namespace, dataset: DGLNodeSampler, metrics: List[str]):
-        args.loss_type = "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
-        super(NARSNodeCLf, self).__init__(args, dataset, metrics)
+    def __init__(self, hparams: Namespace, dataset: DGLNodeSampler, metrics: List[str]):
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        hparams.loss_type = "BCE_WITH_LOGITS" if dataset.multilabel else "SOFTMAX_CROSS_ENTROPY"
+        super().__init__(hparams, dataset, metrics)
 
         self.dataset = dataset
 
-        if "use_relation_subsets" in args and os.path.exists(args.use_relation_subsets):
-            rel_subsets = read_relation_subsets(args.use_relation_subsets)
+        if "use_relation_subsets" in hparams and os.path.exists(hparams.use_relation_subsets):
+            rel_subsets = read_relation_subsets(hparams.use_relation_subsets)
         else:
             rel_subsets = []
-            subsets = sample_relation_subsets(self.dataset.G.metagraph(), args)
+            subsets = sample_relation_subsets(self.dataset.G.metagraph(), hparams)
             for relation in set(subsets):
                 etypes = []
 
@@ -523,7 +532,7 @@ class NARSNodeCLf(NodeClfTrainer):
                 target_touched = False
                 for u, v, e in relation:
                     etypes.append(e)
-                    if u == args.head_node_type or v == args.head_node_type:
+                    if u == hparams.head_node_type or v == hparams.head_node_type:
                         target_touched = True
 
                 print(etypes, target_touched and "touched" or "not touched")
@@ -534,31 +543,31 @@ class NARSNodeCLf(NodeClfTrainer):
         self.rel_subsets = rel_subsets
 
         with torch.no_grad():
-            feats = preprocess_features(self.dataset.G, self.rel_subsets, args)
+            feats = preprocess_features(self.dataset.G, self.rel_subsets, hparams)
             print("Done preprocessing")
 
             self.dataset.feats = feats
-            self.dataset.labels = self.dataset.G.nodes[args.head_node_type].data["label"]
+            self.dataset.labels = self.dataset.G.nodes[hparams.head_node_type].data["label"]
             print("feats", tensor_sizes(feats))
             print("labels", tensor_sizes(self.dataset.labels))
 
         _, num_feats, in_feats = feats[0].shape
         logging.info(f"new input size: {num_feats} {in_feats}")
 
-        num_hops = args.R + 1  # include self feature hop 0
+        num_hops = hparams.R + 1  # include self feature hop 0
         self.model = nn.Sequential(
             WeightedAggregator(num_feats, in_feats, num_hops),
-            SIGN(in_feats, args.num_hidden, dataset.n_classes, num_hops,
-                 args.ff_layer, args.dropout, args.input_dropout)
+            SIGN(in_feats, hparams.num_hidden, dataset.n_classes, num_hops,
+                 hparams.ff_layer, hparams.dropout, hparams.input_dropout)
         )
 
         self.criterion = nn.BCEWithLogitsLoss(reduction="mean") if dataset.multilabel else nn.CrossEntropyLoss()
 
-        args.n_params = self.get_n_params()
+        hparams.n_params = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
 
-        print(f'configuration is {args}')
-        self._set_hparams(args)
+        print(f'configuration is {hparams}')
+        self._set_hparams(hparams)
 
     def forward(self, batch_feats):
         return self.model(batch_feats)
@@ -665,8 +674,10 @@ class NARSNodeCLf(NodeClfTrainer):
 
 
 class HANNodeClf(NodeClfTrainer):
-    def __init__(self, args: Dict, dataset: DGLNodeSampler, metrics: List[str]):
-        super(HANNodeClf, self).__init__(Namespace(**args), dataset, metrics)
+    def __init__(self, hparams: Dict, dataset: DGLNodeSampler, metrics: List[str]):
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(Namespace(**hparams), dataset, metrics)
         self.dataset = dataset
 
         # metapath_list = [['pa', 'ap'], ['pf', 'fp']]
@@ -678,26 +689,26 @@ class HANNodeClf(NodeClfTrainer):
         self.metapath_list = [[etype for srctype, dsttype, etype in metapaths] for metapaths in edge_paths]
         print("metapath_list", self.metapath_list)
 
-        self.num_neighbors = args['num_neighbors']
+        self.num_neighbors = hparams['num_neighbors']
         self.han_sampler = HANSampler(dataset.G, self.metapath_list, self.num_neighbors)
 
         self.features = dataset.G.nodes[dataset.head_node_type].data["feat"]
         self.labels = dataset.G.nodes[dataset.head_node_type].data["label"]
         self.model = Han(num_metapath=len(self.metapath_list),
                          in_size=set(dataset.node_attr_shape.values()).pop(),
-                         hidden_size=args['hidden_units'],
+                         hidden_size=hparams['hidden_units'],
                          out_size=dataset.n_classes,
-                         num_heads=args['num_heads'],
-                         dropout=args['dropout'])
+                         num_heads=hparams['num_heads'],
+                         dropout=hparams['dropout'])
 
-        self.criterion = ClassificationLoss(loss_type=args["loss_type"], n_classes=dataset.n_classes,
+        self.criterion = ClassificationLoss(loss_type=hparams["loss_type"], n_classes=dataset.n_classes,
                                             multilabel=dataset.multilabel)
 
-        args["n_params"] = self.get_n_params()
+        hparams["n_params"] = self.get_n_params()
         print(f'Model #Params: {self.get_n_params()}')
 
-        print(f'configuration is {args}')
-        self._set_hparams(args)
+        print(f'configuration is {hparams}')
+        self._set_hparams(hparams)
 
     def forward(self, blocks, input_features):
         return self.model(blocks, input_features)
@@ -793,7 +804,9 @@ class HANNodeClf(NodeClfTrainer):
 
 class HGTNodeClf(NodeClfTrainer):
     def __init__(self, hparams, dataset: DGLNodeSampler, metrics=["accuracy"]) -> None:
-        super(HGTNodeClf, self).__init__(hparams=hparams, dataset=dataset, metrics=metrics)
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__(hparams=hparams, dataset=dataset, metrics=metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel
@@ -803,17 +816,21 @@ class HGTNodeClf(NodeClfTrainer):
                 and len(self.dataset.neighbor_sizes) != len(hparams.fanouts):
             self.set_fanouts(self.dataset, hparams.fanouts)
 
-        self.n_layers = len(self.dataset.neighbor_sizes)
+        if len(dataset.node_attr_shape) == 0 or sum(dataset.node_attr_shape.values()) == 0:
+            non_seq_ntypes = [ntype for ntype in dataset.node_types if ntype not in dataset.node_attr_shape]
+            print("non_seq_ntypes", non_seq_ntypes)
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
-        self.model = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                         edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
-                         n_inp=self.dataset.node_attr_shape[self.head_node_type if isinstance(self.head_node_type, str) \
-                             else self.head_node_type[0]],
-                         n_hid=hparams.embedding_dim, n_out=hparams.embedding_dim,
-                         n_layers=self.n_layers,
-                         n_heads=hparams.attn_heads,
-                         dropout=hparams.dropout,
-                         use_norm=hparams.use_norm)
+        self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
+                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
+                            n_inp=self.dataset.node_attr_shape[self.head_node_type] \
+                                if self.dataset.node_attr_shape else hparams.embedding_dim,
+                            n_hid=hparams.embedding_dim,
+                            n_out=hparams.embedding_dim,
+                            n_layers=hparams.n_layers,
+                            n_heads=hparams.attn_heads,
+                            dropout=hparams.dropout,
+                            use_norm=hparams.use_norm)
 
         self.classifier = DenseClassification(hparams)
 
@@ -824,18 +841,22 @@ class HGTNodeClf(NodeClfTrainer):
 
         self.hparams.n_params = self.get_n_params()
 
-    def forward(self, blocks, batch_inputs: dict, **kwargs):
-        embeddings = self.model(blocks, batch_inputs)
+    def forward(self, blocks: Tuple[DGLBlock], batch_inputs: Dict[str, Tensor], return_embeddings: bool = False,
+                **kwargs):
+        embeddings = self.embedder(blocks, batch_inputs)
 
         if isinstance(self.head_node_type, str):
             y_hat = self.classifier(embeddings[self.head_node_type]) \
                 if hasattr(self, "classifier") else embeddings[self.head_node_type]
 
-        elif isinstance(self.head_node_type, Iterable):
+        elif isinstance(self.head_node_type, (tuple, list)):
             if hasattr(self, "classifier"):
                 y_hat = {ntype: self.classifier(emb) for ntype, emb in embeddings.items()}
             else:
                 y_hat = embeddings
+
+        if return_embeddings:
+            return embeddings, y_hat
 
         return y_hat
 

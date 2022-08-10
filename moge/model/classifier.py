@@ -96,10 +96,10 @@ class LabelGraphNodeClassifier(nn.Module):
 
 
 class DenseClassification(nn.Module):
-    def __init__(self, hparams) -> None:
-        super(DenseClassification, self).__init__()
+    def __init__(self, hparams: Namespace) -> None:
+        super().__init__()
         # Classifier
-        if hparams.nb_cls_dense_size > 0:
+        if hasattr(hparams, 'nb_cls_dense_size') and hparams.nb_cls_dense_size > 0:
             self.fc_classifier = nn.Sequential(OrderedDict([
                 ("linear_1", nn.Linear(hparams.embedding_dim, hparams.nb_cls_dense_size)),
                 ("relu", nn.ReLU()),

@@ -5,8 +5,10 @@ from typing import Dict, Any, Tuple, Optional, Union, List
 import dgl
 import numpy as np
 import torch
-from dgl.heterograph import DGLBlock
+from dgl._deprecate.graph import DGLGraph
+from dgl.heterograph import DGLBlock, DGLHeteroGraph
 from torch import Tensor
+from torch_geometric.data import HeteroData
 
 
 def activation(y_pred: Tensor, loss_type: str):
@@ -167,6 +169,14 @@ def tensor_sizes(input: Any) -> Any:
         if isinstance(list(input)[0], str):
             return len(input)
         return {tensor_sizes(v) for v in input}
+
+    elif isinstance(input, (DGLGraph, DGLBlock, DGLHeteroGraph)):
+        return {ntype: input.num_nodes(ntype) for ntype in input.ntypes} | \
+               {etype: input.num_edges(etype=etype) for etype in input.etypes if input.num_edges(etype=etype)}
+
+    elif isinstance(input, HeteroData):
+        return {ntype: input[ntype].num_nodes() for ntype in input.node_types} | \
+               {etype: input[etype].num_edges() for etype in input.edge_types if input[etype].num_edges()}
 
     else:
         if input is not None and hasattr(input, "shape"):
