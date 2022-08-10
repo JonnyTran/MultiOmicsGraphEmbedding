@@ -29,7 +29,7 @@ from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, Heter
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
-from moge.model.utils import filter_samples_weights, process_tensor_dicts, activation, concat_dict_batch
+from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -251,7 +251,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred = self.forward(X)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
@@ -272,7 +272,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred = self.forward(X, save_betas=False)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
@@ -287,7 +287,7 @@ class LATTENodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred = self.forward(X, save_betas=True)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=True)
 
@@ -320,7 +320,7 @@ class LATTENodeClf(NodeClfTrainer):
         for X_test, y_test, w_test in tqdm.tqdm(dataloader):
             y_test_pred, _, edge_index = self.forward(X_test, save_betas=True)
 
-            y_test_pred, y_test, w_test = process_tensor_dicts(y_test_pred, y_test, w_test)
+            y_test_pred, y_test, w_test = stack_tensor_dicts(y_test_pred, y_test, w_test)
             mask_idx = filter_samples_weights(Y_hat=y_test_pred, Y=y_test, weights=w_test, return_index=True)
 
             y_test = y_test[mask_idx]

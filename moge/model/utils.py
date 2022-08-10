@@ -115,8 +115,8 @@ def concat_dict_batch(batch_size: Dict[str, int], y_pred: Dict[str, Tensor], y_t
     return y_pred, y_true, weights
 
 
-def process_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
-                         weights: Optional[Dict[str, Tensor]] = None) \
+def stack_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
+                       weights: Optional[Dict[str, Tensor]] = None) \
         -> Tuple[Tensor, Tensor, Tensor]:
     """
     Returns y_pred, y_true, weights as Tensors and ensure they all have the same batch_size in dim 0.

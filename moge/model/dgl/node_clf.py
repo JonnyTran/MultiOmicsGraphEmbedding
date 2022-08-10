@@ -2,7 +2,7 @@ import copy
 import logging
 import os
 from argparse import Namespace
-from typing import Dict, List, Iterable, Tuple
+from typing import Dict, List, Iterable
 
 import dgl
 import torch
@@ -24,7 +24,7 @@ from .conv import HAN as Han
 from ..encoder import HeteroNodeFeatureEncoder
 from ..sampling import sample_metapaths
 from ..trainer import NodeClfTrainer, print_pred_class_counts
-from ..utils import tensor_sizes, process_tensor_dicts, filter_samples_weights
+from ..utils import tensor_sizes, stack_tensor_dicts, filter_samples_weights
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -72,21 +72,8 @@ class LATTENodeClf(NodeClfTrainer):
                                                                                  hparams.use_class_weights else None,
                                             multilabel=dataset.multilabel,
                                             reduction=hparams.reduction if hasattr(dataset, "reduction") else "mean")
+
         self.hparams.n_params = self.get_n_params()
-
-        if isinstance(dataset.node_attr_shape, dict):
-            non_attr_node_types = (dataset.num_nodes_dict.keys() - dataset.node_attr_shape.keys())
-        else:
-            non_attr_node_types = []
-
-        if len(non_attr_node_types) > 0:
-            print("Embedding.device = 'gpu'", "num_nodes_dict", dataset.num_nodes_dict)
-            self.embeddings = nn.ModuleDict(
-                {node_type: nn.Embedding(num_embeddings=dataset.num_nodes_dict[node_type],
-                                         embedding_dim=hparams.embedding_dim,
-                                         sparse=False) for node_type in non_attr_node_types})
-        else:
-            self.embeddings = None
 
     def forward(self, blocks, feat, **kwargs):
         h_dict = {}
@@ -841,9 +828,11 @@ class HGTNodeClf(NodeClfTrainer):
 
         self.hparams.n_params = self.get_n_params()
 
-    def forward(self, blocks: Tuple[DGLBlock], batch_inputs: Dict[str, Tensor], return_embeddings: bool = False,
-                **kwargs):
-        embeddings = self.embedder(blocks, batch_inputs)
+    def forward(self, blocks: List[DGLBlock], x: Dict[str, Tensor], return_embeddings: bool = False, **kwargs):
+        if len(x) == 0 or sum(a.numel() for a in x.values()) == 0:
+            x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
+
+        embeddings = self.embedder(blocks, x)
 
         if isinstance(self.head_node_type, str):
             y_hat = self.classifier(embeddings[self.head_node_type]) \
@@ -862,13 +851,10 @@ class HGTNodeClf(NodeClfTrainer):
 
     def training_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        batch_inputs = blocks[0].srcdata['feat']
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-
-        y_pred = self.forward(blocks, batch_inputs)
-
+        feats = blocks[0].srcdata['feat']
         y_true = blocks[-1].dstdata['label']
+
+        y_pred = self.forward(blocks, feats if isinstance(feats, dict) else {self.head_node_type: feats})
 
         weights = {}
         for ntype, label in y_true.items():
@@ -880,7 +866,7 @@ class HGTNodeClf(NodeClfTrainer):
             elif label.dim() == 2:
                 weights[ntype] = (label.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights=weights)
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights=weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         loss = self.criterion.forward(y_pred, y_true)
 
@@ -895,13 +881,10 @@ class HGTNodeClf(NodeClfTrainer):
 
     def validation_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        batch_inputs = blocks[0].srcdata['feat']
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-
-        y_pred = self.forward(blocks, batch_inputs)
-
+        feats = blocks[0].srcdata['feat']
         y_true = blocks[-1].dstdata['label']
+
+        y_pred = self.forward(blocks, feats if isinstance(feats, dict) else {self.head_node_type: feats})
 
         weights = {}
         for ntype, label in y_true.items():
@@ -913,7 +896,7 @@ class HGTNodeClf(NodeClfTrainer):
             elif label.dim() == 2:
                 weights[ntype] = (label.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true)
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         val_loss = self.criterion.forward(y_pred, y_true)
 
@@ -923,13 +906,10 @@ class HGTNodeClf(NodeClfTrainer):
 
     def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
-        batch_inputs = blocks[0].srcdata['feat']
-        if not isinstance(batch_inputs, dict):
-            batch_inputs = {self.head_node_type: batch_inputs}
-
-        y_pred = self.forward(blocks, batch_inputs)
-
+        feats = blocks[0].srcdata['feat']
         y_true = blocks[-1].dstdata['label']
+
+        y_pred = self.forward(blocks, feats if isinstance(feats, dict) else {self.head_node_type: feats})
 
         weights = {}
         for ntype, label in y_true.items():
@@ -941,12 +921,12 @@ class HGTNodeClf(NodeClfTrainer):
             elif label.dim() == 2:
                 weights[ntype] = (label.sum(1) > 0).to(torch.float)
 
-        y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true)
+        y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
         test_loss = self.criterion.forward(y_pred, y_true)
 
-        if batch_nb == 0:
-            print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
+        # if batch_nb == 0:
+        #     print_pred_class_counts(y_pred, y_true, multilabel=self.dataset.multilabel)
 
         self.test_metrics.update_metrics(y_pred, y_true, weights=None)
         self.log("test_loss", test_loss, logger=True)
@@ -969,7 +949,9 @@ class HGTNodeClf(NodeClfTrainer):
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters())
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, total_steps=self.num_training_steps,
-                                                        max_lr=1e-3, pct_start=0.05)
+        # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, total_steps=self.num_training_steps,
+        #                                                 max_lr=1e-3, pct_start=0.05)
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler, "monitor": "val_loss"}
+        return {"optimizer": optimizer,
+                # "lr_scheduler": scheduler, "monitor": "val_loss"
+                }

@@ -91,6 +91,8 @@ class DGLNodeSampler(HeteroGraphDataset):
                    edge_dir="in", **kwargs)
         self.network = network
         self.classes = classes
+        self.n_classes = len(classes)
+        self.multilabel = len(classes) > 1
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
         self.y_dict = G.ndata["label"]
@@ -117,15 +119,17 @@ class DGLNodeSampler(HeteroGraphDataset):
         if self.use_reverse:
             for metapath in self.G.canonical_etypes:
                 if is_negative(metapath) and is_reversed(metapath):
-                    print("removed", metapath)
+                    logger.info(f"Removed {metapath}")
                     self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
 
-                elif self.pred_metapaths and unreverse_metapath(metapath) in self.pred_metapaths:
-                    print("removed", metapath)
+                elif self.pred_metapaths and (metapath in self.pred_metapaths or
+                                              unreverse_metapath(metapath) in self.pred_metapaths):
+                    logger.info(f"Removed {metapath}")
                     self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
 
-                elif self.neg_pred_metapaths and unreverse_metapath(metapath) in self.pred_metapaths:
-                    print("removed", metapath)
+                elif self.neg_pred_metapaths and (metapath in self.neg_pred_metapaths or
+                                                  unreverse_metapath(metapath) in self.neg_pred_metapaths):
+                    logger.info(f"Removed {metapath}")
                     self.G.remove_edges(eids=self.G.edges(etype=metapath, form='eid'), etype=metapath)
 
             self.metapaths = [metapath for metapath in self.G.canonical_etypes if self.G.num_edges(etype=metapath)]
