@@ -169,10 +169,6 @@ def output_res(res_path: Path, pid_list, go_list, sc_mat):
 
 
 class NodeUpdate(nn.Module):
-    """
-
-    """
-
     def __init__(self, in_f, out_f, dropout: float):
         super(NodeUpdate, self).__init__()
         self.ppi_linear = nn.Linear(in_f, out_f)
@@ -262,6 +258,11 @@ class DeepGraphGO(object):
             self.optimizer.zero_grad()
         return loss.item()
 
+    @torch.no_grad()
+    def predict_step(self, data_x):
+        self.model.eval()
+        return torch.sigmoid(self.get_scores(data_x)).cpu().numpy()
+
     def train(self, train_data, valid_data, loss_params=(), opt_params=(), epochs_num=10, batch_size=40, **kwargs):
         self.get_optimizer(**dict(opt_params))
         self.batch_size = batch_size
@@ -293,11 +294,6 @@ class DeepGraphGO(object):
             best_fmax = fmax_
             self.save_model()
         return best_fmax
-
-    @torch.no_grad()
-    def predict_step(self, data_x):
-        self.model.eval()
-        return torch.sigmoid(self.get_scores(data_x)).cpu().numpy()
 
     def predict(self, test_ppi, batch_size=None, valid=False, **kwargs):
         if batch_size is None:

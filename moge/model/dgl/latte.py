@@ -36,6 +36,7 @@ class LATTE(nn.Module):
                           attn_activation=attn_activation,
                           attn_dropout=attn_dropout,
                           first=True if t == 0 else False))
+
         self.layers = nn.ModuleList(layers)
 
 
@@ -158,9 +159,9 @@ class LATTEConv(nn.Module):
 
         return output
 
-    def get_beta_weights(self, node_emb, rel_embs, ntype):
-        alpha_l = (node_emb * self.rel_attn_l[ntype]).sum(dim=-1)
-        alpha_r = (rel_embs * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
+    def get_beta_weights(self, key, query, ntype):
+        alpha_l = (key * self.rel_attn_l[ntype]).sum(dim=-1)
+        alpha_r = (query * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
 
         beta = alpha_l[:, None, :] + alpha_r
         beta = F.leaky_relu(beta, negative_slope=0.2)
@@ -209,14 +210,12 @@ class LATTEConv(nn.Module):
             #     continue
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[ntype] = torch.stack(
-                [g.dstnodes[ntype].data[etype] for etype in etypes] + [
-                    g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels), ], dim=1)
+            out[ntype] = torch.stack([g.dstnodes[ntype].data[etype] for etype in etypes] +
+                                     [g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels)],
+                                     dim=1)
             # out[ntype] = torch.mean(out[ntype], dim=1)
 
-            beta = self.get_beta_weights(node_emb=out[ntype][:, -1, :],
-                                         rel_embs=out[ntype],
-                                         ntype=ntype)
+            beta = self.get_beta_weights(key=out[ntype][:, -1, :], query=out[ntype], ntype=ntype)
             out[ntype] = out[ntype] * beta.unsqueeze(-1)
             out[ntype] = out[ntype].sum(1).view(out[ntype].size(0), self.embedding_dim)
 
@@ -233,12 +232,10 @@ class LATTEConv(nn.Module):
 
     def get_head_relations(self, head_node_type, to_str=False, etype_only=False) -> list:
         if self.edge_dir == "out":
-            relations = [metapath \
-                         for metapath in self.metapaths \
+            relations = [metapath for metapath in self.metapaths \
                          if metapath[0] == head_node_type]
         elif self.edge_dir == "in":
-            relations = [metapath \
-                         for metapath in self.metapaths \
+            relations = [metapath for metapath in self.metapaths \
                          if metapath[-1] == head_node_type]
 
         if to_str:
@@ -258,33 +255,4 @@ class LATTEConv(nn.Module):
         """
         relations = self.get_head_relations(node_type)
         return len(relations) + 1
-
-
-
-def tag_negative(metapath):
-    if isinstance(metapath, tuple):
-        return metapath + ("neg",)
-    elif isinstance(metapath, str):
-        return metapath + "_neg"
-    else:
-        return "neg"
-
-
-def untag_negative(metapath):
-    if isinstance(metapath, tuple) and metapath[-1] == "neg":
-        return metapath[:-1]
-    elif isinstance(metapath, str):
-        return metapath.strip("_neg")
-    else:
-        return metapath
-
-
-def is_negative(metapath):
-    if isinstance(metapath, tuple) and metapath[-1] == "neg":
-        return True
-    elif isinstance(metapath, str) and "_neg" in metapath:
-        return True
-    else:
-        return False
-
 

@@ -327,7 +327,8 @@ class DGLLinkSampler(DGLNodeSampler):
 
         return df
 
-    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False, **kwargs):
+    def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False,
+                         device=None, **kwargs):
         if self.inductive:
             graph = self.transform_heterograph(self.G, edge_mask=self.G.edata["train_mask"])
             if indices is None:
@@ -348,12 +349,13 @@ class DGLLinkSampler(DGLNodeSampler):
         logger.info(f"Train dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
         # sampler = LinkPredPyGCollator(**args)
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
-                                                batch_size=batch_size, shuffle=True, drop_last=drop_last,
+                                                batch_size=batch_size, shuffle=True, drop_last=drop_last, device=device,
                                                 num_workers=num_workers)
 
         return dataloader
 
-    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False, **kwargs):
+    def valid_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False,
+                         device=None, **kwargs):
         if self.inductive:
             edge_mask = {etype: valid_mask | self.G.edata["train_mask"][etype] \
                          for etype, valid_mask in self.G.edata["valid_mask"].items()}
@@ -376,11 +378,12 @@ class DGLLinkSampler(DGLNodeSampler):
         logger.info(f"Valid dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
 
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
-                                                batch_size=batch_size, shuffle=True, drop_last=drop_last,
+                                                batch_size=batch_size, shuffle=True, drop_last=drop_last, device=device,
                                                 num_workers=num_workers)
         return dataloader
 
-    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, indices=None, drop_last=False, **kwargs):
+    def test_dataloader(self, collate_fn=None, batch_size=128, num_workers=4, indices=None, drop_last=False,
+                        device=None, **kwargs):
         if self.inductive:
             edge_mask = {etype: test_mask | self.G.edata["train_mask"][etype] | self.G.edata["valid_mask"][etype] \
                          for etype, test_mask in self.G.edata["test_mask"].items()}
@@ -403,7 +406,7 @@ class DGLLinkSampler(DGLNodeSampler):
         logger.info(f"Test dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}")
 
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
-                                                batch_size=batch_size, shuffle=True, drop_last=drop_last,
+                                                batch_size=batch_size, shuffle=True, drop_last=drop_last, device=device,
                                                 num_workers=num_workers)
         return dataloader
 
