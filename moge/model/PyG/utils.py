@@ -39,11 +39,12 @@ def convert_to_nx_edgelist(edge_index_dict: Dict[Tuple[str, str, str], Tensor], 
     return edge_list
 
 
-def join_metapaths(metapath_A, metapath_B):
+def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tuple[str, str, str]]) -> List[
+    Tuple[str, str, str]]:
     output_metapaths = []
 
-    for relation_b in metapath_B:
-        for relation_a in metapath_A:
+    for relation_b in metapaths_B:
+        for relation_a in metapaths_A:
             if relation_a[-1] == relation_b[0]:
                 new_relation = relation_a + relation_b[1:]
                 output_metapaths.append(new_relation)

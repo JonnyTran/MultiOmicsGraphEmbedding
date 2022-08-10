@@ -1,6 +1,7 @@
 from typing import List, Union, Optional, Dict
 
 import dgl
+import dgl.transforms as T
 import numpy as np
 import pandas as pd
 import torch
@@ -172,6 +173,8 @@ class DGLLinkGenerator(DGLNodeGenerator):
         return n_train_edges / (n_train_edges + n_valid_edges + n_test_edges)
 
     def full_batch(self, edge_idx: Tensor = None, mode="test", batch_size=None, device="cpu"):
+        T.AddMetaPaths()
+
         if edge_idx is None:
             edge_idx = {m: torch.cat([self.training_idx[m], self.validation_idx[m], self.testing_idx[m]]) \
                         for m in self.training_idx.keys()}
