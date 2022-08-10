@@ -184,8 +184,9 @@ class DGLLinkSampler(DGLNodeSampler):
 
         # Get index of train/valid/test edge_id
         self.training_idx, self.validation_idx, self.testing_idx = {}, {}, {}
-        for triples, trainvalidtest_idx in zip([train_triples, valid_triples, test_triples],
-                                               [self.training_idx, self.validation_idx, self.testing_idx]):
+        for triples, trainvalidtest_idx, mask_name in zip([train_triples, valid_triples, test_triples],
+                                                          [self.training_idx, self.validation_idx, self.testing_idx],
+                                                          ["train_mask", "valid_mask", "test_mask"]):
             edges_pos, edges_neg = get_relabled_edge_index(triples, global_node_index=self.global_node_index,
                                                            metapaths=self.metapaths, format="dgl")
 
@@ -194,6 +195,11 @@ class DGLLinkSampler(DGLNodeSampler):
                 if triples is not train_triples:
                     graph.add_edges(src, dst, etype=metapath)
                 trainvalidtest_idx[metapath] = graph.edge_ids(src, dst, etype=metapath)
+
+                edge_mask = torch.zeros(graph.num_edges(etype=metapath), dtype=torch.bool)
+                edge_mask[trainvalidtest_idx[metapath]] = 1
+                graph.edges[metapath].data[mask_name] = edge_mask
+
             print(sum([len(eids) for eids in trainvalidtest_idx.values()]))
 
         self.G = graph
@@ -335,7 +341,8 @@ class DGLLinkSampler(DGLNodeSampler):
             f"Train dataset (inductive={self.inductive}) pred edges: \n{tensor_sizes(indices)}") if verbose else None
         # sampler = LinkPredPyGCollator(**args)
         dataloader = dgl.dataloading.DataLoader(graph, indices=indices, graph_sampler=graph_sampler,
-                                                batch_size=batch_size, shuffle=True, drop_last=drop_last, device=device,
+                                                batch_size=batch_size, shuffle=True, drop_last=drop_last,
+                                                device=device,
                                                 num_workers=num_workers)
 
         return dataloader
