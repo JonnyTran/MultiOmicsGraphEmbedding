@@ -46,7 +46,7 @@ class RelationAttention:
         relations = self.get_tail_relations(ntype)
         return len(relations) + 1
 
-    def save_relation_weights(self, betas: Dict[str, Tensor], global_node_idx: Dict[str, Tensor]):
+    def save_relation_weights(self, betas: Dict[str, Tensor], global_node_index: Dict[str, Tensor]):
         # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
         if len(betas) < len({metapath[-1] for metapath in self.metapaths}):
             return
@@ -55,7 +55,7 @@ class RelationAttention:
             self._betas, self._beta_std, self._beta_avg = {}, {}, {}
 
         for ntype in betas:
-            if ntype not in global_node_idx or global_node_idx[ntype].numel() == 0: continue
+            if ntype not in global_node_index or global_node_index[ntype].numel() == 0: continue
 
             relations = self.get_tail_relations(ntype, str_form=True) + [ntype, ]
             if len(relations) <= 1: continue
@@ -63,7 +63,7 @@ class RelationAttention:
             with torch.no_grad():
                 df = pd.DataFrame(betas[ntype].squeeze(-1).cpu().numpy(),
                                   columns=relations,
-                                  index=global_node_idx[ntype].cpu().numpy(), dtype=np.float16)
+                                  index=global_node_index[ntype].cpu().numpy(), dtype=np.float16)
 
                 if len(self._betas) == 0 or ntype not in self._betas:
                     self._betas[ntype] = df

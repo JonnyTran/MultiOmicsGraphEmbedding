@@ -38,8 +38,13 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         if hasattr(dataset, "go_namespace"):
             self.go_namespace: Dict[str, np.ndarray] = dataset.go_namespace
+        else:
+            self.go_namespace = None
+
         if hasattr(dataset, "ntype_mapping"):
             self.ntype_mapping: Dict[str, str] = dataset.ntype_mapping
+        else:
+            self.ntype_mapping = None
 
         self.lr = self.hparams.lr
 
@@ -150,8 +155,9 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
     def split_edge_scores(self, pos_edge_score: Dict[Tuple[str, str, str], Tensor],
                           neg_edge_score: Dict[Tuple[str, str, str], Tensor],
-                          pos_graph: DGLHeteroGraph, neg_graph: DGLHeteroGraph) \
-            -> Tuple[Dict[Tuple[str, str, str], Tensor], Union[dict, Dict[Tuple[str, str, str], Tensor]],
+                          pos_graph: DGLHeteroGraph, neg_graph: DGLHeteroGraph,
+                          nodes_namespace: Dict[str, np.ndarray]) \
+            -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor],
                      Dict[Tuple[str, str, str], Tensor]]:
         """
 
@@ -160,6 +166,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
             neg_edge_score ():
             pos_graph ():
             neg_graph ():
+            nodes_namespace:
 
         Returns:
 
@@ -174,16 +181,16 @@ class DglLinkPredTrainer(LinkPredTrainer):
             if metapath in self.neg_pred_metapaths:
                 neg_scores[metapath] = pos_edge_score[metapath]
 
-        if hasattr(self, 'go_namespace'):
-            _, pos_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
+        if nodes_namespace:
+            _, pos_scores = split_edge_index_by_namespace(nodes_namespace=nodes_namespace,
                                                           edge_index_dict=dgl_to_edge_index_dict(pos_graph,
                                                                                                  global_ids=True),
                                                           edge_values=pos_scores)
-            _, neg_batch_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
+            _, neg_batch_scores = split_edge_index_by_namespace(nodes_namespace=nodes_namespace,
                                                                 edge_index_dict=dgl_to_edge_index_dict(neg_graph,
                                                                                                        global_ids=True),
                                                                 edge_values=neg_batch_scores)
-            _, neg_scores = split_edge_index_by_namespace(nodes_namespace=self.go_namespace,
+            _, neg_scores = split_edge_index_by_namespace(nodes_namespace=nodes_namespace,
                                                           edge_index_dict=dgl_to_edge_index_dict(pos_graph,
                                                                                                  global_ids=True),
                                                           edge_values=neg_scores)
@@ -208,7 +215,8 @@ class DglLinkPredTrainer(LinkPredTrainer):
         loss = self.criterion.forward(pos_stack, neg_batch_stack)
 
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
-            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
+            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph,
+            nodes_namespace=self.go_namespace)
 
         self.update_link_pred_metrics(self.train_metrics, pos_edge_scores=pos_edge_scores,
                                       neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
@@ -234,7 +242,8 @@ class DglLinkPredTrainer(LinkPredTrainer):
         loss = self.criterion.forward(pos_stack, neg_batch_stack)
 
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
-            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
+            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph,
+            nodes_namespace=self.go_namespace)
 
         self.update_link_pred_metrics(self.valid_metrics, pos_edge_scores=pos_edge_scores,
                                       neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
@@ -255,7 +264,8 @@ class DglLinkPredTrainer(LinkPredTrainer):
         loss = self.criterion.forward(pos_stack, neg_batch_stack)
 
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
-            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph)
+            pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph,
+            nodes_namespace=self.go_namespace)
 
         self.update_link_pred_metrics(self.test_metrics, pos_edge_scores=pos_edge_scores,
                                       neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
@@ -467,18 +477,6 @@ class LATTELinkPred(DglLinkPredTrainer):
         print(f'Configuration: {hparams}')
         self._set_hparams(hparams)
 
-    @property
-    def metapaths(self) -> List[Tuple[str, str, str]]:
-        return [layer.metapaths for layer in self.embedder.layers]
-
-    @property
-    def betas(self) -> List[Dict[str, DataFrame]]:
-        return [layer._betas for layer in self.embedder.layers]
-
-    @property
-    def beta_avg(self) -> List[Dict[Tuple[str, str, str], float]]:
-        return [layer._beta_avg for layer in self.embedder.layers]
-
     def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False, **kwargs) \
             -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         if len(x) == 0 or sum(a.numel() for a in x) == 0:
@@ -492,6 +490,18 @@ class LATTELinkPred(DglLinkPredTrainer):
         if return_embeddings:
             return x, pos_edge_score, neg_edge_score
         return pos_edge_score, neg_edge_score
+
+    @property
+    def metapaths(self) -> List[Tuple[str, str, str]]:
+        return [layer.metapaths for layer in self.embedder.layers]
+
+    @property
+    def betas(self) -> List[Dict[str, DataFrame]]:
+        return [layer._betas for layer in self.embedder.layers]
+
+    @property
+    def beta_avg(self) -> List[Dict[Tuple[str, str, str], float]]:
+        return [layer._beta_avg for layer in self.embedder.layers]
 
 
 class DeepGraphGOLinkPred(DglLinkPredTrainer):

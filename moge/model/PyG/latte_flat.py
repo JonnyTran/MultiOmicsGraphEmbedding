@@ -1,6 +1,6 @@
 import copy
 from argparse import Namespace
-from typing import List, Dict, Tuple, Union, Optional, Any
+from typing import List, Dict, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
@@ -143,15 +143,15 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
     def forward(self, feats: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
-                global_node_idx: Dict[str, Tensor],
+                global_node_index: Dict[str, Tensor],
                 sizes: Dict[str, int],
                 edge_pred_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]],
                 save_betas=False, empty_gpu_device=None, verbose=False) -> \
-            Tuple[Dict[str, Tensor], Optional[Any], Dict[Tuple[str, str, str], Tensor]]:
+            Tuple[Dict[str, Tensor], Dict[Tuple[str, str, str], Tensor]]:
         """
         Args:
             feats: a dict of node attributes indexed ntype
-            global_node_idx: A dict of index values indexed by ntype in this mini-batch sampling
+            global_node_index: A dict of index values indexed by ntype in this mini-batch sampling
             edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
             sizes: Dict of ntype and number of nodes in `edge_index_dict`
             edge_pred_dict: Higher order edge_index_dict calculated from the previous LATTE layer
@@ -168,8 +168,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         h_out = {}
         betas = {}
         edge_pred_dicts = {}
-        for ntype in global_node_idx:
-            if global_node_idx[ntype].size(0) == 0 or self.num_tail_relations(ntype) <= 1: continue
+        for ntype in global_node_index:
+            if global_node_index[ntype].size(0) == 0 or self.num_tail_relations(ntype) <= 1: continue
             embedding, edge_pred_dict = self.aggregate_relations(
                 ntype=ntype, l_dict=l_dict, r_dict=r_dict,
                 edge_index_dict=edge_index_dict, edge_pred_dict=edge_pred_dict, sizes=sizes)
@@ -181,7 +181,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
 
             if verbose:
-                print("  >", ntype, global_node_idx[ntype].shape, )
+                print("  >", ntype, global_node_index[ntype].shape, )
                 for i, (metapath, beta_mean, beta_std) in enumerate(
                         zip(self.get_tail_relations(ntype) + [ntype],
                             betas[ntype].mean(-1).mean(0),
@@ -210,7 +210,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         if save_betas:
             self.save_relation_weights(betas={ntype: betas[ntype].mean(-1) for ntype in betas},
                                        # mean on attn_heads dim
-                                       global_node_idx=global_node_idx)
+                                       global_node_index=global_node_index)
 
         return h_out, edge_pred_dicts
 
@@ -417,23 +417,23 @@ class LATTE(nn.Module):
 
     def forward(self, h_dict: Dict[str, Tensor],
                 edge_index_dict: Dict[Tuple[str, str, str], Tensor],
-                global_node_idx: Dict[str, Tensor],
+                global_node_index: Dict[str, Tensor],
                 sizes: Dict[str, int],
                 **kwargs):
         """
         Args:
             h_dict: Dict of <ntype>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
-            global_node_idx: Dict of <ntype>:<int tensor size (batch_size,)>
+            global_node_index: Dict of <ntype>:<int tensor size (batch_size,)>
             edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
             save_betas: whether to save _beta values for batch
         Returns:
             embedding_output
         """
-        h_layers = {ntype: [] for ntype in global_node_idx}
+        h_layers = {ntype: [] for ntype in global_node_index}
         edge_pred_dict = None
         for l in range(self.n_layers):
-            h_dict, edge_pred_dict = self.layers[l].forward(h_dict, edge_index_dict,
-                                                            global_node_idx=global_node_idx,
+            h_dict, edge_pred_dict = self.layers[l].forward(feats=h_dict, edge_index_dict=edge_index_dict,
+                                                            global_node_index=global_node_index,
                                                             sizes=sizes,
                                                             edge_pred_dict=edge_pred_dict,
                                                             **kwargs)

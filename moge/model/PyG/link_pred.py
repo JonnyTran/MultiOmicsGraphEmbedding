@@ -14,8 +14,7 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 
-# from moge.model.PyG.latte_flat import LATTE as LATTEFlat
-from moge.model.PyG.latte import LATTE
+from moge.model.PyG.latte_flat import LATTE as LATTEFlat
 from moge.model.losses import ClassificationLoss
 from .conv import HGT
 from .utils import get_edge_index_from_neg_batch, batch2global_edge_index
@@ -291,7 +290,6 @@ class EdgePredictor(torch.nn.Module):
 
         output = {}
         # True positive edges
-
         output["edge_pos"] = self.score_func(edges_input["edge_pos"], embeddings=embeddings, mode="single_pos")
 
         # True negative edges
@@ -415,20 +413,20 @@ class LATTELinkPred(PyGLinkPredTrainer):
         if not hasattr(self, "seq_encoder") or len(non_seq_ntypes):
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
-        self.embedder = LATTE(n_layers=hparams.n_layers,
-                              t_order=min(hparams.t_order, hparams.n_layers),
-                              embedding_dim=hparams.embedding_dim,
-                              num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(),
-                              layer_pooling=hparams.layer_pooling,
-                              activation=hparams.activation,
-                              attn_heads=hparams.attn_heads,
-                              attn_activation=hparams.attn_activation,
-                              attn_dropout=hparams.attn_dropout,
-                              use_proximity=hparams.use_proximity if "use_proximity" in hparams else False,
-                              neg_sampling_ratio=hparams.neg_sampling_ratio if "neg_sampling_ratio" in hparams else None,
-                              edge_sampling=hparams.edge_sampling if "edge_sampling" in hparams else False,
-                              hparams=hparams)
+        self.embedder = LATTEFlat(n_layers=hparams.n_layers,
+                                  t_order=min(hparams.t_order, hparams.n_layers),
+                                  embedding_dim=hparams.embedding_dim,
+                                  num_nodes_dict=dataset.num_nodes_dict,
+                                  metapaths=dataset.get_metapaths(),
+                                  layer_pooling=hparams.layer_pooling,
+                                  activation=hparams.activation,
+                                  attn_heads=hparams.attn_heads,
+                                  attn_activation=hparams.attn_activation,
+                                  attn_dropout=hparams.attn_dropout,
+                                  use_proximity=hparams.use_proximity if "use_proximity" in hparams else False,
+                                  neg_sampling_ratio=hparams.neg_sampling_ratio if "neg_sampling_ratio" in hparams else None,
+                                  edge_sampling=hparams.edge_sampling if "edge_sampling" in hparams else False,
+                                  hparams=hparams)
 
         if hparams.layer_pooling == "concat":
             hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
@@ -473,8 +471,7 @@ class LATTELinkPred(PyGLinkPredTrainer):
         if hasattr(self, "encoder"):
             self.encoder = auto_wrap(self.encoder)
 
-    def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                return_embeddings=False, **kwargs) \
+    def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]], **kwargs) \
             -> Tuple[Dict[str, Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
         input_nodes = inputs["global_node_index"][0] if isinstance(inputs["global_node_index"], list) else inputs[
             "global_node_index"]
@@ -494,8 +491,6 @@ class LATTELinkPred(PyGLinkPredTrainer):
         embeddings = self.embedder.forward(h_out, edge_index_dict=inputs["edge_index_dict"],
                                            global_node_index=inputs["global_node_index"],
                                            sizes=inputs["sizes"], **kwargs)
-        if return_embeddings:
-            return embeddings
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
 

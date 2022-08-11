@@ -276,7 +276,6 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         Returns:
 
         """
-        assert positive != negative
         triples = defaultdict(lambda: [])
         training_idx, validation_idx, testing_idx = [], [], []
 
@@ -284,14 +283,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         for metapath in pred_metapaths:
             head_type, tail_type = metapath[0], metapath[-1]
-            if negative:
-                if metapaths and metapath not in metapaths: continue
-                metapath_idx = metapaths.index(metapath)
-                metapath = tag_negative_metapath(metapath)
-
-            elif positive:
-                if metapaths and metapath not in metapaths: continue
-                metapath_idx = metapaths.index(metapath)
+            if metapaths and metapath not in metapaths: continue
+            metapath_idx = metapaths.index(metapath)
 
             edge_index, edge_attr = get_edge_index_values(self.networks[metapath],
                                                           nodes_A=self.nodes[head_type],

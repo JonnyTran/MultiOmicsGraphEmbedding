@@ -1,3 +1,4 @@
+import logging
 from collections import OrderedDict
 from typing import Union, Tuple, List, Dict, Optional, Set
 
@@ -5,6 +6,8 @@ import pandas as pd
 import torch
 from torch import Tensor
 from torch_sparse import SparseTensor, spspmm
+
+from moge.dataset.utils import is_negative
 
 
 def num_edges(edge_index_dict: Dict[Tuple[str, str, str], Union[Tensor, Tuple[Tensor, Tensor]]]):
@@ -67,9 +70,9 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, Li
 
         num_hops = len(metapath[1::2])
 
-        if order is not None and isinstance(order, int):
+        if isinstance(order, int):
             condition = condition & (num_hops == order)
-        elif order is not None and isinstance(order, (list, set, tuple)):
+        elif isinstance(order, (list, set, tuple)):
             condition = condition & (num_hops in order)
 
         if head_type:
@@ -194,28 +197,32 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
                 else:
                     joined_edge_index[new_metapath] = None
 
-            except RuntimeError as re:
-                # When CUDA out of memory, perform spspmm in cpu
-                new_edge_index, new_values = spspmm(indexA=edge_index_a.cpu(),
-                                                    valueA=values_a.cpu() if isinstance(values_a, Tensor) else None,
-                                                    indexB=edge_index_b.cpu(),
-                                                    valueB=values_b.cpu() if isinstance(values_b, Tensor) else None,
-                                                    m=m, k=k, n=n,
-                                                    coalesced=True)
-
-                if new_edge_index.size(1):
-                    joined_edge_index[new_metapath] = (
-                        new_edge_index.to(orig_device),
-                        new_values.to(orig_device) if isinstance(new_values, Tensor) else None)
-                else:
-                    joined_edge_index[new_metapath] = None
+            # except RuntimeError as re:
+            #     logging.error(re)
+            #     traceback.print_exc()
+            # When CUDA out of memory, perform spspmm in cpu
+            # new_edge_index, new_values = spspmm(indexA=edge_index_a.cpu(),
+            #                                     valueA=values_a.cpu() if isinstance(values_a, Tensor) else None,
+            #                                     indexB=edge_index_b.cpu(),
+            #                                     valueB=values_b.cpu() if isinstance(values_b, Tensor) else None,
+            #                                     m=m, k=k, n=n,
+            #                                     coalesced=True)
+            #
+            # if new_edge_index.size(1):
+            #     joined_edge_index[new_metapath] = (
+            #         new_edge_index.to(orig_device),
+            #         new_values.to(orig_device) if isinstance(new_values, Tensor) else None)
+            # else:
+            #     joined_edge_index[new_metapath] = None
 
             except Exception as e:
-                print(f"{e} \n {metapath_a}: "
-                      f"{edge_index_a.max(1).values.data, values_a.shape if values_a is not None else values_a}, "
-                      f"{metapath_b}: "
-                      f"{edge_index_b.max(1).values.data, values_b.shape if values_b is not None else values_a}")
-                print("sizes: ", {"m": m, "k": k, "n": n, })
+                logging.error(f"\n{e} "
+                              f"\n{new_metapath} sizes: {dict(m=m, k=k, n=n)}"
+                              f"\n {metapath_a}: "
+                              f"{edge_index_a.max(1).values.tolist(), values_a.shape if values_a is not None else values_a}, "
+                              f"\n {metapath_b}: "
+                              f"{edge_index_b.max(1).values.tolist(), values_b.shape if values_b is not None else values_a}"
+                              )
                 joined_edge_index[new_metapath] = None
 
     return joined_edge_index

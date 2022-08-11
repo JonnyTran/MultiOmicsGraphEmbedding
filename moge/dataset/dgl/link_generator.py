@@ -1,4 +1,5 @@
-from typing import List, Union, Optional, Dict
+from copy import copy
+from typing import List, Union, Optional, Dict, Tuple
 
 import dgl
 import dgl.transforms as T
@@ -12,10 +13,14 @@ from logzero import logger
 from ogb.linkproppred import DglLinkPropPredDataset
 from pandas import Index, DataFrame, Series
 from torch import Tensor
+from torch_sparse import SparseTensor
 from umap import UMAP
 
 from .node_generator import DGLNodeGenerator
-from ..utils import get_relabled_edge_index, is_negative, is_reversed, unreverse_metapath
+from .. import HeteroLinkPredDataset
+from ..utils import get_relabled_edge_index, is_negative, is_reversed, unreverse_metapath, untag_negative_metapath, \
+    edge_index_to_adjs
+from ...model.PyG.utils import num_edges
 from ...model.utils import tensor_sizes
 from ...network.base import SEQUENCE_COL
 from ...network.hetero import HeteroNetwork
@@ -162,7 +167,6 @@ class DGLLinkGenerator(DGLNodeGenerator):
             logger.info(f"{mask_name} num edges: {sum([len(eids) for eids in trainvalidtest_idx.values()])}")
 
         self.pred_metapaths = list(self.validation_idx.keys())
-
         self.G = graph
 
     def get_metapaths(self):
@@ -313,15 +317,22 @@ class DGLLinkGenerator(DGLNodeGenerator):
                                  for etype in self.pred_metapaths + self.neg_pred_metapaths}
 
         if collate_fn == LinkPredPyGCollator.__name__:
-            sampler = LinkPredPyGCollator
+            sampler = LinkPredPyGCollator(sampler=neighbor_sampler, exclude=exclude,
+                                          reverse_eids=self.reverse_eids if self.use_reverse else None,
+                                          reverse_etypes=self.reverse_etypes if self.use_reverse else None,
+                                          negative_sampler=negative_sampler,
+                                          node_types=self.node_types, go_namespace=self.go_namespace,
+                                          ntype_mapping=self.ntype_mapping,
+                                          pred_metapaths=self.pred_metapaths,
+                                          neg_pred_metapaths=self.neg_pred_metapaths, network=self.network)
         else:
-            sampler = as_edge_prediction_sampler
+            sampler = as_edge_prediction_sampler(sampler=neighbor_sampler,
+                                                 exclude=exclude,
+                                                 reverse_etypes=self.reverse_etypes if self.use_reverse else None,
+                                                 reverse_eids=self.reverse_eids if self.use_reverse else None,
+                                                 negative_sampler=negative_sampler)
 
-        return sampler(sampler=neighbor_sampler,
-                       exclude=exclude,
-                       reverse_etypes=self.reverse_etypes if self.use_reverse else None,
-                       reverse_eids=self.reverse_eids if self.use_reverse else None,
-                       negative_sampler=negative_sampler)
+        return sampler
 
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False,
@@ -420,15 +431,44 @@ class DGLLinkGenerator(DGLNodeGenerator):
 
 
 class LinkPredPyGCollator(EdgePredictionSampler):
-    def __init__(self, sampler, exclude=None, reverse_eids=None, reverse_etypes=None, negative_sampler=None,
-                 prefetch_labels=None, seq_tokenizer=None):
+    def __init__(self, sampler, exclude=None, reverse_eids=None, reverse_etypes=None,
+                 negative_sampler=None,
+                 prefetch_labels=None, seq_tokenizer=None,
+                 node_types=None, go_namespace=None, ntype_mapping=None, pred_metapaths=[], neg_pred_metapaths=[],
+                 network: HeteroNetwork = None):
+
+        self.triples, *_ = network.get_triples(pred_metapaths, positive=True)
+
+        # Adjacency of pos edges (for neg sampling)
+        edge_index_dict, _ = get_relabled_edge_index(
+            triples=self.triples,
+            global_node_index={ntype: torch.arange(len(nodelist)) for ntype, nodelist in network.nodes.items()},
+            metapaths=pred_metapaths,
+            relation_ids_all=self.triples["relation"].unique())
+        self.triples_adj: Dict[Tuple[str, str, str], SparseTensor] = edge_index_to_adjs(edge_index_dict,
+                                                                                        nodes=network.nodes)
+
+        self.negative_sampler = negative_sampler
         if seq_tokenizer is not None:
             self.seq_tokenizer = seq_tokenizer
+
+        self.go_ntype = list({m[-1] for m in pred_metapaths})[0]
+        self.go_namespace = go_namespace[self.go_ntype]
+        self.ntype_mapping = ntype_mapping
+        self.node_types = node_types
+
+        self.pred_metapaths = pred_metapaths
+        self.neg_pred_metapaths = neg_pred_metapaths
         super().__init__(sampler, exclude, reverse_eids, reverse_etypes, negative_sampler, prefetch_labels)
 
-    def sample(self, g, seed_edges):
+    def get_neg_sampling_size(self, *args, **kwargs):
+        return self.negative_sampler.k
+
+    def sample(self, g: DGLHeteroGraph, seed_edges: Dict[str, Tensor]):
         input_nodes, pos_graph, neg_graph, blocks = super().sample(g, seed_edges)
         blocks: List[DGLBlock]
+        pos_graph: DGLHeteroGraph
+        neg_graph: DGLHeteroGraph
 
         X = {}
         for i, block in enumerate(blocks):
@@ -456,13 +496,49 @@ class LinkPredPyGCollator(EdgePredictionSampler):
                 X.setdefault("sequences", {})[ntype] = self.seq_tokenizer.encode_sequences(X, ntype=ntype,
                                                                                            max_length=None)
 
-        edges = {"edge_pos": {}, "edge_neg": {}}
-        for etype in pos_graph.etypes:
-            if pos_graph.num_edges(etype=etype) == 0: continue
-            edges["edge_pos"][etype] = torch.stack(pos_graph.edges(etype=etype, order='srcdst'), dim=0)
+        # Convert DGL sampled seed edges into PyG format
+        input_nodes = X["global_node_index"][0]
 
-        for etype in neg_graph.etypes:
-            if neg_graph.num_edges(etype=etype) == 0: continue
-            edges["edge_neg"][etype] = torch.stack(neg_graph.edges(etype=etype, order='srcdst'), dim=0)
+        pos_global_edges, pos_edge, neg_edge, head_batch, tail_batch = {}, {}, {}, {}, {}
+        for metapath in pos_graph.canonical_etypes:
+            if pos_graph.num_edges(etype=metapath) == 0: continue
 
-        return X, edges, {}
+            if metapath in self.pred_metapaths:
+                pos_edge[metapath] = torch.stack(pos_graph.edges(etype=metapath, order='srcdst'), dim=0)
+
+                pos_global_edges[metapath] = copy(pos_edge[metapath])
+                pos_global_edges[metapath][0] = input_nodes[metapath[0]][pos_global_edges[metapath][0]]
+                pos_global_edges[metapath][1] = input_nodes[metapath[-1]][pos_global_edges[metapath][1]]
+
+            elif metapath in self.neg_pred_metapaths:
+                neg_edge[untag_negative_metapath(metapath)] = torch.stack(
+                    pos_graph.edges(etype=metapath, order='srcdst'), dim=0)
+
+        # Negative sampling
+        if hasattr(self, 'go_namespace'):
+            pos_global_edges = HeteroLinkPredDataset.split_edge_index_by_go_namespace(self, pos_global_edges,
+                                                                                      batch_to_global=None)
+        head_batch, tail_batch = HeteroLinkPredDataset.generate_negative_sampling(self, edge_pos=pos_global_edges,
+                                                                                  global_node_index=input_nodes,
+                                                                                  max_negative_sampling_size=1000,
+                                                                                  mode="test")
+
+        edge_true = {}
+        if hasattr(self, 'go_namespace'):
+            edge_true['edge_pos'] = HeteroLinkPredDataset.split_edge_index_by_go_namespace(self,
+                                                                                           edge_index_dict=pos_edge,
+                                                                                           batch_to_global=input_nodes)
+        else:
+            edge_true['edge_pos'] = pos_edge
+
+        if num_edges(neg_edge):
+            if hasattr(self, 'go_namespace'):
+                edge_true['edge_neg'] = HeteroLinkPredDataset.split_edge_index_by_go_namespace(self,
+                                                                                               edge_index_dict=neg_edge,
+                                                                                               batch_to_global=input_nodes)
+            else:
+                edge_true['edge_neg'] = neg_edge
+
+        edge_true.update({"head_batch": head_batch, "tail_batch": tail_batch, })
+
+        return X, edge_true, {}

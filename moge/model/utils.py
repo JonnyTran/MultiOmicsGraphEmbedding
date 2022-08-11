@@ -165,11 +165,11 @@ def tensor_sizes(input=None, **kwargs) -> ...:
     elif isinstance(input, tuple):
         return tuple(tensor_sizes(v) for v in input)
     elif isinstance(input, list):
-        if isinstance(input[0], str):
+        if len(input) and isinstance(input[0], str):
             return len(input)
         return [tensor_sizes(v) for v in input]
     elif isinstance(input, set):
-        if isinstance(list(input)[0], str):
+        if len(input) and isinstance(list(input)[0], str):
             return len(input)
         return {tensor_sizes(v) for v in input}
 
