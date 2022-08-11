@@ -452,10 +452,10 @@ class LATTELinkPred(DglLinkPredTrainer):
             print("non_seq_ntypes", non_seq_ntypes)
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
-        self.embedder = LATTE(t_order=hparams.t_order,
-                              embedding_dim=hparams.embedding_dim,
-                              num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths())
+        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+                              num_nodes_dict=dataset.num_nodes_dict, head_node_type=dataset.head_node_type,
+                              metapaths=dataset.get_metapaths(), activation="relu", dropout=hparams.dropout,
+                              attn_heads=hparams.attn_heads, attn_dropout=hparams.attn_dropout)
 
         self.classifier = MLPPredictor(in_dim=hparams.embedding_dim, loss_type=hparams.loss_type)
         self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
@@ -466,12 +466,12 @@ class LATTELinkPred(DglLinkPredTrainer):
         print(f'Configuration: {hparams}')
         self._set_hparams(hparams)
 
-    def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False) \
+    def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False, **kwargs) \
             -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         if len(x) == 0 or sum(a.numel() for a in x) == 0:
             x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
 
-        x = self.embedder.forward(blocks, x)
+        x = self.embedder.forward(blocks, x, **kwargs)
 
         pos_edge_score = self.classifier.forward(pos_graph, x)
         neg_edge_score = self.classifier.forward(neg_graph, x)

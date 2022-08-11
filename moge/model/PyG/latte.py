@@ -12,9 +12,8 @@ from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
 from moge.model.sampling import negative_sample
-from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes
-from ..dgl.latte import tag_negative, untag_negative
-from ...dataset.utils import is_negative
+from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
+from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
 
 class LATTE(nn.Module):
@@ -112,9 +111,6 @@ class LATTE(nn.Module):
                     prev_h_in[ntype].append(h_in[ntype])
                     if len(prev_h_in[ntype]) > self.t_order:
                         prev_h_in[ntype].pop(0)
-
-            # if self.use_proximity and t_loss is not None:
-            #     proximity_loss += t_loss
 
             if self.layer_pooling in ["max", "mean", "concat"]:
                 if isinstance(self.head_node_type, str):
@@ -232,8 +228,7 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         self.layer_pooling = layer_pooling
         self.input_dropout = input_dropout
 
-        print("\n LATTE", [".".join([k[0].upper() if i % 2 == 0 else k[0].lower() for i, k in enumerate(m)]) for m in
-                           sorted(metapaths)])
+        print(f"LATTE {self.layer + 1}, metapaths {len(metapaths)}, max_order {max_num_hops(metapaths)}")
 
         if activation == "sigmoid":
             self.activation = F.sigmoid
@@ -683,11 +678,12 @@ class LATTEConv(MessagePassing, pl.LightningModule):
                 e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, metapath, logits=True)
                 loss += -torch.mean(values * F.logsigmoid(e_pred_logits), dim=-1)
             elif is_negative(metapath):
-                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, untag_negative(metapath), logits=True)
+                e_pred_logits = self.predict_scores(edge_index, l_dict, r_dict, untag_negative_metapath(metapath),
+                                                    logits=True)
                 loss += -torch.mean(F.logsigmoid(-e_pred_logits), dim=-1)
 
             # Only need to sample for negative edges if negative metapath is not included
-            if not is_negative(metapath) and tag_negative(metapath) not in edge_index_dict:
+            if not is_negative(metapath) and tag_negative_metapath(metapath) not in edge_index_dict:
                 neg_edge_index = negative_sample(edge_index,
                                                  M=global_node_idx[metapath[0]].size(0),
                                                  N=global_node_idx[metapath[-1]].size(0),

@@ -88,7 +88,7 @@ def metapath_reachable_blocks(src_block: DGLBlock, dst_block: DGLBlock,
 
 
 class ChainMetaPaths(BaseTransform):
-    def __init__(self, metapaths: Dict[str, List[Tuple[str, str, str]]], keep_orig_edges=False):
+    def __init__(self, metapaths: Dict[str, List[Tuple[str, str, str]]], keep_orig_edges=True):
         self.metapaths = metapaths
         self.keep_orig_edges = keep_orig_edges
 
@@ -111,14 +111,4 @@ class ChainMetaPaths(BaseTransform):
         return new_g
 
 
-def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tuple[str, str, str]]) \
-        -> Dict[str, List[Tuple[str, str, str]]]:
-    output_metapaths = {}
 
-    for metapath_b in metapaths_B:
-        for metapath_a in metapaths_A:
-            if metapath_a[-1] == metapath_b[0]:
-                new_metapath = ".".join([metapath_a[1], metapath_b[1]])
-                output_metapaths[new_metapath] = [metapath_a, metapath_b]
-
-    return output_metapaths

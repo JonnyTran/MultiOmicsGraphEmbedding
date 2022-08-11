@@ -4,11 +4,11 @@ import dgl
 import dgl.nn.pytorch as dglnn
 import torch
 from dgl.heterograph import DGLHeteroGraph
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.latte import LATTE
 from moge.model.losses import ClassificationLoss
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-
 from .pooling import SAGPool
 from ..trainer import GraphClfTrainer, print_pred_class_counts
 
@@ -23,11 +23,9 @@ class LATTEGraphClassifier(GraphClfTrainer):
         self.collate_fn = None
 
         self.embedder = LATTE(t_order=hparams.n_layers, embedding_dim=hparams.embedding_dim,
-                              in_channels_dict=dataset.node_attr_shape, num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(), activation=hparams.activation,
-                              attn_heads=hparams.attn_heads, attn_activation=hparams.attn_activation,
-                              attn_dropout=hparams.attn_dropout, use_proximity=hparams.use_proximity,
-                              neg_sampling_ratio=hparams.neg_sampling_ratio)
+                              num_nodes_dict=dataset.num_nodes_dict, head_node_type=, metapaths=dataset.get_metapaths(),
+                              activation=hparams.activation, attn_heads=hparams.attn_heads,
+                              attn_activation=hparams.attn_activation, attn_dropout=hparams.attn_dropout)
 
         self.pooling = SAGPool(in_dim=hparams.embedding_dim,
                                conv_layer=dglnn.GraphConv(in_feats=hparams.embedding_dim,

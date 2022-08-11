@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from collections.abc import MutableMapping
-from typing import Dict, Any, Tuple, Optional, Union, List
+from typing import Dict, Tuple, Optional, Union, List
 
 import dgl
 import numpy as np
@@ -154,7 +154,10 @@ def stack_tensor_dicts(y_pred: Dict[str, Tensor], y_true: Dict[str, Tensor],
     return y_pred, y_true, weights
 
 
-def tensor_sizes(input: Any) -> Any:
+def tensor_sizes(input=None, **kwargs) -> ...:
+    if kwargs:
+        return tensor_sizes(kwargs)
+
     if isinstance(input, (dict, MutableMapping)):
         return {key: tensor_sizes(v) \
                 for key, v in input.items()}

@@ -68,6 +68,8 @@ class DGLLinkGenerator(DGLNodeGenerator):
         self.n_classes = len(classes) if classes is not None else None
         self.nodes = nodes
         self._name = network._name if hasattr(network, '_name') else ""
+        self.head_node_type = list(
+            {metapath[0] for metapath in self.pred_metapaths} | {metapath[-1] for metapath in self.pred_metapaths})
 
         self.split_namespace = split_namespace
         if split_namespace:

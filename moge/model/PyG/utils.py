@@ -38,23 +38,30 @@ def convert_to_nx_edgelist(edge_index_dict: Dict[Tuple[str, str, str], Tensor], 
 
     return edge_list
 
+def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tuple[str, str, str]], return_dict=False,
+                   tail_types: List[str] = None) \
+        -> Dict[str, List[Tuple[str, str, str]]]:
+    if return_dict:
+        output_metapaths = {}
+    else:
+        output_metapaths = []
 
-def join_metapaths(metapaths_A: List[Tuple[str, str, str]], metapaths_B: List[Tuple[str, str, str]]) -> List[
-    Tuple[str, str, str]]:
-    output_metapaths = []
+    for metapath_b in metapaths_B:
+        if tail_types and metapath_b[-1] not in tail_types: continue
+        for metapath_a in metapaths_A:
+            if metapath_a[-1] == metapath_b[0]:
+                if return_dict:
+                    new_metapath = ".".join([metapath_a[1], metapath_b[1]])
+                    output_metapaths[new_metapath] = [metapath_a, metapath_b]
+                else:
+                    output_metapaths.append(metapath_a + metapath_b[1:])
 
-    for relation_b in metapaths_B:
-        for relation_a in metapaths_A:
-            if relation_a[-1] == relation_b[0]:
-                new_relation = relation_a + relation_b[1:]
-                output_metapaths.append(new_relation)
     return output_metapaths
 
 
-def filter_metapaths(metapaths: List[Tuple[str, str, str]],
-                     order: Union[int, List[int]] = None,
-                     head_type: Union[str, List[str]] = None,
-                     tail_type: Union[str, List[str]] = None) -> List[Tuple[str, str, str]]:
+def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, List[int]] = None,
+                     head_type: Union[str, List[str]] = None, tail_type: Union[str, List[str]] = None) \
+        -> List[Tuple[str, str, str]]:
     def filter_func(metapath: Tuple[str]):
         condition = True
 
