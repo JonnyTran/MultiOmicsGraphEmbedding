@@ -16,143 +16,6 @@ from ..relations import RelationAttention
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
 
-class LATTE(nn.Module):
-    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list,
-                 activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
-                 layer_pooling=False, use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
-                 hparams=None):
-        super(LATTE, self).__init__()
-        self.metapaths = metapaths
-        self.node_types = list(num_nodes_dict.keys())
-        self.head_node_type = hparams.head_node_type
-
-        self.embedding_dim = embedding_dim
-        self.t_order = t_order
-        self.n_layers = n_layers
-
-        self.edge_sampling = edge_sampling
-        self.edge_threshold = hparams.edge_threshold
-        self.use_proximity = use_proximity
-        self.neg_sampling_ratio = neg_sampling_ratio
-        self.layer_pooling = layer_pooling
-
-        layers = []
-        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
-
-        layer_t_orders = {
-            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
-                if (t_order - (n_layers - (l + 1))) > 0 \
-                else [1] \
-            for l in reversed(range(n_layers))}
-
-        for l in range(n_layers):
-            is_last_layer = (l + 1 == n_layers)
-            is_output_layer = is_last_layer and (hparams.nb_cls_dense_size < 0)
-
-            l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
-                                                 order=layer_t_orders[l],  # Select only up to t-order
-                                                 # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
-                                                 tail_type=self.head_node_type if is_last_layer else None)
-
-            layers.append(
-                LATTEConv(input_dim=embedding_dim,
-                          output_dim=hparams.n_classes if is_output_layer else embedding_dim,
-                          node_types=list(num_nodes_dict.keys()), metapaths=l_layer_metapaths, layer=l,
-                          t_order=self.t_order, activation=None if is_output_layer else activation,
-                          batchnorm=False if not hasattr(hparams,
-                                                         "batchnorm") or is_output_layer else hparams.batchnorm_l,
-                          layernorm=False if not hasattr(hparams,
-                                                         "layernorm") or is_output_layer else hparams.layernorm,
-                          dropout=False if not hasattr(hparams,
-                                                       "dropout") or is_output_layer else hparams.dropout,
-                          input_dropout=hparams.input_dropout if "input_dropout" in hparams else False,
-                          attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
-                          edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
-                          use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
-                          layer_pooling=layer_pooling if is_last_layer else None))
-
-            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
-                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
-
-        self.layers: List[LATTEConv] = nn.ModuleList(layers)
-
-
-    def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, Tensor]], sizes: List[Dict[str, Tuple[int]]],
-                global_node_idx: List[Dict], save_betas=False):
-        """
-        This
-        :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
-        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
-        :param adjs: Dict of <metapath>:<tensor size (2, num_edge_index)>
-        :param save_betas: whether to save _beta values for batch
-        :return embedding_output, proximity_loss, edge_pred_dict:
-        """
-        # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
-        edge_pred_dicts = [None, ] * self.n_layers
-        edge_pred_dict = None
-
-        prev_h_in = {ntype: [] for ntype in node_feats}
-        h_out_layers = {ntype: [] for ntype in node_feats}
-        h_out = node_feats
-        for l in range(self.n_layers):
-            (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
-                                                                           prev_h_in=prev_h_in,
-                                                                           edge_index_dict=adjs[l],
-                                                                           prev_edge_index_dict=edge_pred_dict,
-                                                                           sizes=sizes,
-                                                                           global_node_idx=global_node_idx[l],
-                                                                           save_betas=save_betas)
-
-            edge_pred_dicts[l] = edge_pred_dict
-
-            # Add the h_in embeddings to
-            if l < self.n_layers and self.t_order > 1:
-                for ntype in h_in:
-                    prev_h_in[ntype].append(h_in[ntype])
-                    if len(prev_h_in[ntype]) > self.t_order:
-                        prev_h_in[ntype].pop(0)
-
-            if self.layer_pooling in ["max", "mean", "concat"]:
-                if isinstance(self.head_node_type, str):
-                    h_out_layers[self.head_node_type].append(
-                        h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
-                else:
-                    for ntype in [ntype for ntype in sizes[-1] if sizes[-1][ntype][1]]:
-                        h_out_ntype = h_out[ntype][:sizes[-1][ntype][1]]
-                        h_out_layers[ntype].append(h_out_ntype)
-
-        if self.layer_pooling in ["last", "order_concat"] or self.n_layers == 1:
-            out = h_out
-
-        elif self.layer_pooling == "max":
-            out = {ntype: torch.stack(h_list, dim=1).max(1).values \
-                   for ntype, h_list in h_out_layers.items() \
-                   if len(h_list) > 0}
-
-        elif self.layer_pooling == "mean":
-            out = {ntype: torch.stack(h_list, dim=1).mean(dim=1) \
-                   for ntype, h_list in h_out_layers.items() if len(h_list) > 0}
-
-        elif self.layer_pooling == "concat":
-            out = {ntype: torch.cat(h_list, dim=1) \
-                   for ntype, h_list in h_out_layers.items() \
-                   if len(h_list) > 0}
-
-        return out, None, edge_pred_dicts
-
-    def get_attn_activation_weights(self, t):
-        return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
-
-    def get_relation_weights(self, t, **kwargs):
-        return self.layers[t].get_relation_weights(**kwargs)
-
-    def get_top_relations(self, t, node_type, min_order=None):
-        df = self.layers[t].get_top_relations(ntype=node_type)
-        if min_order:
-            df = df[df.notnull().sum(1) >= min_order]
-        return df
-
-
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
     def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, input_dropout=True,
@@ -596,3 +459,142 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             return e_pred
         else:
             return F.sigmoid(e_pred)
+
+
+class LATTE(nn.Module):
+    def __init__(self, n_layers: int, t_order: int, embedding_dim: int, num_nodes_dict: dict, metapaths: list,
+                 activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
+                 layer_pooling=False, use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
+                 hparams=None):
+        super(LATTE, self).__init__()
+        self.metapaths = metapaths
+        self.node_types = list(num_nodes_dict.keys())
+        self.head_node_type = hparams.head_node_type
+
+        self.embedding_dim = embedding_dim
+        self.t_order = t_order
+        self.n_layers = n_layers
+
+        self.edge_sampling = edge_sampling
+        self.edge_threshold = hparams.edge_threshold
+        self.use_proximity = use_proximity
+        self.neg_sampling_ratio = neg_sampling_ratio
+        self.layer_pooling = layer_pooling
+
+        layers = []
+        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of
+
+        layer_t_orders = {
+            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
+                if (t_order - (n_layers - (l + 1))) > 0 \
+                else [1] \
+            for l in reversed(range(n_layers))}
+
+        for l in range(n_layers):
+            is_last_layer = (l + 1 == n_layers)
+            is_output_layer = is_last_layer and (hparams.nb_cls_dense_size < 0)
+
+            l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
+                                                 order=layer_t_orders[l],  # Select only up to t-order
+                                                 # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
+                                                 tail_type=self.head_node_type if is_last_layer else None)
+
+            layers.append(
+                LATTEConv(input_dim=embedding_dim,
+                          output_dim=hparams.n_classes if is_output_layer else embedding_dim,
+                          node_types=list(num_nodes_dict.keys()), metapaths=l_layer_metapaths, layer=l,
+                          t_order=self.t_order, activation=None if is_output_layer else activation,
+                          batchnorm=False if not hasattr(hparams,
+                                                         "batchnorm") or is_output_layer else hparams.batchnorm_l,
+                          layernorm=False if not hasattr(hparams,
+                                                         "layernorm") or is_output_layer else hparams.layernorm,
+                          dropout=False if not hasattr(hparams,
+                                                       "dropout") or is_output_layer else hparams.dropout,
+                          input_dropout=hparams.input_dropout if "input_dropout" in hparams else False,
+                          attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
+                          edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
+                          use_proximity=use_proximity, neg_sampling_ratio=neg_sampling_ratio,
+                          layer_pooling=layer_pooling if is_last_layer else None))
+
+            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
+                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
+
+        self.layers: List[LATTEConv] = nn.ModuleList(layers)
+
+    def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, Tensor]], sizes: List[Dict[str, Tuple[int]]],
+                global_node_idx: List[Dict], save_betas=False):
+        """
+        This
+        :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
+        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
+        :param adjs: Dict of <metapath>:<tensor size (2, num_edge_index)>
+        :param save_betas: whether to save _beta values for batch
+        :return embedding_output, proximity_loss, edge_pred_dict:
+        """
+        # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
+        edge_pred_dicts = [None, ] * self.n_layers
+        edge_pred_dict = None
+
+        prev_h_in = {ntype: [] for ntype in node_feats}
+        h_out_layers = {ntype: [] for ntype in node_feats}
+        h_out = node_feats
+        for l in range(self.n_layers):
+            (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
+                                                                           prev_h_in=prev_h_in,
+                                                                           edge_index_dict=adjs[l],
+                                                                           prev_edge_index_dict=edge_pred_dict,
+                                                                           sizes=sizes,
+                                                                           global_node_idx=global_node_idx[l],
+                                                                           save_betas=save_betas)
+
+            edge_pred_dicts[l] = edge_pred_dict
+
+            # Add the h_in embeddings to
+            if l < self.n_layers and self.t_order > 1:
+                for ntype in h_in:
+                    prev_h_in[ntype].append(h_in[ntype])
+                    if len(prev_h_in[ntype]) > self.t_order:
+                        prev_h_in[ntype].pop(0)
+
+            if self.layer_pooling in ["max", "mean", "concat"]:
+                if isinstance(self.head_node_type, str):
+                    h_out_layers[self.head_node_type].append(
+                        h_out[self.head_node_type][:sizes[-1][self.head_node_type][1]])
+                else:
+                    for ntype in [ntype for ntype in sizes[-1] if sizes[-1][ntype][1]]:
+                        h_out_ntype = h_out[ntype][:sizes[-1][ntype][1]]
+                        h_out_layers[ntype].append(h_out_ntype)
+
+        if self.layer_pooling in ["last", "order_concat"] or self.n_layers == 1:
+            out = h_out
+
+        elif self.layer_pooling == "max":
+            out = {ntype: torch.stack(h_list, dim=1).max(1).values \
+                   for ntype, h_list in h_out_layers.items() \
+                   if len(h_list) > 0}
+
+        elif self.layer_pooling == "mean":
+            out = {ntype: torch.stack(h_list, dim=1).mean(dim=1) \
+                   for ntype, h_list in h_out_layers.items() if len(h_list) > 0}
+
+        elif self.layer_pooling == "concat":
+            out = {ntype: torch.cat(h_list, dim=1) \
+                   for ntype, h_list in h_out_layers.items() \
+                   if len(h_list) > 0}
+
+        return out, None, edge_pred_dicts
+
+    def get_attn_activation_weights(self, t):
+        return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))
+
+    def get_relation_weights(self, t, **kwargs):
+        return self.layers[t].get_relation_weights(**kwargs)
+
+    def get_top_relations(self, t, node_type, min_order=None):
+        df = self.layers[t].get_top_relations(ntype=node_type)
+        if min_order:
+            df = df[df.notnull().sum(1) >= min_order]
+        return df
+
+    def __getitem__(self, item) -> LATTEConv:
+        return self.layers[item]

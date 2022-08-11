@@ -20,6 +20,7 @@ from moge.criterion.clustering import clustering_metrics
 from moge.dataset import DGLNodeGenerator, HeteroNeighborGenerator
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.utils import edge_index_to_adjs
+from moge.model.PyG.latte import LATTE
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
@@ -151,7 +152,7 @@ class ClusteringEvaluator(LightningModule):
 
 class NodeEmbeddingEvaluator(LightningModule):
     dataset: HeteroGraphDataset
-
+    embedder: LATTE
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.attn_plot_name = "sankey_flow"
@@ -200,7 +201,7 @@ class NodeEmbeddingEvaluator(LightningModule):
         # Log plotly HTMLs as a wandb.Table
         plotly_htmls = []
         for ntype in node_types:
-            nodes, links = self.embedder.get_sankey_flow(layer=layer, node_type=ntype, self_loop=True)
+            nodes, links = self.embedder.layers[-1].get_sankey_flow(node_type=ntype, self_loop=True)
             fig = plot_sankey_flow(nodes, links, width=width, height=height)
 
             path_to_plotly_html = f"./wandb_fig_run_{run_id}_{ntype}.html"

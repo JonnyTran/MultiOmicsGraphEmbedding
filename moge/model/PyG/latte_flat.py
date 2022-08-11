@@ -15,124 +15,6 @@ from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edg
 from moge.model.relations import RelationAttention
 
 
-class LATTE(nn.Module):
-    def __init__(self, n_layers: int, t_order: int,
-                 embedding_dim: int, num_nodes_dict: Dict[str, int],
-                 metapaths: List[Tuple[str, str, str]], layer_pooling: str = None,
-                 activation: str = "relu",
-                 attn_heads: int = 1, attn_activation="sharpening", attn_dropout: float = 0.5,
-                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
-                 hparams: Namespace = None):
-        super().__init__()
-        self.metapaths = metapaths
-        self.node_types = list(num_nodes_dict.keys())
-        self.head_node_type = hparams.head_node_type
-
-        self.embedding_dim = embedding_dim
-        self.t_order = t_order
-        self.n_layers = n_layers
-
-        self.neg_sampling_ratio = neg_sampling_ratio
-        self.edge_sampling = edge_sampling
-        self.use_proximity = use_proximity
-        self.layer_pooling = layer_pooling
-
-        layer_t_orders = {
-            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
-                if (t_order - (n_layers - (l + 1))) > 0 \
-                else [1] \
-            for l in reversed(range(n_layers))}
-        # layer_t_orders = {
-        #     l: list(range(1, t_order + 1)) \
-        #     for l in range(n_layers)}
-
-        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of meapaths
-
-        layers = []
-        for l in range(n_layers):
-            is_last_layer = l + 1 == n_layers
-
-            l_layer_metapaths = filter_metapaths(
-                metapaths=metapaths + higher_order_metapaths,
-                order=layer_t_orders[l],  # Select only up to t-order
-                # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
-                tail_type=[self.head_node_type, "GO_term"] if is_last_layer else None)
-
-            layer = LATTEConv(input_dim=embedding_dim,
-                              output_dim=embedding_dim,
-                              num_nodes_dict=num_nodes_dict,
-                              metapaths=l_layer_metapaths,
-                              layer=l,
-                              t_order=self.t_order,
-                              activation=activation,
-                              layernorm=hparams.layernorm,
-                              batchnorm=hparams.batchnorm,
-                              dropout=hparams.dropout if "dropout" in hparams else 0.0,
-                              attn_heads=attn_heads,
-                              attn_activation=attn_activation,
-                              attn_dropout=attn_dropout,
-                              edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
-                              use_proximity=use_proximity,
-                              neg_sampling_ratio=neg_sampling_ratio,
-                              verbose=hparams.verbose if "verbose" in hparams else False)
-            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
-                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
-
-            layers.append(layer)
-
-        self.layers: List[LATTEConv] = nn.ModuleList(layers)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        gain = nn.init.calculate_gain('relu')
-
-    def configure_sharded_model(self):
-        # modules are sharded across processes
-        # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
-        # During the forward/backward passes, weights get synced across processes
-        # and de-allocated once computation is complete, saving memory.
-
-        # Wraps the layer in a Fully Sharded Wrapper automatically
-        self.layers = auto_wrap(self.layers)
-
-    def forward(self, h_dict: Dict[str, Tensor],
-                edge_index_dict: Dict[Tuple[str, str, str], Tensor],
-                global_node_idx: Dict[str, Tensor],
-                sizes: Dict[str, int],
-                **kwargs):
-        """
-        Args:
-            h_dict: Dict of <ntype>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
-            global_node_idx: Dict of <ntype>:<int tensor size (batch_size,)>
-            edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
-            save_betas: whether to save _beta values for batch
-        Returns:
-            embedding_output
-        """
-        h_layers = {ntype: [] for ntype in global_node_idx}
-        edge_pred_dict = None
-        for l in range(self.n_layers):
-            h_dict, edge_pred_dict = self.layers[l].forward(h_dict, edge_index_dict,
-                                                            global_node_idx=global_node_idx,
-                                                            sizes=sizes,
-                                                            edge_pred_dict=edge_pred_dict,
-                                                            **kwargs)
-
-            for ntype in h_dict:
-                h_layers[ntype].append(h_dict[ntype])
-
-        if self.layer_pooling is None or self.layer_pooling in ["last"] or self.n_layers == 1:
-            out = h_dict
-
-        elif self.layer_pooling == "concat":
-            out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
-                   if len(h_list)}
-        else:
-            raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
-
-        return out
-
-
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
     def __init__(self, input_dim: int, output_dim: int, num_nodes_dict: Dict[str, int], metapaths: List,
                  layer: int = 0, t_order: int = 1,
@@ -276,8 +158,6 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         Returns:
              output_emb, edge_attn_scores
         """
-        # self.empty_gpu_device = select_empty_gpu() if empty_gpu_device is None else empty_gpu_device
-
         l_dict = self.projection(feats, linears=self.linear)
         r_dict = l_dict
         # r_dict = self.projection(feats, linears=self.linear_r)
@@ -453,3 +333,124 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             return self.alpha_activation(alpha)
         else:
             return alpha
+
+
+class LATTE(nn.Module):
+    def __init__(self, n_layers: int, t_order: int,
+                 embedding_dim: int, num_nodes_dict: Dict[str, int],
+                 metapaths: List[Tuple[str, str, str]], layer_pooling: str = None,
+                 activation: str = "relu",
+                 attn_heads: int = 1, attn_activation="sharpening", attn_dropout: float = 0.5,
+                 use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
+                 hparams: Namespace = None):
+        super().__init__()
+        self.metapaths = metapaths
+        self.node_types = list(num_nodes_dict.keys())
+        self.head_node_type = hparams.head_node_type
+
+        self.embedding_dim = embedding_dim
+        self.t_order = t_order
+        self.n_layers = n_layers
+
+        self.neg_sampling_ratio = neg_sampling_ratio
+        self.edge_sampling = edge_sampling
+        self.use_proximity = use_proximity
+        self.layer_pooling = layer_pooling
+
+        layer_t_orders = {
+            l: list(range(1, t_order - (n_layers - (l + 1)) + 1)) \
+                if (t_order - (n_layers - (l + 1))) > 0 \
+                else [1] \
+            for l in reversed(range(n_layers))}
+        # layer_t_orders = {
+        #     l: list(range(1, t_order + 1)) \
+        #     for l in range(n_layers)}
+
+        higher_order_metapaths = copy.deepcopy(metapaths)  # Initialize another set of meapaths
+
+        layers = []
+        for l in range(n_layers):
+            is_last_layer = l + 1 == n_layers
+
+            l_layer_metapaths = filter_metapaths(
+                metapaths=metapaths + higher_order_metapaths,
+                order=layer_t_orders[l],  # Select only up to t-order
+                # Skip higher-order relations that doesn't have the head node type, since it's the last output layer.
+                tail_type=[self.head_node_type, "GO_term"] if is_last_layer else None)
+
+            layer = LATTEConv(input_dim=embedding_dim,
+                              output_dim=embedding_dim,
+                              num_nodes_dict=num_nodes_dict,
+                              metapaths=l_layer_metapaths,
+                              layer=l,
+                              t_order=self.t_order,
+                              activation=activation,
+                              layernorm=hparams.layernorm,
+                              batchnorm=hparams.batchnorm,
+                              dropout=hparams.dropout if "dropout" in hparams else 0.0,
+                              attn_heads=attn_heads,
+                              attn_activation=attn_activation,
+                              attn_dropout=attn_dropout,
+                              edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
+                              use_proximity=use_proximity,
+                              neg_sampling_ratio=neg_sampling_ratio,
+                              verbose=hparams.verbose if "verbose" in hparams else False)
+            if l + 1 < n_layers and layer_t_orders[l + 1] > layer_t_orders[l]:
+                higher_order_metapaths = join_metapaths(l_layer_metapaths, metapaths)
+
+            layers.append(layer)
+
+        self.layers: List[LATTEConv] = nn.ModuleList(layers)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        gain = nn.init.calculate_gain('relu')
+
+    def configure_sharded_model(self):
+        # modules are sharded across processes
+        # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
+        # During the forward/backward passes, weights get synced across processes
+        # and de-allocated once computation is complete, saving memory.
+
+        # Wraps the layer in a Fully Sharded Wrapper automatically
+        self.layers = auto_wrap(self.layers)
+
+    def forward(self, h_dict: Dict[str, Tensor],
+                edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+                global_node_idx: Dict[str, Tensor],
+                sizes: Dict[str, int],
+                **kwargs):
+        """
+        Args:
+            h_dict: Dict of <ntype>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
+            global_node_idx: Dict of <ntype>:<int tensor size (batch_size,)>
+            edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
+            save_betas: whether to save _beta values for batch
+        Returns:
+            embedding_output
+        """
+        h_layers = {ntype: [] for ntype in global_node_idx}
+        edge_pred_dict = None
+        for l in range(self.n_layers):
+            h_dict, edge_pred_dict = self.layers[l].forward(h_dict, edge_index_dict,
+                                                            global_node_idx=global_node_idx,
+                                                            sizes=sizes,
+                                                            edge_pred_dict=edge_pred_dict,
+                                                            **kwargs)
+
+            for ntype in h_dict:
+                h_layers[ntype].append(h_dict[ntype])
+
+        if self.layer_pooling is None or self.layer_pooling in ["last"] or self.n_layers == 1:
+            out = h_dict
+
+        elif self.layer_pooling == "concat":
+            out = {node_type: torch.cat(h_list, dim=1) for node_type, h_list in h_layers.items() \
+                   if len(h_list)}
+        else:
+            raise Exception("`layer_pooling` should be either ['last', 'max', 'mean', 'concat']")
+
+        return out
+
+    def __getitem__(self, item) -> LATTEConv:
+        return self.layers[item]

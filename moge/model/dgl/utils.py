@@ -92,7 +92,7 @@ class ChainMetaPaths(BaseTransform):
         self.metapaths = metapaths
         self.keep_orig_edges = keep_orig_edges
 
-    def __call__(self, src_block: DGLBlock, dst_block: DGLBlock):
+    def __call__(self, src_block: DGLBlock, dst_block: DGLBlock) -> DGLBlock:
         data_dict = dict()
 
         for meta_etype, metapath_chain in self.metapaths.items():

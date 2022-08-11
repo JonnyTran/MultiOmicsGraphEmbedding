@@ -51,6 +51,9 @@ class RelationAttention:
         if len(betas) < len({metapath[-1] for metapath in self.metapaths}):
             return
 
+        if not hasattr(self, "_betas"):
+            self._betas, self._beta_std, self._beta_avg = {}, {}, {}
+
         for ntype in betas:
             if ntype not in global_node_idx or global_node_idx[ntype].numel() == 0: continue
 
