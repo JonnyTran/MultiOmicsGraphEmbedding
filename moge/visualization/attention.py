@@ -1,7 +1,8 @@
 import plotly.graph_objects as go
 from matplotlib.colors import to_rgb
-from moge.visualization.utils import configure_layout
 from pandas import DataFrame
+
+from moge.visualization.utils import configure_layout
 
 
 def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=8, orientation="h",
@@ -30,7 +31,7 @@ def plot_sankey_flow(nodes: DataFrame, links: DataFrame, opacity=0.6, font_size=
             value=links['value'],
             label=links['label'],
             color=rgba_colors,
-            # hoverinfo="",
+            # hoverinfo=links['value'],
         ),
 
     )], )

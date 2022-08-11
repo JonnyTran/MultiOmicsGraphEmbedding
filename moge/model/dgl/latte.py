@@ -21,9 +21,8 @@ class LATTEConv(nn.Module, RelationAttention):
         self.node_types = list(num_nodes_dict.keys())
         self.layer = layer
         self.t_order = t_order
-        print(f"LATTE {self.layer + 1}, metapaths {len(metapaths)}, max_order {max_num_hops(metapaths)}")
-
         self.edge_dir = edge_dir
+        print(f"LATTE {self.layer + 1}, metapaths {len(metapaths)}, max_order {max_num_hops(metapaths)}")
 
         self.metapaths = metapaths
         self.etypes = [(metapath[0], ".".join(metapath[1::2]), metapath[-1]) for metapath in metapaths]
@@ -127,14 +126,13 @@ class LATTEConv(nn.Module, RelationAttention):
 
         return output
 
-    def get_beta_weights(self, key, query, ntype):
-        alpha_l = (key * self.rel_attn_l[ntype]).sum(dim=-1)
-        alpha_r = (query * self.rel_attn_r[ntype][None, :, :]).sum(dim=-1)
+    def get_beta_weights(self, query: Tensor, key: Tensor, ntype: str):
+        beta_l = F.relu(query * self.rel_attn_l[ntype], )
+        beta_r = F.relu(key * self.rel_attn_r[ntype], )
 
-        beta = alpha_l[:, None, :] + alpha_r
-        beta = F.leaky_relu(beta, negative_slope=0.2)
-        beta = F.softmax(beta, dim=2)
-        beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
+        beta = (beta_l[:, None, :, :] * beta_r).sum(-1)
+        beta = F.softmax(beta, dim=1)
+        # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
     def forward(self, g: DGLBlock, feat: Dict[str, Tensor], save_betas=False, verbose=False):
@@ -183,20 +181,23 @@ class LATTEConv(nn.Module, RelationAttention):
                                      [g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels)],
                                      dim=1)
 
-            beta[ntype] = self.get_beta_weights(key=out[ntype][:, -1, :], query=out[ntype], ntype=ntype)
+            beta[ntype] = self.get_beta_weights(query=out[ntype][:, -1, :], key=out[ntype], ntype=ntype)
             out[ntype] = (out[ntype] * beta[ntype].unsqueeze(-1)).sum(1)
             out[ntype] = out[ntype].view(out[ntype].size(0), self.embedding_dim)
 
-            # if verbose:
-            #     print("  >", ntype, global_node_idx[ntype].shape, )
-            #     for i, (metapath, beta_mean, beta_std) in enumerate(
-            #             zip(self.get_tail_relations(ntype) + [ntype],
-            #                 betas[ntype].mean(-1).mean(0),
-            #                 betas[ntype].mean(-1).std(0))):
-            #         print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
-            #               f"\tedge_index: {edge_pred_dict[metapath][0].size(1) if metapath in edge_pred_dict else 0}, "
-            #               f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-            #               f"\tnorm: {torch.norm(embedding[:, i]).item():.2f}")
+            if verbose:
+                global_node_index = {ntype: nid[:beta[ntype].size(0)] \
+                                     for ntype, nid in g.ndata["_ID"].items() if ntype in beta}
+                edge_pred_dict = {metapath: g.num_edges(etype=metapath) for metapath in g.canonical_etypes}
+
+                print("  >", ntype, global_node_index[ntype].shape, )
+                for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
+                                                                     beta[ntype].mean(-1).mean(0),
+                                                                     beta[ntype].mean(-1).std(0))):
+                    print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
+                          f"\tedge_index: {edge_pred_dict[etype] if etype in edge_pred_dict else None}, "
+                          f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
+                          f"\tnorm: {torch.norm(out[ntype][:, i]).item():.2f}")
 
             if hasattr(self, "layernorm"):
                 out[ntype] = self.layernorm[ntype](out[ntype])

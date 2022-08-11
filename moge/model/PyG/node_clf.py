@@ -716,12 +716,12 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                                                   minibatch=math.sqrt(self.hparams.batch_size // 4)))
 
         if len(h_out) < len(inputs["global_node_index"].keys()):
-            embs = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
+            embs = self.encoder.forward(inputs["x_dict"], global_node_index=inputs["global_node_index"])
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
         embeddings = self.embedder.forward(h_out,
                                            edge_index_dict=inputs["edge_index_dict"],
-                                           global_node_idx=inputs["global_node_index"],
+                                           global_node_index=inputs["global_node_index"],
                                            sizes=inputs["sizes"],
                                            **kwargs)
 
@@ -892,7 +892,7 @@ class LATTEFlatNodeClfLink(LATTELinkPred):
         super().__init__(hparams, dataset, metrics, collate_fn)
 
     def forward(self, inputs: Dict[str, Any], **kwargs):
-        embeddings = super().forward(inputs, edges_true=None, return_embedding=True, **kwargs)
+        embeddings = super().forward(inputs, edges_true=None, return_embeddings=True, **kwargs)
 
         logits = embeddings[self.head_node_type] @ embeddings[self.dataset.go_ntype].T
         return logits

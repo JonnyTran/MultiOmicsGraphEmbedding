@@ -425,7 +425,7 @@ class HGTLinkPred(DglLinkPredTrainer):
     def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False) \
             -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         if len(x) == 0 or sum(a.numel() for a in x) == 0:
-            x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
+            x = self.encoder.forward(feats=x, global_node_index=blocks[0].srcdata["_ID"])
 
         x = self.embedder(blocks, x)
 
@@ -482,7 +482,7 @@ class LATTELinkPred(DglLinkPredTrainer):
     def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False, **kwargs) \
             -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
         if len(x) == 0 or sum(a.numel() for a in x) == 0:
-            x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
+            x = self.encoder.forward(feats=x, global_node_index=blocks[0].srcdata["_ID"])
 
         x = self.embedder.forward(blocks, x, **kwargs)
 
@@ -532,7 +532,7 @@ class DeepGraphGOLinkPred(DglLinkPredTrainer):
 
     def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False):
         if len(x) == 0 or sum(a.numel() for a in x) == 0:
-            x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
+            x = self.encoder.forward(feats=x, global_node_index=blocks[0].srcdata["_ID"])
 
         x = self.conv(blocks, x)
 

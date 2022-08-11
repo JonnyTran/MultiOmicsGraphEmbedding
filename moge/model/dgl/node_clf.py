@@ -829,7 +829,7 @@ class HGTNodeClf(NodeClfTrainer):
 
     def forward(self, blocks: List[DGLBlock], x: Dict[str, Tensor], return_embeddings: bool = False, **kwargs):
         if len(x) == 0 or sum(a.numel() for a in x.values()) == 0:
-            x = self.encoder.forward(node_feats=x, global_node_idx=blocks[0].srcdata["_ID"])
+            x = self.encoder.forward(feats=x, global_node_index=blocks[0].srcdata["_ID"])
 
         embeddings = self.embedder(blocks, x)
 

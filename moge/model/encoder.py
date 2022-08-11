@@ -87,14 +87,14 @@ class HeteroNodeFeatureEncoder(nn.Module):
 
         return embeddings
 
-    def forward(self, node_feats: Dict[str, Tensor], global_node_idx: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        h_dict = {k: v for k, v in node_feats.items()} if isinstance(node_feats, dict) else {}
+    def forward(self, feats: Dict[str, Tensor], global_node_index: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        h_dict = {k: v for k, v in feats.items()} if isinstance(feats, dict) else {}
 
-        for ntype in global_node_idx:
-            if global_node_idx[ntype].numel() == 0: continue
+        for ntype in global_node_index:
+            if global_node_index[ntype].numel() == 0: continue
 
             if ntype not in h_dict and ntype in self.embeddings:
-                h_dict[ntype] = self.embeddings[ntype](global_node_idx[ntype]).to(global_node_idx[ntype].device)
+                h_dict[ntype] = self.embeddings[ntype](global_node_index[ntype]).to(global_node_index[ntype].device)
 
             # project to embedding_dim if node features are not same same dimension
             if ntype in self.feature_projection:

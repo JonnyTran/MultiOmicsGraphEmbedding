@@ -8,11 +8,14 @@ from typing import List, Tuple, Dict, Any, Union, Optional, Callable
 import numpy as np
 import torch
 from fairscale.nn import auto_wrap
+from logzero import logger
 from pandas import DataFrame
 from torch import nn, Tensor
 from torch.nn import functional as F
+from torch.optim import lr_scheduler
 
-from moge.model.PyG.latte_flat import LATTE
+# from moge.model.PyG.latte_flat import LATTE as LATTEFlat
+from moge.model.PyG.latte import LATTE
 from moge.model.losses import ClassificationLoss
 from .conv import HGT
 from .utils import get_edge_index_from_neg_batch, batch2global_edge_index
@@ -165,6 +168,80 @@ class PyGLinkPredTrainer(LinkPredTrainer):
 
         return e_losses
 
+    def on_validation_end(self) -> None:
+        try:
+            if self.current_epoch % 5 == 1:
+                X, e_true, _ = self.dataset.full_batch(
+                    edge_idx=np.random.choice(self.dataset.validation_idx, size=10, replace=False), device=self.device)
+                embeddings, e_pred = self.forward(X, e_true, save_betas=True)
+
+                self.log_beta_degree_correlation(global_node_index=X["global_node_index"], batch_size=X["batch_size"])
+                self.log_score_averages(edge_scores_dict=e_pred)
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+            super().on_validation_end()
+
+    def on_test_end(self):
+        try:
+            if self.wandb_experiment is not None:
+                X, e_true, _ = self.dataset.full_batch(device="cpu")
+                embeddings, e_pred = self.cpu().forward(X, e_true, save_betas=True)
+
+                self.log_score_averages(edge_scores_dict=e_pred)
+                self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+                self.plot_embeddings_tsne(global_node_index=X['global_node_index'], embeddings=embeddings,
+                                          targets=e_true, y_pred=e_pred)
+                self.cleanup_artifacts()
+
+        except Exception as e:
+            traceback.print_exc()
+
+        finally:
+            super().on_test_end()
+
+    def configure_optimizers(self):
+        param_optimizer = list(self.named_parameters())
+        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embedding",
+                    'LayerNorm.bias', 'LayerNorm.weight',
+                    'BatchNorm.bias', 'BatchNorm.weight']
+
+        weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
+        lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
+
+        optimizer_grouped_parameters = [
+            {'params': [p for name, p in param_optimizer \
+                        if not any(key in name for key in no_decay) \
+                        and "embeddings" not in name],
+             'weight_decay': weight_decay},
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
+             'weight_decay': 0.0},
+        ]
+
+        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
+
+        extra = {}
+        if lr_annealing == "cosine":
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.num_training_steps,
+                                                       eta_min=self.lr / 100)
+
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            logger.info("Using CosineAnnealingLR", scheduler.state_dict())
+
+        elif lr_annealing == "restart":
+            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=50, T_mult=1,
+                                                                 eta_min=self.lr / 100)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            logger.info("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
+
+        elif lr_annealing == "reduce":
+            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            logger.info("Using ReduceLROnPlateau", scheduler.state_dict())
+
+        return {"optimizer": optimizer, **extra}
+
 
 class EdgePredictor(torch.nn.Module):
     def __init__(self, embedding_dim: int, pred_metapaths: List[Tuple[str, str, str]],
@@ -313,9 +390,10 @@ class EdgePredictor(torch.nn.Module):
 
 
 class LATTELinkPred(PyGLinkPredTrainer):
-    def __init__(self, hparams: Namespace, dataset: HeteroLinkPredDataset,
-                 metrics: Dict[str, List[str]] = ["obgl-biokg"],
+    def __init__(self, hparams: Namespace, dataset: HeteroLinkPredDataset, metrics: Dict[str, List[str]],
                  collate_fn=None) -> None:
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
         super().__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
@@ -341,7 +419,7 @@ class LATTELinkPred(PyGLinkPredTrainer):
                               t_order=min(hparams.t_order, hparams.n_layers),
                               embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict,
-                              metapaths=dataset.get_metapaths(khop=None),
+                              metapaths=dataset.get_metapaths(),
                               layer_pooling=hparams.layer_pooling,
                               activation=hparams.activation,
                               attn_heads=hparams.attn_heads,
@@ -396,23 +474,27 @@ class LATTELinkPred(PyGLinkPredTrainer):
             self.encoder = auto_wrap(self.encoder)
 
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]],
-                return_embedding=False, **kwargs) \
+                return_embeddings=False, **kwargs) \
             -> Tuple[Dict[str, Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
+        input_nodes = inputs["global_node_index"][0] if isinstance(inputs["global_node_index"], list) else inputs[
+            "global_node_index"]
+
         if not self.training:
-            self._node_ids = inputs["global_node_index"]
+            self._node_ids = input_nodes
 
         h_out = {}
         if 'sequences' in inputs and hasattr(self, "seq_encoder"):
             h_out.update(self.seq_encoder.forward(inputs['sequences'],
                                                   minibatch=math.sqrt(self.hparams.batch_size // 3)))
 
-        if len(h_out) < len(inputs["global_node_index"].keys()):
-            embs = self.encoder.forward(inputs["x_dict"], global_node_idx=inputs["global_node_index"])
+        if len(h_out) < len(input_nodes.keys()):
+            embs = self.encoder.forward(inputs["x_dict"], global_node_index=input_nodes)
             h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
 
         embeddings = self.embedder.forward(h_out, edge_index_dict=inputs["edge_index_dict"],
-                                           global_node_idx=inputs["global_node_index"], sizes=inputs["sizes"], **kwargs)
-        if return_embedding:
+                                           global_node_index=inputs["global_node_index"],
+                                           sizes=inputs["sizes"], **kwargs)
+        if return_embeddings:
             return embeddings
 
         edges_pred = self.classifier.forward(edges_true, embeddings)
@@ -481,74 +563,6 @@ class LATTELinkPred(PyGLinkPredTrainer):
 
         self.log("test_loss", loss)
         return loss
-
-    def on_validation_end(self) -> None:
-        try:
-            if self.current_epoch % 5 == 1:
-                X, e_true, _ = self.dataset.full_batch(
-                    edge_idx=np.random.choice(self.dataset.validation_idx, size=10, replace=False), device=self.device)
-                embeddings, e_pred = self.forward(X, e_true, save_betas=True)
-
-                self.log_beta_degree_correlation(global_node_index=X["global_node_index"], batch_size=X["batch_size"])
-                self.log_score_averages(edge_scores_dict=e_pred)
-        except Exception as e:
-            traceback.print_exc()
-        finally:
-            self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-            super().on_validation_end()
-
-    def on_test_end(self):
-        try:
-            if self.wandb_experiment is not None:
-                X, e_true, _ = self.dataset.full_batch(device="cpu")
-                embeddings, e_pred = self.cpu().forward(X, e_true, save_betas=True)
-
-                self.log_score_averages(edge_scores_dict=e_pred)
-                self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
-                self.plot_embeddings_tsne(global_node_index=X['global_node_index'], embeddings=embeddings,
-                                          targets=e_true, y_pred=e_pred)
-                self.cleanup_artifacts()
-
-        except Exception as e:
-            traceback.print_exc()
-
-        finally:
-            super().on_test_end()
-
-    def configure_optimizers(self):
-        param_optimizer = list(self.named_parameters())
-        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embedding",
-                    'LayerNorm.bias', 'LayerNorm.weight',
-                    'BatchNorm.bias', 'BatchNorm.weight']
-
-        optimizer_grouped_parameters = [
-            {'params': [p for name, p in param_optimizer \
-                        if not any(key in name for key in no_decay) \
-                        and "embeddings" not in name],
-             'weight_decay': self.hparams.weight_decay if isinstance(self.hparams.weight_decay, float) else 0.0},
-            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
-             'weight_decay': 0.0},
-        ]
-
-        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
-
-        extra = {}
-        if "lr_annealing" in self.hparams and self.hparams.lr_annealing == "cosine":
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                                   T_max=self.num_training_steps,
-                                                                   eta_min=self.lr / 100)
-
-            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
-            print("Using CosineAnnealingLR", scheduler.state_dict())
-
-        elif "lr_annealing" in self.hparams and self.hparams.lr_annealing == "restart":
-            scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
-                                                                             T_0=50, T_mult=1,
-                                                                             eta_min=self.lr / 100)
-            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
-            print("Using CosineAnnealingWarmRestarts", scheduler.state_dict())
-
-        return {"optimizer": optimizer, **extra}
 
 
 class HGTLinkPred(LATTELinkPred):

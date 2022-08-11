@@ -1,4 +1,5 @@
 import copy
+from pprint import pprint
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -13,12 +14,13 @@ from torch_geometric.utils import softmax
 from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ..relations import RelationAttention
+from ..utils import tensor_sizes
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
     def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
-                 activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, input_dropout=True,
+                 activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0,
                  attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
                  neg_sampling_ratio=1.0, layer_pooling=None) -> None:
         super(LATTEConv, self).__init__(aggr="add", flow="source_to_target", node_dim=0)
@@ -33,9 +35,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         self.attn_dropout = attn_dropout
         self.edge_threshold = edge_threshold
         self.layer_pooling = layer_pooling
-        self.input_dropout = input_dropout
 
-        print(f"LATTE {self.layer + 1}, metapaths {len(metapaths)}, max_order {max_num_hops(metapaths)}")
+        print(f"LATTE {layer + 1}, metapaths {len(metapaths)}, max_order {max_num_hops(metapaths)}")
 
         if activation == "sigmoid":
             self.activation = F.sigmoid
@@ -148,14 +149,14 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                 edge_index_dict: Dict[Tuple, Tensor],
                 prev_edge_index_dict: Dict[Tuple, Tensor],
                 sizes: List[Dict[str, Tuple[int]]],
-                global_node_idx: Dict[str, Tensor],
+                global_node_index: Dict[str, Tensor],
                 save_betas=False):
         """
         Args:
             x: a dict of "source" node representations
             prev_h_in: Context embedding of the previous order, required for t >= 2.
                 Default: None (if first order). A dict of (node_type: tensor)
-            global_node_idx: A dict of index values indexed by node_type in this mini-batch sampling
+            global_node_index: A dict of index values indexed by node_type in this mini-batch sampling
             edge_index_dict: Sparse adjacency matrices for each metapath relation. A dict of edge_index indexed by metapath
 
         Returns:
@@ -163,12 +164,6 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         """
         x_r = {ntype: x[ntype][: sizes[self.layer][ntype][1]] \
                for ntype in x if sizes[self.layer][ntype][1]}
-
-        if self.input_dropout and hasattr(self, "dropout"):
-            x = {ntype: self.dropout(x[ntype]) for ntype in x}
-            x_r = {ntype: self.dropout(x_r[ntype]) for ntype in x_r}
-            # if prev_h_in:
-            #     prev_h_in = {ntype: [self.dropout(h) for h in h_list] for ntype, h_list in prev_h_in.items()}
 
         l_dict = {ntype: self.linear_l[ntype].forward(feat).view(feat.size(0), self.attn_heads, self.out_channels) \
                   for ntype, feat in x.items()}
@@ -221,14 +216,14 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         # Save beta weights from testing samples
         if save_betas and not self.training:
             beta_mean = {ntype: beta[ntype].mean(2) for ntype in beta}
-            global_node_idx_out = {ntype: nid[:sizes[self.layer][ntype][1]] for ntype, nid in global_node_idx.items()}
+            global_node_idx_out = {ntype: nid[:sizes[self.layer][ntype][1]] for ntype, nid in global_node_index.items()}
             self.save_relation_weights(beta_mean, global_node_idx_out)
 
         proximity_loss = None
         if self.use_proximity:
             proximity_loss, _ = self.proximity_loss(edge_index_dict,
                                                     l_dict=l_dict, r_dict=r_dict,
-                                                    global_node_idx=global_node_idx)
+                                                    global_node_idx=global_node_index)
 
         return (l_dict, h_out), proximity_loss, edge_pred_dict
 
@@ -297,16 +292,22 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         edge_pred_dict = {}
         for metapath in self.get_head_relations(node_type, order=1):
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None: continue
-            head, tail = metapath[0], metapath[-1]
+            head_type, tail_type = metapath[0], metapath[-1]
 
             edge_index, values = get_edge_index_values(edge_index_dict[metapath], filter_edge=False)
             if edge_index is None: continue
-            head_size_in, tail_size_out = sizes[self.layer][head][0], sizes[self.layer][tail][1]
+            head_size_in, tail_size_out = sizes[self.layer][head_type][0], sizes[self.layer][tail_type][1]
+
+            pprint(tensor_sizes(metapath=metapath,
+                                edge_index=dict(
+                                    zip(["src_" + head_type, "dst_" + tail_type], edge_index.max(1).values)),
+                                x=[l_dict[head_type], r_dict[tail_type]],
+                                head_size_in=head_size_in, tail_size_out=tail_size_out))
 
             # Propapate flows from target nodes to source nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(l_dict[head], r_dict[tail]),
+                x=(l_dict[head_type], r_dict[tail_type]),
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
                 metapath=str(metapath),
@@ -329,20 +330,20 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
         for metapath in higher_relations:
             if metapath not in higher_order_edge_index or higher_order_edge_index[metapath] == None: continue
-            head, tail = metapath[0], metapath[-1]
+            head_type, tail_type = metapath[0], metapath[-1]
 
             edge_index, values = get_edge_index_values(higher_order_edge_index[metapath], filter_edge=False)
             if edge_index is None: continue
 
             # Select the right t-order context node presentations based on the order of the metapath
             order = len(metapath[1::2])
-            h_source = prev_l_dict[head][-(order - 1)]
-            head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail][1]
+            h_source = prev_l_dict[head_type][-(order - 1)]
+            head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail_type][1]
 
             # Propapate flows from higher order source nodes to target nodes
             out = self.propagate(
                 edge_index=edge_index,
-                x=(h_source, r_dict[tail]),
+                x=(h_source, r_dict[tail_type]),
                 size=(head_size_in, tail_size_out),
                 metapath_idx=self.metapaths.index(metapath),
                 metapath=str(metapath),
@@ -466,7 +467,7 @@ class LATTE(nn.Module):
                  activation: str = "relu", attn_heads=1, attn_activation="sharpening", attn_dropout=0.5,
                  layer_pooling=False, use_proximity=True, neg_sampling_ratio=2.0, edge_sampling=True,
                  hparams=None):
-        super(LATTE, self).__init__()
+        super().__init__()
         self.metapaths = metapaths
         self.node_types = list(num_nodes_dict.keys())
         self.head_node_type = hparams.head_node_type
@@ -476,7 +477,7 @@ class LATTE(nn.Module):
         self.n_layers = n_layers
 
         self.edge_sampling = edge_sampling
-        self.edge_threshold = hparams.edge_threshold
+        self.edge_threshold = hparams.edge_threshold if "edge_threshold" in hparams else 0.0
         self.use_proximity = use_proximity
         self.neg_sampling_ratio = neg_sampling_ratio
         self.layer_pooling = layer_pooling
@@ -492,7 +493,6 @@ class LATTE(nn.Module):
 
         for l in range(n_layers):
             is_last_layer = (l + 1 == n_layers)
-            is_output_layer = is_last_layer and (hparams.nb_cls_dense_size < 0)
 
             l_layer_metapaths = filter_metapaths(metapaths + higher_order_metapaths,
                                                  order=layer_t_orders[l],  # Select only up to t-order
@@ -501,15 +501,15 @@ class LATTE(nn.Module):
 
             layers.append(
                 LATTEConv(input_dim=embedding_dim,
-                          output_dim=hparams.n_classes if is_output_layer else embedding_dim,
-                          node_types=list(num_nodes_dict.keys()), metapaths=l_layer_metapaths, layer=l,
-                          t_order=self.t_order, activation=None if is_output_layer else activation,
-                          batchnorm=False if not hasattr(hparams,
-                                                         "batchnorm") or is_output_layer else hparams.batchnorm_l,
-                          layernorm=False if not hasattr(hparams,
-                                                         "layernorm") or is_output_layer else hparams.layernorm,
-                          dropout=False if not hasattr(hparams,
-                                                       "dropout") or is_output_layer else hparams.dropout,
+                          output_dim=embedding_dim,
+                          node_types=list(num_nodes_dict.keys()),
+                          metapaths=l_layer_metapaths,
+                          layer=l,
+                          t_order=self.t_order,
+                          activation=activation,
+                          batchnorm=False if "batchnorm" not in hparams else hparams.batchnorm,
+                          layernorm=False if "layernorm" not in hparams else hparams.layernorm,
+                          dropout=False if "dropout" not in hparams else hparams.dropout,
                           input_dropout=hparams.input_dropout if "input_dropout" in hparams else False,
                           attn_heads=attn_heads, attn_activation=attn_activation, attn_dropout=attn_dropout,
                           edge_threshold=hparams.edge_threshold if "edge_threshold" in hparams else 0.0,
@@ -521,31 +521,32 @@ class LATTE(nn.Module):
 
         self.layers: List[LATTEConv] = nn.ModuleList(layers)
 
-    def forward(self, node_feats: Dict, adjs: List[Dict[Tuple, Tensor]], sizes: List[Dict[str, Tuple[int]]],
-                global_node_idx: List[Dict], save_betas=False):
+    def forward(self, feats: Dict[str, Tensor], edge_index_dict: List[Dict[Tuple, Tensor]],
+                sizes: List[Dict[str, Tuple[int]]], global_node_index: List[Dict], **kwargs):
         """
-        This
-        :param node_feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
-        :param global_node_idx: Dict of <node_type>:<int tensor size (batch_size,)>
-        :param adjs: Dict of <metapath>:<tensor size (2, num_edge_index)>
-        :param save_betas: whether to save _beta values for batch
-        :return embedding_output, proximity_loss, edge_pred_dict:
+        Args:
+            feats: Dict of <node_type>:<tensor size (batch_size, in_channels)>. If nodes are not attributed, then pass an empty dict.
+            global_node_index: Dict of <node_type>:<int tensor size (batch_size,)>
+            edge_index_dict: Dict of <metapath>:<tensor size (2, num_edge_index)>
+        Returns:
+            embedding_output, proximity_loss, edge_pred_dict:
         """
         # proximity_loss = torch.tensor(0.0, device=self.device) if self.use_proximity else None
         edge_pred_dicts = [None, ] * self.n_layers
         edge_pred_dict = None
 
-        prev_h_in = {ntype: [] for ntype in node_feats}
-        h_out_layers = {ntype: [] for ntype in node_feats}
-        h_out = node_feats
+        prev_h_in = {ntype: [] for ntype in feats}
+        h_out_layers = {ntype: [] for ntype in feats}
+        h_out = feats
+
         for l in range(self.n_layers):
-            (h_in, h_out), t_loss, edge_pred_dict = self.layers[l].forward(x=h_out,
-                                                                           prev_h_in=prev_h_in,
-                                                                           edge_index_dict=adjs[l],
-                                                                           prev_edge_index_dict=edge_pred_dict,
-                                                                           sizes=sizes,
-                                                                           global_node_idx=global_node_idx[l],
-                                                                           save_betas=save_betas)
+            (h_in, h_out), edge_pred_dict = self.layers[l].forward(x=h_out,
+                                                                   prev_h_in=prev_h_in,
+                                                                   edge_index_dict=edge_index_dict[l],
+                                                                   prev_edge_index_dict=edge_pred_dict,
+                                                                   sizes=sizes,
+                                                                   global_node_index=global_node_index[l],
+                                                                   **kwargs)
 
             edge_pred_dicts[l] = edge_pred_dict
 
@@ -582,7 +583,7 @@ class LATTE(nn.Module):
                    for ntype, h_list in h_out_layers.items() \
                    if len(h_list) > 0}
 
-        return out, None, edge_pred_dicts
+        return out, edge_pred_dicts
 
     def get_attn_activation_weights(self, t):
         return dict(zip(self.layers[t].metapaths, self.layers[t].alpha_activation.detach().numpy().tolist()))

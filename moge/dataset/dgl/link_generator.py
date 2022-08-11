@@ -279,8 +279,8 @@ class DGLLinkGenerator(DGLNodeGenerator):
         return df
 
     def get_link_sampler(self, G: DGLHeteroGraph, negative_sampling_size: int, negative_sampler: str,
-                         neighbor_sizes: List[str], neighbor_sampler: str, edge_dir="in",
-                         exclude="all_pred") -> Sampler:
+                         neighbor_sizes: List[str], neighbor_sampler: str, edge_dir="in", exclude="all_pred",
+                         collate_fn=None) -> Sampler:
         if G is None:
             G = self.G
         if negative_sampling_size is None:
@@ -312,13 +312,17 @@ class DGLLinkGenerator(DGLNodeGenerator):
             exclude = lambda x: {etype: self.G.edges(etype=self.pred_metapaths[0], form="eid") \
                                  for etype in self.pred_metapaths + self.neg_pred_metapaths}
 
-        link_sampler = as_edge_prediction_sampler(sampler=neighbor_sampler,
-                                                  exclude=exclude,
-                                                  reverse_etypes=self.reverse_etypes if self.use_reverse else None,
-                                                  reverse_eids=self.reverse_eids if self.use_reverse else None,
-                                                  negative_sampler=negative_sampler)
+        if collate_fn == LinkPredPyGCollator.__name__:
+            sampler = LinkPredPyGCollator
+        else:
+            sampler = as_edge_prediction_sampler
 
-        return link_sampler
+        return sampler(sampler=neighbor_sampler,
+                       exclude=exclude,
+                       reverse_etypes=self.reverse_etypes if self.use_reverse else None,
+                       reverse_eids=self.reverse_eids if self.use_reverse else None,
+                       negative_sampler=negative_sampler)
+
 
     def train_dataloader(self, collate_fn=None, batch_size=128, num_workers=0, indices=None, drop_last=False,
                          device=None, verbose=False, **kwargs):
@@ -326,9 +330,8 @@ class DGLLinkGenerator(DGLNodeGenerator):
             graph = self.transform_heterograph(self.G, edge_mask=self.G.edata["train_mask"], verbose=verbose)
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
-                                                  neighbor_sizes=self.neighbor_sizes,
-                                                  neighbor_sampler=self.sampler,
-                                                  edge_dir=self.edge_dir, exclude=self.exclude)
+                                                  neighbor_sizes=self.neighbor_sizes, neighbor_sampler=self.sampler,
+                                                  edge_dir=self.edge_dir, exclude=self.exclude, collate_fn=collate_fn)
         else:
             graph = self.G
             graph_sampler = self.link_sampler
@@ -361,9 +364,8 @@ class DGLLinkGenerator(DGLNodeGenerator):
 
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
-                                                  neighbor_sizes=self.neighbor_sizes,
-                                                  neighbor_sampler=self.sampler,
-                                                  edge_dir=self.edge_dir, exclude=self.exclude)
+                                                  neighbor_sizes=self.neighbor_sizes, neighbor_sampler=self.sampler,
+                                                  edge_dir=self.edge_dir, exclude=self.exclude, collate_fn=collate_fn)
         else:
             graph = self.G
             graph_sampler = self.link_sampler
@@ -393,9 +395,8 @@ class DGLLinkGenerator(DGLNodeGenerator):
             graph = self.transform_heterograph(self.G, edge_mask=edge_mask, verbose=verbose)
             graph_sampler = self.get_link_sampler(graph, negative_sampling_size=self.negative_sampling_size,
                                                   negative_sampler=self.negative_sampler,
-                                                  neighbor_sizes=self.neighbor_sizes,
-                                                  neighbor_sampler=self.sampler,
-                                                  edge_dir=self.edge_dir, exclude=self.exclude)
+                                                  neighbor_sizes=self.neighbor_sizes, neighbor_sampler=self.sampler,
+                                                  edge_dir=self.edge_dir, exclude=self.exclude, collate_fn=collate_fn)
         else:
             graph = self.G
             graph_sampler = self.link_sampler
@@ -436,7 +437,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
                 if block.num_edges(etype=metapath) == 0:
                     continue
                 edge_index_dict[metapath] = torch.stack(block.edges(etype=metapath, order="srcdst"), dim=0)
-            X.setdefault("edge_index", []).append(edge_index_dict)
+            X.setdefault("edge_index_dict", []).append(edge_index_dict)
 
             sizes = {}
             for ntype in block.ntypes:
@@ -449,8 +450,6 @@ class LinkPredPyGCollator(EdgePredictionSampler):
         X["x_dict"] = {ntype: feat \
                        for ntype, feat in blocks[0].srcdata["feat"].items() \
                        if feat.size(0) != 0}
-        if len(X["x_dict"]) == 0:
-            X.pop("x_dict")
 
         if SEQUENCE_COL in blocks[0].srcdata and len(blocks[0].srcdata[SEQUENCE_COL]):
             for ntype, feat in blocks[0].srcdata[SEQUENCE_COL].items():
