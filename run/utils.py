@@ -51,6 +51,9 @@ def adjust_batch_size(hparams):
 def select_empty_gpu():
     gpu_mem_free = {i: torch.cuda.mem_get_info(i)[0] for i in range(torch.cuda.device_count())}
     best_gpu = max(gpu_mem_free, key=gpu_mem_free.get)
+
+    del gpu_mem_free
+    torch.cuda.empty_cache()
     return best_gpu
 
 

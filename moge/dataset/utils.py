@@ -39,8 +39,8 @@ def split_edge_index_by_namespace(nodes_namespace: Dict[str, Union[np.ndarray, S
 
     for metapath, (src, dst) in edge_index_dict.items():
         if edge_values and metapath not in edge_values: continue
-        assert src.size(0) == edge_values[
-            metapath].numel(), f"num edges {src.size(0)} != values {edge_values[metapath].numel()}"
+        # assert src.size(0) == edge_values[
+        #     metapath].numel(), f"num edges {src.size(0)} != values {edge_values[metapath].numel()}"
         head_type, tail_type = metapath[0], metapath[-1]
 
         unique_heads = np.unique(nodes_namespace[head_type]) if head_type in nodes_namespace else [None]

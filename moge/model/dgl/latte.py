@@ -2,16 +2,16 @@ import copy
 from typing import Union, Dict, List, Tuple
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn.functional as F
-from dgl.heterograph import DGLHeteroGraph, DGLBlock
+from dgl.heterograph import DGLBlock
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
 from torch import nn as nn, Tensor
 
 from moge.model.PyG.utils import filter_metapaths, max_num_hops, join_metapaths
 from moge.model.dgl.utils import ChainMetaPaths
+from moge.model.relations import RelationAttention
 
 
 class LATTE(nn.Module):
@@ -58,7 +58,7 @@ class LATTE(nn.Module):
 
             h_new = self.layers[t].forward(block, h_dict, **kwargs)
             for ntype in h_new:
-                h_dict[ntype][:h_new[ntype].size(0)] = h_new[ntype]
+                h_dict[ntype] = torch.cat([h_new[ntype], h_dict[ntype][h_new[ntype].size(0):]], dim=0)
 
         dst_block = blocks[-1] if isinstance(blocks, (tuple, list)) else blocks
         h_dict = {ntype: emb[:dst_block.num_dst_nodes(ntype=ntype)] \
@@ -67,7 +67,7 @@ class LATTE(nn.Module):
         return h_dict
 
 
-class LATTEConv(nn.Module):
+class LATTEConv(nn.Module, RelationAttention):
     def __init__(self, in_dim, embedding_dim, num_nodes_dict: Dict, metapaths: List[Tuple[str, str, str]], layer: int,
                  t_order: int, batchnorm=False, layernorm=True, edge_dir="in", activation: str = "relu", dropout=0.2,
                  attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2) -> None:
@@ -169,11 +169,14 @@ class LATTEConv(nn.Module):
         '''
         output = {}
         for srctype, etype, dsttype in self.metapaths:
-            if etype not in nodes.mailbox: continue
-
-            att = F.softmax(nodes.mailbox[etype], dim=1)
-            h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['h'], dim=1)
-            output[etype] = h
+            if etype in nodes.mailbox:
+                att = F.softmax(nodes.mailbox[etype], dim=1)
+                h = torch.sum(att.unsqueeze(dim=-1) * nodes.mailbox['h'], dim=1)
+                output[etype] = h
+            else:
+                output[etype] = torch.zeros(nodes.batch_size(), self.attn_heads, self.out_channels,
+                                            device=self.linear_l[srctype].weight.device,
+                                            dtype=self.linear_l[srctype].weight.dtype)
 
         return output
 
@@ -187,7 +190,7 @@ class LATTEConv(nn.Module):
         beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
 
-    def forward(self, g: Union[DGLBlock, DGLHeteroGraph], feat: Dict[str, Tensor], save_betas=False):
+    def forward(self, g: DGLBlock, feat: Dict[str, Tensor], save_betas=False):
         feat_src, feat_dst = expand_as_pair(input_=feat, g=g)
 
         funcs = {}
@@ -203,8 +206,8 @@ class LATTEConv(nn.Module):
             # Compute node-level attention coefficients
             g.apply_edges(func=self.edge_attention, etype=etype)
 
-            if g.batch_num_edges(etype=etype).nelement() > 1 or g.batch_num_edges(etype=etype).item() > 0:
-                funcs[etype] = (self.message_func, self.reduce_func)
+            # if g.batch_num_edges(etype=etype).nelement() > 1 or g.batch_num_edges(etype=etype).item() > 0:
+            funcs[etype] = (self.message_func, self.reduce_func)
 
         g.multi_update_all(funcs, cross_reducer='mean')
 
@@ -212,8 +215,7 @@ class LATTEConv(nn.Module):
         beta = {}
         out = {}
         for ntype in set(g.ntypes):
-            etypes = [etype for etype in self.get_head_relations(ntype, etype_only=True) \
-                      if etype in g.dstnodes[ntype].data]
+            etypes = self.get_tail_etypes(ntype, etype_only=True)
 
             # If node type doesn't have any messages
             if len(etypes) == 0:
@@ -235,8 +237,8 @@ class LATTEConv(nn.Module):
             # out[ntype] = torch.mean(out[ntype], dim=1)
 
             beta[ntype] = self.get_beta_weights(key=out[ntype][:, -1, :], query=out[ntype], ntype=ntype)
-            out[ntype] = out[ntype] * beta[ntype].unsqueeze(-1)
-            out[ntype] = out[ntype].sum(1).view(out[ntype].size(0), self.embedding_dim)
+            out[ntype] = (out[ntype] * beta[ntype].unsqueeze(-1)).sum(1)
+            out[ntype] = out[ntype].view(out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "layernorm"):
                 out[ntype] = self.layernorm[ntype](out[ntype])
@@ -250,22 +252,18 @@ class LATTEConv(nn.Module):
             if hasattr(self, "dropout"):
                 out[ntype] = F.dropout(out[ntype], p=self.dropout, training=self.training)
 
-        if save_betas and not self.training:
+        if save_betas:
             beta_mean = {ntype: beta[ntype].mean(2) for ntype in beta}
-            global_node_idx_out = {ntype: nid for ntype, nid in g.ndata["_ID"].items()}
-            self.save_relation_weights(beta_mean, global_node_idx_out)
+            global_node_index = {ntype: nid[:beta_mean[ntype].size(0)] \
+                                 for ntype, nid in g.ndata["_ID"].items() if ntype in beta_mean}
+            self.save_relation_weights(beta_mean, global_node_index)
 
         return out
 
-    def get_head_relations(self, head_node_type, to_str=False, etype_only=False) -> list:
-        if self.edge_dir == "out":
-            relations = [metapath for metapath in self.metapaths \
-                         if metapath[0] == head_node_type]
-        elif self.edge_dir == "in":
-            relations = [metapath for metapath in self.metapaths \
-                         if metapath[-1] == head_node_type]
+    def get_tail_etypes(self, head_node_type, str_form=False, etype_only=False) -> List[Tuple[str, str, str]]:
+        relations = [metapath for metapath in self.metapaths if metapath[-1] == head_node_type]
 
-        if to_str:
+        if str_form:
             relations = [".".join(metapath) if isinstance(metapath, tuple) else metapath \
                          for metapath in relations]
         if etype_only:
@@ -274,35 +272,16 @@ class LATTEConv(nn.Module):
 
         return relations
 
-    def num_head_relations(self, node_type) -> int:
+    def num_tail_relations(self, node_type) -> int:
         """
         Return the number of metapaths with head node type equals to :param node_type: and plus one for none-selection.
         :param node_type (str):
         :return:
         """
-        relations = self.get_head_relations(node_type)
+        relations = self.get_tail_etypes(node_type)
         return len(relations) + 1
 
-    def save_relation_weights(self, betas: Dict[str, Tensor],
-                              global_node_idx: Dict[str, Tensor]):
-        # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
-        if not hasattr(self, "_betas"): return
-
-        with torch.no_grad():
-            for ntype in betas:
-                if ntype not in global_node_idx or global_node_idx[ntype].numel() == 0: continue
-                relations = self.get_head_relations(ntype, str_form=True) + [ntype, ]
-                df = pd.DataFrame(betas[ntype].cpu().numpy(),
-                                  columns=relations,
-                                  index=global_node_idx[ntype].cpu().numpy(),
-                                  dtype=np.float16)
-
-                if len(self._betas) == 0 or ntype not in self._betas:
-                    self._betas[ntype] = df
-                else:
-                    self._betas[ntype].update(df, overwrite=True)
-
-    def get_relation_weights(self, std=True, std_minus=True):
+    def get_relation_weights(self, std=True):
         """
         Get the mean and std of relation attention weights for all nodes
         :return:
@@ -310,7 +289,7 @@ class LATTEConv(nn.Module):
         _beta_avg = {}
         _beta_std = {}
         for ntype in self._betas:
-            relations = self.get_head_relations(ntype, str_form=True) + [ntype, ]
+            relations = self.get_tail_etypes(ntype, str_form=True) + [ntype, ]
             _beta_avg = np.around(self._betas[ntype].mean(), decimals=3)
             _beta_std = np.around(self._betas[ntype].std(), decimals=2)
             self._beta_avg[ntype] = {metapath: _beta_avg[i] for i, metapath in

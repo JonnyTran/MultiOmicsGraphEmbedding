@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from colorhash import ColorHash
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
@@ -13,6 +12,7 @@ from torch_geometric.utils import softmax
 
 from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
+from ..relations import RelationAttention
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
 
@@ -152,64 +152,8 @@ class LATTE(nn.Module):
             df = df[df.notnull().sum(1) >= min_order]
         return df
 
-    def get_sankey_flow(self, layer, node_type, self_loop=False, agg="median"):
-        rel_attn: pd.DataFrame = self.layers[layer]._betas[node_type]
-        if agg == "sum":
-            rel_attn = rel_attn.sum(axis=0)
-        elif agg == "median":
-            rel_attn = rel_attn.median(axis=0)
-        elif agg == "max":
-            rel_attn = rel_attn.max(axis=0)
-        elif agg == "min":
-            rel_attn = rel_attn.min(axis=0)
-        else:
-            rel_attn = rel_attn.mean(axis=0)
 
-        new_index = rel_attn.index.str.split(".").map(lambda tup: [str(len(tup) - i) + n for i, n in enumerate(tup)])
-        all_nodes = {node for nodes in new_index for node in nodes}
-        all_nodes = {node: i for i, node in enumerate(all_nodes)}
-
-        # Links
-        links = pd.DataFrame(columns=["source", "target", "value", "label", "color"])
-        for i, (metapath, value) in enumerate(rel_attn.to_dict().items()):
-            if len(metapath.split(".")) > 1:
-                sources = [all_nodes[new_index[i][j]] for j, _ in enumerate(new_index[i][:-1])]
-                targets = [all_nodes[new_index[i][j + 1]] for j, _ in enumerate(new_index[i][:-1])]
-
-                path_links = pd.DataFrame({"source": sources,
-                                           "target": targets,
-                                           "value": [value, ] * len(targets),
-                                           "label": [metapath, ] * len(targets)})
-                links = links.append(path_links, ignore_index=True)
-
-
-            elif self_loop:
-                source = all_nodes[new_index[i][0]]
-                links = links.append({"source": source,
-                                      "target": source,
-                                      "value": value,
-                                      "label": metapath}, ignore_index=True)
-
-        links["color"] = links["label"].apply(lambda label: ColorHash(label).hex)
-        links = links.iloc[::-1]
-
-        # Nodes
-        node_group = [int(node[0]) for node, nid in all_nodes.items()]
-        groups = [[nid for nid, node in enumerate(node_group) if node == group] for group in np.unique(node_group)]
-
-        nodes = pd.DataFrame(columns=["label", "level", "color"])
-        nodes["label"] = [node[1:] for node in all_nodes.keys()]
-        nodes["level"] = [int(node[0]) for node in all_nodes.keys()]
-
-        nodes["color"] = nodes[["label", "level"]].apply(
-            lambda x: ColorHash(x["label"] + str(x["level"])).hex \
-                if x["level"] % 2 == 0 \
-                else ColorHash(x["label"]).hex, axis=1)
-
-        return nodes, links
-
-
-class LATTEConv(MessagePassing, pl.LightningModule):
+class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
     def __init__(self, input_dim: int, output_dim: int, node_types: list, metapaths: list, layer: int, t_order: int,
                  activation: str = "relu", batchnorm=False, layernorm=False, dropout=0.0, input_dropout=True,
                  attn_heads=4, attn_activation="LeakyReLU", attn_dropout=0.2, edge_threshold=0.0, use_proximity=False,
@@ -565,49 +509,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         relations = self.get_head_relations(node_type)
         return len(relations) + 1
 
-    def save_relation_weights(self, betas: Dict[str, Tensor],
-                              global_node_idx: Dict[str, Tensor]):
-        # Only save relation weights if beta has weights for all node_types in the global_node_idx batch
-        if not hasattr(self, "_betas"): return
-
-        with torch.no_grad():
-            for ntype in betas:
-                if ntype not in global_node_idx or global_node_idx[ntype].numel() == 0: continue
-                relations = self.get_head_relations(ntype, str_form=True) + [ntype, ]
-                df = pd.DataFrame(betas[ntype].cpu().numpy(),
-                                  columns=relations,
-                                  index=global_node_idx[ntype].cpu().numpy(),
-                                  dtype=np.float16)
-
-                if len(self._betas) == 0 or ntype not in self._betas:
-                    self._betas[ntype] = df
-                else:
-                    self._betas[ntype].update(df, overwrite=True)
-
-    def get_relation_weights(self, std=True, std_minus=True):
-        """
-        Get the mean and std of relation attention weights for all nodes
-        :return:
-        """
-        _beta_avg = {}
-        _beta_std = {}
-        for ntype in self._betas:
-            relations = self.get_head_relations(ntype, str_form=True) + [ntype, ]
-            _beta_avg = np.around(self._betas[ntype].mean(), decimals=3)
-            _beta_std = np.around(self._betas[ntype].std(), decimals=2)
-            self._beta_avg[ntype] = {metapath: _beta_avg[i] for i, metapath in
-                                     enumerate(relations)}
-            self._beta_std[ntype] = {metapath: _beta_std[i] for i, metapath in
-                                     enumerate(relations)}
-
-        print_output = {}
-        for node_type in self._beta_avg:
-            for metapath, avg in self._beta_avg[node_type].items():
-                if std:
-                    print_output[metapath] = (avg, self._beta_std[node_type][metapath])
-                else:
-                    print_output[metapath] = avg
-        return print_output
 
     def get_top_relations(self, ntype="paper"):
         # columns: [..., 2-neighbors, 2-order relations, 1-neighbors, 1-order relations, targets]
@@ -629,27 +530,6 @@ class LATTEConv(MessagePassing, pl.LightningModule):
         top_rels.columns = reversed(columns)
 
         return top_rels
-
-    def save_attn_weights(self, node_type: str,
-                          attn_weights: Tensor,
-                          node_idx: Tensor):
-        self._betas = {}
-        self._beta_avg = {}
-        self._beta_std = {}
-
-        betas = attn_weights.sum(1).cpu().numpy()
-        metapaths = self.get_head_relations(node_type, str_form=True) + [node_type, ]
-
-        self._betas[node_type] = pd.DataFrame(betas,
-                                              columns=metapaths,
-                                              index=node_idx.cpu().numpy())
-
-        _beta_avg = np.around(betas.mean(dim=0), decimals=3)
-        _beta_std = np.around(betas.std(dim=0), decimals=2)
-        self._beta_avg[node_type] = {metapath: _beta_avg[i] for i, metapath in
-                                     enumerate(metapaths)}
-        self._beta_std[node_type] = {metapath: _beta_std[i] for i, metapath in
-                                     enumerate(metapaths)}
 
     def proximity_loss(self, edge_index_dict, l_dict, r_dict, global_node_idx):
         """

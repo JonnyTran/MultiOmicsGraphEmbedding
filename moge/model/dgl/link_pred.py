@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dgl import DGLHeteroGraph
+from pandas import DataFrame
 from torch import Tensor
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
@@ -465,6 +466,18 @@ class LATTELinkPred(DglLinkPredTrainer):
 
         print(f'Configuration: {hparams}')
         self._set_hparams(hparams)
+
+    @property
+    def metapaths(self) -> List[Tuple[str, str, str]]:
+        return [layer.metapaths for layer in self.embedder.layers]
+
+    @property
+    def betas(self) -> List[Dict[str, DataFrame]]:
+        return [layer._betas for layer in self.embedder.layers]
+
+    @property
+    def beta_avg(self) -> List[Dict[Tuple[str, str, str], float]]:
+        return [layer._beta_avg for layer in self.embedder.layers]
 
     def forward(self, pos_graph, neg_graph, blocks, x, return_embeddings=False, **kwargs) \
             -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
