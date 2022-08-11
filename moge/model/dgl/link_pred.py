@@ -288,7 +288,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
         except Exception as e:
             traceback.print_exc()
         finally:
-            # self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+            self.plot_sankey_flow(layer=-1)
             super().on_validation_end()
 
     def on_test_end(self):
@@ -301,7 +301,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
                 global_node_index = {ntype: blocks[-1].dstnodes[ntype].data["_ID"] \
                                      for ntype in blocks[-1].ntypes if blocks[-1].num_dst_nodes(ntype)}
 
-                # self.plot_sankey_flow(layer=-1, width=max(250 * self.embedder.t_order, 500))
+                self.plot_sankey_flow(layer=-1)
 
                 self.log_score_averages(edge_scores_dict=pos_edge_scores | tag_negative_metapath({
                     k: v for k, v in neg_edge_scores.items() if not is_negative(k)}))

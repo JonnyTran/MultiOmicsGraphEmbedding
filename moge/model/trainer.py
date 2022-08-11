@@ -189,7 +189,8 @@ class NodeEmbeddingEvaluator(LightningModule):
         raise NotImplementedError
 
     def plot_sankey_flow(self, layer: int = -1, width=500, height=300):
-        if self.wandb_experiment is None or not hasattr(self.embedder, "layers"):
+        if self.wandb_experiment is None or not hasattr(self.embedder, "layers") or \
+                not hasattr(self.embedder.layers[layer], "_betas"):
             return
 
         run_id = self.wandb_experiment.id
