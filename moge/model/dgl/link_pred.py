@@ -10,11 +10,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dgl import DGLHeteroGraph
-from pandas import DataFrame
-from torch import Tensor
-from torch.nn import functional as F
-from torch.optim import lr_scheduler
-
 from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace
@@ -24,6 +19,10 @@ from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import LinkPredTrainer
+from pandas import DataFrame
+from torch import Tensor
+from torch.nn import functional as F
+from torch.optim import lr_scheduler
 
 
 class DglLinkPredTrainer(LinkPredTrainer):
@@ -223,11 +222,6 @@ class DglLinkPredTrainer(LinkPredTrainer):
                                       pos_stack=pos_stack, neg_stack=neg_stack)
 
         self.log("loss", loss, logger=True, on_step=True)
-
-        if batch_nb % 25 == 0 and isinstance(self.train_metrics, Metrics):
-            logs = self.train_metrics.compute_metrics()
-            self.log_dict(logs, prog_bar=True, logger=True, on_step=True)
-
         return loss
 
     def validation_step(self, batch, batch_nb):

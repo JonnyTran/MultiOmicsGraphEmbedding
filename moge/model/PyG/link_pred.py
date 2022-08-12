@@ -567,7 +567,7 @@ class LATTEFlatLinkPred(PyGLinkPredTrainer):
 class HGTLinkPred(LATTEFlatLinkPred):
     def __init__(self, hparams, dataset: HeteroLinkPredDataset, metrics=["obgl-biokg"],
                  collate_fn=None) -> None:
-        super().__init__(hparams, dataset, metrics)
+        super(LATTEFlatLinkPred, self).__init__(hparams, dataset, metrics)
         self.head_node_type = dataset.head_node_type
         self.dataset = dataset
         self.multilabel = dataset.multilabel

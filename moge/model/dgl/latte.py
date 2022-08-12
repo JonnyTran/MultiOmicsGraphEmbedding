@@ -6,11 +6,10 @@ import torch.nn.functional as F
 from dgl.heterograph import DGLBlock
 from dgl.udf import EdgeBatch, NodeBatch
 from dgl.utils import expand_as_pair
-from torch import nn as nn, Tensor
-
 from moge.model.PyG.utils import filter_metapaths, max_num_hops, join_metapaths
 from moge.model.dgl.utils import ChainMetaPaths
 from moge.model.relations import RelationAttention
+from torch import nn as nn, Tensor
 
 
 class LATTEConv(nn.Module, RelationAttention):
@@ -199,17 +198,14 @@ class LATTEConv(nn.Module, RelationAttention):
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(out[ntype][:, i]).item():.2f}")
 
-            if hasattr(self, "layernorm"):
-                out[ntype] = self.layernorm[ntype](out[ntype])
-
-            if hasattr(self, "batchnorm"):
-                out[ntype] = self.batchnorm[ntype](out[ntype])
-
             if hasattr(self, "activation"):
                 out[ntype] = self.activation(out[ntype])
 
             if hasattr(self, "dropout"):
                 out[ntype] = F.dropout(out[ntype], p=self.dropout, training=self.training)
+
+            if hasattr(self, "layernorm"):
+                out[ntype] = self.layernorm[ntype](out[ntype])
 
         if save_betas:
             beta_mean = {ntype: beta[ntype].mean(2) for ntype in beta}

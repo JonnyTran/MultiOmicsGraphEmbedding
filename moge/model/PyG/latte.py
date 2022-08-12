@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
-from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ..relations import RelationAttention
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
@@ -228,14 +228,15 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             h_out[ntype] = (h_out[ntype] * betas[ntype].unsqueeze(-1)).sum(1)
             h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.embedding_dim)
 
-            if hasattr(self, "layernorm"):
-                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
-
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])
 
             if hasattr(self, "dropout"):
                 h_out[ntype] = self.dropout(h_out[ntype])
+
+            if hasattr(self, "layernorm"):
+                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
+
 
         # Save beta weights from testing samples
         if save_betas:

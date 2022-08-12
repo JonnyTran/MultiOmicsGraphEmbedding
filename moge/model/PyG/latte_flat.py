@@ -6,13 +6,12 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from torch import nn as nn, Tensor, ModuleDict
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
 from moge.model.relations import RelationAttention
+from torch import nn as nn, Tensor, ModuleDict
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -197,13 +196,11 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             if hasattr(self, "activation"):
                 embedding = self.activation(embedding)
 
-            if hasattr(self, "layernorm"):
-                embedding = self.layernorm[ntype](embedding)
-            elif hasattr(self, "batchnorm"):
-                embedding = self.batchnorm[ntype](embedding)
-
             if hasattr(self, "dropout"):
                 embedding = self.dropout(embedding)
+
+            if hasattr(self, "layernorm"):
+                embedding = self.layernorm[ntype](embedding)
 
             h_out[ntype] = embedding
 
