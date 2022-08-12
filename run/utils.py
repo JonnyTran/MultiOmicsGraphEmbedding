@@ -9,7 +9,8 @@ import dill
 import torch
 import yaml
 
-from moge.dataset import HeteroNeighborGenerator, DGLNodeGenerator
+from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
+from moge.dataset.dgl.node_generator import DGLNodeGenerator
 from moge.model.utils import preprocess_input
 
 

@@ -15,11 +15,9 @@ from torch import Tensor
 from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
-from torch_geometric.utils import is_undirected
 
 import moge.model.PyG.utils
 from moge.dataset.utils import get_reverse_metapaths
-from moge.model.PyG.utils import get_edge_index_values
 from moge.network.hetero import HeteroNetwork
 
 
@@ -257,12 +255,6 @@ class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
             if hasattr(self, "training_idx"):
                 self.train_ratio = self.get_train_ratio()
                 print("train_ratio", self.train_ratio)
-
-    def is_undirected(self):
-        if hasattr(self, "edge_index_dict") and self.edge_index_dict:
-            for m, edge_index in self.edge_index_dict.items():
-                e_index, e_values = get_edge_index_values(edge_index)
-                print(m, "is_undirected:", is_undirected(edge_index=e_index))
 
     def name(self):
         if not hasattr(self, "_name"):

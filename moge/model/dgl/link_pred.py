@@ -15,7 +15,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 
-from moge.dataset import DGLLinkGenerator
+from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace
 from moge.model.dgl.HGT import HGT

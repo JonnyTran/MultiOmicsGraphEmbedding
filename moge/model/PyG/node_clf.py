@@ -23,7 +23,7 @@ from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
 from moge.model.PyG.latte import LATTE
 from moge.model.PyG.latte_flat import LATTE as LATTE_Flat
-from moge.model.PyG.link_pred import LATTELinkPred
+from moge.model.PyG.link_pred import LATTEFlatLinkPred
 from moge.model.classifier import DenseClassification, LabelGraphNodeClassifier
 from moge.model.encoder import LSTMSequenceEncoder, HeteroSequenceEncoder, HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
@@ -884,7 +884,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         return (batches // effective_accum) * self.trainer.max_epochs
 
 
-class LATTEFlatNodeClfLink(LATTELinkPred):
+class LATTEFlatNodeClfLink(LATTEFlatLinkPred):
     def __init__(self, hparams: Namespace, dataset: HeteroNodeClfDataset,
                  metrics: Dict[str, List[str]] = ["obgn-mag"], collate_fn=None) -> None:
         dataset.pred_metapaths = [("_N", "_E", "_N")]

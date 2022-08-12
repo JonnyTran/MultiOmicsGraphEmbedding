@@ -1,5 +1,4 @@
 import copy
-from pprint import pprint
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -14,7 +13,6 @@ from torch_geometric.utils import softmax
 from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ..relations import RelationAttention
-from ..utils import tensor_sizes
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
 
@@ -196,41 +194,39 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                   for ntype, feat in x_r.items()}
 
         print("\nLayer", self.layer + 1, ) if verbose else None
-        pprint(tensor_sizes(l_dict=l_dict, r_dict=r_dict))
 
-        # # Predict relations attention coefficients
-        # beta = self.get_beta_weights(x_r)
-
-        beta = {}
+        betas = {}
         h_out = {}
         edge_pred_dict = {}
 
         # For each metapath in a node_type, use GAT message passing to aggregate l_dict neighbors
         for ntype in x_r:
-            print(self.layer, ntype) if verbose else None
-            h_out[ntype], edge_attn_dict = self.agg_relation_neighbors(node_type=ntype,
+            h_out[ntype], edge_attn_dict = self.agg_relation_neighbors(ntype=ntype,
                                                                        l_dict=l_dict,
                                                                        r_dict=r_dict,
                                                                        edge_index_dict=edge_index_dict,
                                                                        prev_l_dict=prev_h_in,
                                                                        prev_edge_index_dict=prev_edge_index_dict,
                                                                        sizes=sizes)
+            h_out[ntype][:, -1] = l_dict[ntype][:sizes[self.layer][ntype][1]]
+
             if edge_attn_dict:
                 edge_pred_dict.update(edge_attn_dict)
 
-            h_out[ntype][:, -1] = l_dict[ntype][:sizes[self.layer][ntype][1]]
+            # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
+            betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
+            if verbose:
+                print("  >", ntype, global_node_index[self.layer][ntype].shape, )
+                for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
+                                                                     betas[ntype].mean(-1).mean(0),
+                                                                     betas[ntype].mean(-1).std(0))):
+                    print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
+                          f"\tedge_index: {edge_index_dict[etype].size(1) if etype in edge_index_dict else 0}, "
+                          f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
+                          f"\tnorm: {torch.norm(h_out[ntype][:, i]).item():.2f}")
 
-            # Aggregate multiple relations for each node type
-            if self.layer_pooling == "order_concat":  # Only at last layer
-                h_out[ntype], beta[ntype] = self.order_concat(h_out[ntype], query=r_dict[ntype], ntype=ntype)
-
-            else:
-                # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-                beta[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
-                h_out[ntype] = h_out[ntype] * beta[ntype].unsqueeze(-1)
-
-                # print("h_out[ntype]", h_out[ntype].shape)
-                h_out[ntype] = h_out[ntype].sum(1).view(h_out[ntype].size(0), self.embedding_dim)
+            h_out[ntype] = (h_out[ntype] * betas[ntype].unsqueeze(-1)).sum(1)
+            h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "layernorm"):
                 h_out[ntype] = self.layernorm[ntype](h_out[ntype])
@@ -241,12 +237,12 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             if hasattr(self, "dropout"):
                 h_out[ntype] = self.dropout(h_out[ntype])
 
-
         # Save beta weights from testing samples
-        if save_betas and not self.training:
-            beta_mean = {ntype: beta[ntype].mean(2) for ntype in beta}
+        if save_betas:
+            beta_mean = {ntype: betas[ntype].mean(2) for ntype in betas}
             global_node_idx_out = {ntype: nid[:sizes[self.layer][ntype][1]] \
-                                   for ntype, nid in global_node_index[self.layer].items()}
+                                   for ntype, nid in global_node_index[self.layer].items() \
+                                   if ntype in beta_mean and sizes[self.layer][ntype][1]}
             self.save_relation_weights(beta_mean, global_node_idx_out)
 
         return (l_dict, h_out), edge_pred_dict
@@ -272,7 +268,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
         return x_j * alpha.unsqueeze(-1)
 
-    def agg_relation_neighbors(self, node_type: str,
+    def agg_relation_neighbors(self, ntype: str,
                                l_dict: Dict[str, Tensor],
                                r_dict: Dict[str, Tensor],
                                edge_index_dict: Dict[Tuple, Tuple[Tensor]],
@@ -282,16 +278,15 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         # Initialize embeddings, size: (num_nodes, num_relations, embedding_dim)
         # print(node_type, tensor_sizes(r_dict))
         emb_relations = torch.zeros(
-            size=(r_dict[node_type].size(0),
-                  self.num_tail_relations(node_type),
+            size=(r_dict[ntype].size(0),
+                  self.num_tail_relations(ntype),
                   self.attn_heads,
-                  self.out_channels)).type_as(r_dict[node_type])
+                  self.out_channels)).type_as(r_dict[ntype])
 
-        relations = self.get_tail_relations(node_type)
-        pprint(relations)
+        relations = self.get_tail_relations(ntype)
 
         edge_pred_dict = {}
-        for metapath in self.get_tail_relations(node_type, order=1):
+        for metapath in self.get_tail_relations(ntype, order=1):
             if metapath not in edge_index_dict or edge_index_dict[metapath] is None: continue
             head_type, tail_type = metapath[0], metapath[-1]
 
@@ -302,6 +297,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             # pprint(tensor_sizes(metapath=metapath,
             #                     edge_index=list(
             #                         zip(["src_" + head_type, "dst_" + tail_type], edge_index.max(1).values)),
+            #                     edge_values=values,
             #                     x=[l_dict[head_type], r_dict[tail_type]],
             #                     head_size_in=head_size_in, tail_size_out=tail_size_out))
 
@@ -314,14 +310,11 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                 metapath=str(metapath),
                 values=None)
             emb_relations[:, relations.index(metapath)] = out
-
             edge_pred_dict[metapath] = (edge_index, self._alpha)
             self._alpha = None
 
         remaining_orders = list(range(2, min(self.layer + 1, self.t_order) + 1))
-        higher_relations = self.get_tail_relations(node_type, order=remaining_orders)
-
-        pprint(tensor_sizes(higher_relations=higher_relations, remaining_orders=str(remaining_orders)), width=500)
+        higher_relations = self.get_tail_relations(ntype, order=remaining_orders)
 
         higher_order_edge_index = join_edge_indexes(edge_index_dict_A=prev_edge_index_dict,
                                                     edge_index_dict_B=edge_pred_dict,
@@ -342,6 +335,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             order = len(metapath[1::2])
             h_source = prev_l_dict[head_type][-(order - 1)]
             head_size_in, tail_size_out = h_source.size(0), sizes[self.layer][tail_type][1]
+
 
             # Propapate flows from higher order source nodes to target nodes
             out = self.propagate(
@@ -527,7 +521,7 @@ class LATTE(nn.Module):
                                                                    edge_index_dict=edge_index_dict[l],
                                                                    prev_edge_index_dict=edge_pred_dict,
                                                                    sizes=sizes,
-                                                                   global_node_index=global_node_index[l],
+                                                                   global_node_index=global_node_index,
                                                                    **kwargs)
 
             prev_edge_index_dict[l] = edge_pred_dict

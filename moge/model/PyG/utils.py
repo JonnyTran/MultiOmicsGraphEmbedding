@@ -86,7 +86,7 @@ def filter_metapaths(metapaths: List[Tuple[str, str, str]], order: Union[int, Li
 
 
 def get_edge_index_values(edge_index_tup: Union[Tuple[Tensor, Tensor], Tensor],
-                          filter_edge=False, threshold=0.5):
+                          filter_edge=False, threshold=0.5, drop_edge_values=False):
     if isinstance(edge_index_tup, tuple):
         edge_index, edge_values = edge_index_tup
 
@@ -107,6 +107,8 @@ def get_edge_index_values(edge_index_tup: Union[Tuple[Tensor, Tensor], Tensor],
 
     # if edge_values.dtype != torch.float:
     #     edge_values = edge_values.to(torch.float)
+    if drop_edge_values:
+        edge_values = None
 
     return edge_index, edge_values
 
@@ -128,7 +130,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
         return {}
 
     for metapath_b, edge_index_b in edge_index_dict_B.items():
-        edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False)
+        edge_index_b, values_b = get_edge_index_values(edge_index_b, filter_edge=False, drop_edge_values=True)
         if edge_index_b is None or edge_index_b.size(1) < 1: continue
 
         # In the current LATTE layer that calls this method, a metapath is not higher-order
@@ -143,7 +145,7 @@ def join_edge_indexes(edge_index_dict_A: Dict[Tuple[str, str, str], Union[Tensor
 
             edge_index_a, values_a = get_edge_index_values(edge_index_a,
                                                            filter_edge=True if edge_threshold else False,
-                                                           threshold=edge_threshold)
+                                                           threshold=edge_threshold, drop_edge_values=True)
             if edge_index_a is None or edge_index_a.size(1) < 1 or is_negative(metapath_a): continue
 
             head, middle, tail = metapath_a[0], metapath_a[-1], metapath_b[-1]

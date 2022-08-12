@@ -11,7 +11,9 @@ from torch import Tensor
 from torch_geometric.utils import is_undirected
 from torch_sparse import SparseTensor, transpose
 
-from moge.model.utils import is_sorted
+
+def is_sorted(arr: Tensor):
+    return torch.all(arr[:-1] <= arr[1:])
 
 
 def split_edge_index_by_namespace(nodes_namespace: Dict[str, Union[np.ndarray, Series]],

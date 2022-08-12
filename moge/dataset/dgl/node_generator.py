@@ -22,7 +22,7 @@ from moge.network.hetero import HeteroNetwork
 from moge.network.sequence import BertSequenceTokenizer
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
-from .. import HeteroNeighborGenerator
+from ..PyG.node_generator import HeteroNeighborGenerator
 from ..utils import reverse_metapath, is_negative, is_reversed, unreverse_metapath
 from ...network.base import SEQUENCE_COL
 

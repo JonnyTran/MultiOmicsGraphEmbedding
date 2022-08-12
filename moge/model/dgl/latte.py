@@ -188,14 +188,14 @@ class LATTEConv(nn.Module, RelationAttention):
             if verbose:
                 global_node_index = {ntype: nid[:beta[ntype].size(0)] \
                                      for ntype, nid in g.ndata["_ID"].items() if ntype in beta}
-                edge_pred_dict = {metapath: g.num_edges(etype=metapath) for metapath in g.canonical_etypes}
+                num_edges = {metapath: g.num_edges(etype=metapath) for metapath in g.canonical_etypes}
 
                 print("  >", ntype, global_node_index[ntype].shape, )
                 for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
                                                                      beta[ntype].mean(-1).mean(0),
                                                                      beta[ntype].mean(-1).std(0))):
                     print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
-                          f"\tedge_index: {edge_pred_dict[etype] if etype in edge_pred_dict else None}, "
+                          f"\tedge_index: {num_edges[etype] if etype in num_edges else None}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(out[ntype][:, i]).item():.2f}")
 

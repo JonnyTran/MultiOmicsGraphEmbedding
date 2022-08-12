@@ -10,8 +10,7 @@ from dgl.heterograph import DGLBlock
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 
-from moge.dataset import DGLNodeGenerator
-from moge.dataset.dgl.node_generator import HANSampler
+from moge.dataset.dgl.node_generator import DGLNodeGenerator, HANSampler
 from moge.model.classifier import DenseClassification
 from moge.model.dgl.NARS import SIGN, WeightedAggregator, sample_relation_subsets, preprocess_features, \
     read_relation_subsets

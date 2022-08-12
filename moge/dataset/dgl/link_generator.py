@@ -1,4 +1,3 @@
-from copy import copy
 from typing import List, Union, Optional, Dict, Tuple
 
 import dgl
@@ -17,7 +16,7 @@ from torch_sparse import SparseTensor
 from umap import UMAP
 
 from .node_generator import DGLNodeGenerator
-from .. import HeteroLinkPredDataset
+from ..PyG.hetero_generator import HeteroLinkPredDataset
 from ..utils import get_relabled_edge_index, is_negative, is_reversed, unreverse_metapath, untag_negative_metapath, \
     edge_index_to_adjs
 from ...model.PyG.utils import num_edges
@@ -468,7 +467,6 @@ class LinkPredPyGCollator(EdgePredictionSampler):
         input_nodes, pos_graph, neg_graph, blocks = super().sample(g, seed_edges)
         blocks: List[DGLBlock]
         pos_graph: DGLHeteroGraph
-        neg_graph: DGLHeteroGraph
 
         X = {}
         for i, block in enumerate(blocks):
@@ -498,6 +496,10 @@ class LinkPredPyGCollator(EdgePredictionSampler):
 
         # Convert DGL sampled seed edges into PyG format
         input_nodes = X["global_node_index"][0]
+        output_nodes = {ntype: ids[:X["sizes"][-1][ntype][1]] \
+                        for ntype, ids in X["global_node_index"][-1].items() \
+                        if X["sizes"][-1][ntype][1]  # This is the size of the embeddings
+                        }
 
         pos_global_edges, pos_edge, neg_edge, head_batch, tail_batch = {}, {}, {}, {}, {}
         for metapath in pos_graph.canonical_etypes:
@@ -506,7 +508,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
             if metapath in self.pred_metapaths:
                 pos_edge[metapath] = torch.stack(pos_graph.edges(etype=metapath, order='srcdst'), dim=0)
 
-                pos_global_edges[metapath] = copy(pos_edge[metapath])
+                pos_global_edges[metapath] = pos_edge[metapath].clone().detach()
                 pos_global_edges[metapath][0] = input_nodes[metapath[0]][pos_global_edges[metapath][0]]
                 pos_global_edges[metapath][1] = input_nodes[metapath[-1]][pos_global_edges[metapath][1]]
 
@@ -519,7 +521,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
             pos_global_edges = HeteroLinkPredDataset.split_edge_index_by_go_namespace(self, pos_global_edges,
                                                                                       batch_to_global=None)
         head_batch, tail_batch = HeteroLinkPredDataset.generate_negative_sampling(self, edge_pos=pos_global_edges,
-                                                                                  global_node_index=input_nodes,
+                                                                                  global_node_index=output_nodes,
                                                                                   max_negative_sampling_size=1000,
                                                                                   mode="test")
 

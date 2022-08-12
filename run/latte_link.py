@@ -15,7 +15,7 @@ from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
-from moge.model.PyG.link_pred import LATTELinkPred
+from moge.model.PyG.link_pred import LATTEFlatLinkPred
 from run.load_data import load_link_dataset
 from run.utils import parse_yaml_config, adjust_batch_size, select_empty_gpu
 
@@ -44,11 +44,11 @@ def train(hparams: Namespace):
 
     # Resume from model checkpoint
     if hasattr(hparams, "load_path") and hparams.load_path:
-        model = LATTELinkPred.load_from_checkpoint(hparams.load_path,
-                                                   hparams=hparams, dataset=dataset, metrics=metrics)
+        model = LATTEFlatLinkPred.load_from_checkpoint(hparams.load_path,
+                                                       hparams=hparams, dataset=dataset, metrics=metrics)
         print(f"Loaded model from {hparams.load_path}")
     else:
-        model = LATTELinkPred(hparams, dataset, metrics=metrics)
+        model = LATTEFlatLinkPred(hparams, dataset, metrics=metrics)
 
     # Logger
     logger = None if hasattr(hparams, "no_wandb") and hparams.no_wandb else \

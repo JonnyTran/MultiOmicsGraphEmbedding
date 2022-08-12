@@ -14,14 +14,16 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 from torch.optim import lr_scheduler
 
-from moge.model.PyG.latte_flat import LATTE as LATTEFlat
-from moge.model.losses import ClassificationLoss
 from .conv import HGT
+from .latte import LATTE
+from .latte_flat import LATTE as LATTEFlat
 from .utils import get_edge_index_from_neg_batch, batch2global_edge_index
 from ..encoder import HeteroSequenceEncoder, HeteroNodeFeatureEncoder
+from ..losses import ClassificationLoss
 from ..metrics import Metrics
 from ..trainer import LinkPredTrainer
-from ...dataset import HeteroLinkPredDataset
+from ...dataset.PyG.hetero_generator import HeteroLinkPredDataset
+from ...dataset.dgl.link_generator import LinkPredPyGCollator, DGLLinkGenerator
 
 
 class PyGLinkPredTrainer(LinkPredTrainer):
@@ -49,7 +51,7 @@ class PyGLinkPredTrainer(LinkPredTrainer):
                 neg_batch_scores.append(torch.cat([e_pred_head, e_pred_tail], dim=1))
 
             # True negatives
-            if edge_neg:
+            if edge_neg and metapath in edge_neg:
                 neg_scores.append(edge_neg[metapath])
 
         pos_scores = torch.cat(pos_scores, dim=0)
@@ -295,6 +297,8 @@ class EdgePredictor(torch.nn.Module):
         # True negative edges
         if "edge_neg" in edges_input:
             output["edge_neg"] = self.score_func(edges_input["edge_neg"], embeddings=embeddings, mode="single_neg")
+        else:
+            output["edge_neg"] = {}
 
         # Sampled head or tail negative sampling
         if self.head_batch in edges_input or self.tail_batch in edges_input:
@@ -387,7 +391,7 @@ class EdgePredictor(torch.nn.Module):
         return edge_pred_dict
 
 
-class LATTELinkPred(PyGLinkPredTrainer):
+class LATTEFlatLinkPred(PyGLinkPredTrainer):
     def __init__(self, hparams: Namespace, dataset: HeteroLinkPredDataset, metrics: Dict[str, List[str]],
                  collate_fn=None) -> None:
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
@@ -447,30 +451,6 @@ class LATTELinkPred(PyGLinkPredTrainer):
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
 
-    @property
-    def metapaths(self) -> List[Tuple[str, str, str]]:
-        return [layer.metapaths for layer in self.embedder.layers]
-
-    @property
-    def betas(self) -> List[Dict[str, DataFrame]]:
-        return [layer._betas for layer in self.embedder.layers]
-
-    @property
-    def beta_avg(self) -> List[Dict[Tuple[str, str, str], float]]:
-        return [layer._beta_avg for layer in self.embedder.layers]
-
-    def configure_sharded_model(self):
-        # modules are sharded across processes
-        # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
-        # During the forward/backward passes, weights get synced across processes
-        # and de-allocated once computation is complete, saving memory.
-
-        # Wraps the layer in a Fully Sharded Wrapper automatically
-        if hasattr(self, "seq_encoder"):
-            self.seq_encoder = auto_wrap(self.seq_encoder)
-        if hasattr(self, "encoder"):
-            self.encoder = auto_wrap(self.encoder)
-
     def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]], **kwargs) \
             -> Tuple[Dict[str, Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
         input_nodes = inputs["global_node_index"][0] if isinstance(inputs["global_node_index"], list) else inputs[
@@ -495,6 +475,30 @@ class LATTELinkPred(PyGLinkPredTrainer):
         edges_pred = self.classifier.forward(edges_true, embeddings)
 
         return embeddings, edges_pred
+
+    @property
+    def metapaths(self) -> List[Tuple[str, str, str]]:
+        return [layer.metapaths for layer in self.embedder.layers]
+
+    @property
+    def betas(self) -> List[Dict[str, DataFrame]]:
+        return [layer._betas for layer in self.embedder.layers]
+
+    @property
+    def beta_avg(self) -> List[Dict[Tuple[str, str, str], float]]:
+        return [layer._beta_avg for layer in self.embedder.layers]
+
+    def configure_sharded_model(self):
+        # modules are sharded across processes
+        # as soon as they are wrapped with ``wrap`` or ``auto_wrap``.
+        # During the forward/backward passes, weights get synced across processes
+        # and de-allocated once computation is complete, saving memory.
+
+        # Wraps the layer in a Fully Sharded Wrapper automatically
+        if hasattr(self, "seq_encoder"):
+            self.seq_encoder = auto_wrap(self.seq_encoder)
+        if hasattr(self, "encoder"):
+            self.encoder = auto_wrap(self.encoder)
 
     def training_step(self, batch, batch_nb):
         X, edge_true, _ = batch
@@ -560,7 +564,7 @@ class LATTELinkPred(PyGLinkPredTrainer):
         return loss
 
 
-class HGTLinkPred(LATTELinkPred):
+class HGTLinkPred(LATTEFlatLinkPred):
     def __init__(self, hparams, dataset: HeteroLinkPredDataset, metrics=["obgl-biokg"],
                  collate_fn=None) -> None:
         super().__init__(hparams, dataset, metrics)
@@ -590,3 +594,111 @@ class HGTLinkPred(LATTELinkPred):
 
         self.hparams.n_params = self.get_n_params()
         self.lr = self.hparams.lr
+
+
+class LATTELinkPred(LATTEFlatLinkPred):
+    dataset: DGLLinkGenerator
+
+    def __init__(self, hparams: Namespace, dataset: DGLLinkGenerator, metrics: Dict[str, List[str]],
+                 collate_fn=None) -> None:
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super(LATTEFlatLinkPred, self).__init__(hparams, dataset, metrics)
+        self.head_node_type = dataset.head_node_type
+        self.dataset = dataset
+        self.multilabel = dataset.multilabel
+        self._name = f"LATTE-{hparams.n_layers}-{hparams.t_order}th_Link"
+        self.collate_fn = LinkPredPyGCollator.__name__
+
+        if hasattr(hparams, "neighbor_sizes"):
+            self.dataset.neighbor_sizes = hparams.neighbor_sizes
+        else:
+            hparams.neighbor_sizes = self.dataset.neighbor_sizes
+
+        # Node attr input
+        if hasattr(dataset, 'seq_tokenizer'):
+            self.seq_encoder = HeteroSequenceEncoder(hparams, dataset)
+
+        non_seq_ntypes = list(set(self.dataset.node_types).difference(
+            set(self.seq_encoder.seq_encoders.keys())) if hasattr(dataset, 'seq_tokenizer') else set())
+        if not hasattr(self, "seq_encoder") or len(non_seq_ntypes):
+            self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
+
+        self.embedder = LATTE(n_layers=hparams.n_layers,
+                              t_order=min(hparams.t_order, hparams.n_layers),
+                              embedding_dim=hparams.embedding_dim,
+                              num_nodes_dict=dataset.num_nodes_dict,
+                              metapaths=dataset.get_metapaths(),
+                              layer_pooling=hparams.layer_pooling,
+                              activation=hparams.activation,
+                              attn_heads=hparams.attn_heads,
+                              attn_activation=hparams.attn_activation,
+                              attn_dropout=hparams.attn_dropout,
+                              use_proximity=hparams.use_proximity if "use_proximity" in hparams else False,
+                              neg_sampling_ratio=hparams.neg_sampling_ratio if "neg_sampling_ratio" in hparams else None,
+                              edge_sampling=hparams.edge_sampling if "edge_sampling" in hparams else False,
+                              hparams=hparams)
+
+        if hparams.layer_pooling == "concat":
+            hparams.embedding_dim = hparams.embedding_dim * hparams.t_order
+            logging.info("embedding_dim {}".format(hparams.embedding_dim))
+
+        if "negative_sampling_size" in hparams:
+            self.dataset.negative_sampling_size = hparams.negative_sampling_size
+
+        self.classifier = EdgePredictor(embedding_dim=hparams.embedding_dim,
+                                        pred_metapaths=dataset.pred_metapaths,
+                                        scoring=hparams.scoring if "scoring" in hparams else "DistMult",
+                                        loss_type=hparams.loss_type,
+                                        ntype_mapping=dataset.ntype_mapping if hasattr(dataset,
+                                                                                       "ntype_mapping") else None)
+
+        self.criterion = ClassificationLoss(loss_type=hparams.loss_type, multilabel=False)
+
+        self.hparams.n_params = self.get_n_params()
+        self.lr = self.hparams.lr
+
+    def forward(self, inputs: Dict[str, Any], edges_true: Dict[str, Dict[Tuple[str, str, str], Tensor]], **kwargs) \
+            -> Tuple[Dict[str, Tensor], Dict[str, Dict[Tuple[str, str, str], Tensor]]]:
+        input_nodes = inputs["global_node_index"][0] if isinstance(inputs["global_node_index"], list) else inputs[
+            "global_node_index"]
+
+        if not self.training:
+            self._node_ids = input_nodes
+
+        h_out = {}
+        if 'sequences' in inputs and hasattr(self, "seq_encoder"):
+            h_out.update(self.seq_encoder.forward(inputs['sequences'],
+                                                  minibatch=math.sqrt(self.hparams.batch_size // 3)))
+
+        if len(h_out) < len(input_nodes.keys()):
+            embs = self.encoder.forward(inputs["x_dict"], global_node_index=input_nodes)
+            h_out.update({ntype: emb for ntype, emb in embs.items() if ntype not in h_out})
+
+        embeddings, _ = self.embedder.forward(h_out, edge_index_dict=inputs["edge_index_dict"],
+                                              global_node_index=inputs["global_node_index"],
+                                              sizes=inputs["sizes"], **kwargs)
+
+        edges_pred = self.classifier.forward(edges_true, embeddings)
+
+        return embeddings, edges_pred
+
+    def train_dataloader(self, **kwargs):
+        return self.dataset.train_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=self.hparams.batch_size, **kwargs)
+
+    def val_dataloader(self, **kwargs):
+        if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
+            batch_size = self.test_batch_size
+        else:
+            batch_size = self.hparams.batch_size
+        return self.dataset.valid_dataloader(collate_fn=self.collate_fn,
+                                             batch_size=batch_size, **kwargs)
+
+    def test_dataloader(self, **kwargs):
+        if self.dataset.name() in ["ogbl-biokg", "ogbl-wikikg"]:
+            batch_size = self.test_batch_size
+        else:
+            batch_size = self.hparams.batch_size
+        return self.dataset.test_dataloader(collate_fn=self.collate_fn,
+                                            batch_size=batch_size, **kwargs)
