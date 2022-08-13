@@ -5,7 +5,7 @@ requirements = [
     'dask', 'plotly', 'python-igraph', "colorhash",
     'biopython', 'bioservices', "gseapy", "obonet", 'iterative-stratification', 'scikit-multilearn',
     "wandb", "pytorch-lightning", "pytorch-ignite", "ogb", "torchmetrics", "torchtext", "fairscale",
-    "logzero"
+    "logzero", "torchtyping",
 ]
 
 setup(

@@ -6,12 +6,13 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
-from moge.model.relations import RelationAttention
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
+from moge.model.relations import RelationAttention, MetapathGATConv
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -57,18 +58,23 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         self.out_channels = self.embedding_dim // attn_heads
         self.attn = nn.Parameter(torch.rand((len(self.metapaths), attn_heads, self.out_channels * 2)))
 
-        self.rel_attn_l = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
-            for ntype in self.node_types})
-        self.rel_attn_r = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
-            for ntype in self.node_types})
-
-        self.rel_attn_bias = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
-            for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
+        # self.rel_attn_l = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
+        #     for ntype in self.node_types})
+        # self.rel_attn_r = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype), attn_heads, self.out_channels)) \
+        #     for ntype in self.node_types})
+        #
+        # self.rel_attn_bias = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(self.num_tail_relations(ntype)).fill_(0.0)) \
+        #     for ntype in self.node_types if self.num_tail_relations(ntype) > 1})
         # self.rel_mha = nn.MultiheadAttention(embed_dim=self.embedding_dim, num_heads=attn_heads, dropout=attn_dropout,
         #                                      batch_first=True)
+
+        self.relation_conv: Dict[str, MetapathGATConv] = nn.ParameterDict({
+            ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=2,
+                                   attn_heads=attn_heads, attn_dropout=attn_dropout) \
+            for ntype in self.node_types})
 
         if attn_activation == "sharpening":
             self.alpha_activation = nn.Parameter(Tensor(len(self.metapaths)).fill_(1.0))
@@ -81,10 +87,10 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             self.alpha_activation = None
 
         if layernorm:
-            self.layernorm = {ntype: nn.LayerNorm(output_dim) for ntype in self.node_types}
+            self.layernorm = nn.ParameterDict({ntype: nn.LayerNorm(output_dim) for ntype in self.node_types})
 
         if batchnorm:
-            self.batchnorm = {ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types}
+            self.batchnorm = nn.ParameterDict({ntype: nn.BatchNorm1d(output_dim) for ntype in self.node_types})
 
         if dropout:
             self.dropout = nn.Dropout(p=dropout)
@@ -176,8 +182,11 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
             embedding[:, -1] = l_dict[ntype]
 
+            embedding, betas[ntype] = self.relation_conv[ntype].forward(
+                embedding.view(embedding.size(0), self.num_tail_relations(ntype), self.embedding_dim))
+
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
+            # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
 
             if verbose:
                 print("  >", ntype, global_node_index[ntype].shape, )
@@ -186,12 +195,12 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                             betas[ntype].mean(-1).mean(0),
                             betas[ntype].mean(-1).std(0))):
                     print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
-                          f"\tedge_index: {edge_pred_dict[metapath][0].size(1) if metapath in edge_pred_dict else 0}, "
+                          f"\tedge_index: {(edge_index_dict[metapath].size(1) if isinstance(edge_index_dict[metapath], Tensor) else edge_index_dict[metapath][0].size(1)) if metapath in edge_pred_dict else 0}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(embedding[:, i]).item():.2f}")
+                          f"\tnorm: {torch.norm(embedding[:, i]).item() if embedding.dim() == 3 else -1:.2f}")
 
-            embedding = embedding * betas[ntype].unsqueeze(-1)
-            embedding = embedding.sum(1).view(embedding.size(0), self.embedding_dim)
+            # embedding = embedding * betas[ntype].unsqueeze(-1)
+            # embedding = embedding.sum(1).view(embedding.size(0), self.embedding_dim)
 
             if hasattr(self, "activation"):
                 embedding = self.activation(embedding)

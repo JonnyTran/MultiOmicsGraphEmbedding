@@ -1,3 +1,4 @@
+import itertools
 from typing import Tuple, List, Dict
 
 import numpy as np
@@ -5,9 +6,82 @@ import pandas as pd
 import torch
 from colorhash import ColorHash
 from pandas import DataFrame
-from torch import Tensor
+from torch import Tensor, nn
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
+from torch_geometric.nn import GATConv
+from torch_sparse import SparseTensor
+from torchtyping import TensorType
 
 from moge.model.PyG.utils import filter_metapaths
+
+
+class MetapathGATConv(nn.Module):
+    def __init__(self, embedding_dim: int, metapaths: List[Tuple[str, str, str]], n_layers=2,
+                 attn_heads=4, attn_dropout=0.2):
+        super().__init__()
+        self.metapaths = metapaths
+        self.n_relations = len(metapaths) + 1
+        self.self_index = self.n_relations - 1
+
+        self.n_layers = n_layers
+        self.layers: List[GATConv] = nn.ModuleList()
+        self.attn_heads = attn_heads
+        self.out_channels = embedding_dim // attn_heads
+        for _ in range(n_layers):
+            self.layers.append(GATConv(in_channels=embedding_dim, out_channels=self.out_channels,
+                                       heads=attn_heads, dropout=attn_dropout))
+
+    def construct_multigraph(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]) \
+            -> Data:
+        num_nodes = relation_embs.size(0)
+        edge_index = torch.tensor(list(itertools.product(range(self.n_relations), range(self.n_relations))),
+                                  device=relation_embs.device,
+                                  dtype=torch.long).T
+        nid = torch.arange(self.n_relations, device=relation_embs.device)
+
+        data_list = []
+        for i in torch.arange(num_nodes):
+            g = Data(x=relation_embs[i],
+                     nid=nid,
+                     edge_index=edge_index)
+            data_list.append(g)
+
+        loader = DataLoader(data_list, batch_size=len(data_list), shuffle=False)
+        batch = next(iter(loader))
+        return batch
+
+    def deconstruct_multigraph(self, batch: Data,
+                               h: TensorType["batch_nodes", "embedding_dim"],
+                               alpha_edges: TensorType[2, "batch_edges"],
+                               alpha_values: TensorType["batch_edges", "attn_heads"]):
+        if alpha_edges is not None and alpha_values is not None:
+            src_node_id = batch.nid[alpha_edges[0]]
+            dst_node_id = batch.nid[alpha_edges[1]]
+            batch_id = batch.batch[alpha_edges[1]]
+
+            self_node_mask = dst_node_id == self.self_index
+
+            betas = SparseTensor(row=batch_id[self_node_mask],
+                                 col=src_node_id[self_node_mask],
+                                 value=alpha_values[self_node_mask]).to_dense().detach()
+        else:
+            betas = None
+
+        node_embs = h[batch.nid == self.self_index]
+
+        return node_embs, betas
+
+    def forward(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]):
+        batch: Data = self.construct_multigraph(relation_embs)
+
+        h = batch.x
+        for i in range(self.n_layers):
+            h, (alpha_edges, alpha_values) = self.layers[i].forward(h, batch.edge_index, return_attention_weights=True)
+
+        node_embs, betas = self.deconstruct_multigraph(batch, h, alpha_edges, alpha_values)
+
+        return node_embs, betas
 
 
 class RelationAttention:

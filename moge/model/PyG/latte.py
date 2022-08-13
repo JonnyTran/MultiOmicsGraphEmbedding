@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-from moge.model.sampling import negative_sample
 from torch import nn as nn, Tensor
 from torch.nn import functional as F
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
 
+from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
 from ..relations import RelationAttention
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
@@ -209,9 +209,6 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                                                                        prev_edge_index_dict=prev_edge_index_dict,
                                                                        sizes=sizes)
             h_out[ntype][:, -1] = l_dict[ntype][:sizes[self.layer][ntype][1]]
-
-            if edge_attn_dict:
-                edge_pred_dict.update(edge_attn_dict)
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)

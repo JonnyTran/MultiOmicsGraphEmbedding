@@ -174,7 +174,9 @@ def tensor_sizes(input=None, **kwargs) -> ...:
         return {tensor_sizes(v) for v in input}
 
     elif isinstance(input, (DGLGraph, DGLBlock, DGLHeteroGraph)):
-        return {ntype: input.num_nodes(ntype) for ntype in input.ntypes} | \
+        return {ntype: (input.num_src_nodes(ntype), input.num_dst_nodes(ntype)) if isinstance(input,
+                                                                                              DGLBlock) else input.num_nodes(
+            ntype) for ntype in input.ntypes} | \
                {etype: input.num_edges(etype=etype) for etype in input.etypes if input.num_edges(etype=etype)}
 
     elif isinstance(input, HeteroData):
