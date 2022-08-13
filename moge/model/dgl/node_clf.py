@@ -50,7 +50,7 @@ class LATTENodeClf(NodeClfTrainer):
             for ntype, in_channels in dataset.node_attr_shape.items()
         })
 
-        self.embedder = LATTE(t_order=hparams.n_layers, embedding_dim=hparams.embedding_dim,
+        self.embedder = LATTE(n_layers, t_order=hparams.n_layers, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict, head_node_type=dataset.head_node_type,
                               metapaths=dataset.get_metapaths(),
                               batchnorm=hparams.batchnorm_l if "batchnorm" in hparams else False,

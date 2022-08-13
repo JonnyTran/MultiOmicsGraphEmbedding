@@ -12,7 +12,7 @@ from torch_geometric.utils import softmax
 
 from moge.model.sampling import negative_sample
 from .utils import get_edge_index_values, filter_metapaths, join_metapaths, join_edge_indexes, max_num_hops
-from ..relations import RelationAttention
+from ..relations import RelationAttention, MetapathGATConv
 from ...dataset.utils import is_negative, tag_negative_metapath, untag_negative_metapath
 
 
@@ -79,11 +79,16 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             {str(metapath): nn.Parameter(torch.rand((attn_heads, self.out_channels * 2))) \
              for metapath in filter_metapaths(self.metapaths, order=None)})
 
-        self.rel_attn_l = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
-            for ntype in self.node_types})
-        self.rel_attn_r = nn.ParameterDict({
-            ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
+        # self.rel_attn_l = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
+        #     for ntype in self.node_types})
+        # self.rel_attn_r = nn.ParameterDict({
+        #     ntype: nn.Parameter(Tensor(attn_heads, self.out_channels)) \
+        #     for ntype in self.node_types})
+
+        self.relation_conv: Dict[str, MetapathGATConv] = nn.ParameterDict({
+            ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=1,
+                                   attn_heads=attn_heads, attn_dropout=attn_dropout) \
             for ntype in self.node_types})
 
         if attn_activation == "sharpening":
@@ -106,12 +111,14 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         # gain = nn.init.calculate_gain('relu')
         for ntype in self.linear_l:
             nn.init.kaiming_uniform_(self.linear_l[ntype].weight, mode='fan_in', nonlinearity='relu')
-            nn.init.kaiming_uniform_(self.linear_r[ntype].weight, mode='fan_in', nonlinearity='relu')
+            nn.init.kaiming_uniform_(self.linear_r[ntype].weight, mode='fan_in', nonlinearity='relu') if hasattr(self,
+                                                                                                                 "linear_r") else None
 
         if hasattr(self, "rel_attn_l"):
             for ntype in self.rel_attn_l:
                 nn.init.kaiming_uniform_(self.rel_attn_l[ntype], mode='fan_in', nonlinearity='leaky_relu')
-                nn.init.kaiming_uniform_(self.rel_attn_r[ntype], mode='fan_in', nonlinearity='leaky_relu')
+                nn.init.kaiming_uniform_(self.rel_attn_r[ntype], mode='fan_in', nonlinearity='leaky_relu') if hasattr(
+                    self, "rel_attn_r") else None
 
         if hasattr(self, "conv"):
             for node_type in self.conv:
@@ -141,30 +148,6 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         beta = F.softmax(beta, dim=1)
         # beta = F.dropout(beta, p=self.attn_dropout, training=self.training)
         return beta
-
-    def order_concat(self, rel_embs: Tensor, query: Tensor, ntype: str):
-        beta = []
-        rel_idxs = []
-        order_embs = []
-        for order in range(1, self.t_order + 1):
-            rel_idx = [self.get_tail_relations(ntype).index(m) \
-                       for m in self.get_tail_relations(ntype, order=order)]
-            if order == 1:
-                # Add the self LHS embeddings to first order relations
-                rel_idx.append(self.num_tail_relations(ntype) - 1)
-
-            sub_beta = self.get_beta_weights(query=query, key=rel_embs[:, rel_idx], ntype=ntype)
-
-            order_emb = rel_embs[:, rel_idx] * sub_beta.unsqueeze(-1)
-            order_emb = order_emb.sum(1).view(rel_embs.size(0), self.embedding_dim)
-
-            order_embs.append(order_emb)
-            beta.append(sub_beta)
-            rel_idxs.extend(rel_idx)
-
-        rel_embs = torch.cat(order_embs, dim=1)
-        beta = torch.cat(beta, dim=1)[:, rel_idxs]
-        return rel_embs, beta
 
     def forward(self, x: Dict[str, Tensor],
                 prev_h_in: Dict[str, List[Tensor]],
@@ -211,19 +194,22 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             h_out[ntype][:, -1] = l_dict[ntype][:sizes[self.layer][ntype][1]]
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
-            if verbose:
-                print("  >", ntype, global_node_index[self.layer][ntype].shape, )
-                for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
-                                                                     betas[ntype].mean(-1).mean(0),
-                                                                     betas[ntype].mean(-1).std(0))):
-                    print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
-                          f"\tedge_index: {edge_index_dict[etype].size(1) if etype in edge_index_dict else 0}, "
-                          f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(h_out[ntype][:, i]).item():.2f}")
+            h_out[ntype], betas[ntype] = self.relation_conv[ntype].forward(
+                h_out[ntype].view(h_out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim))
 
-            h_out[ntype] = (h_out[ntype] * betas[ntype].unsqueeze(-1)).sum(1)
-            h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.embedding_dim)
+            # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
+            # if verbose:
+            #     print("  >", ntype, global_node_index[self.layer][ntype].shape, )
+            #     for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
+            #                                                          betas[ntype].mean(-1).mean(0),
+            #                                                          betas[ntype].mean(-1).std(0))):
+            #         print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
+            #               f"\tedge_index: {edge_index_dict[etype].size(1) if etype in edge_index_dict else 0}, "
+            #               f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
+            #               f"\tnorm: {torch.norm(h_out[ntype][:, i]).item():.2f}")
+            #
+            # h_out[ntype] = (h_out[ntype] * betas[ntype].unsqueeze(-1)).sum(1)
+            # h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.embedding_dim)
 
             if hasattr(self, "activation"):
                 h_out[ntype] = self.activation(h_out[ntype])

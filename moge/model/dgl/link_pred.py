@@ -10,6 +10,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dgl import DGLHeteroGraph
+from pandas import DataFrame
+from torch import Tensor
+from torch.nn import functional as F
+from torch.optim import lr_scheduler
+
 from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace
@@ -19,10 +24,6 @@ from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import LinkPredTrainer
-from pandas import DataFrame
-from torch import Tensor
-from torch.nn import functional as F
-from torch.optim import lr_scheduler
 
 
 class DglLinkPredTrainer(LinkPredTrainer):
@@ -457,7 +458,7 @@ class LATTELinkPred(DglLinkPredTrainer):
             print("non_seq_ntypes", non_seq_ntypes)
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
-        self.embedder = LATTE(t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
+        self.embedder = LATTE(n_layers=hparams.n_layers, t_order=hparams.t_order, embedding_dim=hparams.embedding_dim,
                               num_nodes_dict=dataset.num_nodes_dict, head_node_type=dataset.head_node_type,
                               metapaths=dataset.get_metapaths(), activation="relu", dropout=hparams.dropout,
                               attn_heads=hparams.attn_heads, attn_dropout=hparams.attn_dropout)
