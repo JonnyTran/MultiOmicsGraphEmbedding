@@ -18,7 +18,7 @@ from moge.model.PyG.utils import filter_metapaths
 
 class MetapathGATConv(nn.Module):
     def __init__(self, embedding_dim: int, metapaths: List[Tuple[str, str, str]], n_layers=2,
-                 attn_heads=4, attn_dropout=0.2):
+                 attn_heads=4, attn_dropout=0.0):
         super().__init__()
         self.metapaths = metapaths
         self.n_relations = len(metapaths) + 1
@@ -48,7 +48,7 @@ class MetapathGATConv(nn.Module):
         data_list = []
         for i in torch.arange(num_nodes):
             x = relation_embs[i]
-            node_mask = torch.norm(x, dim=1) != 0
+            node_mask = torch.norm(x, dim=1).detach() != 0
             num_nz_relations = node_mask.sum().item()
 
             g = Data(x=x[node_mask],
@@ -57,7 +57,8 @@ class MetapathGATConv(nn.Module):
             data_list.append(g)
 
         loader = DataLoader(data_list, batch_size=len(data_list), shuffle=False)
-        batch = next(iter(loader))
+        batch: Data = next(iter(loader))
+        print(num_nodes, relation_embs.size(1), batch.num_nodes)
         return batch
 
     def deconstruct_multigraph(self, batch: Data,

@@ -101,12 +101,14 @@ class DGLNodeGenerator(HeteroGraphDataset):
         # Whether to use split namespace
         self.split_namespace = split_namespace
         if split_namespace:
-            self.go_namespace = {}
+            self.nodes_namespace = {}
             self.ntype_mapping = {}
             for ntype, df in network.annotations.items():
                 if "namespace" in df.columns:
-                    self.go_namespace[ntype] = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]].to_numpy()
-                    self.ntype_mapping.update({namespace: ntype for namespace in np.unique(self.go_namespace[ntype])})
+                    self.nodes_namespace[ntype] = network.annotations[ntype]["namespace"].loc[
+                        self.nodes[ntype]].to_numpy()
+                    self.ntype_mapping.update(
+                        {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 
         self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx
 

@@ -28,8 +28,6 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         self.node_types = list(num_nodes_dict.keys())
         self.metapaths = list(metapaths)
         print(f"LATTE {self.layer + 1}, metapaths {len(metapaths)}, max_order {max_num_hops(metapaths)}")
-        # pprint({ntype: [m[1::2] for m in self.metapaths if m[-1] == ntype] \
-        #         for ntype in {m[-1] for m in self.metapaths}}, width=500)
 
         self.num_nodes_dict = num_nodes_dict
         self.embedding_dim = output_dim
@@ -72,8 +70,10 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         #                                      batch_first=True)
 
         self.relation_conv: Dict[str, MetapathGATConv] = nn.ParameterDict({
-            ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=2,
-                                   attn_heads=attn_heads, attn_dropout=attn_dropout) \
+            ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=1,
+                                   attn_heads=attn_heads,
+                                   # attn_dropout=attn_dropout
+                                   ) \
             for ntype in self.node_types})
 
         if attn_activation == "sharpening":

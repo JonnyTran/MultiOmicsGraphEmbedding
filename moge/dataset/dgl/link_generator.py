@@ -26,6 +26,7 @@ from ...network.hetero import HeteroNetwork
 
 
 class DGLLinkGenerator(DGLNodeGenerator):
+    nodes_namespace: Dict[str, Series]
     def __init__(self, dataset: Union[DglLinkPropPredDataset, DGLHeteroGraph], sampler: str, neighbor_sizes=None,
                  negative_sampler="uniform", negative_sampling_size=100, pred_metapaths=None, neg_pred_metapaths=None,
                  node_types=None, metapaths=None, head_node_type=None, edge_dir=True, reshuffle_train: float = None,
@@ -77,12 +78,14 @@ class DGLLinkGenerator(DGLNodeGenerator):
 
         self.split_namespace = split_namespace
         if split_namespace:
-            self.go_namespace = {}
+            self.nodes_namespace = {}
             self.ntype_mapping = {}
             for ntype, df in network.annotations.items():
                 if "namespace" in df.columns:
-                    self.go_namespace[ntype] = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]].to_numpy()
-                    self.ntype_mapping.update({namespace: ntype for namespace in np.unique(self.go_namespace[ntype])})
+                    self.nodes_namespace[ntype] = network.annotations[ntype]["namespace"].loc[
+                        self.nodes[ntype]].to_numpy()
+                    self.ntype_mapping.update(
+                        {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 
         self.training_idx, self.validation_idx, self.testing_idx = training_idx, validation_idx, testing_idx
 
@@ -320,7 +323,7 @@ class DGLLinkGenerator(DGLNodeGenerator):
                                           reverse_eids=self.reverse_eids if self.use_reverse else None,
                                           reverse_etypes=self.reverse_etypes if self.use_reverse else None,
                                           negative_sampler=negative_sampler,
-                                          node_types=self.node_types, go_namespace=self.go_namespace,
+                                          node_types=self.node_types, nodes_namespace=self.nodes_namespace,
                                           ntype_mapping=self.ntype_mapping,
                                           pred_metapaths=self.pred_metapaths,
                                           neg_pred_metapaths=self.neg_pred_metapaths, network=self.network)
@@ -433,7 +436,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
     def __init__(self, sampler, exclude=None, reverse_eids=None, reverse_etypes=None,
                  negative_sampler=None,
                  prefetch_labels=None, seq_tokenizer=None,
-                 node_types=None, go_namespace=None, ntype_mapping=None, pred_metapaths=[], neg_pred_metapaths=[],
+                 node_types=None, nodes_namespace=None, ntype_mapping=None, pred_metapaths=[], neg_pred_metapaths=[],
                  network: HeteroNetwork = None):
 
         self.triples, *_ = network.get_triples(pred_metapaths, positive=True)
@@ -452,7 +455,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
             self.seq_tokenizer = seq_tokenizer
 
         self.go_ntype = list({m[-1] for m in pred_metapaths})[0]
-        self.go_namespace = go_namespace[self.go_ntype]
+        self.nodes_namespace = nodes_namespace[self.go_ntype]
         self.ntype_mapping = ntype_mapping
         self.node_types = node_types
 
@@ -517,27 +520,27 @@ class LinkPredPyGCollator(EdgePredictionSampler):
                     pos_graph.edges(etype=metapath, order='srcdst'), dim=0)
 
         # Negative sampling
-        if hasattr(self, 'go_namespace'):
-            pos_global_edges = HeteroLinkPredDataset.split_edge_index_by_go_namespace(self, pos_global_edges,
-                                                                                      batch_to_global=None)
+        if hasattr(self, 'nodes_namespace'):
+            pos_global_edges = HeteroLinkPredDataset.split_edge_index_by_nodes_namespace(self, pos_global_edges,
+                                                                                         batch_to_global=None)
         head_batch, tail_batch = HeteroLinkPredDataset.generate_negative_sampling(self, edge_pos=pos_global_edges,
                                                                                   global_node_index=output_nodes,
                                                                                   max_negative_sampling_size=1000,
                                                                                   mode="test")
 
         edge_true = {}
-        if hasattr(self, 'go_namespace'):
-            edge_true['edge_pos'] = HeteroLinkPredDataset.split_edge_index_by_go_namespace(self,
-                                                                                           edge_index_dict=pos_edge,
-                                                                                           batch_to_global=input_nodes)
+        if hasattr(self, 'nodes_namespace'):
+            edge_true['edge_pos'] = HeteroLinkPredDataset.split_edge_index_by_nodes_namespace(self,
+                                                                                              edge_index_dict=pos_edge,
+                                                                                              batch_to_global=input_nodes)
         else:
             edge_true['edge_pos'] = pos_edge
 
         if num_edges(neg_edge):
-            if hasattr(self, 'go_namespace'):
-                edge_true['edge_neg'] = HeteroLinkPredDataset.split_edge_index_by_go_namespace(self,
-                                                                                               edge_index_dict=neg_edge,
-                                                                                               batch_to_global=input_nodes)
+            if hasattr(self, 'nodes_namespace'):
+                edge_true['edge_neg'] = HeteroLinkPredDataset.split_edge_index_by_nodes_namespace(self,
+                                                                                                  edge_index_dict=neg_edge,
+                                                                                                  batch_to_global=input_nodes)
             else:
                 edge_true['edge_neg'] = neg_edge
 

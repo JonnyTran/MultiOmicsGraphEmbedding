@@ -6,6 +6,7 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
+from logzero import logger
 from pandas import Series
 from torch import Tensor
 from torch_geometric.utils import is_undirected
@@ -204,7 +205,7 @@ def get_edge_index_dict(graph: Tuple[nx.Graph, nx.MultiGraph], nodes: Union[List
             biadj = nx.bipartite.biadjacency_matrix(subgraph, row_order=nodes_A, column_order=nodes_B, weight=None,
                                                     format="coo")
         except Exception as e:
-            print(e, etype, )
+            logger.error(f"{metapath}, {e}")
             # "\n", subgraph, list(subgraph.edges())[:2],
             # '\n', f"nodes_A {len(nodes_A)} {nodes_A[:5]}", f"nodes_A {len(nodes_A)} {nodes_A[:5]}"
             # traceback.print_exc()

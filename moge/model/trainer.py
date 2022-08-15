@@ -9,11 +9,13 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import wandb
+from logzero import logger
 from pandas import DataFrame, Series
 from pytorch_lightning import LightningModule
 from pytorch_lightning.loggers import WandbLogger
 from sklearn.cluster import KMeans
 from torch import Tensor
+from torch.optim import lr_scheduler
 from torch.utils.data.distributed import DistributedSampler
 
 from moge.criterion.clustering import clustering_metrics
@@ -332,9 +334,12 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
                                          multilabel=dataset.multilabel, metrics=metrics)
             self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                         multilabel=dataset.multilabel, metrics=metrics)
+
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
         self._set_hparams(hparams)
+        self.lr = hparams.lr
+        self.hparams.n_params = self.get_n_params()
 
     def name(self):
         if hasattr(self, "_name"):
@@ -481,6 +486,49 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
 
         print(f"Changed graph neighbor sampling sizes to {fanouts}, because method have {len(fanouts)} layers.")
 
+    def configure_optimizers(self):
+        param_optimizer = list(self.named_parameters())
+        no_decay = ['bias', 'alpha_activation', 'batchnorm', 'layernorm', "activation", "embeddings",
+                    "attn_kernels",
+                    'LayerNorm.bias', 'LayerNorm.weight',
+                    'BatchNorm.bias', 'BatchNorm.weight']
+        lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
+        weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
+
+        optimizer_grouped_parameters = [
+            {'params': [p for name, p in param_optimizer \
+                        if not any(key in name for key in no_decay) \
+                        and "embeddings" not in name],
+             'weight_decay': weight_decay},
+            {'params': [p for name, p in param_optimizer if any(key in name for key in no_decay)],
+             'weight_decay': 0.0},
+        ]
+
+        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
+
+        extra = {}
+        if lr_annealing == "cosine":
+            scheduler = lr_scheduler.CosineAnnealingLR(optimizer,
+                                                       T_max=self.num_training_steps,
+                                                       eta_min=self.lr / 100
+                                                       )
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            logger.info(f"Using CosineAnnealingLR {scheduler.state_dict()}", )
+
+        elif lr_annealing == "restart":
+            scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
+                                                                 T_0=50, T_mult=1,
+                                                                 eta_min=self.lr / 100)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            logger.info(f"Using CosineAnnealingWarmRestarts {scheduler.state_dict()}", )
+
+        elif lr_annealing == "reduce":
+            scheduler = lr_scheduler.ReduceLROnPlateau(optimizer)
+            extra = {"lr_scheduler": scheduler, "monitor": "val_loss"}
+            logger.info(f"Using ReduceLROnPlateau {scheduler.state_dict()}", )
+
+        return {"optimizer": optimizer, **extra}
+
 
 class LinkPredTrainer(NodeClfTrainer):
     def __init__(self, hparams, dataset, metrics: Union[List[str], Dict[str, List[str]]], *args, **kwargs):
@@ -544,9 +592,12 @@ class GraphClfTrainer(LightningModule):
                                      multilabel=dataset.multilabel, metrics=metrics)
         self.test_metrics = Metrics(prefix="test_", loss_type=hparams.loss_type, n_classes=dataset.n_classes,
                                     multilabel=dataset.multilabel, metrics=metrics)
+
         hparams.name = self.name()
         hparams.inductive = dataset.inductive
-        self.hparams = hparams
+        self._set_hparams(hparams)
+        self.lr = hparams.lr
+        self.hparams.n_params = self.get_n_params()
 
     def name(self):
         if hasattr(self, "_name"):

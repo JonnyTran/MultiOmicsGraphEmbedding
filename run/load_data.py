@@ -170,7 +170,7 @@ def load_node_dataset(name: str, method, args: Namespace, train_ratio=None,
 
         geneontology = GeneOntology(
             file_resources={"go-basic.obo": "http://purl.obolibrary.org/obo/go/go-basic.obo"})
-        dataset.go_namespace = geneontology.data.loc[dataset.classes, "namespace"]
+        dataset.nodes_namespace = geneontology.data.loc[dataset.classes, "namespace"]
         dataset._name = name
 
         dataset.ntype_mapping = {'biological_process': "GO_term",

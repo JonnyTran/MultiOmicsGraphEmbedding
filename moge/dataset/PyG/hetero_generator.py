@@ -32,6 +32,7 @@ def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str
 
 
 class HeteroNodeClfDataset(HeteroGraphDataset):
+    nodes_namespace: Dict[str, Series]
     def __init__(self, dataset: HeteroData,
                  seq_tokenizer: SequenceTokenizers = None,
                  neighbor_loader: str = "NeighborLoader",
@@ -54,35 +55,40 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
                            expression=False, sequence=False,
                            label_subset: Optional[Union[Index, np.ndarray]] = None,
                            ntype_subset: Optional[List[str]] = None,
-                           add_reverse_metapaths=True, go_ntype=None, exclude_metapaths=None, **kwargs):
+                           add_reverse_metapaths=True,
+                           split_namespace=False,
+                           go_ntype=None,
+                           exclude_metapaths=None, **kwargs):
         hetero, classes, nodes, training_idx, validation_idx, testing_idx = \
             network.to_pyg_heterodata(node_attr_cols=node_attr_cols, target=target, min_count=min_count,
                                       label_subset=label_subset, ntype_subset=ntype_subset, sequence=sequence,
                                       expression=expression, exclude_metapaths=exclude_metapaths)
 
-        # Add reverse metapaths to allow reverse message passing for directed edges
-        if add_reverse_metapaths:
-            transform = T.ToUndirected(merge=False)
-            hetero: HeteroData = transform(hetero)
-
         self = cls(dataset=hetero, metapaths=hetero.edge_types, add_reverse_metapaths=add_reverse_metapaths,
                    edge_dir="in", **kwargs)
+        self.classes = classes
+        self.nodes = nodes
+        self._name = network._name if hasattr(network, '_name') else ""
         self.network = network
         self.go_ntype = go_ntype
 
         self.pred_metapaths = network.pred_metapaths if hasattr(network, 'pred_metapaths') else []
         self.neg_pred_metapaths = network.neg_pred_metapaths if hasattr(network, 'neg_pred_metapaths') else []
 
-
-
-        self.classes = classes
-        self.nodes = nodes
-        self._name = network._name if hasattr(network, '_name') else ""
+        self.split_namespace = split_namespace
+        if split_namespace:
+            assert self.go_ntype is not None
+            self.nodes_namespace = {}
+            self.ntype_mapping = {}
+            for ntype, df in network.annotations.items():
+                if "namespace" in df.columns:
+                    self.nodes_namespace[ntype] = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]]
+                    self.ntype_mapping.update(
+                        {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 
         return self
 
     def process_pyg_heterodata(self, hetero: HeteroData):
-        self.G = hetero
         self.x_dict = hetero.x_dict
         self.node_types = hetero.node_types
         self.num_nodes_dict = {ntype: hetero[ntype].num_nodes for ntype in hetero.node_types}
@@ -90,10 +96,16 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         self.y_dict = {ntype: hetero[ntype].y for ntype in hetero.node_types if hasattr(hetero[ntype], "y")}
 
+        # Add reverse metapaths to allow reverse message passing for directed edges
+        if self.use_reverse:
+            transform = T.ToUndirected(merge=False)
+            hetero: HeteroData = transform(hetero)
+
         self.metapaths = hetero.edge_types
         self.edge_index_dict = {etype: etype_dict["edge_index"] \
                                 for etype, etype_dict in zip(hetero.edge_types, hetero.edge_stores)}
 
+        self.G = hetero
 
     def create_graph_sampler(self, graph: HeteroData, batch_size: int,
                              node_mask: Tensor, transform_fn=None, num_workers=10, verbose=False, **kwargs):
@@ -326,13 +338,13 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return dataset
 
-    def split_labels_by_go_namespace(self, y: Union[Tensor, Dict[str, Tensor], np.ndarray]):
-        assert hasattr(self, 'go_namespace')
-        go_namespaces = self.go_namespace[self.classes]
+    def split_labels_by_nodes_namespace(self, y: Union[Tensor, Dict[str, Tensor], np.ndarray]):
+        assert hasattr(self, "nodes_namespace")
+        nodes_namespaces = self.nodes_namespace[self.go_ntype][self.classes]
 
         y_dict = {}
-        for namespace in np.unique(go_namespaces):
-            mask = go_namespaces == namespace
+        for namespace in np.unique(nodes_namespaces):
+            mask = nodes_namespaces == namespace
 
             if isinstance(y, (Tensor, np.ndarray, DataFrame)):
                 y_dict[namespace] = y[:, mask]
@@ -384,8 +396,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         if split_namespace:
             for ntype in self.G.node_types:
                 if "namespace" in self.G[ntype]:
-                    self.go_namespace = self.G[ntype]["namespace"]
-                    self.ntype_mapping = {namespace: ntype for namespace in np.unique(self.go_namespace)}
+                    self.nodes_namespace = self.G[ntype]["namespace"]
+                    self.ntype_mapping = {namespace: ntype for namespace in np.unique(self.nodes_namespace)}
 
         # Train/valid/test positive annotations
         self.triples, self.training_idx, self.validation_idx, self.testing_idx = \
@@ -490,7 +502,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         # Edge_pos must be global index, not batch index
         if self.split_namespace:
-            edge_pos = self.split_edge_index_by_go_namespace(edge_pos, batch_to_global=None)
+            edge_pos = self.split_edge_index_by_nodes_namespace(edge_pos, batch_to_global=None)
         head_batch, tail_batch = self.generate_negative_sampling(edge_pos,
                                                                  global_node_index=X["global_node_index"],
                                                                  max_negative_sampling_size=max_negative_sampling_size,
@@ -509,9 +521,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         edge_pos = self.relabel_edge_index_dict(edge_pos, global_node_index=X["global_node_index"],
                                                 global2batch=global2batch)
         if self.split_namespace:
-            edge_true['edge_pos'] = self.split_edge_index_by_go_namespace(edge_pos,
-                                                                          batch_to_global=X["global_node_index"]
-                                                                          )
+            edge_true['edge_pos'] = self.split_edge_index_by_nodes_namespace(edge_pos,
+                                                                             batch_to_global=X["global_node_index"]
+                                                                             )
         else:
             edge_true['edge_pos'] = edge_pos
 
@@ -519,9 +531,9 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             edge_neg = self.relabel_edge_index_dict(edge_neg, global_node_index=X["global_node_index"],
                                                     global2batch=global2batch, )
             if self.split_namespace:
-                edge_true['edge_neg'] = self.split_edge_index_by_go_namespace(edge_neg,
-                                                                              batch_to_global=X["global_node_index"]
-                                                                              )
+                edge_true['edge_neg'] = self.split_edge_index_by_nodes_namespace(edge_neg,
+                                                                                 batch_to_global=X["global_node_index"]
+                                                                                 )
             else:
                 edge_true['edge_neg'] = edge_neg
 
@@ -584,7 +596,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             # for go_type in ['biological_process', 'cellular_component', 'molecular_function']:
             #     if go_type != tail_type: continue
             #
-            #     go_terms_mask = self.go_namespace[tail_neg_nodes] != go_type
+            #     go_terms_mask = self.nodes_namespace[tail_neg_nodes] != go_type
             #     tail_prob_dist[:, go_terms_mask] = 0
 
             tail_batch[metapath] = torch.multinomial(tail_prob_dist, num_samples=sampling_size, replacement=True)
@@ -610,11 +622,11 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
 
         return sampling_size
 
-    def split_edge_index_by_go_namespace(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
-                                         batch_to_global: Dict[str, Tensor] = None,
-                                         edge_pos: Dict[Tuple[str, str, str], Tensor] = None,
-                                         mode: str = None) -> Dict[Tuple[str, str, str], Tensor]:
-        if not hasattr(self, "go_namespace"):
+    def split_edge_index_by_nodes_namespace(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
+                                            batch_to_global: Dict[str, Tensor] = None,
+                                            edge_pos: Dict[Tuple[str, str, str], Tensor] = None,
+                                            mode: str = None) -> Dict[Tuple[str, str, str], Tensor]:
+        if not hasattr(self, "nodes_namespace"):
             return edge_index_dict
 
         out_edge_index_dict = {}
@@ -628,10 +640,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                     go_terms = batch_to_global[tail_type][edge_index[1]]
                 else:
                     go_terms = edge_index[1]
-                go_namespaces = self.go_namespace[go_terms]
+                nodes_namespaces = self.nodes_namespace[go_terms]
 
-                for namespace in np.unique(go_namespaces):
-                    mask = go_namespaces == namespace
+                for namespace in np.unique(nodes_namespaces):
+                    mask = nodes_namespaces == namespace
                     new_metapath = metapath[:-1] + (namespace,)
 
                     if not isinstance(mask, bool):
@@ -646,10 +658,10 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                 else:
                     go_terms = edge_pos[metapath][1]
 
-                go_namespaces = self.go_namespace[go_terms]
+                nodes_namespaces = self.nodes_namespace[go_terms]
 
-                for namespace in np.unique(go_namespaces):
-                    mask = go_namespaces == namespace
+                for namespace in np.unique(nodes_namespaces):
+                    mask = nodes_namespaces == namespace
                     new_metapath = metapath[:-1] + (namespace,)
 
                     if not isinstance(mask, bool):
