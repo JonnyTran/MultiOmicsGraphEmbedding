@@ -193,20 +193,23 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                                                                        sizes=sizes)
             h_out[ntype][:, -1] = l_dict[ntype][:sizes[self.layer][ntype][1]]
 
+            if verbose:
+                rel_embedding = h_out[ntype].detach().clone()
+
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
             h_out[ntype], betas[ntype] = self.relation_conv[ntype].forward(
                 h_out[ntype].view(h_out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim))
 
             # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=h_out[ntype], ntype=ntype)
-            # if verbose:
-            #     print("  >", ntype, global_node_index[self.layer][ntype].shape, )
-            #     for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
-            #                                                          betas[ntype].mean(-1).mean(0),
-            #                                                          betas[ntype].mean(-1).std(0))):
-            #         print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
-            #               f"\tedge_index: {edge_index_dict[etype].size(1) if etype in edge_index_dict else 0}, "
-            #               f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-            #               f"\tnorm: {torch.norm(h_out[ntype][:, i]).item():.2f}")
+            if verbose:
+                print("  >", ntype, global_node_index[self.layer][ntype].shape, )
+                for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
+                                                                     betas[ntype].mean(-1).mean(0),
+                                                                     betas[ntype].mean(-1).std(0))):
+                    print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
+                          f"\tedge_index: {edge_index_dict[etype].size(1) if etype in edge_index_dict else 0}, "
+                          f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
+                          f"\tnorm: {torch.norm(rel_embeddings[:, i]).item() if rel_embeddings.dim() >= 3 else -1:.2f}")
             #
             # h_out[ntype] = (h_out[ntype] * betas[ntype].unsqueeze(-1)).sum(1)
             # h_out[ntype] = h_out[ntype].view(h_out[ntype].size(0), self.embedding_dim)

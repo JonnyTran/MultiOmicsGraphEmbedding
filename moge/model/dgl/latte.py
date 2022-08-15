@@ -165,13 +165,13 @@ class LATTEConv(nn.Module, RelationAttention):
 
         # For each metapath in a node_type, use GAT message passing to aggregate h_j neighbors
         betas = {}
-        out = {}
+        h_out = {}
         for ntype in set(g.ntypes):
             etypes = self.get_tail_etypes(ntype, etype_only=True)
 
             # If node type doesn't have any messages
             if len(etypes) == 0:
-                out[ntype] = feat_dst[ntype]
+                h_out[ntype] = feat_dst[ntype]
                 continue
             # If homogeneous graph
             # if len(g.etypes) == 1:
@@ -183,11 +183,15 @@ class LATTEConv(nn.Module, RelationAttention):
             #     continue
 
             # Soft-select the relation-specific embeddings by a weighted average with beta[node_type]
-            out[ntype] = torch.stack([g.dstnodes[ntype].data[etype] for etype in etypes] +
-                                     [g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels)],
-                                     dim=1)
-            out[ntype], betas[ntype] = self.relation_conv[ntype].forward(
-                out[ntype].view(out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim))
+            h_out[ntype] = torch.stack([g.dstnodes[ntype].data[etype] for etype in etypes] +
+                                       [g.dstnodes[ntype].data["v"].view(-1, self.attn_heads, self.out_channels)],
+                                       dim=1)
+
+            if verbose:
+                rel_embedding = h_out[ntype].detach().clone()
+
+            h_out[ntype], betas[ntype] = self.relation_conv[ntype].forward(
+                h_out[ntype].view(h_out[ntype].size(0), self.num_tail_relations(ntype), self.embedding_dim))
             # beta[ntype] = self.get_beta_weights(query=out[ntype][:, -1, :], key=out[ntype], ntype=ntype)
             # out[ntype] = (out[ntype] * beta[ntype].unsqueeze(-1)).sum(1)
             # out[ntype] = out[ntype].view(out[ntype].size(0), self.embedding_dim)
@@ -204,16 +208,17 @@ class LATTEConv(nn.Module, RelationAttention):
                     print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
                           f"\tedge_index: {num_edges[etype] if etype in num_edges else None}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(out[ntype][:, i]).item():.2f}")
+                          f"\tnorm: {torch.norm(rel_embedding[:, i]).item() if rel_embedding.dim() >= 3 else -1:.2f}"
+                          f"\n")
 
             if hasattr(self, "activation"):
-                out[ntype] = self.activation(out[ntype])
+                h_out[ntype] = self.activation(h_out[ntype])
 
             if hasattr(self, "dropout"):
-                out[ntype] = F.dropout(out[ntype], p=self.dropout, training=self.training)
+                h_out[ntype] = F.dropout(h_out[ntype], p=self.dropout, training=self.training)
 
             if hasattr(self, "layernorm"):
-                out[ntype] = self.layernorm[ntype](out[ntype])
+                h_out[ntype] = self.layernorm[ntype](h_out[ntype])
 
         if save_betas:
             beta_mean = {ntype: betas[ntype].mean(2) for ntype in betas}
@@ -221,7 +226,7 @@ class LATTEConv(nn.Module, RelationAttention):
                                  for ntype, nid in g.ndata["_ID"].items() if ntype in beta_mean}
             self.save_relation_weights(beta_mean, global_node_index)
 
-        return out
+        return h_out
 
     def get_tail_etypes(self, head_node_type, str_form=False, etype_only=False) -> List[Tuple[str, str, str]]:
         relations = [metapath for metapath in self.etypes if metapath[-1] == head_node_type]

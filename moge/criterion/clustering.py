@@ -1,9 +1,10 @@
 import logging
-import gseapy as gp
+
 import numpy as np
 import pandas as pd
 from sklearn.metrics import homogeneity_score, completeness_score, normalized_mutual_info_score, \
     adjusted_mutual_info_score
+
 
 @DeprecationWarning
 def evaluate_clustering(embedding, annotations, nodelist, node_label, n_clusters=None,
@@ -49,6 +50,7 @@ def _get_top_enrichr_term(gene_sets, libraries=[
                                                 'KEGG_2019_Human', ],
                           cutoff=0.01, top_k=1):
     results = []
+    import gseapy as gp
 
     for gene_set in gene_sets:
         try:

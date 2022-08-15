@@ -32,19 +32,28 @@ class MetapathGATConv(nn.Module):
             self.layers.append(GATConv(in_channels=embedding_dim, out_channels=self.out_channels,
                                        heads=attn_heads, dropout=attn_dropout))
 
+    def generate_fc_edge_index(self, num_nodes_A: int, num_nodes_B: int = None, device=None):
+        if num_nodes_B is None:
+            num_nodes_B = num_nodes_A
+        edge_index = torch.tensor(list(itertools.product(range(num_nodes_A), range(num_nodes_B))),
+                                  device=device,
+                                  dtype=torch.long).T
+        return edge_index
+
     def construct_multigraph(self, relation_embs: TensorType["num_nodes", "n_relations", "embedding_dim"]) \
             -> Data:
         num_nodes = relation_embs.size(0)
-        edge_index = torch.tensor(list(itertools.product(range(self.n_relations), range(self.n_relations))),
-                                  device=relation_embs.device,
-                                  dtype=torch.long).T
         nid = torch.arange(self.n_relations, device=relation_embs.device)
 
         data_list = []
         for i in torch.arange(num_nodes):
-            g = Data(x=relation_embs[i],
-                     nid=nid,
-                     edge_index=edge_index)
+            x = relation_embs[i]
+            node_mask = torch.norm(x, dim=1) != 0
+            num_nz_relations = node_mask.sum().item()
+
+            g = Data(x=x[node_mask],
+                     nid=nid[node_mask],
+                     edge_index=self.generate_fc_edge_index(num_nz_relations, device=relation_embs.device))
             data_list.append(g)
 
         loader = DataLoader(data_list, batch_size=len(data_list), shuffle=False)

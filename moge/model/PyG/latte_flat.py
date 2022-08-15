@@ -182,6 +182,9 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
             embedding[:, -1] = l_dict[ntype]
 
+            if verbose:
+                rel_embedding = embedding.detach().clone()
+
             embedding, betas[ntype] = self.relation_conv[ntype].forward(
                 embedding.view(embedding.size(0), self.num_tail_relations(ntype), self.embedding_dim))
 
@@ -189,7 +192,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
 
             if verbose:
-                print("  >", ntype, global_node_index[ntype].shape, )
+                print("  >", ntype, global_node_index[ntype].shape, rel_embedding.shape)
                 for i, (metapath, beta_mean, beta_std) in enumerate(
                         zip(self.get_tail_relations(ntype) + [ntype],
                             betas[ntype].mean(-1).mean(0),
@@ -197,7 +200,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                     print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
                           f"\tedge_index: {(edge_index_dict[metapath].size(1) if isinstance(edge_index_dict[metapath], Tensor) else edge_index_dict[metapath][0].size(1)) if metapath in edge_pred_dict else 0}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(embedding[:, i]).item() if embedding.dim() == 3 else -1:.2f}")
+                          f"\tnorm: {torch.norm(rel_embedding[:, i]).item() if rel_embedding.dim() >= 3 else -1:.2f}")
 
             # embedding = embedding * betas[ntype].unsqueeze(-1)
             # embedding = embedding.sum(1).view(embedding.size(0), self.embedding_dim)
