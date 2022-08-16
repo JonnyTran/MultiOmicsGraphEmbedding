@@ -9,6 +9,7 @@ import dgl.function as fn
 import numpy as np
 import torch
 import torch.nn as nn
+import tqdm
 from dgl import DGLHeteroGraph
 from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
@@ -30,27 +31,30 @@ class DglLinkPredForNodeClfTrainer:
     dataset: DGLLinkGenerator
     pred_metapaths: List[Tuple]
     neg_pred_metapaths: List[Tuple]
+    train_metrics: Union[Metrics, Dict[str, Metrics]]
+    valid_metrics: Union[Metrics, Dict[str, Metrics]]
+    test_metrics: Union[Metrics, Dict[str, Metrics]]
 
     def evaluate_node_clf_metrics(self, mode="test", subset=["aupr", "fmax"], batch_size=None):
         if batch_size is None:
             batch_size = self.hparams.batch_size // 2 ** 2
 
-        if mode == "train":
+        if "train" in mode:
             dataloader = iter(self.dataset.train_nodeclf_dataloader(batch_size=batch_size,
                                                                     device=self.device, num_workers=0))
             metrics = self.train_metrics
 
-        elif mode == "valid":
+        elif "valid" in mode:
             dataloader = iter(self.dataset.valid_nodeclf_dataloader(batch_size=batch_size,
                                                                     device=self.device, num_workers=0))
             metrics = self.valid_metrics
 
-        elif mode == "test":
+        elif "test" in mode:
             dataloader = iter(self.dataset.test_nodeclf_dataloader(batch_size=batch_size,
                                                                    device=self.device, num_workers=0))
             metrics = self.test_metrics
 
-        for input_nodes, pos_graph, neg_graph, blocks in dataloader:
+        for input_nodes, pos_graph, neg_graph, blocks in tqdm.tqdm(dataloader, desc=f"Node classification {mode}"):
             feats = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
             embeddings, pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, feats,
                                                                         return_embeddings=True)

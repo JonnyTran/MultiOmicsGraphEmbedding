@@ -180,7 +180,7 @@ class Metrics(torch.nn.Module):
                     logs[metric_name] = self.metrics[metric].compute()
 
             except Exception as e:
-                print(f"Had problem with metric {metric}, {str(e)}\r")
+                print(f"Metric: {metric}, {type(e)}:{str(e)}\r")
                 # traceback.print_exc()
 
         # Needed for Precision(average=False) metrics
@@ -429,6 +429,7 @@ class AveragePrecision(torchmetrics.Metric):
         if len(self._scores) == 0:
             logger.warn("AveragePrecision must have at"
                         "least one example before it can be computed.")
+            return {}
 
         weighted_avg_score = np.average(self._scores, weights=self._n_samples)
         return weighted_avg_score if prefix is None else {f"{prefix}avg_precision": weighted_avg_score}
