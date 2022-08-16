@@ -8,6 +8,13 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+from umap import UMAP
+
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -16,12 +23,6 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-from umap import UMAP
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -393,10 +394,14 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         # Whether to use split_namespace of GO_term's
         self.split_namespace = split_namespace
         if split_namespace:
-            for ntype in self.G.node_types:
-                if "namespace" in self.G[ntype]:
-                    self.nodes_namespace = self.G[ntype]["namespace"]
-                    self.ntype_mapping = {namespace: ntype for namespace in np.unique(self.nodes_namespace)}
+            assert self.go_ntype is not None
+            self.nodes_namespace = {}
+            self.ntype_mapping = {}
+            for ntype, df in network.annotations.items():
+                if "namespace" in df.columns:
+                    self.nodes_namespace[ntype] = network.annotations[ntype]["namespace"].loc[self.nodes[ntype]]
+                    self.ntype_mapping.update(
+                        {namespace: ntype for namespace in np.unique(self.nodes_namespace[ntype])})
 
         # Train/valid/test positive annotations
         self.triples, self.training_idx, self.validation_idx, self.testing_idx = \
@@ -521,8 +526,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                 global2batch=global2batch)
         if self.split_namespace:
             edge_true['edge_pos'] = self.split_edge_index_by_nodes_namespace(edge_pos,
-                                                                             batch_to_global=X["global_node_index"]
-                                                                             )
+                                                                             batch_to_global=X["global_node_index"])
         else:
             edge_true['edge_pos'] = edge_pos
 
@@ -531,8 +535,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                                                     global2batch=global2batch, )
             if self.split_namespace:
                 edge_true['edge_neg'] = self.split_edge_index_by_nodes_namespace(edge_neg,
-                                                                                 batch_to_global=X["global_node_index"]
-                                                                                 )
+                                                                                 batch_to_global=X["global_node_index"])
             else:
                 edge_true['edge_neg'] = edge_neg
 
@@ -565,8 +568,19 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
     def generate_negative_sampling(self, edge_pos: Dict[Tuple[str, str, str], Tensor],
                                    global_node_index: Dict[str, Tensor],
                                    max_negative_sampling_size: int,
-                                   mode: str = None) -> \
-            Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
+                                   mode: str = None) \
+            -> Tuple[Dict[Tuple[str, str, str], Tensor], Dict[Tuple[str, str, str], Tensor]]:
+        """
+
+        Args:
+            edge_pos (): Edge index dict in global index
+            global_node_index ():
+            max_negative_sampling_size ():
+            mode ():
+
+        Returns:
+
+        """
         head_batch = {}
         tail_batch = {}
 
@@ -584,8 +598,7 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
             head_neg_nodes = global_node_index[head_type]
             head_prob_dist = 1 - adj[head_neg_nodes, edge_index[1]].to_dense().T
 
-            head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=sampling_size,
-                                                     replacement=True)
+            head_batch[metapath] = torch.multinomial(head_prob_dist, num_samples=sampling_size, replacement=True)
 
             # Tail noise distribution
             tail_neg_nodes = global_node_index[tail_type if tail_type in global_node_index else self.go_ntype]
@@ -622,9 +635,8 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
         return sampling_size
 
     def split_edge_index_by_nodes_namespace(self, edge_index_dict: Dict[Tuple[str, str, str], Tensor],
-                                            batch_to_global: Dict[str, Tensor] = None,
-                                            edge_pos: Dict[Tuple[str, str, str], Tensor] = None,
-                                            mode: str = None) -> Dict[Tuple[str, str, str], Tensor]:
+                                            batch_to_global: Dict[str, Tensor] = None) -> Dict[
+        Tuple[str, str, str], Tensor]:
         if not hasattr(self, "nodes_namespace"):
             return edge_index_dict
 
@@ -639,32 +651,15 @@ class HeteroLinkPredDataset(HeteroNodeClfDataset):
                     go_terms = batch_to_global[tail_type][edge_index[1]]
                 else:
                     go_terms = edge_index[1]
-                nodes_namespaces = self.nodes_namespace[go_terms]
 
-                for namespace in np.unique(nodes_namespaces):
-                    mask = nodes_namespaces == namespace
+                namespaces = self.nodes_namespace[tail_type].iloc[go_terms]
+
+                for namespace in np.unique(namespaces):
+                    mask = namespaces == namespace
                     new_metapath = metapath[:-1] + (namespace,)
 
                     if not isinstance(mask, bool):
                         out_edge_index_dict[new_metapath] = edge_index[:, mask]
-                    else:
-                        out_edge_index_dict[new_metapath] = edge_index
-
-            # Sampled head_batch or tail_batch
-            elif mode == "head_batch":
-                if batch_to_global is not None:
-                    go_terms = batch_to_global[tail_type][edge_pos[metapath][1]]
-                else:
-                    go_terms = edge_pos[metapath][1]
-
-                nodes_namespaces = self.nodes_namespace[go_terms]
-
-                for namespace in np.unique(nodes_namespaces):
-                    mask = nodes_namespaces == namespace
-                    new_metapath = metapath[:-1] + (namespace,)
-
-                    if not isinstance(mask, bool):
-                        out_edge_index_dict[new_metapath] = edge_index[mask]
                     else:
                         out_edge_index_dict[new_metapath] = edge_index
 

@@ -201,14 +201,14 @@ class LATTEConv(nn.Module, RelationAttention):
                                      for ntype, nid in g.ndata["_ID"].items() if ntype in betas}
                 num_edges = {metapath: g.num_edges(etype=metapath) for metapath in g.canonical_etypes}
 
-                print("  >", ntype, global_node_index[ntype].shape, )
+                print("  >", ntype, h_out[ntype].shape, )
                 for i, (etype, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
                                                                      betas[ntype].mean(-1).mean(0),
                                                                      betas[ntype].mean(-1).std(0))):
                     print(f"   - {'.'.join(etype[1::2]) if isinstance(etype, tuple) else etype}, "
                           f"\tedge_index: {num_edges[etype] if etype in num_edges else None}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(rel_embedding[:, i]).item() if rel_embedding.dim() >= 3 else -1:.2f}"
+                          f"\tnorm: {torch.norm(rel_embedding[:, i], dim=0).mean().item() if rel_embedding.dim() >= 3 else -1:.2f}"
                           f"\n")
 
             if hasattr(self, "activation"):

@@ -11,6 +11,11 @@ import torch
 import torch.nn as nn
 import tqdm
 from dgl import DGLHeteroGraph
+from pandas import DataFrame
+from torch import Tensor
+from torch.nn import functional as F
+from torch.optim import lr_scheduler
+
 from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace, edge_index_to_adjs
@@ -21,10 +26,6 @@ from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import LinkPredTrainer
-from pandas import DataFrame
-from torch import Tensor
-from torch.nn import functional as F
-from torch.optim import lr_scheduler
 
 
 class DglLinkPredForNodeClfTrainer:
@@ -349,6 +350,7 @@ class DglLinkPredTrainer(LinkPredTrainer, DglLinkPredForNodeClfTrainer):
         try:
             self.evaluate_node_clf_metrics(mode="train", subset=["aupr", "fmax"])
         except Exception as e:
+            print(type(e), e, )
             traceback.print_exc()
         finally:
             super().on_train_end()

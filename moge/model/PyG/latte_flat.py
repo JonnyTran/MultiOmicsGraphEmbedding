@@ -6,12 +6,13 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
-    filter_metapaths
-from moge.model.relations import RelationAttention, MetapathGATConv
 from torch import nn as nn, Tensor, ModuleDict
 from torch_geometric.nn import MessagePassing
 from torch_geometric.utils import softmax
+
+from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
+    filter_metapaths
+from moge.model.relations import RelationAttention, MetapathGATConv
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -191,7 +192,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
 
             if verbose:
-                print("  >", ntype, global_node_index[ntype].shape)
+                print("  >", ntype, embedding[ntype].shape)
                 for i, (metapath, beta_mean, beta_std) in enumerate(
                         zip(self.get_tail_relations(ntype) + [ntype],
                             betas[ntype].mean(-1).mean(0),
@@ -199,7 +200,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                     print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
                           f"\tedge_index: {(edge_index_dict[metapath].size(1) if isinstance(edge_index_dict[metapath], Tensor) else edge_index_dict[metapath][0].size(1)) if metapath in edge_pred_dict else 0}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
-                          f"\tnorm: {torch.norm(rel_embedding[:, i]).item() if rel_embedding.dim() >= 3 else -1:.2f}")
+                          f"\tnorm: {torch.norm(rel_embedding[:, i], dim=0).mean().item() if rel_embedding.dim() >= 3 else -1:.2f}")
 
             # embedding = embedding * betas[ntype].unsqueeze(-1)
             # embedding = embedding.sum(1).view(embedding.size(0), self.embedding_dim)
@@ -212,6 +213,9 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
             if hasattr(self, "layernorm"):
                 embedding = self.layernorm[ntype](embedding)
+
+            if verbose:
+                print("   -> ", torch.norm(embedding[ntype], dim=0).mean().item())
 
             h_out[ntype] = embedding
 

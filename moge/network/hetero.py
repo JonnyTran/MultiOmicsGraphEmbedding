@@ -7,18 +7,19 @@ import numpy as np
 import pandas as pd
 import torch
 from logzero import logger
-from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
-    untag_negative_metapath
-from moge.network.attributed import AttributedNetwork
-from moge.network.base import SEQUENCE_COL
-from moge.network.train_test_split import TrainTestSplit
-from moge.network.utils import filter_multilabel
 from openomics import MultiOmics
 from openomics.database.ontology import Ontology
 from openomics.utils.df import concat_uniques
 from pandas import Series, Index, DataFrame
 from torch import Tensor
 from torch_geometric.data import HeteroData
+
+from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
+    untag_negative_metapath
+from moge.network.attributed import AttributedNetwork
+from moge.network.base import SEQUENCE_COL
+from moge.network.train_test_split import TrainTestSplit
+from moge.network.utils import filter_multilabel
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -263,12 +264,12 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.set_edge_traintest_mask(self.train_nodes, self.valid_nodes, self.test_nodes,
                                      exclude_metapaths=self.pred_metapaths + self.neg_pred_metapaths)
 
-    def get_triples(self, metapaths: List[Tuple[str, str, str]], positive: bool = False, negative: bool = False) \
+    def get_triples(self, all_metapaths: List[Tuple[str, str, str]], positive: bool = False, negative: bool = False) \
             -> Tuple[Dict[str, Tensor], Tensor, Tensor, Tensor]:
         """
 
         Args:
-            metapaths (): External metapath list where the triple's `relation` field gets its ordinal ID from.
+            all_metapaths (): External metapath list where the triple's `relation` field gets its ordinal ID from.
             positive (): Whether to only retrieve positive edge types
             negative (): Whether to only retrieve negative edge types
 
@@ -282,8 +283,8 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         for metapath in pred_metapaths:
             head_type, tail_type = metapath[0], metapath[-1]
-            if metapaths and metapath not in metapaths: continue
-            metapath_idx = metapaths.index(metapath)
+            if all_metapaths and metapath not in all_metapaths: continue
+            metapath_idx = all_metapaths.index(metapath)
 
             edge_index, edge_attr = get_edge_index_values(self.networks[metapath],
                                                           nodes_A=self.nodes[head_type],

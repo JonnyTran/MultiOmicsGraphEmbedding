@@ -539,6 +539,7 @@ class EdgePredictionSamplerForNodeClassification(EdgePredictionSampler):
 
         labels = new_g.ndata["label"][self.head_node_type][seed_nodes[self.head_node_type]]
         seed_edges = {}
+
         # Add all positive annotations to graph
         pos_edges = labels.nonzero().T
         pos_edges[1] = self.go_nids[pos_edges[1]]  # Relabel GO_term classes to global node index
@@ -597,7 +598,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
             self.seq_tokenizer = seq_tokenizer
 
         self.go_ntype = list({m[-1] for m in pred_metapaths})[0]
-        self.nodes_namespace = nodes_namespace[self.go_ntype]
+        self.nodes_namespace = nodes_namespace
         self.ntype_mapping = ntype_mapping
         self.node_types = node_types
 
@@ -606,7 +607,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
         super().__init__(sampler, exclude, reverse_eids, reverse_etypes, negative_sampler, prefetch_labels)
 
     def get_neg_sampling_size(self, *args, **kwargs):
-        return self.negative_sampler.k
+        return self.negative_sampler.k // 2
 
     def sample(self, g: DGLHeteroGraph, seed_edges: Dict[str, Tensor]):
         input_nodes, pos_graph, neg_graph, blocks = super().sample(g, seed_edges)
@@ -640,11 +641,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
                                                                                            max_length=None)
 
         # Convert DGL sampled seed edges into PyG format
-        input_nodes = X["global_node_index"][0]
-        output_nodes = {ntype: ids[:X["sizes"][-1][ntype][1]] \
-                        for ntype, ids in X["global_node_index"][-1].items() \
-                        if X["sizes"][-1][ntype][1]  # This is the size of the embeddings
-                        }
+        output_nodes = {ntype: ids for ntype, ids in pos_graph.dstdata["_ID"].items() if ids.numel()}
 
         pos_global_edges, pos_edge, neg_edge, head_batch, tail_batch = {}, {}, {}, {}, {}
         for metapath in pos_graph.canonical_etypes:
@@ -667,7 +664,7 @@ class LinkPredPyGCollator(EdgePredictionSampler):
                                                                                          batch_to_global=None)
         head_batch, tail_batch = HeteroLinkPredDataset.generate_negative_sampling(self, edge_pos=pos_global_edges,
                                                                                   global_node_index=output_nodes,
-                                                                                  max_negative_sampling_size=1000,
+                                                                                  max_negative_sampling_size=500,
                                                                                   mode="test")
 
         edge_true = {}
