@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import torch
 from colorhash import ColorHash
+from moge.model.PyG.utils import filter_metapaths
 from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
@@ -12,8 +13,6 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GATConv
 from torch_sparse import SparseTensor
 from torchtyping import TensorType
-
-from moge.model.PyG.utils import filter_metapaths
 
 
 class MetapathGATConv(nn.Module):
@@ -58,7 +57,7 @@ class MetapathGATConv(nn.Module):
 
         loader = DataLoader(data_list, batch_size=len(data_list), shuffle=False)
         batch: Data = next(iter(loader))
-        print(num_nodes, relation_embs.size(1), batch.num_nodes)
+
         return batch
 
     def deconstruct_multigraph(self, batch: Data,

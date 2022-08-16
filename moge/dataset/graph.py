@@ -2,11 +2,15 @@ from abc import abstractmethod
 from typing import Union, List, Tuple, Dict, Optional
 
 import dgl
+import moge.model.PyG.utils
 import networkx as nx
 import numpy as np
 import pandas as pd
 import torch
 import torch_sparse
+from moge.dataset.utils import get_reverse_metapaths
+from moge.network.hetero import HeteroNetwork
+from moge.network.sequence import BertSequenceTokenizer
 from ogb.graphproppred import DglGraphPropPredDataset
 from ogb.linkproppred import PygLinkPropPredDataset, DglLinkPropPredDataset
 from ogb.nodeproppred import PygNodePropPredDataset, DglNodePropPredDataset
@@ -15,10 +19,6 @@ from torch import Tensor
 from torch.utils import data
 from torch_geometric.data import HeteroData
 from torch_geometric.data import InMemoryDataset as PyGInMemoryDataset
-
-import moge.model.PyG.utils
-from moge.dataset.utils import get_reverse_metapaths
-from moge.network.hetero import HeteroNetwork
 
 
 class Graph:
@@ -122,6 +122,9 @@ class Graph:
 
 
 class HeteroGraphDataset(torch.utils.data.Dataset, Graph):
+    network: HeteroNetwork
+    tokenizer: BertSequenceTokenizer
+
     def __init__(self,
                  dataset: Union[PyGInMemoryDataset, PygNodePropPredDataset, PygLinkPropPredDataset,
                                 DglNodePropPredDataset, DglLinkPropPredDataset, HeteroData],

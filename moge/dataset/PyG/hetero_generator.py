@@ -8,13 +8,6 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
-from pandas import DataFrame, Series, Index
-from torch import Tensor
-from torch.utils.data import DataLoader
-from torch_geometric.data import HeteroData
-from torch_sparse.tensor import SparseTensor
-from umap import UMAP
-
 from moge.dataset.PyG.neighbor_sampler import NeighborLoader, HGTLoader
 from moge.dataset.graph import HeteroGraphDataset
 from moge.dataset.sequences import SequenceTokenizers
@@ -23,6 +16,12 @@ from moge.dataset.utils import edge_index_to_adjs, gather_node_dict, \
 from moge.model.PyG.utils import num_edges, convert_to_nx_edgelist
 from moge.model.utils import to_device
 from moge.network.hetero import HeteroNetwork
+from pandas import DataFrame, Series, Index
+from torch import Tensor
+from torch.utils.data import DataLoader
+from torch_geometric.data import HeteroData
+from torch_sparse.tensor import SparseTensor
+from umap import UMAP
 
 
 def reverse_metapath_name(metapath: Tuple[str, str, str]) -> Tuple[str, str, str]:
@@ -338,7 +337,7 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
 
         return dataset
 
-    def split_labels_by_nodes_namespace(self, y: Union[Tensor, Dict[str, Tensor], np.ndarray]):
+    def split_labels_by_nodes_namespace(self, labels: Union[Tensor, Dict[str, Tensor], np.ndarray]):
         assert hasattr(self, "nodes_namespace")
         nodes_namespaces = self.nodes_namespace[self.go_ntype][self.classes]
 
@@ -346,10 +345,10 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
         for namespace in np.unique(nodes_namespaces):
             mask = nodes_namespaces == namespace
 
-            if isinstance(y, (Tensor, np.ndarray, DataFrame)):
-                y_dict[namespace] = y[:, mask]
-            elif isinstance(y, dict):
-                for ntype, labels in y.items():
+            if isinstance(labels, (Tensor, np.ndarray, DataFrame)):
+                y_dict[namespace] = labels[:, mask]
+            elif isinstance(labels, dict):
+                for ntype, labels in labels.items():
                     y_dict.setdefault(ntype, {})[namespace] = labels[:, mask]
 
         return y_dict

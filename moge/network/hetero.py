@@ -7,19 +7,18 @@ import numpy as np
 import pandas as pd
 import torch
 from logzero import logger
-from openomics import MultiOmics
-from openomics.database.ontology import Ontology
-from openomics.utils.df import concat_uniques
-from pandas import Series, Index, DataFrame
-from torch import Tensor
-from torch_geometric.data import HeteroData
-
 from moge.dataset.utils import get_edge_index_values, get_edge_index_dict, tag_negative_metapath, \
     untag_negative_metapath
 from moge.network.attributed import AttributedNetwork
 from moge.network.base import SEQUENCE_COL
 from moge.network.train_test_split import TrainTestSplit
 from moge.network.utils import filter_multilabel
+from openomics import MultiOmics
+from openomics.database.ontology import Ontology
+from openomics.utils.df import concat_uniques
+from pandas import Series, Index, DataFrame
+from torch import Tensor
+from torch_geometric.data import HeteroData
 
 
 class HeteroNetwork(AttributedNetwork, TrainTestSplit):
@@ -274,7 +273,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             negative (): Whether to only retrieve negative edge types
 
         Returns:
-
+            triples, training_idx, validation_idx, testing_idx
         """
         triples = defaultdict(lambda: [])
         training_idx, validation_idx, testing_idx = [], [], []

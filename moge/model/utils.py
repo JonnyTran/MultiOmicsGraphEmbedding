@@ -73,9 +73,8 @@ def filter_samples(Y_hat: Tensor, Y: Tensor, weights: Tensor):
     return Y_hat, Y
 
 
-def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights, return_index=False):
-    if weights is None or \
-            (isinstance(weights, (Tensor, np.ndarray)) and weights.shape == None):
+def filter_samples_weights(Y_hat: Tensor, Y: Tensor, weights: Optional[Tensor] = None, return_index=False):
+    if weights is None or (isinstance(weights, (Tensor, np.ndarray)) and weights.shape == None):
         return Y_hat, Y, None
 
     if isinstance(weights, Tensor):
@@ -174,13 +173,12 @@ def tensor_sizes(input=None, **kwargs) -> ...:
         return {tensor_sizes(v) for v in input}
 
     elif isinstance(input, (DGLGraph, DGLBlock, DGLHeteroGraph)):
-        return {ntype: (input.num_src_nodes(ntype), input.num_dst_nodes(ntype)) if isinstance(input,
-                                                                                              DGLBlock) else input.num_nodes(
-            ntype) for ntype in input.ntypes} | \
+        return {ntype: (input.num_src_nodes(ntype), input.num_dst_nodes(ntype)) if isinstance(input, DGLBlock) else \
+            (input.num_nodes(ntype),) for ntype in input.ntypes} | \
                {etype: input.num_edges(etype=etype) for etype in input.etypes if input.num_edges(etype=etype)}
 
     elif isinstance(input, HeteroData):
-        return {ntype: input[ntype].num_nodes() for ntype in input.node_types} | \
+        return {ntype: (input[ntype].num_nodes(),) for ntype in input.node_types} | \
                {etype: input[etype].num_edges() for etype in input.edge_types if input[etype].num_edges()}
 
     else:

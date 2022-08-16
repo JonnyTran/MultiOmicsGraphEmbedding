@@ -10,14 +10,6 @@ import torch
 import torch_sparse.sample
 import tqdm
 from fairscale.nn import auto_wrap
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import precision_recall_fscore_support
-from sklearn.multiclass import OneVsRestClassifier
-from torch import nn, Tensor
-from torch.nn import functional as F
-from torch.utils.data import DataLoader
-from torch_geometric.nn import MetaPath2Vec as Metapath2vec
-
 from moge.dataset.PyG.hetero_generator import HeteroNodeClfDataset
 from moge.dataset.graph import HeteroGraphDataset
 from moge.model.PyG.conv import HGT
@@ -30,6 +22,13 @@ from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import NodeClfTrainer, print_pred_class_counts
 from moge.model.utils import filter_samples_weights, stack_tensor_dicts, activation, concat_dict_batch
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.multiclass import OneVsRestClassifier
+from torch import nn, Tensor
+from torch.nn import functional as F
+from torch.utils.data import DataLoader
+from torch_geometric.nn import MetaPath2Vec as Metapath2vec
 
 
 class LATTENodeClf(NodeClfTrainer):
@@ -454,10 +453,11 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         X, y_true, weights = batch
         y_pred = self.forward(X)
 
-        # y_pred, y_true, weights = process_tensor_dicts(y_pred, y_true, weights)
+        # y_pred, y_true, weights = stack_tensor_dicts(y_pred, y_true, weights)
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+        if y_true.size(0) == 0:
+            return torch.tensor(0.0, requires_grad=False)
 
         loss = self.criterion.forward(y_pred, y_true, weights=weights)
 
@@ -489,7 +489,8 @@ class LATTEFlatNodeClf(NodeClfTrainer):
 
         y_pred, y_true, weights = concat_dict_batch(X['batch_size'], y_pred, y_true, weights)
         y_pred, y_true, weights = filter_samples_weights(Y_hat=y_pred, Y=y_true, weights=weights)
-        if y_true.size(0) == 0: return torch.tensor(0.0, requires_grad=False)
+        if y_true.size(0) == 0:
+            return torch.tensor(0.0, requires_grad=False)
 
         test_loss = self.criterion(y_pred, y_true, weights=weights)
 
@@ -503,7 +504,7 @@ class LATTEFlatNodeClf(NodeClfTrainer):
         return test_loss
 
     def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
-                                y_pred: Tensor, y_true: Tensor, weights: Tensor):
+                                y_pred: Tensor, y_true: Tensor, weights: Tensor, subset=None):
         if isinstance(metrics, dict):
             y_pred_dict = self.dataset.split_labels_by_nodes_namespace(y_pred)
             y_true_dict = self.dataset.split_labels_by_nodes_namespace(y_true)
@@ -512,10 +513,12 @@ class LATTEFlatNodeClf(NodeClfTrainer):
                 go_type = "BPO" if namespace == 'biological_process' else \
                     "CCO" if namespace == 'cellular_component' else \
                         "MFO" if namespace == 'molecular_function' else namespace
-                metrics[go_type].update_metrics(y_pred_dict[namespace], y_true_dict[namespace], weights=weights)
+
+                metrics[go_type].update_metrics(y_pred_dict[namespace], y_true_dict[namespace],
+                                                weights=weights, subset=subset)
 
         else:
-            metrics.update_metrics(y_pred, y_true, weights=weights)
+            metrics.update_metrics(y_pred, y_true, weights=weights, subset=subset)
 
     def on_validation_end(self) -> None:
         super().on_validation_end()

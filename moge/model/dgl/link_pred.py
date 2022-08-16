@@ -10,23 +10,87 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dgl import DGLHeteroGraph
-from pandas import DataFrame
-from torch import Tensor
-from torch.nn import functional as F
-from torch.optim import lr_scheduler
-
 from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
-from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace
+from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace, edge_index_to_adjs
+from moge.model.PyG.node_clf import LATTEFlatNodeClf
 from moge.model.dgl.HGT import HGT
 from moge.model.dgl.latte import LATTE
 from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import LinkPredTrainer
+from pandas import DataFrame
+from torch import Tensor
+from torch.nn import functional as F
+from torch.optim import lr_scheduler
 
 
-class DglLinkPredTrainer(LinkPredTrainer):
+class DglLinkPredForNodeClfTrainer:
+    dataset: DGLLinkGenerator
+    pred_metapaths: List[Tuple]
+    neg_pred_metapaths: List[Tuple]
+
+    def evaluate_node_clf_metrics(self, mode="test", subset=["aupr", "fmax"], batch_size=None):
+        if batch_size is None:
+            batch_size = self.hparams.batch_size // 2 ** 2
+
+        if mode == "train":
+            dataloader = iter(self.dataset.train_nodeclf_dataloader(batch_size=batch_size,
+                                                                    device=self.device, num_workers=0))
+            metrics = self.train_metrics
+
+        elif mode == "valid":
+            dataloader = iter(self.dataset.valid_nodeclf_dataloader(batch_size=batch_size,
+                                                                    device=self.device, num_workers=0))
+            metrics = self.valid_metrics
+
+        elif mode == "test":
+            dataloader = iter(self.dataset.test_nodeclf_dataloader(batch_size=batch_size,
+                                                                   device=self.device, num_workers=0))
+            metrics = self.test_metrics
+
+        for input_nodes, pos_graph, neg_graph, blocks in dataloader:
+            feats = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}
+            embeddings, pos_edge_scores, neg_edge_scores = self.forward(pos_graph, neg_graph, blocks, feats,
+                                                                        return_embeddings=True)
+
+            y_pred, y_true, weights = self.get_logits_and_targets(pos_edge_scores=pos_edge_scores, pos_graph=pos_graph)
+            self.update_node_clf_metrics(metrics=metrics, y_pred=y_pred, y_true=y_true, weights=weights,
+                                         subset=subset)
+
+    def get_logits_and_targets(self, pos_edge_scores: Dict[Tuple, Tensor], pos_graph: DGLHeteroGraph, ) \
+            -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+        edge_index_dict = dgl_to_edge_index_dict(pos_graph, edge_values=pos_edge_scores, global_ids=False)
+        adjs = edge_index_to_adjs(edge_index_dict, nodes={ntype: pos_graph.nodes(ntype) \
+                                                          for ntype in pos_graph.ntypes if pos_graph.num_nodes(ntype)})
+
+        pos_adj = adjs[self.pred_metapaths[0]]
+        neg_adj = adjs[self.neg_pred_metapaths[0]]
+
+        y_pred = pos_adj + neg_adj
+        y_pred = y_pred.to_dense()
+
+        y_true = pos_adj.set_value(torch.ones(pos_adj.nnz(), device=pos_graph.device)) + \
+                 neg_adj.set_value(torch.zeros(neg_adj.nnz(), device=pos_graph.device))
+        y_true = y_true.to_dense()
+
+        if y_true.dim() == 1:
+            weights = (y_true >= 0).to(torch.float)
+        elif y_true.dim() == 2:
+            weights = (y_true.sum(1) > 0).to(torch.float)
+        else:
+            weights = None
+
+        return y_pred, y_true, weights
+
+    def update_node_clf_metrics(self, metrics: Union[Metrics, Dict[str, Metrics]],
+                                y_pred: Tensor, y_true: Tensor, weights: Tensor, subset: List[str] = None, ):
+        LATTEFlatNodeClf.update_node_clf_metrics(self, metrics, y_pred=y_pred, y_true=y_true, weights=weights,
+                                                 subset=subset)
+
+
+class DglLinkPredTrainer(LinkPredTrainer, DglLinkPredForNodeClfTrainer):
     dataset: DGLLinkGenerator
 
     def __init__(self, hparams, dataset: DGLLinkGenerator, metrics: Union[List[str], Dict[str, List[str]]], *args,
@@ -36,10 +100,10 @@ class DglLinkPredTrainer(LinkPredTrainer):
         self.pred_metapaths = dataset.pred_metapaths
         self.neg_pred_metapaths = dataset.neg_pred_metapaths
 
-        if hasattr(dataset, "go_namespace"):
-            self.go_namespace: Dict[str, np.ndarray] = dataset.go_namespace
+        if hasattr(dataset, "nodes_namespace"):
+            self.nodes_namespace: Dict[str, np.ndarray] = dataset.nodes_namespace
         else:
-            self.go_namespace = None
+            self.nodes_namespace = None
 
         if hasattr(dataset, "ntype_mapping"):
             self.ntype_mapping: Dict[str, str] = dataset.ntype_mapping
@@ -77,7 +141,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
                 self.update_pr_metrics(pos_scores=pos_stack, true_neg_scores=neg_edge_scores, metrics=metrics)
 
     def update_pr_metrics(self, pos_scores: Tensor, true_neg_scores: Union[Tensor, Dict[Tuple[str, str, str], Tuple]],
-                          metrics: Metrics, subset=["precision", "recall", "aupr"]):
+                          metrics: Metrics, subset=["precision", "recall", "true_aupr"]):
         if isinstance(true_neg_scores, dict):
             neg_scores = torch.cat([edge_scores.detach() for m, edge_scores in true_neg_scores.items()])
         else:
@@ -216,7 +280,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
             pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph,
-            nodes_namespace=self.go_namespace)
+            nodes_namespace=self.nodes_namespace)
 
         self.update_link_pred_metrics(self.train_metrics, pos_edge_scores=pos_edge_scores,
                                       neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
@@ -238,7 +302,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
             pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph,
-            nodes_namespace=self.go_namespace)
+            nodes_namespace=self.nodes_namespace)
 
         self.update_link_pred_metrics(self.valid_metrics, pos_edge_scores=pos_edge_scores,
                                       neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
@@ -260,7 +324,7 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
         pos_edge_scores, neg_batch_scores, neg_edge_scores = self.split_edge_scores(
             pos_edge_scores, neg_edge_scores, pos_graph=pos_graph, neg_graph=neg_graph,
-            nodes_namespace=self.go_namespace)
+            nodes_namespace=self.nodes_namespace)
 
         self.update_link_pred_metrics(self.test_metrics, pos_edge_scores=pos_edge_scores,
                                       neg_batch_scores=neg_batch_scores, neg_edge_scores=neg_edge_scores,
@@ -277,8 +341,18 @@ class DglLinkPredTrainer(LinkPredTrainer):
     def test_dataloader(self, batch_size=None):
         return self.dataset.test_dataloader(collate_fn=None, batch_size=self.hparams.batch_size, num_workers=0)
 
+    def on_train_end(self) -> None:
+        try:
+            self.evaluate_node_clf_metrics(mode="train", subset=["aupr", "fmax"])
+        except Exception as e:
+            traceback.print_exc()
+        finally:
+            super().on_train_end()
+
     def on_validation_end(self) -> None:
         try:
+            self.evaluate_node_clf_metrics(mode="valid", subset=["aupr", "fmax"])
+
             if self.current_epoch % 5 == 1:
                 input_nodes, pos_graph, neg_graph, blocks = next(
                     iter(self.dataset.valid_dataloader(batch_size=self.hparams.batch_size, device=self.device,
@@ -298,6 +372,8 @@ class DglLinkPredTrainer(LinkPredTrainer):
 
     def on_test_end(self):
         try:
+            self.evaluate_node_clf_metrics(mode="test", subset=["aupr", "fmax"])
+
             if self.wandb_experiment is not None:
                 input_nodes, pos_graph, neg_graph, blocks = next(iter(self.dataset.test_dataloader(batch_size=1000)))
                 feats = {ntype: feat for ntype, feat in blocks[0].srcdata["feat"]}

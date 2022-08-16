@@ -62,7 +62,7 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = MeanSquaredError()
             elif "auroc" == metric:
                 self.metrics[metric] = AUROC(num_classes=n_classes, average="micro")
-            elif "aupr" == metric:
+            elif "aupr" in metric:
                 self.metrics[metric] = AveragePrecision(average="micro")
 
             elif "accuracy" in metric:

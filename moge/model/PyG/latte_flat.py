@@ -6,13 +6,12 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from torch import nn as nn, Tensor, ModuleDict
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
 from moge.model.relations import RelationAttention, MetapathGATConv
+from torch import nn as nn, Tensor, ModuleDict
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -192,7 +191,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
 
             if verbose:
-                print("  >", ntype, global_node_index[ntype].shape, rel_embedding.shape)
+                print("  >", ntype, global_node_index[ntype].shape)
                 for i, (metapath, beta_mean, beta_std) in enumerate(
                         zip(self.get_tail_relations(ntype) + [ntype],
                             betas[ntype].mean(-1).mean(0),
