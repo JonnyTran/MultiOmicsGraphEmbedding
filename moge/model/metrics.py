@@ -1,3 +1,4 @@
+import traceback
 from typing import Optional, Any, Callable, List, Dict, Union, Tuple
 
 import numpy as np
@@ -149,6 +150,9 @@ class Metrics(torch.nn.Module):
             elif isinstance(self.metrics[name], torchmetrics.metric.Metric):
                 try:
                     self.metrics[name].update(y_pred_act, y_true)
+                except NotComputableError as nce:
+                    print(nce)
+
                 except Exception as e:
                     print(e, "\n", name, tensor_sizes({"y_pred": y_pred_act, "y_true": y_true}))
                     raise e
@@ -179,9 +183,13 @@ class Metrics(torch.nn.Module):
                     metric_name = str(metric) if prefix is None else prefix + str(metric)
                     logs[metric_name] = self.metrics[metric].compute()
 
+            except NotComputableError as nce:
+                print(nce)
+                pass
+
             except Exception as e:
                 print(f"Metric: {metric}, {type(e)}:{str(e)}\r")
-                # traceback.print_exc()
+                traceback.print_exc()
 
         # Needed for Precision(average=False) metrics
         logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v for k, v in logs.items()}

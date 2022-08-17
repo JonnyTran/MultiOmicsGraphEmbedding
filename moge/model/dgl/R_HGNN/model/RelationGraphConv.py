@@ -1,9 +1,8 @@
-import torch
-from torch import nn
-
 import dgl
-from dgl.ops import edge_softmax
 import dgl.function as fn
+import torch
+from dgl.ops import edge_softmax
+from torch import nn
 
 
 class RelationGraphConv(nn.Module):
@@ -69,9 +68,9 @@ class RelationGraphConv(nn.Module):
         # Tensor, (N_src, n_heads, 1),   (N_src, n_heads, hidden_dim) * (n_heads, hidden_dim)
         e_src = (feat_src * relation_attention_weight[:, self._out_feats:]).sum(dim=-1, keepdim=True)
         # (N_src, n_heads, hidden_dim), (N_src, n_heads, 1)
-        graph.srcdata.update({'ft': feat_src, 'e_src': e_src})
+        graph.srcdata.layers({'ft': feat_src, 'e_src': e_src})
         # (N_dst, n_heads, 1)
-        graph.dstdata.update({'e_dst': e_dst})
+        graph.dstdata.layers({'e_dst': e_dst})
         # compute edge attention, e_src and e_dst are a_src * Wh_src and a_dst * Wh_dst respectively.
         graph.apply_edges(fn.u_add_v('e_src', 'e_dst', 'e'))
         # shape (edges_num, heads, 1)

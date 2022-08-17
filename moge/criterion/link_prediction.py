@@ -1,6 +1,4 @@
-import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.metrics import average_precision_score, precision_recall_curve
 
 from moge.evaluation.utils import largest_indices
 
@@ -24,7 +22,7 @@ def evaluate_pr_curve_link_pred_by_database(methods, data_generator, edge_types=
         else:
             continue
 
-        X, y_true = data_generator.load_data()
+        X, y_true = data_generator.load_dgl_graph()
         y_true = np.round(y_true)
         evaluate_pr_curve_link_pred(methods, X, y_true, title=title, data_generator=data_generator)
 

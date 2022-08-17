@@ -43,10 +43,10 @@ def metapath_reachable_graph(g: DGLHeteroGraph, metapath_chain: List[Tuple[str, 
                                 idtype=g.idtype, device=g.device)
 
     # copy srcnode features
-    new_g.nodes[srctype].data.update(g.nodes[srctype].data)
+    new_g.nodes[srctype].data.layers(g.nodes[srctype].data)
     # copy dstnode features
     if srctype != dsttype:
-        new_g.nodes[dsttype].data.update(g.nodes[dsttype].data)
+        new_g.nodes[dsttype].data.layers(g.nodes[dsttype].data)
 
     return new_g
 
@@ -78,11 +78,11 @@ def metapath_reachable_blocks(src_block: DGLBlock, dst_block: DGLBlock,
                                                 num_nodes_dict=num_nodes_dict,
                                                 idtype=src_block.idtype, device=src_block.device)
     # copy srcnode features
-    new_g.nodes[srctype].data.update(src_feats)
+    new_g.nodes[srctype].data.layers(src_feats)
     # copy dstnode features
     if srctype != dsttype:
         dst_feats = src_block.nodes[dsttype].data
-        new_g.nodes[dsttype].data.update(dst_feats)
+        new_g.nodes[dsttype].data.layers(dst_feats)
 
     return new_g
 

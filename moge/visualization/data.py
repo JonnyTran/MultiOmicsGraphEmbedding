@@ -44,7 +44,7 @@ def heatmap_fast(mtx, x_label, y_label, size=1000):
     agg = cvs.raster(pw_s, agg=rd.mean())
 
     fig = px.imshow(agg, labels={"x": x_label, "y": y_label})
-    fig['layout'].update(autosize=False)
+    fig['layout'].layers(autosize=False)
     return fig
 
 

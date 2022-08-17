@@ -359,6 +359,8 @@ class DglLinkPredTrainer(LinkPredTrainer, DglLinkPredForNodeClfTrainer):
         try:
             self.evaluate_node_clf_metrics(mode="valid", subset=["aupr", "fmax"])
 
+            self.plot_sankey_flow(layer=-1)
+
             if self.current_epoch % 5 == 1:
                 input_nodes, pos_graph, neg_graph, blocks = next(
                     iter(self.dataset.valid_dataloader(batch_size=self.hparams.batch_size, device=self.device,
@@ -371,9 +373,9 @@ class DglLinkPredTrainer(LinkPredTrainer, DglLinkPredForNodeClfTrainer):
                 self.log_score_averages(edge_scores_dict=pos_edge_scores | tag_negative_metapath({
                     k: v for k, v in neg_edge_scores.items() if not is_negative(k)}))
         except Exception as e:
+            print(e, type(e))
             traceback.print_exc()
         finally:
-            self.plot_sankey_flow(layer=-1)
             super().on_validation_end()
 
     def on_test_end(self):

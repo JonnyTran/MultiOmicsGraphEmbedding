@@ -1,6 +1,9 @@
+import os.path
 import warnings
+from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
+from typing import List, Dict, Tuple
 
 import dgl
 import dgl.function as fn
@@ -12,11 +15,15 @@ import torch.nn.functional as F
 from Bio import SeqIO
 from Bio.Blast import NCBIXML
 from Bio.Blast.Applications import NcbipsiblastCommandline
+from dgl.heterograph import DGLBlock
+from dgl.udf import NodeBatch
 from logzero import logger
-from ruamel_yaml import YAML
+from pytorch_lightning import LightningModule
+from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score as aupr
 from sklearn.preprocessing import MultiLabelBinarizer
-from torch import nn
+from torch import nn, Tensor
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 
@@ -62,22 +69,26 @@ def get_pid_go_sc(pid_go_sc_file):
 
 
 def get_data(fasta_file, pid_go_file=None, feature_type=None, **kwargs):
-    pid_list, data_x = [], []
+    pid_list, seqs = [], []
     for seq in SeqIO.parse(fasta_file, 'fasta'):
         pid_list.append(seq.id)
-        data_x.append(str(seq.seq))
+        seqs.append(str(seq.seq))
+
     if feature_type is not None:
         feature_path = Path(kwargs[feature_type])
         if feature_path.suffix == '.npy':
-            data_x = np.load(feature_path)
+            seqs = np.load(feature_path)
         elif feature_path.suffix == '.npz':
-            data_x = ssp.load_npz(feature_path)
+            seqs = ssp.load_npz(feature_path)
         else:
             raise ValueError(F'Only support suffix of .npy for np.ndarray or .npz for scipy.csr_matrix as feature.')
-    return pid_list, data_x, get_go_list(pid_go_file, pid_list)
+
+    go_labels = get_go_list(pid_go_file, pid_list)
+
+    return pid_list, seqs, go_labels
 
 
-def get_ppi_idx(pid_list, data_y, net_pid_map):
+def get_ppi_idx(pid_list: List[str], data_y: ssp.csr_matrix, net_pid_map: Dict[str, int]):
     pid_list_ = tuple(zip(*[(i, pid, net_pid_map[pid])
                             for i, pid in enumerate(pid_list) if pid in net_pid_map]))
     assert pid_list_
@@ -109,12 +120,10 @@ def psiblast(blastdb, pid_list, fasta_path, output_path: Path, evalue=1e-3, num_
     return psiblast_sim
 
 
-def blast(*args, **kwargs):
-    return psiblast(*args, **kwargs, num_iterations=1)
-
-
-def get_homo_ppi_idx(pid_list, fasta_file, data_y, net_pid_map, net_blastdb, blast_output_path):
-    blast_sim = blast(net_blastdb, pid_list, fasta_file, blast_output_path)
+def get_homo_ppi_idx(pid_list, fasta_file, data_y, net_pid_map: Dict[str, int], net_blastdb: Path,
+                     blast_output_path: Path):
+    blast_sim = psiblast(net_blastdb, pid_list=pid_list, fasta_path=fasta_file, output_path=blast_output_path,
+                         num_iterations=1)
     pid_list_ = []
     for i, pid in enumerate(pid_list):
         blast_sim[pid][None] = float('-inf')
@@ -127,7 +136,7 @@ def get_homo_ppi_idx(pid_list, fasta_file, data_y, net_pid_map, net_blastdb, bla
 
 
 def get_mlb(mlb_path: Path, labels=None, **kwargs) -> MultiLabelBinarizer:
-    if mlb_path.exists():
+    if isinstance(mlb_path, Path) and mlb_path.exists() or os.path.exists(mlb_path):
         return joblib.load(mlb_path)
     mlb = MultiLabelBinarizer(sparse_output=True, **kwargs)
     mlb.fit(labels)
@@ -135,7 +144,7 @@ def get_mlb(mlb_path: Path, labels=None, **kwargs) -> MultiLabelBinarizer:
     return mlb
 
 
-def fmax(targets: ssp.csr_matrix, scores: np.ndarray):
+def fmax(targets: ssp.csr_matrix, scores: np.ndarray) -> Tuple[float, float]:
     fmax_ = 0.0, 0.0
     for cut in (c / 100 for c in range(101)):
         cut_sc = ssp.csr_matrix((scores >= cut).astype(np.int32))
@@ -169,123 +178,138 @@ def output_res(res_path: Path, pid_list, go_list, sc_mat):
 
 
 class NodeUpdate(nn.Module):
-    def __init__(self, in_f, out_f, dropout: float):
+    def __init__(self, in_dim, out_dim, dropout: float):
         super(NodeUpdate, self).__init__()
-        self.ppi_linear = nn.Linear(in_f, out_f)
+        self.linear = nn.Linear(in_dim, out_dim)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, node):
-        outputs = self.dropout(F.relu(self.ppi_linear(node.data['ppi_out'])))
+    def forward(self, node: NodeBatch, ):
+        outputs = self.dropout(F.relu(self.linear(node.data['ppi_out'])))
+
         if 'res' in node.data:
             outputs = outputs + node.data['res']
         return {'h': outputs}
 
     def reset_parameters(self):
-        nn.init.xavier_uniform_(self.ppi_linear.weight)
+        nn.init.xavier_uniform_(self.linear.weight)
 
 
 class GcnNet(nn.Module):
     """
     """
 
-    def __init__(self, *, labels_num, input_size, hidden_size, num_gcn=0, dropout=0.5, residual=True,
-                 **kwargs):
-        super(GcnNet, self).__init__()
-        logger.info(F'GCN: labels_num={labels_num}, input size={input_size}, hidden_size={hidden_size}, '
+    def __init__(self, n_classes, input_size, hidden_size, num_gcn=0, dropout=0.5, residual=True, **kwargs):
+        super().__init__()
+        logger.info(F'GCN: labels_num={n_classes}, input size={input_size}, hidden_size={hidden_size}, '
                     F'num_gcn={num_gcn}, dropout={dropout}, residual={residual}')
-        self.labels_num = labels_num
-        self.input = nn.EmbeddingBag(input_size, hidden_size, mode='sum', include_last_offset=True)
+        self.embedding = nn.EmbeddingBag(input_size, hidden_size, mode='sum', include_last_offset=True)
         self.input_bias = nn.Parameter(torch.zeros(hidden_size))
+
         self.dropout = nn.Dropout(dropout)
-        self.update = nn.ModuleList(NodeUpdate(hidden_size, hidden_size, dropout) for _ in range(num_gcn))
-        self.output = nn.Linear(hidden_size, self.labels_num)
+
+        self.layers: List[NodeUpdate] = nn.ModuleList([
+            NodeUpdate(hidden_size, hidden_size, dropout) for _ in range(num_gcn)])
+
+        self.n_classes = n_classes
+        self.output = nn.Linear(hidden_size, self.n_classes)
         self.residual = residual
         self.num_gcn = num_gcn
         self.reset_parameters()
 
     def reset_parameters(self):
-        nn.init.xavier_uniform_(self.input.weight)
-        for update in self.update:
+        nn.init.xavier_uniform_(self.embedding.weight)
+        for update in self.layers:
             update.reset_parameters()
         nn.init.xavier_uniform_(self.output.weight)
 
-    def forward(self, nf: dgl.NodeFlow, inputs):
-        nf.copy_from_parent()
-        outputs = self.dropout(F.relu(self.input(*inputs) + self.input_bias))
-        nf.layers[0].data['h'] = outputs
-        for i, update in enumerate(self.update):
+    def forward(self, blocks: List[DGLBlock], input, offets, per_sample_weights):
+        h = self.embedding.forward(input, offets, per_sample_weights) + self.input_bias
+        h = self.dropout(F.relu(h))
+
+        for i, layer in enumerate(self.layers):
+            blocks[i].srcdata['h'] = h
             if self.residual:
-                nf.block_compute(i,
-                                 fn.u_mul_e('h', 'self', out='m_res'),
-                                 fn.sum(msg='m_res', out='res'))
-            nf.block_compute(i,
-                             fn.u_mul_e('h', 'ppi', out='ppi_m_out'),
-                             fn.sum(msg='ppi_m_out', out='ppi_out'), update)
-        return self.output(nf.layers[-1].data['h'])
+                blocks[i].update_all(fn.u_mul_e('h', 'self', out='m_res'),
+                                     fn.sum(msg='m_res', out='res'))
+            blocks[i].update_all(fn.u_mul_e('h', 'ppi', out='ppi_m_out'),
+                                 fn.sum(msg='ppi_m_out', out='ppi_out'), layer)
+            h = blocks[i].dstdata['h']
+
+        h = self.output(h)
+        return h
 
 
-class DeepGraphGO(object):
-    """
+class DeepGraphGO(LightningModule):
+    def __init__(self, hparams: Namespace, model_path: Path, dgl_graph: dgl.DGLGraph, node_feats: ssp.csr_matrix, ):
+        if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
+            hparams = Namespace(**hparams)
+        super().__init__()
+        self.model = GcnNet(**hparams.__dict__)
 
-    """
-
-    def __init__(self, *, model_path: Path, dgl_graph, network_x, **kwargs):
-        self.model = self.network = GcnNet(**kwargs)
-        self.dp_network = nn.DataParallel(self.network.cuda())
         model_path.parent.mkdir(parents=True, exist_ok=True)
         self.model_path = model_path
-        self.loss_fn = nn.BCEWithLogitsLoss()
-        self.optimizer = None
-        self.dgl_graph, self.network_x, self.batch_size = dgl_graph, network_x, None
+        self.criterion = nn.BCEWithLogitsLoss()
+        self.dgl_graph, self.node_feats, self.batch_size = dgl_graph, node_feats, hparams.batch_size
 
-    def get_scores(self, nf: dgl.NodeFlow):
-        batch_x = self.network_x[nf.layer_parent_nid(0).numpy()]
-        scores = self.network.forward(nf, (torch.from_numpy(batch_x.indices).cuda().long(),
-                                           torch.from_numpy(batch_x.indptr).cuda().long(),
-                                           torch.from_numpy(batch_x.data).cuda().float()))
-        return scores
+        self.training_idx, self.validation_idx, self.testing_idx = hparams.training_idx, hparams.validation_idx, hparams.testing_idx
 
-    def get_optimizer(self, **kwargs):
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), **kwargs)
+        self._set_hparams(hparams)
 
-    def train_step(self, train_x, train_y, update, **kwargs):
-        self.model.train()
-        scores = self.get_scores(train_x)
-        loss = self.loss_fn(scores, train_y.cuda())
-        loss.backward()
-        if update:
-            self.optimizer.step(closure=None)
-            self.optimizer.zero_grad()
-        return loss.item()
+    def forward(self, blocks: List[DGLBlock]):
+        batch_x = self.node_feats[blocks[0].srcdata["_ID"].cpu().numpy()]
 
-    @torch.no_grad()
-    def predict_step(self, data_x):
-        self.model.eval()
-        return torch.sigmoid(self.get_scores(data_x)).cpu().numpy()
+        input = torch.from_numpy(batch_x.indices).to(self.device).long()
+        offsets = torch.from_numpy(batch_x.indptr).to(self.device).long()
+        per_sample_weights = torch.from_numpy(batch_x.data).to(self.device).float()
 
-    def train(self, train_data, valid_data, loss_params=(), opt_params=(), epochs_num=10, batch_size=40, **kwargs):
-        self.get_optimizer(**dict(opt_params))
-        self.batch_size = batch_size
+        logits = self.model.forward(blocks, input, offsets, per_sample_weights)
 
-        (train_ppi, train_y), (valid_ppi, valid_y) = train_data, valid_data
-        ppi_train_idx = np.full(self.network_x.shape[0], -1, dtype=np.int)
-        ppi_train_idx[train_ppi] = np.arange(train_ppi.shape[0])
-        best_fmax = 0.0
-        for epoch_idx in range(epochs_num):
-            train_loss = 0.0
-            for nf in tqdm(dgl.contrib.sampling.sampler.NeighborSampler(self.dgl_graph, batch_size,
-                                                                        self.dgl_graph.number_of_nodes(),
-                                                                        num_hops=self.model.num_gcn,
-                                                                        seed_nodes=train_ppi,
-                                                                        prefetch=True, shuffle=True),
-                           desc=F'Epoch {epoch_idx}', leave=False, dynamic_ncols=True,
-                           total=(len(train_ppi) + batch_size - 1) // batch_size):
-                batch_y = train_y[ppi_train_idx[nf.layer_parent_nid(-1).numpy()]].toarray()
-                train_loss += self.train_step(train_x=nf, train_y=torch.from_numpy(batch_y), update=True)
-            best_fmax = self.valid(valid_loader=valid_ppi, targets=valid_y, epoch_idx=epoch_idx,
-                                   train_loss=train_loss / len(train_ppi), best_fmax=best_fmax)
+        return logits
 
-    def valid(self, valid_loader, targets, epoch_idx, train_loss, best_fmax):
+    def training_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        y_true = blocks[-1].dstdata["label"]
+
+        logits = self.forward(blocks)
+        loss = self.criterion(logits, y_true)
+        self.log("loss", loss, logger=True, on_step=True)
+
+        scores = torch.sigmoid(logits).detach().cpu().numpy()
+        y_true = y_true.detach().cpu().numpy()
+        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True, on_step=False, on_epoch=True)
+        return loss
+
+    def validation_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        y_true = blocks[-1].dstdata["label"]
+
+        logits = self.forward(blocks)
+        loss = self.criterion(logits, y_true)
+        self.log("val_loss", loss, logger=True, on_step=True)
+
+        scores = torch.sigmoid(logits).detach().cpu().numpy()
+        y_true = y_true.detach().cpu().numpy()
+        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True, on_step=False, on_epoch=True)
+        return loss
+
+    def testing_step(self, batch, batch_nb):
+        input_nodes, seeds, blocks = batch
+        y_true = blocks[-1].dstdata["label"]
+
+        logits = self.forward(blocks)
+        loss = self.criterion(logits, y_true)
+        self.log("test_loss", loss, logger=True, on_step=True)
+
+        scores = torch.sigmoid(logits).detach().cpu().numpy()
+        y_true = y_true.detach().cpu().numpy()
+        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True, on_step=False,
+                      on_epoch=True)
+        return loss
+
+    def valid_step(self, valid_loader, targets, epoch_idx, train_loss, best_fmax):
         scores = self.predict(valid_loader, valid=True)
         (fmax_, t_), aupr_ = fmax(targets, scores), aupr(targets.toarray().flatten(), scores.flatten())
         logger.info(F'Epoch {epoch_idx}: Loss: {train_loss:.5f} '
@@ -295,21 +319,72 @@ class DeepGraphGO(object):
             self.save_model()
         return best_fmax
 
-    def predict(self, test_ppi, batch_size=None, valid=False, **kwargs):
-        if batch_size is None:
-            batch_size = self.batch_size
-        if not valid:
-            self.load_model()
-        unique_test_ppi = np.unique(test_ppi)
-        mapping = {x: i for i, x in enumerate(unique_test_ppi)}
-        test_ppi = np.asarray([mapping[x] for x in test_ppi])
-        scores = np.vstack([self.predict_step(nf)
-                            for nf in dgl.contrib.sampling.sampler.NeighborSampler(self.dgl_graph, batch_size,
-                                                                                   self.dgl_graph.number_of_nodes(),
-                                                                                   num_hops=self.model.num_gcn,
-                                                                                   seed_nodes=unique_test_ppi,
-                                                                                   prefetch=True)])
-        return scores[test_ppi]
+    # def train(self, train_data, valid_data, loss_params=(), opt_params=(), epochs_num=10, batch_size=40, **kwargs):
+    #     self.get_optimizer(**dict(opt_params))
+    #     self.batch_size = batch_size
+    #
+    #     (train_ppi, train_y), (valid_ppi, valid_y) = train_data, valid_data
+    #     ppi_train_idx = np.full(self.node_feats.shape[0], -1, dtype=np.int)
+    #     ppi_train_idx[train_ppi] = np.arange(train_ppi.shape[0])
+    #     best_fmax = 0.0
+    #     for epoch_idx in range(epochs_num):
+    #         train_loss = 0.0
+    #         for nf in tqdm(dgl.contrib.sampling.sampler.NeighborSampler(self.dgl_graph, batch_size,
+    #                                                                     self.dgl_graph.number_of_nodes(),
+    #                                                                     num_hops=self.model.num_gcn,
+    #                                                                     seed_nodes=train_ppi,
+    #                                                                     prefetch=True, shuffle=True),
+    #                        desc=F'Epoch {epoch_idx}', leave=False, dynamic_ncols=True,
+    #                        total=(len(train_ppi) + batch_size - 1) // batch_size):
+    #             batch_y = train_y[ppi_train_idx[nf.layer_parent_nid(-1).numpy()]].toarray()
+    #
+    #             train_loss += self.train_step(train_x=nf, train_y=torch.from_numpy(batch_y), update=True)
+    #         best_fmax = self.valid_step(valid_loader=valid_ppi, targets=valid_y, epoch_idx=epoch_idx,
+    #                                     train_loss=train_loss / len(train_ppi), best_fmax=best_fmax)
+
+    @torch.no_grad()
+    def predict_step(self, data_x):
+        self.model.eval()
+        input_nodes, seeds, blocks = data_x
+
+        return torch.sigmoid(self.forward(blocks)).cpu().numpy()
+
+    def train_dataloader(self):
+        neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
+
+        collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.training_idx,
+                                                graph_sampler=neighbor_sampler)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=self.batch_size, shuffle=True, drop_last=False, )
+        return dataloader
+
+    def val_dataloader(self):
+        neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
+
+        collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.validation_idx,
+                                                graph_sampler=neighbor_sampler)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=self.batch_size, shuffle=True, drop_last=False, )
+        return dataloader
+
+    def test_dataloader(self):
+        neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
+
+        collator = dgl.dataloading.NodeCollator(self.dgl_graph, nids=self.testing_idx,
+                                                graph_sampler=neighbor_sampler)
+        dataloader = DataLoader(collator.dataset, collate_fn=collator.collate,
+                                batch_size=self.batch_size, shuffle=True, drop_last=False, )
+        return dataloader
+
+    def configure_optimizers(self):
+        weight_decay = self.hparams.weight_decay if 'weight_decay' in self.hparams else 0.0
+        lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
+
+        optimizer = torch.optim.AdamW(self.model.parameters(),
+                                      # lr=self.hparams.lr
+                                      )
+
+        return {"optimizer": optimizer}
 
     def save_model(self):
         torch.save(self.model.state_dict(), self.model_path)
@@ -319,65 +394,108 @@ class DeepGraphGO(object):
 
 
 def main(data_cnf, model_cnf, mode, model_id):
+    if not isinstance(data_cnf, dict):
+        data_cnf = YAML(typ='safe').load(Path(data_cnf))
+    if not isinstance(model_cnf, dict):
+        model_cnf = YAML(typ='safe').load(Path(model_cnf))
+
     model_id = F'-Model-{model_id}' if model_id is not None else ''
-    yaml = YAML(typ='safe')
-    data_cnf, model_cnf = yaml.load(Path(data_cnf)), yaml.load(Path(model_cnf))
     data_name, model_name = data_cnf['name'], model_cnf['name']
     run_name = F'{model_name}{model_id}-{data_name}'
-    model, model_cnf['model']['model_path'] = None, Path(data_cnf['model_path']) / F'{run_name}'
-    data_cnf['mlb'] = Path(data_cnf['mlb'])
-    data_cnf['results'] = Path(data_cnf['results'])
-    logger.info(F'Model: {model_name}, Path: {model_cnf["model"]["model_path"]}, Dataset: {data_name}')
-
-    net_pid_list = get_pid_list(data_cnf['network']['pid_list'])
-    net_pid_map = {pid: i for i, pid in enumerate(net_pid_list)}
-    net_blastdb = data_cnf['network']['blastdb']
-    dgl_graph = dgl.data.utils.load_graphs(data_cnf['network']['dgl'])[0][0]
-    self_loop = torch.zeros_like(dgl_graph.edata['ppi'])
-
-    nr_ = np.arange(dgl_graph.number_of_nodes())
-    self_loop[dgl_graph.edge_ids(nr_, nr_)] = 1.0
-    dgl_graph.edata['self'] = self_loop
-    dgl_graph.edata['ppi'] = dgl_graph.edata['ppi'].float().cuda()
-    dgl_graph.edata['self'] = dgl_graph.edata['self'].float().cuda()
-    logger.info(F'{dgl_graph}')
-    network_x = ssp.load_npz(data_cnf['network']['feature'])
+    dgl_graph, node_feats, net_pid_map, train_idx, valid_idx, test_idx = load_dgl_graph(data_cnf, model_cnf,
+                                                                                        model_id=model_id)
 
     if mode is None or mode == 'train':
-        train_pid_list, _, train_go = get_data(**data_cnf['train'])
-        valid_pid_list, _, valid_go = get_data(**data_cnf['valid'])
-        mlb = get_mlb(data_cnf['mlb'], train_go)
-        labels_num = len(mlb.classes_)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            train_y, valid_y = mlb.transform(train_go).astype(np.float32), mlb.transform(valid_go).astype(np.float32)
-        *_, train_ppi, train_y = get_ppi_idx(train_pid_list, train_y, net_pid_map)
-        *_, valid_ppi, valid_y = get_homo_ppi_idx(valid_pid_list, data_cnf['valid']['fasta_file'],
-                                                  valid_y, net_pid_map, net_blastdb,
-                                                  data_cnf['results'] / F'{data_name}-valid-ppi-blast-out')
-        logger.info(F'Number of Labels: {labels_num}')
-        logger.info(F'Size of Training Set: {len(train_ppi)}')
-        logger.info(F'Size of Validation Set: {len(valid_ppi)}')
+        train_pid_list, train_seqs, train_go_labels = get_data(**data_cnf['train'])
+        valid_pid_list, valid_seqs, valid_go_labels = get_data(**data_cnf['valid'])
+        mlb = get_mlb(data_cnf['mlb'], train_go_labels)
+        num_labels = len(mlb.classes_)
 
-        model = Model(labels_num=labels_num, dgl_graph=dgl_graph, network_x=network_x,
-                      input_size=network_x.shape[1], **model_cnf['model'])
-        model.train((train_ppi, train_y), (valid_ppi, valid_y), **model_cnf['train'])
+        train_y, valid_y = mlb.transform(train_go_labels).astype(np.float32), mlb.transform(valid_go_labels).astype(
+            np.float32)
+        *_, train_idx, train_y = get_ppi_idx(train_pid_list, train_y, net_pid_map)
+        *_, valid_ppi, valid_y = get_homo_ppi_idx(pid_list=valid_pid_list, fasta_file=data_cnf['valid']['fasta_file'],
+                                                  data_y=valid_y, net_pid_map=net_pid_map,
+                                                  net_blastdb=data_cnf['network']['blastdb'],
+                                                  blast_output_path=data_cnf[
+                                                                        'results'] / F'{data_name}-valid-ppi-blast-out')
+        logger.info(F'Number of Labels: {num_labels}')
+        logger.info(F'Size of Training Set: {len(train_idx)}')
+        logger.info(F'Size of Validation Set: {len(valid_idx)}')
+
+        model = DeepGraphGO(labels_num=num_labels, dgl_graph=dgl_graph, node_feats=node_feats,
+                            input_size=node_feats.shape[1], **model_cnf['model'])
+        model.train((train_idx, train_y), (valid_idx, valid_y), **model_cnf['train'])
 
     if mode is None or mode == 'eval':
         mlb = get_mlb(data_cnf['mlb'])
-        labels_num = len(mlb.classes_)
+        num_labels = len(mlb.classes_)
+
         if model is None:
-            model = Model(labels_num=labels_num, dgl_graph=dgl_graph, network_x=network_x,
-                          input_size=network_x.shape[1], **model_cnf['model'])
-        test_cnf = data_cnf['test']
-        test_name = test_cnf.pop('name')
-        test_pid_list, _, test_go = get_data(**test_cnf)
-        test_res_idx_, test_pid_list_, test_ppi, _ = get_homo_ppi_idx(test_pid_list, test_cnf['fasta_file'],
-                                                                      None, net_pid_map, net_blastdb,
-                                                                      data_cnf['results'] / F'{data_name}-{test_name}'
-                                                                                            F'-ppi-blast-out')
+            model = DeepGraphGO(labels_num=num_labels, dgl_graph=dgl_graph, node_feats=node_feats,
+                                input_size=node_feats.shape[1], **model_cnf['model'])
+
+        test_name = data_cnf['test'].pop('name')
+        test_pid_list, _, test_go_labels = get_data(**data_cnf['test'])
+        test_res_idx_, test_pid_list_, test_ppi, _ = get_homo_ppi_idx(
+            pid_list=test_pid_list, fasta_file=data_cnf['test']['fasta_file'], data_y=None, net_pid_map=net_pid_map,
+            net_blastdb=data_cnf['network']['blastdb'],
+            blast_output_path=data_cnf['results'] / F'{data_name}-{test_name}-ppi-blast-out')
         scores = np.zeros((len(test_pid_list), len(mlb.classes_)))
         scores[test_res_idx_] = model.predict(test_ppi, **model_cnf['test'])
         res_path = data_cnf['results'] / F'{run_name}-{test_name}'
         output_res(res_path.with_suffix('.txt'), test_pid_list, mlb.classes_, scores)
         np.save(res_path, scores)
+
+
+def load_dgl_graph(data_cnf, model_cnf, model_id=None) \
+        -> Tuple[dgl.DGLGraph, ssp.csr_matrix, Dict[str, int], Tensor, Tensor, Tensor]:
+    # Set paths
+    data_name, model_name = data_cnf['name'], model_cnf['name']
+    run_name = F'{model_name}{model_id}-{data_name}'
+
+    model_cnf['model']['model_path'] = Path(data_cnf['model_path']) / F'{run_name}'
+    data_cnf['mlb'] = Path(data_cnf['mlb'])
+    data_cnf['results'] = Path(data_cnf['results'])
+
+    # Get all protein node id lists
+    net_pid_list = get_pid_list(data_cnf['network']['pid_list'])
+    net_pid_map = {pid: i for i, pid in enumerate(net_pid_list)}
+
+    # Load DGL Graph
+    dgl_graph = dgl.data.utils.load_graphs(data_cnf['network']['dgl'])[0][0]
+    self_loop = torch.zeros_like(dgl_graph.edata['ppi'])
+    nr_ = np.arange(dgl_graph.number_of_nodes())
+    self_loop[dgl_graph.edge_ids(nr_, nr_)] = 1.0
+
+    dgl_graph.edata['self'] = self_loop
+    dgl_graph.edata['ppi'] = dgl_graph.edata['ppi'].float()
+    dgl_graph.edata['self'] = dgl_graph.edata['self'].float()
+
+    logger.info(F'{dgl_graph}')
+    # Node features
+    node_feats = ssp.load_npz(data_cnf['network']['feature'])
+
+    # Get train/valid/test split of node lists
+    train_pid_list, _, train_go_labels = get_data(**data_cnf['train'])
+    valid_pid_list, _, valid_go_labels = get_data(**data_cnf['valid'])
+    test_pid_list, _, test_go_labels = get_data(**data_cnf['test'])
+
+    # Binarize multilabel GO annotations
+    mlb = get_mlb(data_cnf['mlb'], train_go_labels)
+    num_labels = len(mlb.classes_)
+    train_y, valid_y, test_y = mlb.transform(train_go_labels).astype(np.float32), mlb.transform(valid_go_labels).astype(
+        np.float32), mlb.transform(test_go_labels).astype(np.float32)
+
+    # Get train/valid/test index split and labels index_list
+    *_, train_idx, train_y = get_ppi_idx(train_pid_list, train_y, net_pid_map)
+    *_, valid_idx, valid_y = get_ppi_idx(valid_pid_list, valid_y, net_pid_map)
+    *_, test_idx, test_y = get_ppi_idx(test_pid_list, test_y, net_pid_map)
+
+    # Assign labels to dgl_graph
+    dgl_graph.ndata["label"] = torch.zeros(dgl_graph.num_nodes(), train_y.shape[1])
+    dgl_graph.ndata["label"][train_idx] = torch.tensor(train_y.todense())
+    dgl_graph.ndata["label"][valid_idx] = torch.tensor(valid_y.todense())
+    dgl_graph.ndata["label"][test_idx] = torch.tensor(test_y.todense())
+
+    return dgl_graph, node_feats, net_pid_map, train_idx, valid_idx, test_idx

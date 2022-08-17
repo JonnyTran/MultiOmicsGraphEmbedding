@@ -335,7 +335,7 @@ class SiameseGraphEmbedding(ImportedGraphEmbedding, BaseEstimator):
             print("log_dir:", self.log_dir)
 
         if embeddings:
-            x_test, y_test = self.generator_val.load_data(return_node_name=True)
+            x_test, y_test = self.generator_val.load_dgl_graph(return_node_name=True)
             if not os.path.exists(self.log_dir): os.makedirs(self.log_dir)
             with open(os.path.join(self.log_dir, "metadata.tsv"), 'w') as f:
                 np.savetxt(f, y_test, fmt="%s")

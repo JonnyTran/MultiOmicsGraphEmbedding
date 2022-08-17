@@ -273,7 +273,7 @@ class DGLLinkGenerator(DGLNodeGenerator):
         # Update all nodes embeddings with self.node_metadata
         for col in set(self.node_metadata.columns) - set(df.columns):
             df[col] = None
-        df.update(self.node_metadata, overwrite=False)
+        df.layers(self.node_metadata, overwrite=False)
         df.dropna(axis=1, how="all", inplace=True)
 
         # Update self.node_metadata with df
