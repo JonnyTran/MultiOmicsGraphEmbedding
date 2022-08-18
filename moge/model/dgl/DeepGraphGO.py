@@ -26,6 +26,8 @@ from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from moge.model.metrics import Metrics
+
 
 def get_pid_list(pid_list_file):
     try:
@@ -144,19 +146,21 @@ def get_mlb(mlb_path: Path, labels=None, **kwargs) -> MultiLabelBinarizer:
     return mlb
 
 
-def fmax(targets: ssp.csr_matrix, scores: np.ndarray) -> Tuple[float, float]:
+def fmax(targets: np.ndarray, scores: np.ndarray) -> Tuple[float, float]:
     fmax_ = 0.0, 0.0
-    for cut in (c / 100 for c in range(101)):
-        cut_sc = ssp.csr_matrix((scores >= cut).astype(np.int32))
+    for thresh in (c / 100 for c in range(101)):
+        cut_sc = ssp.csr_matrix((scores >= thresh).astype(np.int32))
         correct = cut_sc.multiply(targets).sum(axis=1)
+
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             p, r = correct / cut_sc.sum(axis=1), correct / targets.sum(axis=1)
             p, r = np.average(p[np.invert(np.isnan(p))]), np.average(r)
         if np.isnan(p):
             continue
+
         try:
-            fmax_ = max(fmax_, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, cut))
+            fmax_ = max(fmax_, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
         except ZeroDivisionError:
             pass
     return fmax_
@@ -198,12 +202,11 @@ class GcnNet(nn.Module):
     """
     """
 
-    def __init__(self, num_nodes, n_classes, input_size, hidden_size, num_gcn=0, dropout=0.5, residual=True, **kwargs):
+    def __init__(self, n_classes, input_size, hidden_size, num_gcn=0, dropout=0.5, residual=True, **kwargs):
         super().__init__()
         logger.info(F'GCN: labels_num={n_classes}, input size={input_size}, hidden_size={hidden_size}, '
                     F'num_gcn={num_gcn}, dropout={dropout}, residual={residual}')
-        # self.embedding = nn.EmbeddingBag(input_size, hidden_size, mode='sum', include_last_offset=True)
-        self.embedding = nn.Embedding(num_nodes, hidden_size)
+        self.embedding = nn.EmbeddingBag(input_size, hidden_size, mode='sum', include_last_offset=True)
         self.input_bias = nn.Parameter(torch.zeros(hidden_size))
 
         self.dropout = nn.Dropout(dropout)
@@ -223,9 +226,8 @@ class GcnNet(nn.Module):
             update.reset_parameters()
         nn.init.xavier_uniform_(self.output.weight)
 
-    def forward(self, blocks: List[DGLBlock], input, offets, per_sample_weights, node_ids):
-        # h = self.embedding.forward(input, offets, per_sample_weights) + self.input_bias
-        h = self.embedding.forward(node_ids) + self.input_bias
+    def forward(self, blocks: List[DGLBlock], input, offets, per_sample_weights):
+        h = self.embedding.forward(input, offets, per_sample_weights) + self.input_bias
         h = self.dropout(F.relu(h))
 
         for i, layer in enumerate(self.layers):
@@ -242,10 +244,19 @@ class GcnNet(nn.Module):
 
 
 class DeepGraphGO(LightningModule):
-    def __init__(self, hparams: Namespace, model_path: Path, dgl_graph: dgl.DGLGraph, node_feats: ssp.csr_matrix, ):
+    def __init__(self, hparams: Namespace, model_path: Path, dgl_graph: dgl.DGLGraph, node_feats: ssp.csr_matrix,
+                 metrics: List[str]):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__()
+
+        self.train_metrics = Metrics(prefix="", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
+                                     multilabel=True, metrics=metrics)
+        self.valid_metrics = Metrics(prefix="val_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
+                                     multilabel=True, metrics=metrics)
+        self.test_metrics = Metrics(prefix="test_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
+                                    multilabel=True, metrics=metrics)
+
         self.model = GcnNet(num_nodes=dgl_graph.num_nodes(), **hparams.__dict__)
 
         model_path.parent.mkdir(parents=True, exist_ok=True)
@@ -265,7 +276,7 @@ class DeepGraphGO(LightningModule):
         offsets = torch.from_numpy(batch_x.indptr).to(self.device).long()
         per_sample_weights = torch.from_numpy(batch_x.data).to(self.device).float()
 
-        logits = self.model.forward(blocks, input, offsets, per_sample_weights, node_ids)
+        logits = self.model.forward(blocks, input, offsets, per_sample_weights)
 
         return logits
 
@@ -277,11 +288,12 @@ class DeepGraphGO(LightningModule):
         loss = self.criterion(logits, y_true)
         self.log("loss", loss, logger=True, prog_bar=True, on_step=False, on_epoch=True)
 
-        scores = torch.sigmoid(logits).detach().cpu().numpy()
-        y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True,
-                      on_step=False, on_epoch=True)
+        self.train_metrics.update_metrics(torch.sigmoid(logits), y_true)
+        # scores = torch.sigmoid(logits).detach().cpu().numpy()
+        # y_true = y_true.detach().cpu().numpy()
+        # (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        # self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True,
+        #               on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
@@ -292,11 +304,12 @@ class DeepGraphGO(LightningModule):
         loss = self.criterion(logits, y_true)
         self.log("val_loss", loss, logger=True, on_step=False, on_epoch=True)
 
-        scores = torch.sigmoid(logits).detach().cpu().numpy()
-        y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True,
-                      on_step=False, on_epoch=True)
+        self.valid_metrics.update_metrics(torch.sigmoid(logits), y_true)
+        # scores = torch.sigmoid(logits).detach().cpu().numpy()
+        # y_true = y_true.detach().cpu().numpy()
+        # (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        # self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True,
+        #               on_step=False, on_epoch=True)
         return loss
 
     def test_step(self, batch, batch_nb):
@@ -307,22 +320,14 @@ class DeepGraphGO(LightningModule):
         loss = self.criterion(logits, y_true)
         self.log("test_loss", loss, logger=True, on_step=False, on_epoch=True)
 
-        scores = torch.sigmoid(logits).detach().cpu().numpy()
-        y_true = y_true.detach().cpu().numpy()
-        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True,
-                      on_step=False, on_epoch=True)
+        self.test_metrics.update_metrics(torch.sigmoid(logits), y_true)
+        # scores = torch.sigmoid(logits).detach().cpu().numpy()
+        # y_true = y_true.detach().cpu().numpy()
+        # (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        # self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True,
+        #               on_step=False, on_epoch=True)
         return loss
 
-    def valid_step(self, valid_loader, targets, epoch_idx, train_loss, best_fmax):
-        scores = self.predict(valid_loader, valid=True)
-        (fmax_, t_), aupr_ = fmax(targets, scores), aupr(targets.toarray().flatten(), scores.flatten())
-        logger.info(F'Epoch {epoch_idx}: Loss: {train_loss:.5f} '
-                    F'Fmax: {fmax_:.3f} {t_:.2f} AUPR: {aupr_:.3f}')
-        if fmax_ > best_fmax:
-            best_fmax = fmax_
-            self.save_model()
-        return best_fmax
 
     # def train(self, train_data, valid_data, loss_params=(), opt_params=(), epochs_num=10, batch_size=40, **kwargs):
     #     self.get_optimizer(**dict(opt_params))
@@ -353,6 +358,29 @@ class DeepGraphGO(LightningModule):
         input_nodes, seeds, blocks = data_x
 
         return torch.sigmoid(self.forward(blocks)).cpu().numpy()
+
+    def training_epoch_end(self, outputs):
+        metrics_dict = self.train_metrics.compute_metrics()
+        self.train_metrics.reset_metrics()
+
+        self.log_dict(metrics_dict, prog_bar=True)
+
+        return None
+
+    def validation_epoch_end(self, outputs):
+        metrics_dict = self.valid_metrics.compute_metrics()
+        self.valid_metrics.reset_metrics()
+
+        self.log_dict(metrics_dict, prog_bar=True)
+
+        return None
+
+    def test_epoch_end(self, outputs):
+        metrics_dict = self.test_metrics.compute_metrics()
+        self.test_metrics.reset_metrics()
+
+        self.log_dict(metrics_dict, prog_bar=True)
+        return None
 
     def train_dataloader(self):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)

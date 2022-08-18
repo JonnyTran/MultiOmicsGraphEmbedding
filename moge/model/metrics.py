@@ -1,7 +1,9 @@
 import traceback
+import warnings
 from typing import Optional, Any, Callable, List, Dict, Union, Tuple
 
 import numpy as np
+import scipy.sparse as ssp
 import torch
 import torchmetrics
 from ignite.exceptions import NotComputableError
@@ -57,7 +59,7 @@ class Metrics(torch.nn.Module):
                 self.metrics[metric] = F1Score(num_classes=n_classes, average="micro",
                                                top_k=int(metric.split("@")[-1]) if "@" in metric else None, )
             elif "fmax" in metric:
-                self.metrics[metric] = FMax(average="macro")
+                self.metrics[metric] = FMax()
 
             elif "mse" == metric:
                 self.metrics[metric] = MeanSquaredError()
@@ -171,10 +173,10 @@ class Metrics(torch.nn.Module):
                 if "ogb" in metric:
                     logs.update(self.metrics[metric].compute(prefix=prefix))
 
-                elif metric == "top_k" and isinstance(self.metrics[metric], TopKMultilabelAccuracy):
+                elif isinstance(self.metrics[metric], TopKMultilabelAccuracy):
                     logs.update(self.metrics[metric].compute(prefix=prefix))
 
-                elif metric == "top_k" and isinstance(self.metrics[metric], TopKCategoricalAccuracy):
+                elif isinstance(self.metrics[metric], TopKCategoricalAccuracy):
                     metric_name = (str(metric) if prefix is None else prefix + str(metric)) + \
                                   f"@{self.metrics[metric]._k}"
                     logs[metric_name] = self.metrics[metric].compute()
@@ -321,7 +323,74 @@ class TopKMultilabelAccuracy(torchmetrics.Metric):
             return {f"{prefix}top_k@{k}": self._num_correct[k] / self._num_examples for k in self.k_s}
 
 
-class FMax(Metric):
+class FMax(torchmetrics.Metric):
+    def __init__(self):
+        """
+
+        Args:
+            average : {'micro', 'samples', 'weighted', 'macro', 'pairwise'} or None,             default='macro'
+                If ``None``, the scores for each class are returned. Otherwise,
+                this determines the type of averaging performed on the data:
+
+                ``'micro'``:
+                    Calculate metrics globally by considering each element of the label
+                    indicator matrix as a label.
+                ``'macro'``:
+                    Calculate metrics for each label, and find their unweighted
+                    mean.  This does not take label imbalance into account.
+                ``'weighted'``:
+                    Calculate metrics for each label, and find their average, weighted
+                    by support (the number of true instances for each label).
+                ``'samples'``:
+                    Calculate metrics for each instance, and find their average.
+                ``'pairwise'``:
+                    Calculate metrics for each sample and each class individually and
+                    average them.
+
+        """
+        super().__init__()
+
+    def reset(self):
+        self._scores = []
+        self._n_samples = []
+
+    def update(self, scores, targets):
+        n_samples = scores.shape[0]
+        if isinstance(scores, Tensor):
+            scores = scores.detach().cpu().numpy()
+        if isinstance(targets, Tensor):
+            targets = targets.detach().cpu().numpy()
+
+        fmax_ = 0.0, 0.0
+        for thresh in (c / 100 for c in range(101)):
+            cut_sc = ssp.csr_matrix((scores >= thresh).astype(np.int32))
+            correct = cut_sc.multiply(targets).sum(axis=1)
+
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                p, r = correct / cut_sc.sum(axis=1), correct / targets.sum(axis=1)
+                p, r = np.average(p[np.invert(np.isnan(p))]), np.average(r)
+            if np.isnan(p):
+                continue
+
+            try:
+                fmax_ = max(fmax_, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
+            except ZeroDivisionError:
+                pass
+
+        self._scores.append(fmax_[0])
+        self._n_samples.append(n_samples)
+
+    def compute(self, prefix=None) -> Union[float, Dict[str, float]]:
+        if len(self._scores) == 0:
+            raise NotComputableError("AveragePrecision must have at"
+                                     "least one example before it can be computed.")
+
+        weighted_avg_score = np.average(self._scores, weights=self._n_samples)
+        return weighted_avg_score
+
+
+class FMax_(Metric):
     def __init__(self, num_classes=None, thresholds: Union[int, Tensor, List[float]] = 100,
                  average="macro", **kwargs) -> None:
         assert average == "macro"
@@ -432,14 +501,15 @@ class AveragePrecision(torchmetrics.Metric):
         self._n_samples = []
 
     def update(self, y_pred, y_true):
-        y_true_: np.ndarray = y_true.detach().cpu().numpy()
+        y_true_ = y_true.detach().cpu().numpy()
         y_pred_ = y_pred.detach().cpu().numpy()
+        average = self.average
         if self.average == "pairwise":
             y_true_ = y_true_.flatten()
             y_pred_ = y_pred_.flatten()
+            average = "micro"
 
-        score = average_precision_score(y_true_,
-                                        y_pred_, average=self.average)
+        score = average_precision_score(y_true_, y_pred_, average=average)
 
         self._scores.append(score)
         self._n_samples.append(y_true.size(0))
