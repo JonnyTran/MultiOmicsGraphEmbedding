@@ -146,7 +146,7 @@ class DglLinkPredTrainer(LinkPredTrainer, DglLinkPredForNodeClfTrainer):
                 self.update_pr_metrics(pos_scores=pos_stack, true_neg_scores=neg_edge_scores, metrics=metrics)
 
     def update_pr_metrics(self, pos_scores: Tensor, true_neg_scores: Union[Tensor, Dict[Tuple[str, str, str], Tuple]],
-                          metrics: Metrics, subset=["precision", "recall", "true_aupr"]):
+                          metrics: Metrics, subset=["precision", "recall", "link_aupr"]):
         if isinstance(true_neg_scores, dict):
             neg_scores = torch.cat([edge_scores.detach() for m, edge_scores in true_neg_scores.items()])
         else:

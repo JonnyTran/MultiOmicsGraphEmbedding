@@ -361,7 +361,7 @@ class FMax(torchmetrics.Metric):
         if isinstance(targets, Tensor):
             targets = targets.detach().cpu().numpy()
 
-        fmax_ = 0.0, 0.0
+        fmax_t = 0.0, 0.0
         for thresh in (c / 100 for c in range(101)):
             cut_sc = ssp.csr_matrix((scores >= thresh).astype(np.int32))
             correct = cut_sc.multiply(targets).sum(axis=1)
@@ -374,11 +374,11 @@ class FMax(torchmetrics.Metric):
                 continue
 
             try:
-                fmax_ = max(fmax_, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
+                fmax_t = max(fmax_t, (2 * p * r / (p + r) if p + r > 0.0 else 0.0, thresh))
             except ZeroDivisionError:
                 pass
 
-        self._scores.append(fmax_[0])
+        self._scores.append(fmax_t[0])
         self._n_samples.append(n_samples)
 
     def compute(self, prefix=None) -> Union[float, Dict[str, float]]:

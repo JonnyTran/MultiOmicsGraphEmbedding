@@ -257,7 +257,7 @@ class DeepGraphGO(LightningModule):
         self.test_metrics = Metrics(prefix="test_", loss_type='BCE_WITH_LOGITS', n_classes=hparams.n_classes,
                                     multilabel=True, metrics=metrics)
 
-        self.model = GcnNet(num_nodes=dgl_graph.num_nodes(), **hparams.__dict__)
+        self.model = GcnNet(**hparams.__dict__)
 
         model_path.parent.mkdir(parents=True, exist_ok=True)
         self.model_path = model_path
@@ -328,8 +328,8 @@ class DeepGraphGO(LightningModule):
         #               on_step=False, on_epoch=True)
         return loss
 
-
-    # def train(self, train_data, valid_data, loss_params=(), opt_params=(), epochs_num=10, batch_size=40, **kwargs):
+    # def train(self, train_data:Tuple[np.ndarray, ssp.csr_matrix], valid_data:Tuple[np.ndarray, ssp.csr_matrix],
+    #           loss_params=(), opt_params=(), epochs_num=10, batch_size=40, **kwargs):
     #     self.get_optimizer(**dict(opt_params))
     #     self.batch_size = batch_size
     #
@@ -362,25 +362,17 @@ class DeepGraphGO(LightningModule):
     def training_epoch_end(self, outputs):
         metrics_dict = self.train_metrics.compute_metrics()
         self.train_metrics.reset_metrics()
-
         self.log_dict(metrics_dict, prog_bar=True)
-
-        return None
 
     def validation_epoch_end(self, outputs):
         metrics_dict = self.valid_metrics.compute_metrics()
         self.valid_metrics.reset_metrics()
-
         self.log_dict(metrics_dict, prog_bar=True)
-
-        return None
 
     def test_epoch_end(self, outputs):
         metrics_dict = self.test_metrics.compute_metrics()
         self.test_metrics.reset_metrics()
-
         self.log_dict(metrics_dict, prog_bar=True)
-        return None
 
     def train_dataloader(self):
         neighbor_sampler = dgl.dataloading.MultiLayerFullNeighborSampler(num_layers=self.model.num_gcn)
