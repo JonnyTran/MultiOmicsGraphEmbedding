@@ -64,7 +64,7 @@ class Metrics(torch.nn.Module):
             elif "auroc" == metric:
                 self.metrics[metric] = AUROC(num_classes=n_classes, average="micro")
             elif "aupr" in metric:
-                self.metrics[metric] = AveragePrecision(average="micro")
+                self.metrics[metric] = AveragePrecision(average="pairwise")
 
             elif "accuracy" in metric:
                 self.metrics[metric] = Accuracy(top_k=int(metric.split("@")[-1]) if "@" in metric else None,
@@ -404,7 +404,7 @@ class AveragePrecision(torchmetrics.Metric):
         """
 
         Args:
-            average : {'micro', 'samples', 'weighted', 'macro'} or None,             default='macro'
+            average : {'micro', 'samples', 'weighted', 'macro', 'pairwise'} or None,             default='macro'
                 If ``None``, the scores for each class are returned. Otherwise,
                 this determines the type of averaging performed on the data:
 
@@ -419,6 +419,10 @@ class AveragePrecision(torchmetrics.Metric):
                     by support (the number of true instances for each label).
                 ``'samples'``:
                     Calculate metrics for each instance, and find their average.
+                ``'pairwise'``:
+                    Calculate metrics for each sample and each class individually and
+                    average them.
+
         """
         super().__init__()
         self.average = average
@@ -428,8 +432,14 @@ class AveragePrecision(torchmetrics.Metric):
         self._n_samples = []
 
     def update(self, y_pred, y_true):
-        score = average_precision_score(y_true.detach().cpu().numpy(),
-                                        y_pred.detach().cpu().numpy(), average=self.average)
+        y_true_: np.ndarray = y_true.detach().cpu().numpy()
+        y_pred_ = y_pred.detach().cpu().numpy()
+        if self.average == "pairwise":
+            y_true_ = y_true_.flatten()
+            y_pred_ = y_pred_.flatten()
+
+        score = average_precision_score(y_true_,
+                                        y_pred_, average=self.average)
 
         self._scores.append(score)
         self._n_samples.append(y_true.size(0))
