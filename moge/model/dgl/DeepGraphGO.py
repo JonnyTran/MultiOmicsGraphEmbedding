@@ -198,11 +198,12 @@ class GcnNet(nn.Module):
     """
     """
 
-    def __init__(self, n_classes, input_size, hidden_size, num_gcn=0, dropout=0.5, residual=True, **kwargs):
+    def __init__(self, num_nodes, n_classes, input_size, hidden_size, num_gcn=0, dropout=0.5, residual=True, **kwargs):
         super().__init__()
         logger.info(F'GCN: labels_num={n_classes}, input size={input_size}, hidden_size={hidden_size}, '
                     F'num_gcn={num_gcn}, dropout={dropout}, residual={residual}')
-        self.embedding = nn.EmbeddingBag(input_size, hidden_size, mode='sum', include_last_offset=True)
+        # self.embedding = nn.EmbeddingBag(input_size, hidden_size, mode='sum', include_last_offset=True)
+        self.embedding = nn.Embedding(num_nodes, hidden_size)
         self.input_bias = nn.Parameter(torch.zeros(hidden_size))
 
         self.dropout = nn.Dropout(dropout)
@@ -222,8 +223,9 @@ class GcnNet(nn.Module):
             update.reset_parameters()
         nn.init.xavier_uniform_(self.output.weight)
 
-    def forward(self, blocks: List[DGLBlock], input, offets, per_sample_weights):
-        h = self.embedding.forward(input, offets, per_sample_weights) + self.input_bias
+    def forward(self, blocks: List[DGLBlock], input, offets, per_sample_weights, node_ids):
+        # h = self.embedding.forward(input, offets, per_sample_weights) + self.input_bias
+        h = self.embedding.forward(node_ids) + self.input_bias
         h = self.dropout(F.relu(h))
 
         for i, layer in enumerate(self.layers):
@@ -244,7 +246,7 @@ class DeepGraphGO(LightningModule):
         if not isinstance(hparams, Namespace) and isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         super().__init__()
-        self.model = GcnNet(**hparams.__dict__)
+        self.model = GcnNet(num_nodes=dgl_graph.num_nodes(), **hparams.__dict__)
 
         model_path.parent.mkdir(parents=True, exist_ok=True)
         self.model_path = model_path
@@ -256,13 +258,14 @@ class DeepGraphGO(LightningModule):
         self._set_hparams(hparams)
 
     def forward(self, blocks: List[DGLBlock]):
-        batch_x = self.node_feats[blocks[0].srcdata["_ID"].cpu().numpy()]
+        node_ids = blocks[0].srcdata["_ID"]
+        batch_x = self.node_feats[node_ids.cpu().numpy()]
 
         input = torch.from_numpy(batch_x.indices).to(self.device).long()
         offsets = torch.from_numpy(batch_x.indptr).to(self.device).long()
         per_sample_weights = torch.from_numpy(batch_x.data).to(self.device).float()
 
-        logits = self.model.forward(blocks, input, offsets, per_sample_weights)
+        logits = self.model.forward(blocks, input, offsets, per_sample_weights, node_ids)
 
         return logits
 
@@ -272,12 +275,13 @@ class DeepGraphGO(LightningModule):
 
         logits = self.forward(blocks)
         loss = self.criterion(logits, y_true)
-        self.log("loss", loss, logger=True, on_step=True)
+        self.log("loss", loss, logger=True, prog_bar=True, on_step=False, on_epoch=True)
 
         scores = torch.sigmoid(logits).detach().cpu().numpy()
         y_true = y_true.detach().cpu().numpy()
         (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True, on_step=False, on_epoch=True)
+        self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True,
+                      on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
@@ -286,27 +290,28 @@ class DeepGraphGO(LightningModule):
 
         logits = self.forward(blocks)
         loss = self.criterion(logits, y_true)
-        self.log("val_loss", loss, logger=True, on_step=True)
+        self.log("val_loss", loss, logger=True, on_step=False, on_epoch=True)
 
         scores = torch.sigmoid(logits).detach().cpu().numpy()
         y_true = y_true.detach().cpu().numpy()
         (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True, on_step=False, on_epoch=True)
+        self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True,
+                      on_step=False, on_epoch=True)
         return loss
 
-    def testing_step(self, batch, batch_nb):
+    def test_step(self, batch, batch_nb):
         input_nodes, seeds, blocks = batch
         y_true = blocks[-1].dstdata["label"]
 
         logits = self.forward(blocks)
         loss = self.criterion(logits, y_true)
-        self.log("test_loss", loss, logger=True, on_step=True)
+        self.log("test_loss", loss, logger=True, on_step=False, on_epoch=True)
 
         scores = torch.sigmoid(logits).detach().cpu().numpy()
         y_true = y_true.detach().cpu().numpy()
         (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True, on_step=False,
-                      on_epoch=True)
+        self.log_dict({"test_fmax": fmax_, "test_aupr": aupr_}, logger=True, prog_bar=True,
+                      on_step=False, on_epoch=True)
         return loss
 
     def valid_step(self, valid_loader, targets, epoch_idx, train_loss, best_fmax):

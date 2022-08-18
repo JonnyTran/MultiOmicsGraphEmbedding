@@ -178,6 +178,15 @@ class TrainTestSplit():
 
         train_nodes, valid_nodes, test_nodes = defaultdict(set, train_nodes), \
                                                defaultdict(set, valid_nodes), defaultdict(set, test_nodes)
+        if hasattr(self, "train_nodes"):
+            train_nodes = {ntype: nids.union(self.train_nodes[ntype]) if ntype in self.train_nodes else nids \
+                           for ntype, nids in train_nodes.items()}
+        if hasattr(self, "valid_nodes"):
+            train_nodes = {ntype: nids.union(self.valid_nodes[ntype]) if ntype in self.valid_nodes else nids \
+                           for ntype, nids in train_nodes.items()}
+        if hasattr(self, "test_nodes"):
+            train_nodes = {ntype: nids.union(self.test_nodes[ntype]) if ntype in self.test_nodes else nids \
+                           for ntype, nids in train_nodes.items()}
         return train_nodes, valid_nodes, test_nodes
 
     def get_all_edges_mask(self, edgelist: EdgeView, metapath: Tuple[str, str, str],

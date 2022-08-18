@@ -128,7 +128,7 @@ class DglLinkPredTrainer(LinkPredTrainer, DglLinkPredForNodeClfTrainer):
             for metapath in pos_edge_scores:
                 go_type = "BPO" if metapath[-1] == 'biological_process' else \
                     "CCO" if metapath[-1] == 'cellular_component' else \
-                        "MFO" if metapath[-1] == 'molecular_function' else None
+                        "MFO" if metapath[-1] == 'molecular_function' else metapath[-1]
 
                 metrics[go_type].update_metrics(pos_edge_scores[metapath].detach(), neg_batch_scores[metapath].detach(),
                                                 weights=None, subset=["ogbl-biokg"])
@@ -169,12 +169,15 @@ class DglLinkPredTrainer(LinkPredTrainer, DglLinkPredForNodeClfTrainer):
         if neg_scores is None:
             neg_scores = {}
 
+        min_num_neg_samples = min(scores.size(1) for scores in neg_batch_scores.values())
+
         metapaths = list(pos_scores | neg_batch_scores | neg_scores)
 
         pos_stack, neg_batch_stack, neg_stack = [], [], []
         for metapath in metapaths:
             pos_stack.append(pos_scores[metapath]) if metapath in pos_scores else None
-            neg_batch_stack.append(neg_batch_scores[metapath]) if metapath in neg_batch_scores else None
+            neg_batch_stack.append(
+                neg_batch_scores[metapath][:, :min_num_neg_samples]) if metapath in neg_batch_scores else None
             neg_stack.append(neg_scores[metapath]) if metapath in neg_scores else None
 
         pos_stack = torch.cat(pos_stack, dim=0) if pos_stack else torch.tensor([])
@@ -491,8 +494,9 @@ class HGTLinkPred(DglLinkPredTrainer):
             print("non_seq_ntypes", non_seq_ntypes)
             self.encoder = HeteroNodeFeatureEncoder(hparams, dataset, select_ntypes=non_seq_ntypes)
 
+        etypes = {etype for srctype, etype, dsttype in dataset.get_metapaths()}
         self.embedder = HGT(node_dict={ntype: i for i, ntype in enumerate(dataset.node_types)},
-                            edge_dict={metapath[1]: i for i, metapath in enumerate(dataset.get_metapaths())},
+                            edge_dict={etype: i for i, etype in enumerate(etypes)},
                             n_inp=self.dataset.node_attr_shape[self.head_node_type] \
                                 if self.dataset.node_attr_shape else hparams.embedding_dim,
                             n_hid=hparams.embedding_dim,

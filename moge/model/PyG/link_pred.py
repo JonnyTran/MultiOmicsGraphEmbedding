@@ -77,7 +77,7 @@ class PyGLinkPredTrainer(LinkPredTrainer):
             for metapath in pos_edge_score:
                 go_type = "BPO" if metapath[-1] == 'biological_process' else \
                     "CCO" if metapath[-1] == 'cellular_component' else \
-                        "MFO" if metapath[-1] == 'molecular_function' else None
+                        "MFO" if metapath[-1] == 'molecular_function' else metapath[-1]
 
                 neg_batch = torch.concat([neg_head_batch[metapath], neg_tail_batch[metapath]], dim=1)
                 metrics[go_type].update_metrics(pos_edge_score[metapath].detach(), neg_batch.detach(),

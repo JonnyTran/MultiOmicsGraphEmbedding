@@ -134,6 +134,8 @@ class HeteroNodeClfDataset(HeteroGraphDataset):
             graph_loader_cls = NeighborLoader
         elif self.neighbor_loader == "HGTLoader":
             graph_loader_cls = HGTLoader
+        elif self.neighbor_loader == "HGTLoader":
+            graph_loader_cls = HGTLoader
 
         dataset = graph_loader_cls(graph,
                                    num_neighbors=self.num_neighbors,

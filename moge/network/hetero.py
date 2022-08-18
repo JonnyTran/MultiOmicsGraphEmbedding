@@ -116,7 +116,7 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                     f"{len(unq_sources)} {src_type}'s and {len(unq_targets)} {dst_type}'s.")
 
     def add_edges_from_ontology(self, ontology: Ontology, nodes: Optional[List[str]] = None, ntype: str = "GO_term",
-                                reverse_edges=True, etypes: List[Tuple[str, str, str]] = []):
+                                reverse_edge_dir=True, etypes: List[Tuple[str, str, str]] = []):
         """
 
         Args:
@@ -133,17 +133,15 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
         self.add_nodes(nodes=nodes, ntype=ntype, annotations=ontology.data)
 
         # Add ontology edges
-        edge_types = {e for u, v, e in ontology.network.edges}
+        edge_types = {e for u, v, e in ontology.network.edges if not etypes or e in etypes}
         graph = ontology.network
-        if reverse_edges:
+        if reverse_edge_dir:
             graph = nx.reverse(graph, copy=True)
 
         edge_index_dict = get_edge_index_dict(graph, nodes=nodes, metapaths=edge_types,
                                               format="nx", d_ntype=ntype)
         for metapath, edgelist in edge_index_dict.items():
             if len(edgelist) < 10: continue
-            if etypes and (metapath not in etypes and (isinstance(metapath, tuple) and metapath[1] not in etypes)):
-                continue
             self.add_edges(edgelist, etype=metapath, database=ontology.name(), directed=True)
 
     def add_edges_from_annotations(self, ontology: Ontology, nodes: Optional[List[str]],
@@ -188,21 +186,18 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
 
         if split_etype:
             nx_options = dict(edge_key=split_etype, create_using=nx.MultiGraph, edge_attr=True)
-            self.pred_metapaths = [(src_ntype, etype, dst_ntype) \
-                                   for etype in train_ann.reset_index()[split_etype].unique()]
+            pred_metapaths = [(src_ntype, etype, dst_ntype) \
+                              for etype in train_ann.reset_index()[split_etype].unique()]
         else:
             nx_options = dict(edge_key=None, create_using=nx.Graph, edge_attr=None)
-            self.pred_metapaths = [(src_ntype, d_etype, dst_ntype)]
+            pred_metapaths = [(src_ntype, d_etype, dst_ntype)]
 
         dst_node_col = ontology.data.index.name
-        self.neg_pred_metapaths = []
         node_lists = []
 
         # Process train, validation, and test annotations
         for go_ann in [train_ann, valid_ann, test_ann]:
-            is_train = go_ann is train_ann
-            is_valid = go_ann is valid_ann
-            is_test = go_ann is test_ann
+            is_train, is_valid, is_test = go_ann is train_ann, go_ann is valid_ann, go_ann is test_ann
 
             if is_train:
                 logger.info("Train:")
@@ -217,35 +212,37 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
             if split_etype:
                 metapaths = {(src_ntype, etype, dst_ntype) for u, v, etype in pos_graph.edges}
             else:
-                metapaths = set(self.pred_metapaths)
+                metapaths = set(pred_metapaths)
 
             pos_edge_list_dict = get_edge_index_dict(pos_graph, nodes=self.nodes,
-                                                     metapaths=metapaths.intersection(self.pred_metapaths), format="nx")
+                                                     metapaths=metapaths.intersection(pred_metapaths), format="nx")
 
             for etype, edges in pos_edge_list_dict.items():
-                if etype not in self.pred_metapaths or len(edges) == 0: continue
+                if etype not in pred_metapaths or len(edges) == 0: continue
 
                 edges = self.label_edge_trainvalidtest(edges, train=is_train, valid=is_valid, test=is_test)
                 self.add_edges(edges, etype=etype, database=ontology.name(), directed=True, )
 
             # True Negative links
-            neg_dst_node_col = "neg_" + dst_node_col
             if use_neg_annotations:
+                neg_pred_metapaths = []
+
+                neg_dst_node_col = "neg_" + dst_node_col
                 neg_annotations = go_ann[neg_dst_node_col].dropna().explode().to_frame().reset_index()
                 neg_graph = nx.from_pandas_edgelist(neg_annotations, source=src_node_col, target=neg_dst_node_col,
                                                     **nx_options)
                 if split_etype:
                     metapaths = {(src_ntype, etype, dst_ntype) for u, v, etype in neg_graph.edges}
                 else:
-                    metapaths = set(self.pred_metapaths)
+                    metapaths = set(pred_metapaths)
                 neg_edge_list_dict = get_edge_index_dict(neg_graph, nodes=self.nodes,
-                                                         metapaths=metapaths.intersection(self.pred_metapaths),
+                                                         metapaths=metapaths.intersection(pred_metapaths),
                                                          format="nx")
                 for etype, edges in neg_edge_list_dict.items():
-                    if etype not in self.pred_metapaths or len(edges) == 0: continue
+                    if etype not in pred_metapaths or len(edges) == 0: continue
                     neg_etype = tag_negative_metapath(etype)
-                    if neg_etype not in self.neg_pred_metapaths:
-                        self.neg_pred_metapaths.append(neg_etype)
+                    if neg_etype not in neg_pred_metapaths:
+                        neg_pred_metapaths.append(neg_etype)
 
                     edges = self.label_edge_trainvalidtest(edges, train=is_train, valid=is_valid, test=is_test)
                     self.add_edges(edges, etype=neg_etype, database=ontology.name(), directed=True, )
@@ -256,13 +253,21 @@ class HeteroNetwork(AttributedNetwork, TrainTestSplit):
                 dst_ntype: set(pos_annotations[dst_node_col].unique()).intersection(self.nodes[dst_ntype]),
             })
 
+        # Save the list of prediction metapaths
+        if not hasattr(self, "pred_metapaths"):
+            self.pred_metapaths = pred_metapaths
+        else:
+            self.pred_metapaths = list(set(self.pred_metapaths + pred_metapaths))
+
+        if use_neg_annotations and not hasattr(self, "neg_pred_metapaths"):
+            self.neg_pred_metapaths = neg_pred_metapaths
+        elif use_neg_annotations:
+            self.neg_pred_metapaths = list(set(self.neg_pred_metapaths + neg_pred_metapaths))
+
         # Set train/valid/test mask of all nodes on hetero graph
         train_nodes, valid_nodes, test_nodes = node_lists
         self.train_nodes, self.valid_nodes, self.test_nodes = self.get_all_nodes_split(train_nodes,
                                                                                        valid_nodes, test_nodes)
-
-        self.set_edge_traintest_mask(self.train_nodes, self.valid_nodes, self.test_nodes,
-                                     exclude_metapaths=self.pred_metapaths + self.neg_pred_metapaths)
 
     def get_triples(self, all_metapaths: List[Tuple[str, str, str]], positive: bool = False, negative: bool = False) \
             -> Tuple[Dict[str, Tensor], Tensor, Tensor, Tensor]:

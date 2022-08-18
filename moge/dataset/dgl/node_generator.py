@@ -11,15 +11,15 @@ from dgl.dataloading import BlockSampler
 from dgl.sampling import RandomWalkNeighborSampler
 from dgl.utils import prepare_tensor_dict, prepare_tensor
 from logzero import logger
-from moge.dataset.graph import HeteroGraphDataset
-from moge.model.utils import tensor_sizes
-from moge.network.hetero import HeteroNetwork
 from ogb.nodeproppred import DglNodePropPredDataset
 from pandas import Index, DataFrame
 from sklearn.preprocessing import LabelBinarizer
 from torch import Tensor
 from torch.utils.data import DataLoader
 
+from moge.dataset.graph import HeteroGraphDataset
+from moge.model.utils import tensor_sizes
+from moge.network.hetero import HeteroNetwork
 from .samplers import ImportanceSampler
 from .utils import copy_ndata
 from ..PyG.node_generator import HeteroNeighborGenerator
@@ -327,7 +327,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
             edge_index_dict = {}
             for metapath in G.canonical_etypes:
                 # Original edges
-                src, dst, eid = G.all_edges(etype=metapath[1], form="all")
+                src, dst, eid = G.all_edges(etype=metapath, form="all")
                 edge_index_dict[metapath] = (src, dst)
 
                 # Separate edge types by each non-zero entry in the `g.edata["feat"]` vector, with length = number of etypes
@@ -346,14 +346,15 @@ class DGLNodeGenerator(HeteroGraphDataset):
         if edge_mask:
             edge_index_dict = {}
             for metapath in G.canonical_etypes:
-                src, dst, eid = self.filter_edges(G.all_edges(etype=metapath[1], form="all"), metapath=metapath,
+                src, dst, eid = self.filter_edges(G.all_edges(etype=metapath, form="all"), metapath=metapath,
                                                   edge_mask=edge_mask)
                 if drop_empty_etypes and len(src) == 0: continue
                 edge_index_dict[metapath] = (src, dst)
 
             new_g = dgl.heterograph(edge_index_dict, num_nodes_dict=self.num_nodes_dict)
             num_edges_removed = {etype: G.num_edges(etype=etype) - new_g.num_edges(etype=etype) \
-                                 for etype in new_g.etypes if (G.num_edges(etype=etype) - new_g.num_edges(etype=etype))}
+                                 for etype in new_g.canonical_etypes \
+                                 if (G.num_edges(etype=etype) - new_g.num_edges(etype=etype))}
 
             new_g = copy_ndata(old_g=G, new_g=new_g)
             logger.info(f"Removed edges: {num_edges_removed}") if verbose else None
@@ -361,7 +362,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
         if nodes_subset:
             edge_index_dict = {}
             for metapath in G.canonical_etypes:
-                src, dst, eid = self.filter_edges(G.all_edges(etype=metapath[1], form="all"), metapath=metapath,
+                src, dst, eid = self.filter_edges(G.all_edges(etype=metapath, form="all"), metapath=metapath,
                                                   nids_subset=nodes_subset)
                 if drop_empty_etypes and len(src) == 0: continue
 
@@ -384,7 +385,7 @@ class DGLNodeGenerator(HeteroGraphDataset):
             # Get mapping between orig eid to reversed eid
             for metapath in G.canonical_etypes:
                 rev_metapath = reverse_metapath(metapath)
-                src_rev, dst_rev, eid_rev = new_g.all_edges(etype=rev_metapath[1], form="all")
+                src_rev, dst_rev, eid_rev = new_g.all_edges(etype=rev_metapath, form="all")
                 # print(metapath, eid[:10], (src[0], dst[0]))
                 # print(rev_metapath, eid_rev[:10], (src_rev[0], dst_rev[0]))
                 self.reverse_eids[metapath] = eid_rev

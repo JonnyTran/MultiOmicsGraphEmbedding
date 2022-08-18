@@ -192,13 +192,21 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
 
             if verbose:
-                print("  >", ntype, embedding[ntype].shape)
-                for i, (metapath, beta_mean, beta_std) in enumerate(
-                        zip(self.get_tail_relations(ntype) + [ntype],
-                            betas[ntype].mean(-1).mean(0),
-                            betas[ntype].mean(-1).std(0))):
+                print("  >", ntype, embedding.shape)
+                for i, (metapath, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
+                                                                        betas[ntype].mean(-1).mean(0),
+                                                                        betas[ntype].mean(-1).std(0))):
+                    if metapath in edge_pred_dict:
+                        edge_index = edge_pred_dict[metapath] if isinstance(edge_pred_dict[metapath], Tensor) else \
+                        edge_pred_dict[metapath][0]
+                        edge_index_size = edge_index.size(1)
+                    elif metapath != ntype:
+                        continue
+                    else:
+                        edge_index_size = None
+
                     print(f"   - {'.'.join(metapath[1::2]) if isinstance(metapath, tuple) else metapath}, "
-                          f"\tedge_index: {(edge_index_dict[metapath].size(1) if isinstance(edge_index_dict[metapath], Tensor) else edge_index_dict[metapath][0].size(1)) if metapath in edge_pred_dict else 0}, "
+                          f"\tedge_index: {edge_index_size}, "
                           f"\tbeta: {beta_mean.item():.2f} ± {beta_std.item():.2f}, "
                           f"\tnorm: {torch.norm(rel_embedding[:, i], dim=0).mean().item() if rel_embedding.dim() >= 3 else -1:.2f}")
 
@@ -215,7 +223,10 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                 embedding = self.layernorm[ntype](embedding)
 
             if verbose:
-                print("   -> ", torch.norm(embedding[ntype], dim=0).mean().item())
+                print(f"   -> {self.activation.__name__ if hasattr(self, 'activation') else ''} "
+                      f"{'batchnorm' if hasattr(self, 'batchnorm') else ''} "
+                      f"{'layernorm' if hasattr(self, 'layernorm') else ''}: "
+                      f"{torch.norm(embedding, dim=1).mean().item():.2f}")
 
             h_out[ntype] = embedding
 

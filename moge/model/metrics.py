@@ -184,15 +184,16 @@ class Metrics(torch.nn.Module):
                     logs[metric_name] = self.metrics[metric].compute()
 
             except NotComputableError as nce:
-                print(nce)
+                # logger.warn(nce)
                 pass
 
             except Exception as e:
-                print(f"Metric: {metric}, {type(e)}:{str(e)}\r")
+                logger.error(f"Metric: {metric}, {type(e)}:{str(e)}\r")
                 traceback.print_exc()
 
         # Needed for Precision(average=False) metrics
-        logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v for k, v in logs.items()}
+        logs = {k: v.mean() if isinstance(v, Tensor) and v.numel() > 1 else v \
+                for k, v in logs.items()}
 
         return logs
 
@@ -345,9 +346,9 @@ class FMax(Metric):
                     dist_reduce_fx="sum",
                 )
 
-    def update(self, preds: Tensor, target: Tensor) -> None:
+    def update(self, preds: Tensor, targets: Tensor) -> None:
         if self.num_classes is None:
-            self.num_classes = target.size(1) if target.dim() > 1 else 1
+            self.num_classes = targets.size(1) if targets.dim() > 1 else 1
             for name in ("TPs", "FPs", "FNs"):
                 self.add_state(
                     name=name,
@@ -356,20 +357,20 @@ class FMax(Metric):
                     dist_reduce_fx="sum",
                 )
 
-        if len(preds.shape) == len(target.shape) == 1:
+        if len(preds.shape) == len(targets.shape) == 1:
             preds = preds.reshape(-1, 1)
-            target = target.reshape(-1, 1)
+            targets = targets.reshape(-1, 1)
 
-        if len(preds.shape) == len(target.shape) + 1:
-            target = to_onehot(target, num_classes=self.num_classes)
+        if len(preds.shape) == len(targets.shape) + 1:
+            targets = to_onehot(targets, num_classes=self.num_classes)
 
-        target = target == 1
+        targets = targets == 1
         # Iterate one threshold at a time to conserve memory
         for i in range(self.num_thresholds):
             predictions = preds >= self.thresholds[i]
-            self.TPs[:, i] += (target & predictions).sum(dim=0)
-            self.FPs[:, i] += ((~target) & predictions).sum(dim=0)
-            self.FNs[:, i] += (target & (~predictions)).sum(dim=0)
+            self.TPs[:, i] += (targets & predictions).sum(dim=0)
+            self.FPs[:, i] += ((~targets) & predictions).sum(dim=0)
+            self.FNs[:, i] += (targets & (~predictions)).sum(dim=0)
 
     def compute(self) -> Tensor:
         """Returns float tensor of size n_classes."""
@@ -435,9 +436,8 @@ class AveragePrecision(torchmetrics.Metric):
 
     def compute(self, prefix=None) -> Union[float, Dict[str, float]]:
         if len(self._scores) == 0:
-            logger.warn("AveragePrecision must have at"
-                        "least one example before it can be computed.")
-            return {}
+            raise NotComputableError("AveragePrecision must have at"
+                                     "least one example before it can be computed.")
 
         weighted_avg_score = np.average(self._scores, weights=self._n_samples)
         return weighted_avg_score if prefix is None else {f"{prefix}avg_precision": weighted_avg_score}

@@ -231,7 +231,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
                 print(f"   -> {self.activation.__name__ if hasattr(self, 'activation') else ''} "
                       f"{'batchnorm' if hasattr(self, 'batchnorm') else ''} "
                       f"{'layernorm' if hasattr(self, 'layernorm') else ''}: "
-                      f"{torch.norm(h_out[ntype], dim=0).mean().item():.2f}")
+                      f"{torch.norm(h_out[ntype], dim=1).mean().item():.2f}")
 
         # Save beta weights from testing samples
         if save_betas:
