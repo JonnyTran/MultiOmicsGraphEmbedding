@@ -11,11 +11,6 @@ import torch
 import torch.nn as nn
 import tqdm
 from dgl import DGLHeteroGraph
-from pandas import DataFrame
-from torch import Tensor
-from torch.nn import functional as F
-from torch.optim import lr_scheduler
-
 from moge.dataset.dgl.link_generator import DGLLinkGenerator
 from moge.dataset.dgl.utils import dgl_to_edge_index_dict, round_to_multiple
 from moge.dataset.utils import tag_negative_metapath, is_negative, split_edge_index_by_namespace, edge_index_to_adjs
@@ -26,6 +21,10 @@ from moge.model.encoder import HeteroNodeFeatureEncoder
 from moge.model.losses import ClassificationLoss
 from moge.model.metrics import Metrics
 from moge.model.trainer import LinkPredTrainer
+from pandas import DataFrame
+from torch import Tensor
+from torch.nn import functional as F
+from torch.optim import lr_scheduler
 
 
 class DglLinkPredForNodeClfTrainer:
@@ -448,7 +447,9 @@ class DglLinkPredTrainer(LinkPredTrainer, DglLinkPredForNodeClfTrainer):
         optimizer = self.hparams.optimizer if 'optimizer' in self.hparams else "adam"
         lr_annealing = self.hparams.lr_annealing if "lr_annealing" in self.hparams else None
 
-        if optimizer.lower() == 'adam':
+        if optimizer.lower() == 'adamw':
+            optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=weight_decay)
+        elif optimizer.lower() == 'adam':
             optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=weight_decay)
         elif optimizer.lower() == 'sgd':
             optimizer = torch.optim.SGD(self.parameters(), lr=self.lr, weight_decay=weight_decay)

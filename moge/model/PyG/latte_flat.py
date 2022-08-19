@@ -6,13 +6,12 @@ import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from fairscale.nn import auto_wrap
-from torch import nn as nn, Tensor, ModuleDict
-from torch_geometric.nn import MessagePassing
-from torch_geometric.utils import softmax
-
 from moge.model.PyG.utils import join_metapaths, get_edge_index_values, join_edge_indexes, max_num_hops, \
     filter_metapaths
 from moge.model.relations import RelationAttention, MetapathGATConv
+from torch import nn as nn, Tensor, ModuleDict
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import softmax
 
 
 class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
@@ -46,12 +45,12 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         else:
             print(f"Embedding activation arg `{activation}` did not match, so uses linear activation.")
 
-        self.linear = nn.ModuleDict(
+        self.linear_l = nn.ModuleDict(
             {node_type: nn.Linear(input_dim, output_dim, bias=True) \
              for node_type in self.node_types})  # W.shape (F x F)
-        # self.linear_r = nn.ModuleDict(
-        #     {node_type: nn.Linear(input_dim, output_dim, bias=True) \
-        #      for node_type in self.node_types})  # W.shape (F x F}
+        self.linear_r = nn.ModuleDict(
+            {node_type: nn.Linear(input_dim, output_dim, bias=True) \
+             for node_type in self.node_types})  # W.shape (F x F}
 
         self.out_channels = self.embedding_dim // attn_heads
         self.attn = nn.Parameter(torch.rand((len(self.metapaths), attn_heads, self.out_channels * 2)))
@@ -70,7 +69,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         #                                      batch_first=True)
 
         self.relation_conv: Dict[str, MetapathGATConv] = nn.ParameterDict({
-            ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=1,
+            ntype: MetapathGATConv(output_dim, metapaths=self.get_tail_relations(ntype), n_layers=2,
                                    attn_heads=attn_heads,
                                    # attn_dropout=attn_dropout
                                    ) \
@@ -103,8 +102,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             nn.init.xavier_normal_(self.attn[i], gain=gain)
 
         gain = nn.init.calculate_gain('relu')
-        for node_type in self.linear:
-            nn.init.xavier_normal_(self.linear[node_type].weight, gain=gain)
+        for node_type in self.linear_l:
+            nn.init.xavier_normal_(self.linear_l[node_type].weight, gain=gain)
         # for node_type in self.linear_r:
         #     nn.init.xavier_normal_(self.linear_r[node_type].weight, gain=gain)
 
@@ -163,9 +162,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
         Returns:
              output_emb, edge_attn_scores
         """
-        l_dict = self.projection(feats, linears=self.linear)
-        r_dict = l_dict
-        # r_dict = self.projection(feats, linears=self.linear_r)
+        l_dict = self.projection(feats, linears=self.linear_l)
+        r_dict = self.projection(feats, linears=self.linear_r)
 
         print("\nLayer", self.layer + 1, ) if verbose else None
 
@@ -182,6 +180,8 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
 
             embedding[:, -1] = l_dict[ntype]
 
+            embedding = torch.relu(embedding)
+
             if verbose:
                 rel_embedding = embedding.detach().clone()
 
@@ -192,7 +192,7 @@ class LATTEConv(MessagePassing, pl.LightningModule, RelationAttention):
             # betas[ntype] = self.get_beta_weights(query=r_dict[ntype], key=embedding, ntype=ntype)
 
             if verbose:
-                print("  >", ntype, embedding.shape)
+                print("  >", ntype, embedding.shape, betas[ntype].shape)
                 for i, (metapath, beta_mean, beta_std) in enumerate(zip(self.get_tail_relations(ntype) + [ntype],
                                                                         betas[ntype].mean(-1).mean(0),
                                                                         betas[ntype].mean(-1).std(0))):

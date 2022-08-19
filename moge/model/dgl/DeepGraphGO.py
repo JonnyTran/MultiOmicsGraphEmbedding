@@ -18,6 +18,7 @@ from Bio.Blast.Applications import NcbipsiblastCommandline
 from dgl.heterograph import DGLBlock
 from dgl.udf import NodeBatch
 from logzero import logger
+from moge.model.metrics import Metrics
 from pytorch_lightning import LightningModule
 from ruamel.yaml import YAML
 from sklearn.metrics import average_precision_score as aupr
@@ -25,8 +26,6 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from torch import nn, Tensor
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from moge.model.metrics import Metrics
 
 
 def get_pid_list(pid_list_file):
@@ -289,11 +288,11 @@ class DeepGraphGO(LightningModule):
         self.log("loss", loss, logger=True, prog_bar=True, on_step=False, on_epoch=True)
 
         self.train_metrics.update_metrics(torch.sigmoid(logits), y_true)
-        # scores = torch.sigmoid(logits).detach().cpu().numpy()
-        # y_true = y_true.detach().cpu().numpy()
-        # (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        # self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True,
-        #               on_step=False, on_epoch=True)
+        scores = torch.sigmoid(logits).detach().cpu().numpy()
+        y_true = y_true.detach().cpu().numpy()
+        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        self.log_dict({"fmax": fmax_, "aupr": aupr_}, logger=True, prog_bar=True,
+                      on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_nb):
@@ -305,11 +304,11 @@ class DeepGraphGO(LightningModule):
         self.log("val_loss", loss, logger=True, on_step=False, on_epoch=True)
 
         self.valid_metrics.update_metrics(torch.sigmoid(logits), y_true)
-        # scores = torch.sigmoid(logits).detach().cpu().numpy()
-        # y_true = y_true.detach().cpu().numpy()
-        # (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
-        # self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True,
-        #               on_step=False, on_epoch=True)
+        scores = torch.sigmoid(logits).detach().cpu().numpy()
+        y_true = y_true.detach().cpu().numpy()
+        (fmax_, t_), aupr_ = fmax(y_true, scores), aupr(y_true.flatten(), scores.flatten())
+        self.log_dict({"val_fmax": fmax_, "val_aupr": aupr_}, logger=True, prog_bar=True,
+                      on_step=False, on_epoch=True)
         return loss
 
     def test_step(self, batch, batch_nb):

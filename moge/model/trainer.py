@@ -10,14 +10,6 @@ import torch
 import torch.nn.functional as F
 import wandb
 from logzero import logger
-from pandas import DataFrame, Series
-from pytorch_lightning import LightningModule
-from pytorch_lightning.loggers import WandbLogger
-from sklearn.cluster import KMeans
-from torch import Tensor
-from torch.optim import lr_scheduler
-from torch.utils.data.distributed import DistributedSampler
-
 from moge.criterion.clustering import clustering_metrics
 from moge.dataset.PyG.node_generator import HeteroNeighborGenerator
 from moge.dataset.dgl.node_generator import DGLNodeGenerator
@@ -27,6 +19,13 @@ from moge.model.PyG.latte import LATTE
 from moge.model.metrics import Metrics
 from moge.model.utils import tensor_sizes, preprocess_input
 from moge.visualization.attention import plot_sankey_flow
+from pandas import DataFrame, Series
+from pytorch_lightning import LightningModule
+from pytorch_lightning.loggers import WandbLogger
+from sklearn.cluster import KMeans
+from torch import Tensor
+from torch.optim import lr_scheduler
+from torch.utils.data.distributed import DistributedSampler
 
 
 class ClusteringEvaluator(LightningModule):
@@ -504,7 +503,7 @@ class NodeClfTrainer(ClusteringEvaluator, NodeEmbeddingEvaluator):
              'weight_decay': 0.0},
         ]
 
-        optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=self.lr)
+        optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=self.lr)
 
         extra = {}
         if lr_annealing == "cosine":

@@ -10,7 +10,7 @@ from pandas import DataFrame
 from torch import Tensor, nn
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
-from torch_geometric.nn import GATConv
+from torch_geometric.nn import GATConv, GraphNorm
 from torch_sparse import SparseTensor
 from torchtyping import TensorType
 
@@ -30,6 +30,8 @@ class MetapathGATConv(nn.Module):
         for _ in range(n_layers):
             self.layers.append(GATConv(in_channels=embedding_dim, out_channels=self.out_channels,
                                        heads=attn_heads, dropout=attn_dropout))
+
+        self.norm = GraphNorm(embedding_dim)
 
     def generate_fc_edge_index(self, num_nodes_A: int, num_nodes_B: int = None, device=None):
         if num_nodes_B is None:
@@ -86,10 +88,21 @@ class MetapathGATConv(nn.Module):
 
         h = batch.x
         for i in range(self.n_layers):
-            h, (alpha_edges, alpha_values) = self.layers[i].forward(h, batch.edge_index, return_attention_weights=True)
+            is_last_layer = i + 1 == self.n_layers
+
+            if is_last_layer:
+                # Select only edges with dst node as the readout node
+                edge_mask = batch.nid[batch.edge_index[1]] == self.self_index
+                edge_index = batch.edge_index[:, edge_mask]
+            else:
+                edge_index = batch.edge_index
+
+            h, (alpha_edges, alpha_values) = self.layers[i].forward(h, edge_index, return_attention_weights=True)
+
+            if hasattr(self, 'norm'):
+                h = self.norm.forward(h)
 
         node_embs, betas = self.deconstruct_multigraph(batch, h, alpha_edges, alpha_values)
-
         return node_embs, betas
 
 
